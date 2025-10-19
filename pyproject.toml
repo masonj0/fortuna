@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "paddock-parser-ng"
+version = "0.1.0"
+description = "A toolkit to identify the best racecards for betting."
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.scripts]
+paddock_parser_ui = "paddock_parser.entry_points:run_terminal_ui"
+paddock_parser_dashboard = "paddock_parser.entry_points:run_dashboard"
+paddock_parser_predict = "paddock_parser.entry_points:run_prediction_engine"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# Configuration for the Ruff linter
+[tool.ruff]
+# Allow lines to be up to 120 characters long.
+line-length = 120
+
+[tool.ruff.lint]
+# Enable Pyflakes (F), pycodestyle (E, W), and isort (I) rules.
+select = ["E", "F", "W", "I"]
+ignore = []
+
+[tool.ruff.lint.isort]
+# Sort imports within their sections alphabetically.
+force-single-line = true
