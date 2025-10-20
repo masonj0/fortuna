@@ -1,0 +1,64 @@
+name: Build MSI Installer
+
+on:
+  push:
+    branches: [main, develop]
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build_msi:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build frontend
+        run: |
+          cd web_platform\frontend
+          npm install
+          npm run build
+
+      - name: Build MSI
+        run: |
+          $Version = "${{ github.ref }}".Replace('refs/tags/v', '')
+          if ($Version -eq "refs/tags/v" -or $Version -eq "") {
+            $Version = "2.1.0-dev"
+          }
+          powershell -ExecutionPolicy Bypass -File scripts/build_msi.ps1 -Version $Version -Configuration Release
+
+      - name: Generate checksums
+        run: |
+          Get-ChildItem dist/*.msi | ForEach-Object {
+            $hash = (Get-FileHash $_ -Algorithm SHA256).Hash
+            Add-Content -Path dist/CHECKSUMS.txt -Value "$hash  $($_.Name)"
+          }
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: fortuna-msi
+          path: |
+            dist/Fortuna-Faucet-*.msi
+            dist/metadata.json
+            dist/CHECKSUMS.txt
+
+      - name: Create release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            dist/Fortuna-Faucet-*.msi
+            dist/metadata.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
