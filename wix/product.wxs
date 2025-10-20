@@ -26,103 +26,37 @@
       <Directory Id="ProgramMenuFolder">
         <Directory Id="ApplicationProgramsFolder" Name="Fortuna Faucet"/>
       </Directory>
-      <Directory Id="DesktopFolder"/>
-      <Directory Id="LocalAppDataFolder">
-        <Directory Id="LOGFOLDER" Name="Fortuna Faucet"/>
-      </Directory>
     </Directory>
 
     <!-- Features (What users can select) -->
-    <Feature Id="ProductFeature" Title="Fortuna Faucet" Level="1" Display="expand">
-      <Feature
-        Id="BackendFeature"
-        Title="Python Backend Engine"
-        Description="Core async data collection with 30+ adapters"
-        Level="1">
-        <ComponentRef Id="PythonBackendComponent"/>
-      </Feature>
-
-      <Feature
-        Id="FrontendFeature"
-        Title="React Dashboard"
-        Description="Professional web-based user interface"
-        Level="1">
-        <ComponentRef Id="ReactFrontendComponent"/>
-      </Feature>
-
-      <Feature
-        Id="WindowsServiceFeature"
-        Title="Background Service"
-        Description="Auto-start engine on system boot"
-        Level="2">
-        <ComponentRef Id="WindowsServiceComponent"/>
-      </Feature>
-
-      <Feature
-        Id="ShortcutsFeature"
-        Title="Start Menu Shortcuts"
-        Description="Desktop and Start Menu shortcuts"
-        Level="1">
-        <ComponentRef Id="DesktopShortcutsComponent"/>
-      </Feature>
+    <Feature Id="ProductFeature" Title="Fortuna Faucet" Level="1">
+        <ComponentGroupRef Id="ProductComponents"/>
+        <ComponentGroupRef Id="ShortcutsComponentGroup"/>
     </Feature>
 
     <!-- Components (Logical file groupings) -->
     <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
       <Component Id="PythonBackendComponent" Guid="*">
-        <RegistryValue
-          Root="HKLM"
-          Key="Software\Fortuna Faucet\Backend"
-          Name="Installed"
-          Value="1"
-          Type="integer"/>
-        <!-- Files auto-generated from backend_files.wxs -->
+        <RegistryValue Root="HKLM" Key="Software\Fortuna Faucet\Backend" Name="Installed" Value="1" Type="integer"/>
       </Component>
-
       <Component Id="ReactFrontendComponent" Guid="*">
-        <RegistryValue
-          Root="HKLM"
-          Key="Software\Fortuna Faucet\Frontend"
-          Name="Installed"
-          Value="1"
-          Type="integer"/>
+        <RegistryValue Root="HKLM" Key="Software\Fortuna Faucet\Frontend" Name="Installed" Value="1" Type="integer"/>
       </Component>
-
       <Component Id="WindowsServiceComponent" Guid="*">
-        <ServiceInstall
-          Id="FortunaService"
-          Name="FortunaFaucetBackend"
-          DisplayName="Fortuna Faucet Background Service"
-          Description="Continuous horse racing data monitoring engine"
-          Type="ownProcess"
-          Start="auto"
-          Account="LocalSystem"
-          ErrorControl="normal"/>
-        <ServiceControl
-          Id="StartService"
-          Name="FortunaFaucetBackend"
-          Start="install"
-          Stop="both"
-          Remove="uninstall"/>
-      </Component>
-
-      <Component Id="DesktopShortcutsComponent" Guid="*" Directory="ApplicationProgramsFolder">
-        <Shortcut
-          Id="DashboardShortcut"
-          Name="Fortuna Faucet Dashboard"
-          Description="Open racing analysis dashboard"
-          Target="http://localhost:3000"
-          Advertise="no"/>
-
-        <Shortcut
-          Id="UninstallShortcut"
-          Name="Uninstall Fortuna Faucet"
-          Description="Remove this application"
-          Target="[SystemFolder]msiexec.exe"
-          Arguments="/x [ProductCode]"
-          Advertise="no"/>
+        <ServiceInstall Id="FortunaService" Name="FortunaFaucetBackend" DisplayName="Fortuna Faucet Background Service" Description="Continuous horse racing data monitoring engine" Type="ownProcess" Start="auto" Account="LocalSystem" ErrorControl="normal"/>
+        <ServiceControl Id="StartService" Name="FortunaFaucetBackend" Start="install" Stop="both" Remove="uninstall"/>
       </Component>
     </ComponentGroup>
+
+    <ComponentGroup Id="ShortcutsComponentGroup" Directory="ApplicationProgramsFolder">
+      <Component Id="DesktopShortcutsComponent" Guid="*">
+          <Shortcut Id="DashboardShortcut" Name="Fortuna Faucet Dashboard" Description="Open racing analysis dashboard" Target="http://localhost:3000" Advertise="no"/>
+          <Shortcut Id="UninstallShortcut" Name="Uninstall Fortuna Faucet" Description="Remove this application" Target="[SystemFolder]msiexec.exe" Arguments="/x [ProductCode]" Advertise="no"/>
+          <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall"/>
+          <RegistryValue Root="HKCU" Key="Software\Fortuna Faucet" Name="Installed" Type="integer" Value="1" KeyPath="yes"/>
+      </Component>
+    </ComponentGroup>
+
 
     <!-- UI Customization -->
     <UIRef Id="WixUI_InstallScope"/>
@@ -140,5 +74,4 @@
     </Condition>
 
   </Product>
-
 </Wix>

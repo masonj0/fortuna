@@ -50,7 +50,7 @@ Write-Info "Harvesting backend files..."
     -gg -sf -srd -cg BackendFileGroup -dr INSTALLFOLDER -var "var.BackendSourceDir"
 
 Write-Info "Harvesting frontend files..."
-& heat.exe dir ".\web_platform\frontend\build" -o "$buildDir\frontend_files.wxs" `
+& heat.exe dir ".\web_platform\frontend\.next" -o "$buildDir\frontend_files.wxs" `
     -gg -sf -srd -cg FrontendFileGroup -dr INSTALLFOLDER -var "var.FrontendSourceDir"
 
 Write-Success "File harvesting complete."
@@ -65,7 +65,7 @@ Copy-Item ".\wix\product.wxs" "$buildDir\product.wxs"
     Write-Info "Compiling $(Split-Path $_ -Leaf)..."
     & candle.exe $_ -o "$objDir\" `
         -d"BackendSourceDir=.\python_service" `
-        -d"FrontendSourceDir=.\web_platform\frontend\build" `
+        -d"FrontendSourceDir=.\web_platform\frontend\.next" `
         -dVersion="$AppVersion.0" `
         -arch x64
     if ($LASTEXITCODE -ne 0) { throw "Compilation failed for $_" }
