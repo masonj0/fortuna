@@ -32,6 +32,15 @@ export interface Race {
   surface?: string;
 }
 
+// --- Adapter Status Interface ---
+export interface AdapterStatus {
+  adapter_name: string;
+  status: 'SUCCESS' | 'OK' | 'FAILED' | 'ERROR';
+  races_fetched?: number;
+  fetch_duration?: number;
+  error_message?: string;
+}
+
 // --- Analysis Factor Interfaces (retained from previous version) ---
 export interface Factor {
     points: number;

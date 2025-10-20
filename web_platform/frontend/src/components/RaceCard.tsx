@@ -2,9 +2,9 @@
 'use client';
 
 import React from 'react';
-import type { Race, Runner } from '@/types/racing';
+import type { Race, Runner } from '../types/racing';
 
-// Local types removed, now importing from '@/types/racing.ts'
+// Local types removed, now importing from '../types/racing'
 
 interface RaceCardProps {
   race: Race;

@@ -4,45 +4,10 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { RaceCard } from './RaceCard';
-
-// --- Type Definitions ---
-// --- Type Definitions ---
-interface Runner {
-  number: number;
-  name: string;
-  scratched: boolean;
-  selection_id?: number;
-  jockey?: string;
-  trainer?: string;
-  odds: Record<string, OddsData>;
-}
-
-interface OddsData {
-  win: number | null;
-  source: string;
-  last_updated: string;
-}
-
-interface Race {
-  id: string;
-  venue: string;
-  race_number: number;
-  start_time: string;
-  runners: Runner[];
-  source: string;
-  qualification_score?: number;
-  distance?: string;
-  surface?: string;
-  race_name?: string;
-}
+import { Race, AdapterStatus } from '../types/racing';
 
 interface QualifiedRacesResponse {
   races: Race[];
-}
-
-interface AdapterStatus {
-  adapter_name: string;
-  status: string;
 }
 
 // --- Helper Functions from UI Bible ---
@@ -62,19 +27,19 @@ const getNextRaceCountdown = (races: Race[]): string => {
   return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 };
 
-const fetchQualifiedRaces = async (): Promise<QualifiedRacesResponse> => {
-  const apiKey = process.env.NEXT_PUBLIC_API_KEY;
-  if (!apiKey) throw new Error('API key not configured. Check NEXT_PUBLIC_API_KEY in .env.local');
-  const response = await fetch(`/api/races/qualified/trifecta`, { headers: { 'X-API-Key': apiKey } });
-  if (!response.ok) throw new Error(`Qualified races API request failed: ${response.statusText}`);
-  return response.json();
-};
-
 const fetchAdapterStatuses = async (): Promise<AdapterStatus[]> => {
   const apiKey = process.env.NEXT_PUBLIC_API_KEY;
   if (!apiKey) throw new Error('API key not configured. Check NEXT_PUBLIC_API_KEY in .env.local');
   const response = await fetch(`/api/adapters/status`, { headers: { 'X-API-Key': apiKey } });
   if (!response.ok) throw new Error(`Adapter status API request failed: ${response.statusText}`);
+  return response.json();
+};
+
+const fetchQualifiedRaces = async (): Promise<QualifiedRacesResponse> => {
+  const apiKey = process.env.NEXT_PUBLIC_API_KEY;
+  if (!apiKey) throw new Error('API key not configured. Check NEXT_PUBLIC_API_KEY in .env.local');
+  const response = await fetch(`/api/races/qualified/trifecta`, { headers: { 'X-API-Key': apiKey } });
+  if (!response.ok) throw new Error(`Qualified races API request failed: ${response.statusText}`);
   return response.json();
 };
 
