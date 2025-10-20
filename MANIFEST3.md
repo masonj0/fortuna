@@ -2,37 +2,68 @@
 
 This manifest lists all files related to the frontend application, the Electron shell, and operational tooling.
 
-## Frontend Application (web_platform)
-
-* web_platform/frontend/package.json
-* web_platform/frontend/next.config.js
-* web_platform/frontend/tailwind.config.ts
-* web_platform/frontend/src/app/layout.tsx
-* web_platform/frontend/src/app/page.tsx
-* web_platform/frontend/src/components/LiveRaceDashboard.tsx
-* web_platform/frontend/src/components/RaceCard.tsx
-* web_platform/frontend/src/types/racing.ts
-* web_platform/frontend/public/manifest.json
-
-## Electron Desktop Shell
-
-* electron/main.js
-* electron/package.json
-* electron/preload.js
-
-# Added by Operation: Complete the Royal Blueprints
-electron/main.js
-electron/package.json
-electron/preload.js
-web_platform/api_gateway/src/server.ts
-web_platform/api_gateway/src/services/DatabaseService.ts
-web_platform/frontend/next.config.mjs
-web_platform/frontend/postcss.config.js
-web_platform/frontend/tailwind.config.ts
-web_platform/frontend/public/manifest.json
-web_platform/frontend/src/components/ScoreBadge.tsx
-web_platform/frontend/src/components/TrifectaFactors.tsx
-web_platform/frontend/src/hooks/useRealTimeRaces.ts
-web_platform/frontend/src/types/racing.ts
-web_platform/frontend/srcs/utils/exportManager.ts
-
+- electron/assets/.gitkeep
+- electron/install-dependencies.js
+- electron/installer.nsh
+- electron/main.js
+- electron/package.json
+- electron/preload.js
+- web_platform/api_gateway/package-lock.json
+- web_platform/api_gateway/package.json
+- web_platform/api_gateway/src/server.ts
+- web_platform/api_gateway/src/services/DatabaseService.ts
+- web_platform/api_gateway/tsconfig.json
+- web_platform/frontend/.gitignore
+- web_platform/frontend/.next/app-build-manifest.json
+- web_platform/frontend/.next/build-manifest.json
+- web_platform/frontend/.next/cache/webpack/client-development/0.pack.gz
+- web_platform/frontend/.next/cache/webpack/client-development/1.pack.gz
+- web_platform/frontend/.next/cache/webpack/client-development/2.pack.gz
+- web_platform/frontend/.next/cache/webpack/client-development/3.pack.gz
+- web_platform/frontend/.next/cache/webpack/client-development/4.pack.gz
+- web_platform/frontend/.next/cache/webpack/client-development/index.pack.gz
+- web_platform/frontend/.next/cache/webpack/client-development/index.pack.gz.old
+- web_platform/frontend/.next/cache/webpack/server-development/0.pack.gz
+- web_platform/frontend/.next/cache/webpack/server-development/1.pack.gz
+- web_platform/frontend/.next/cache/webpack/server-development/2.pack.gz
+- web_platform/frontend/.next/cache/webpack/server-development/index.pack.gz
+- web_platform/frontend/.next/cache/webpack/server-development/index.pack.gz.old
+- web_platform/frontend/.next/package.json
+- web_platform/frontend/.next/react-loadable-manifest.json
+- web_platform/frontend/.next/server/app-paths-manifest.json
+- web_platform/frontend/.next/server/middleware-build-manifest.js
+- web_platform/frontend/.next/server/middleware-manifest.json
+- web_platform/frontend/.next/server/middleware-react-loadable-manifest.js
+- web_platform/frontend/.next/server/next-font-manifest.js
+- web_platform/frontend/.next/server/next-font-manifest.json
+- web_platform/frontend/.next/server/pages-manifest.json
+- web_platform/frontend/.next/server/server-reference-manifest.js
+- web_platform/frontend/.next/server/server-reference-manifest.json
+- web_platform/frontend/.next/static/chunks/polyfills.js
+- web_platform/frontend/.next/static/development/_buildManifest.js
+- web_platform/frontend/.next/static/development/_ssgManifest.js
+- web_platform/frontend/.next/trace
+- web_platform/frontend/.next/types/package.json
+- web_platform/frontend/app/globals.css
+- web_platform/frontend/app/layout.tsx
+- web_platform/frontend/app/page.tsx
+- web_platform/frontend/next-env.d.ts
+- web_platform/frontend/next.config.mjs
+- web_platform/frontend/package-lock.json
+- web_platform/frontend/package.json
+- web_platform/frontend/postcss.config.js
+- web_platform/frontend/public/manifest.json
+- web_platform/frontend/src/app/Providers.tsx
+- web_platform/frontend/src/app/layout.tsx
+- web_platform/frontend/src/app/page.tsx
+- web_platform/frontend/src/components/LiveRaceDashboard.tsx
+- web_platform/frontend/src/components/LiveRaceDashboardNoSSR.tsx
+- web_platform/frontend/src/components/RaceCard.tsx
+- web_platform/frontend/src/components/ScoreBadge.tsx
+- web_platform/frontend/src/components/TrifectaFactors.tsx
+- web_platform/frontend/src/hooks/useRealTimeRaces.ts
+- web_platform/frontend/src/lib/queryClient.ts
+- web_platform/frontend/src/types/racing.ts
+- web_platform/frontend/src/utils/exportManager.ts
+- web_platform/frontend/tailwind.config.ts
+- web_platform/frontend/tsconfig.json

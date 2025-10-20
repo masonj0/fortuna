@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product
+    Id="*"
+    Name="Fortuna Faucet - Racing Analysis Engine"
+    Language="1033"
+    Version="2.1.0.0"
+    Manufacturer="Mason J0 Studios"
+    UpgradeCode="12345678-1234-1234-1234-123456789012">
+
+    <Package
+      InstallerVersion="200"
+      Compressed="yes"
+      InstallScope="perMachine"
+      Description="Horse racing analysis platform with Python backend and React frontend"
+      Comments="Professional-grade installer"/>
+
+    <Media Id="1" Cabinet="fortuna.cab" EmbedCab="yes"/>
+
+    <!-- Directory Structure -->
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFilesFolder">
+        <Directory Id="INSTALLFOLDER" Name="Fortuna Faucet"/>
+      </Directory>
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="ApplicationProgramsFolder" Name="Fortuna Faucet"/>
+      </Directory>
+      <Directory Id="DesktopFolder"/>
+      <Directory Id="LocalAppDataFolder">
+        <Directory Id="LOGFOLDER" Name="Fortuna Faucet"/>
+      </Directory>
+    </Directory>
+
+    <!-- Features (What users can select) -->
+    <Feature Id="ProductFeature" Title="Fortuna Faucet" Level="1" Display="expand">
+      <Feature
+        Id="BackendFeature"
+        Title="Python Backend Engine"
+        Description="Core async data collection with 30+ adapters"
+        Level="1">
+        <ComponentRef Id="PythonBackendComponent"/>
+      </Feature>
+
+      <Feature
+        Id="FrontendFeature"
+        Title="React Dashboard"
+        Description="Professional web-based user interface"
+        Level="1">
+        <ComponentRef Id="ReactFrontendComponent"/>
+      </Feature>
+
+      <Feature
+        Id="WindowsServiceFeature"
+        Title="Background Service"
+        Description="Auto-start engine on system boot"
+        Level="2">
+        <ComponentRef Id="WindowsServiceComponent"/>
+      </Feature>
+
+      <Feature
+        Id="ShortcutsFeature"
+        Title="Start Menu Shortcuts"
+        Description="Desktop and Start Menu shortcuts"
+        Level="1">
+        <ComponentRef Id="DesktopShortcutsComponent"/>
+      </Feature>
+    </Feature>
+
+    <!-- Components (Logical file groupings) -->
+    <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+      <Component Id="PythonBackendComponent" Guid="*">
+        <RegistryValue
+          Root="HKLM"
+          Key="Software\Fortuna Faucet\Backend"
+          Name="Installed"
+          Value="1"
+          Type="integer"/>
+        <!-- Files auto-generated from backend_files.wxs -->
+      </Component>
+
+      <Component Id="ReactFrontendComponent" Guid="*">
+        <RegistryValue
+          Root="HKLM"
+          Key="Software\Fortuna Faucet\Frontend"
+          Name="Installed"
+          Value="1"
+          Type="integer"/>
+      </Component>
+
+      <Component Id="WindowsServiceComponent" Guid="*">
+        <ServiceInstall
+          Id="FortunaService"
+          Name="FortunaFaucetBackend"
+          DisplayName="Fortuna Faucet Background Service"
+          Description="Continuous horse racing data monitoring engine"
+          Type="ownProcess"
+          Start="auto"
+          Account="LocalSystem"
+          ErrorControl="normal"/>
+        <ServiceControl
+          Id="StartService"
+          Name="FortunaFaucetBackend"
+          Start="install"
+          Stop="both"
+          Remove="uninstall"/>
+      </Component>
+
+      <Component Id="DesktopShortcutsComponent" Guid="*" Directory="ApplicationProgramsFolder">
+        <Shortcut
+          Id="DashboardShortcut"
+          Name="Fortuna Faucet Dashboard"
+          Description="Open racing analysis dashboard"
+          Target="http://localhost:3000"
+          Advertise="no"/>
+
+        <Shortcut
+          Id="UninstallShortcut"
+          Name="Uninstall Fortuna Faucet"
+          Description="Remove this application"
+          Target="[SystemFolder]msiexec.exe"
+          Arguments="/x [ProductCode]"
+          Advertise="no"/>
+      </Component>
+    </ComponentGroup>
+
+    <!-- UI Customization -->
+    <UIRef Id="WixUI_InstallScope"/>
+    <WixVariable Id="WixUILicenseRtf" Value="assets\license.rtf"/>
+    <WixVariable Id="WixUIBannerBmp" Value="assets\banner.bmp"/>
+    <WixVariable Id="WixUIDialogBmp" Value="assets\dialog.bmp"/>
+
+    <!-- System Requirements -->
+    <Condition Message="Windows 7 or later (64-bit) is required">
+      <![CDATA[Installed OR (VersionNT64 >= 601)]]>
+    </Condition>
+
+    <Condition Message="Administrator privileges are required">
+      <![CDATA[Privileged]]]>
+    </Condition>
+
+  </Product>
+
+</Wix>

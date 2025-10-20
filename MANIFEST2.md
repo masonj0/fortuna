@@ -2,73 +2,86 @@
 
 This manifest lists all core backend services, utilities, and the entire adapter fleet.
 
-## Core Services
-
-* python_service/api.py
-* python_service/engine.py
-* python_service/analyzer.py
-* python_service/live_monitor.py
-
-## Data Models & Configuration
-
-* python_service/config.py
-* python_service/models.py
-* python_service/models_v3.py
-
-## Production Hardening & ETL
-
-* python_service/health.py
-* python_service/cache_manager.py
-* python_service/middleware/error_handler.py
-* python_service/etl.py
-
-## Adapter Architecture
-
-* python_service/adapters/base.py
-* python_service/adapters/base_v3.py
-* python_service/adapters/utils.py
-
-## Adapter Fleet
-
-* python_service/adapters/at_the_races_adapter.py
-* python_service/adapters/betfair_adapter.py
-* python_service/adapters/betfair_datascientist_adapter.py
-* python_service/adapters/betfair_greyhound_adapter.py
-* python_service/adapters/fanduel_adapter.py
-* python_service/adapters/gbgb_api_adapter.py
-* python_service/adapters/greyhound_adapter.py
-* python_service/adapters/harness_adapter.py
-* python_service/adapters/oddschecker_adapter.py
-* python_service/adapters/racing_and_sports_adapter.py
-* python_service/adapters/sporting_life_adapter.py
-* python_service/adapters/the_racing_api_adapter.py
-* python_service/adapters/timeform_adapter.py
-* python_service/adapters/tvg_adapter.py
-
-# Added by Operation: Complete the Royal Blueprints
-pg_schemas/historical_races.sql
-pg_schemas/quarantine_races.sql
-python_service/analyzer.py
-python_service/api.py
-python_service/cache_manager.py
-python_service/checkmate_service.py
-python_service/engine.py
-python_service/etl.py
-python_service/health.py
-python_service/windows_service_wrapper.py
-python_service/adapters/at_the_races_adapter.py
-python_service/adapters/base_v3.py
-python_service/adapters/betfair_datascientist_adapter.py
-python_service/middleware/error_handler.py
-src/paddock_parser/api/main.py
-src/paddock_parser/database/manager.py
-src/paddock_parser/ui/terminal_ui.py
-src/paddock_parser/utils/browser.py
-src/paddock_parser/utils/honeypot.py
-tests/test_analyzer.py
-tests/test_api.py
-tests/test_engine.py
-tests/adapters/test_gbgb_api_adapter.py
-tests/adapters/test_greyhound_adapter.py
-tests/adapters/test_the_racing_api_adapter.py
-
+- pg_schemas/historical_races.sql
+- pg_schemas/quarantine_races.sql
+- pg_schemas/quarantined_races.sql
+- python_service/__init__.py
+- python_service/adapters/__init__.py
+- python_service/adapters/at_the_races_adapter.py
+- python_service/adapters/base.py
+- python_service/adapters/base_v3.py
+- python_service/adapters/betfair_adapter.py
+- python_service/adapters/betfair_auth_mixin.py
+- python_service/adapters/betfair_datascientist_adapter.py
+- python_service/adapters/betfair_greyhound_adapter.py
+- python_service/adapters/brisnet_adapter.py
+- python_service/adapters/drf_adapter.py
+- python_service/adapters/equibase_adapter.py
+- python_service/adapters/fanduel_adapter.py
+- python_service/adapters/gbgb_api_adapter.py
+- python_service/adapters/greyhound_adapter.py
+- python_service/adapters/harness_adapter.py
+- python_service/adapters/horseracingnation_adapter.py
+- python_service/adapters/nyrabets_adapter.py
+- python_service/adapters/oddschecker_adapter.py
+- python_service/adapters/pointsbet_greyhound_adapter.py
+- python_service/adapters/punters_adapter.py
+- python_service/adapters/racing_and_sports_adapter.py
+- python_service/adapters/racing_and_sports_greyhound_adapter.py
+- python_service/adapters/racingpost_adapter.py
+- python_service/adapters/racingtv_adapter.py
+- python_service/adapters/sporting_life_adapter.py
+- python_service/adapters/tab_adapter.py
+- python_service/adapters/template_adapter.py
+- python_service/adapters/the_racing_api_adapter.py
+- python_service/adapters/timeform_adapter.py
+- python_service/adapters/tvg_adapter.py
+- python_service/adapters/twinspires_adapter.py
+- python_service/adapters/universal_adapter.py
+- python_service/adapters/utils.py
+- python_service/adapters/xpressbet_adapter.py
+- python_service/analyzer.py
+- python_service/api.py
+- python_service/cache_manager.py
+- python_service/checkmate_service.py
+- python_service/config.py
+- python_service/core/__init__.py
+- python_service/core/errors.py
+- python_service/credentials_manager.py
+- python_service/engine.py
+- python_service/etl.py
+- python_service/fortuna_watchman.py
+- python_service/health.py
+- python_service/logging_config.py
+- python_service/middleware/__init__.py
+- python_service/middleware/error_handler.py
+- python_service/minimal_service.py
+- python_service/models.py
+- python_service/models_v3.py
+- python_service/requirements.txt
+- python_service/security.py
+- python_service/setup_wizard_gui.py
+- python_service/utils/__init__.py
+- python_service/utils/odds.py
+- python_service/utils/text.py
+- python_service/windows_service_wrapper.py
+- tests/adapters/test_base_v3.py
+- tests/adapters/test_gbgb_api_adapter.py
+- tests/adapters/test_greyhound_adapter.py
+- tests/adapters/test_the_racing_api_adapter.py
+- tests/adapters/test_timeform_adapter_modernized.py
+- tests/analyzers/test_trifecta_analyzer.py
+- tests/conftest.py
+- tests/fixtures/timeform_legacy_sample.html
+- tests/fixtures/timeform_modern_sample.html
+- tests/test_analyzer.py
+- tests/test_api.py
+- tests/test_api/test_endpoints.py
+- tests/test_engine.py
+- tests/test_engine/test_orchestration.py
+- tests/test_models.py
+- tests/test_models/test_validation.py
+- tests/test_msi_installation.ps1
+- tests/test_silent_deployment.ps1
+- tests/test_uninstall.ps1
+- tests/utils/test_odds.py
