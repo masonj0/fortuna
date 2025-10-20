@@ -29,6 +29,16 @@ jobs:
           npm install
           npm run build
 
+      - name: Install Code Signing Certificate
+        if: runner.os == 'Windows' && secrets.WINDOWS_SIGNING_CERT != ''
+        env:
+          CERT_BASE64: ${{ secrets.WINDOWS_SIGNING_CERT }}
+          CERT_PASSWORD: ${{ secrets.WINDOWS_SIGNING_PASSWORD }}
+        run: |
+          [System.IO.File]::WriteAllBytes("cert.pfx", [System.Convert]::FromBase64String($env:CERT_BASE64))
+          certutil -p $env:CERT_PASSWORD -importpfx cert.pfx
+          Remove-Item cert.pfx
+
       - name: Build MSI
         run: |
           $Version = "${{ github.ref }}".Replace('refs/tags/v', '')

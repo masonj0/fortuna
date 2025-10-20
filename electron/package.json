@@ -23,7 +23,8 @@
     ],
     "win": {
       "target": "msi",
-      "icon": "assets/icon.ico"
+      "icon": "assets/icon.ico",
+      "shortcutName": "Fortuna Faucet"
     },
     "msi": {
       "oneClick": false,

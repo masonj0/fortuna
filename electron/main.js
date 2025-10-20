@@ -1,54 +1,90 @@
 // electron/main.js
-const { app, BrowserWindow, Tray, Menu, nativeImage } = require('electron');
-const { spawn } = require('child_process');
+const { app, BrowserWindow, Tray, Menu, nativeImage, dialog } = require('electron');
+const { spawn, exec } = require('child_process');
 const path = require('path');
+const fs = require('fs');
 
+// --- Python Backend Manager ---
+class PythonManager {
+    constructor() {
+        this.venvPath = path.join(app.getPath('userData'), 'backend_env');
+        this.pythonPath = path.join(this.venvPath, 'Scripts', 'python.exe');
+        this.backendProcess = null;
+    }
+
+    async setupEnvironment() {
+        return new Promise((resolve, reject) => {
+            if (fs.existsSync(this.pythonPath)) {
+                console.log('Python environment already exists.');
+                return resolve();
+            }
+
+            console.log('Creating Python virtual environment...');
+            exec(`python -m venv "${this.venvPath}"`, (error, stdout, stderr) => {
+                if (error) {
+                    console.error(`Failed to create venv: ${stderr}`);
+                    dialog.showErrorBox('Fatal Error', 'Failed to create the Python virtual environment. Please ensure Python 3.9+ is installed and in your PATH.');
+                    return reject(error);
+                }
+                console.log('Virtual environment created. Installing backend...');
+                this.installBackend().then(resolve).catch(reject);
+            });
+        });
+    }
+
+    async installBackend() {
+        return new Promise((resolve, reject) => {
+            const pipPath = path.join(this.venvPath, 'Scripts', 'pip.exe');
+            const wheelPath = path.resolve(__dirname, '..', 'dist', 'fortuna_engine-1.0.0-py3-none-any.whl'); // Assuming a wheel is built
+            const reqsPath = path.resolve(__dirname, '..', 'requirements.txt');
+
+            exec(`"${pipPath}" install -r "${reqsPath}"`, (error, stdout, stderr) => {
+                if (error) {
+                    console.error(`Failed to install dependencies: ${stderr}`);
+                    dialog.showErrorBox('Backend Error', 'Failed to install Python dependencies.');
+                    return reject(error);
+                }
+                console.log('Backend installed successfully.');
+                resolve();
+            });
+        });
+    }
+
+    start() {
+        console.log(`Spawning backend from: ${this.pythonPath}`);
+        this.backendProcess = spawn(this.pythonPath, ['-m', 'python_service.run_api'], {
+            cwd: path.resolve(__dirname, '..')
+        });
+
+        this.backendProcess.stdout.on('data', (data) => console.log(`Backend: ${data}`));
+        this.backendProcess.stderr.on('data', (data) => console.error(`Backend ERR: ${data}`));
+    }
+
+    stop() {
+        if (this.backendProcess) {
+            this.backendProcess.kill();
+        }
+    }
+}
+
+
+// --- Main Application Class ---
 class FortunaDesktopApp {
   constructor() {
-    this.backendProcess = null;
-    this.frontendProcess = null;
     this.mainWindow = null;
     this.tray = null;
-  }
+    this.pythonManager = new PythonManager();
 
-  async startBackend() {
-    return new Promise((resolve, reject) => {
-      // Corrected pathing for a packaged app
-      const isDev = process.env.NODE_ENV !== 'production';
-      const rootPath = isDev ? path.join(__dirname, '..') : process.resourcesPath;
-      const pythonPath = path.join(rootPath, '.venv', 'Scripts', 'python.exe');
-      const apiPath = path.join(rootPath, 'python_service', 'api.py');
-
-      this.backendProcess = spawn(pythonPath, ['-m', 'uvicorn', 'api:app', '--host', '127.0.0.1', '--port', '8000'], {
-        cwd: path.join(rootPath, 'python_service')
-      });
-
-      this.backendProcess.stdout.on('data', (data) => {
-        console.log(`Backend STDOUT: ${data}`);
-        if (data.toString().includes('Uvicorn running')) {
-          console.log('Backend started successfully.');
-          resolve();
+    const gotTheLock = app.requestSingleInstanceLock();
+    if (!gotTheLock) {
+      app.quit();
+    } else {
+      app.on('second-instance', () => {
+        if (this.mainWindow) {
+          if (this.mainWindow.isMinimized()) this.mainWindow.restore();
+          this.mainWindow.focus();
         }
       });
-
-      this.backendProcess.stderr.on('data', (data) => {
-        console.error(`Backend STDERR: ${data}`);
-      });
-
-      this.backendProcess.on('error', reject);
-    });
-  }
-
-  async startFrontend() {
-    const isDev = process.env.NODE_ENV !== 'production';
-    if (isDev) {
-        // In development, we assume the Next.js dev server is already running.
-        return Promise.resolve();
-    } else {
-        // In production, we would serve the built Next.js app.
-        // This part needs a production-ready server like Express or Next.js's standalone output.
-        // For now, we will assume the build is served and we just load the URL.
-        return Promise.resolve();
     }
   }
 
@@ -64,11 +100,28 @@ class FortunaDesktopApp {
         preload: path.join(__dirname, 'preload.js')
       },
       autoHideMenuBar: true,
-      backgroundColor: '#1a1a2e'
+      backgroundColor: '#1a1a2e',
+      show: false
     });
 
-    // In development, load from the Next.js dev server.
-    this.mainWindow.loadURL('http://localhost:3000');
+    this.mainWindow.on('close', (event) => {
+      if (!app.isQuitting) {
+        event.preventDefault();
+        this.mainWindow.hide();
+      }
+      return false;
+    });
+
+    const isDev = process.env.NODE_ENV !== 'production';
+    if (isDev) {
+      this.mainWindow.loadURL('http://localhost:3000');
+    } else {
+      this.mainWindow.loadFile(path.join(__dirname, '..', 'web_platform', 'frontend', 'out', 'index.html'));
+    }
+
+    this.mainWindow.once('ready-to-show', () => {
+        this.mainWindow.show();
+    });
   }
 
   createSystemTray() {
@@ -77,33 +130,43 @@ class FortunaDesktopApp {
     this.tray = new Tray(icon.resize({ width: 16, height: 16 }));
 
     const contextMenu = Menu.buildFromTemplate([
-      { label: 'Open Dashboard', click: () => this.mainWindow.show() },
+      { label: 'Show Dashboard', click: () => this.showWindow() },
       { type: 'separator' },
-      { label: 'Exit', click: () => app.quit() }
+      { label: 'Quit Fortuna Faucet', click: () => this.quitApp() }
     ]);
 
     this.tray.setToolTip('Fortuna Faucet - Monitoring Races');
     this.tray.setContextMenu(contextMenu);
+    this.tray.on('double-click', () => this.showWindow());
+  }
+
+  showWindow() {
+    if (this.mainWindow) {
+      this.mainWindow.show();
+      this.mainWindow.focus();
+    }
+  }
+
+  quitApp() {
+    app.isQuitting = true;
+    app.quit();
   }
 
   async initialize() {
-    console.log('Starting Fortuna Faucet backend...');
-    await this.startBackend();
-
-    console.log('Frontend server is assumed to be running in dev mode...');
-    await this.startFrontend();
-
-    // Wait for frontend to be ready
-    await new Promise(resolve => setTimeout(resolve, 5000));
-
-    this.createMainWindow();
-    this.createSystemTray();
+    try {
+        await this.pythonManager.setupEnvironment();
+        this.pythonManager.start();
+        this.createMainWindow();
+        this.createSystemTray();
+    } catch(err) {
+        console.error("Initialization failed:", err);
+        app.quit();
+    }
   }
 
   cleanup() {
     console.log('Cleaning up processes...');
-    if (this.backendProcess) this.backendProcess.kill();
-    if (this.frontendProcess) this.frontendProcess.kill();
+    this.pythonManager.stop();
   }
 }
 
@@ -114,12 +177,8 @@ app.whenReady().then(() => {
   fortunaApp.initialize();
 });
 
-app.on('window-all-closed', () => {
-  // On macOS it's common to re-create a window in the app when the
-  // dock icon is clicked and there are no other windows open.
-  if (process.platform !== 'darwin') {
-    // Do not quit here, let it run in the tray
-  }
+app.on('window-all-closed', (event) => {
+  event.preventDefault();
 });
 
 app.on('before-quit', () => {

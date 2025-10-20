@@ -30,7 +30,7 @@ This story is our "why."
 
 ### Chapter 5: The 'Modern' Era - The New Beginning (early September 2025)
 
-*   **Repository:** `scrape-sort_races-toteboards`
+*   **Repository:** `fortuna`
 *   **Narrative:** This is the current, active repository, representing the clean, focused implementation of the grand vision developed through the previous eras.
 
 ### Chapter 6: The 'Crucible' Era - The Forging of Protocols (Early September 2025)
