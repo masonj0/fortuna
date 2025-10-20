@@ -11,7 +11,7 @@ This document serves as the central guide for developers contributing to the For
 ## Local Development Setup
 
 1.  **Prerequisites:** Python 3.11+, Node.js (LTS), Git.
-2.  **Clone:** `git clone https://github.com/masonj0/scrape-sort_races-toteboards.git`
+2.  **Clone:** `git clone https://github.com/masonj0/fortuna.git`
 3.  **Backend:** Create a venv and `pip install -r requirements.txt`.
 4.  **Frontend:** `cd web_platform/frontend` and run `npm install`.
 

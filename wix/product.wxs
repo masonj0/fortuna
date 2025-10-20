@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <?define Version = "1.0.0.0" ?>
   <Product
     Id="*"
     Name="Fortuna Faucet - Racing Analysis Engine"
     Language="1033"
-    Version="2.1.0.0"
+    Version="$(var.Version)"
     Manufacturer="Mason J0 Studios"
     UpgradeCode="12345678-1234-1234-1234-123456789012">
 
