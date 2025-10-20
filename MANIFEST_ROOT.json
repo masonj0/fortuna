@@ -44,5 +44,11 @@
     "scripts/repair_fortuna.bat",
     "scripts/uninstall_fortuna.bat",
     "windows_service.py",
-    "wix/product.wxs"
+    "wix/product.wxs",
+    "MANIFEST_BACKEND.json",
+    "MANIFEST_FRONTEND.json",
+    "MANIFEST_ROOT.json",
+    "env.example",
+    "github/workflows/build_msi.yml",
+    "gitignore"
 ]

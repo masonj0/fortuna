@@ -1,0 +1,4 @@
+{
+    "file_path": "web_platform/frontend/src/lib/queryClient.ts",
+    "content": "// web_platform/frontend/src/lib/queryClient.ts\nimport { QueryClient } from '@tanstack/react-query';\n\nexport const queryClient = new QueryClient();\n"
+}

@@ -1,0 +1,4 @@
+{
+    "file_path": "python_service/adapters/utils.py",
+    "content": "# python_service/adapters/utils.py\n# Compatibility shim to re-export parse_odds from the centralized location.\n\nfrom ..utils.odds import parse_odds\n\n__all__ = ['parse_odds']\n"
+}

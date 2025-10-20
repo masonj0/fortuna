@@ -1,0 +1,4 @@
+{
+    "file_path": "tests/test_silent_deployment.ps1",
+    "content": "Write-Host \"Testing silent deployment...\" -ForegroundColor Cyan\n\n& msiexec.exe /i \"Fortuna-Faucet-2.1.0-x64.msi\" `\n    /qn /l*v \"silent_test.log\" `\n    ALLUSERS=1 INSTALLSCOPE=perMachine\n\nif ($LASTEXITCODE -eq 0) {\n    Write-Host \"\u2713 Silent deployment successful\"\n} else {\n    Write-Host \"\u2717 Silent deployment failed\"\n    Write-Host \"Log: silent_test.log\"\n    exit 1\n}"
+}

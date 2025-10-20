@@ -1,0 +1,4 @@
+{
+    "file_path": "python_service/core/errors.py",
+    "content": "# python_service/core/errors.py\nfrom enum import Enum\n\nclass ErrorCategory(Enum):\n    CONFIGURATION_ERROR = \"Configuration missing or invalid\"\n    NETWORK_ERROR = \"HTTP/Network request failed\"\n    PARSING_ERROR = \"Data parsing or validation unsuccessful\"\n    UNEXPECTED_ERROR = \"An unhandled exception occurred\""
+}

@@ -44,6 +44,3 @@ web_platform/frontend/.next/
 
 # Security
 .key
-
-# Agent artifacts
-ReviewableJSON/
