@@ -1,6 +1,4 @@
 [
-    ".github/workflows/build_msi.yml",
-    ".gitignore",
     "AGENTS.md",
     "ARCHITECTURAL_MANDATE.md",
     "ARCHITECTURAL_MANDATE_V8.1.md",
@@ -36,7 +34,6 @@
     "jules-scratch/verification/verify_dashboard.py",
     "launcher.ps1",
     "manual_override_tool.py",
-    "npm_output.log",
     "pyproject.toml",
     "pytest.ini",
     "requirements.txt",
@@ -48,5 +45,11 @@
     "scripts/repair_fortuna.bat",
     "scripts/uninstall_fortuna.bat",
     "windows_service.py",
-    "wix/product.wxs"
+    "wix/product.wxs",
+    "MANIFEST_BACKEND.json",
+    "MANIFEST_FRONTEND.json",
+    "MANIFEST_ROOT.json",
+    "env.example",
+    "github/workflows/build_msi.yml",
+    "gitignore"
 ]

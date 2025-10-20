@@ -10,7 +10,8 @@ from multiprocessing import Process, Queue
 # --- Configuration ---
 MANIFEST_FILES = ['MANIFEST2.md', 'MANIFEST3.md']
 OUTPUT_DIR = 'ReviewableJSON'
-FILE_PROCESSING_TIMEOUT = 10
+FILE_PROCESSING_TIMEOUT = 30
+EXCLUDED_FILES = ['package-lock.json']
 
 # --- ENLIGHTENED PARSING LOGIC (V2) ---
 def extract_and_normalize_path(line: str) -> str | None:
