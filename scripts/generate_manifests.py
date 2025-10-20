@@ -10,6 +10,7 @@ EXCLUDE_DIRS = {
     '.idea',
     '.vscode',
     'node_modules',
+    '.next',
     '.venv',
     'dist',
     'build',
