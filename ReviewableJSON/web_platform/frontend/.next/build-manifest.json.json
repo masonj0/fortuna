@@ -1,0 +1,4 @@
+{
+    "file_path": "web_platform/frontend/.next/build-manifest.json",
+    "content": "{\n  \"polyfillFiles\": [\n    \"static/chunks/polyfills.js\"\n  ],\n  \"devFiles\": [],\n  \"ampDevFiles\": [],\n  \"lowPriorityFiles\": [\n    \"static/development/_buildManifest.js\",\n    \"static/development/_ssgManifest.js\"\n  ],\n  \"rootMainFiles\": [],\n  \"pages\": {\n    \"/_app\": []\n  },\n  \"ampFirstPages\": []\n}"
+}

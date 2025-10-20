@@ -1,0 +1,4 @@
+{
+    "file_path": "web_platform/frontend/.gitignore",
+    "content": "# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.\n\n# Dependencies\n/node_modules\n/.pnp\n.pnp.js\n\n# Testing\n/coverage\n\n# Next.js\n/.next/\n/out/\n\n# Production\n/build\n\n# Misc\n.DS_Store\n*.pem\n\n# Local .env files\n.env.local\n.env.development.local\n.env.test.local\n.env.production.local\n\n# Log files\nnpm-debug.log*\nyarn-debug.log*\nyarn-error.log*\nlerna-debug.log*\n\n# Editor directories and files\n.vscode\n.idea\n*.suo\n*.ntvs*\n*.njsproj\n*.sln\n*.sw?"
+}

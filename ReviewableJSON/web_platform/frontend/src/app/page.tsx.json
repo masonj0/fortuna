@@ -1,0 +1,4 @@
+{
+    "file_path": "web_platform/frontend/src/app/page.tsx",
+    "content": "// web_platform/frontend/src/app/page.tsx\nimport LiveRaceDashboardNoSSR from '../components/LiveRaceDashboardNoSSR';\n\nexport default function Home() {\n  return (\n    <main className=\"flex min-h-screen flex-col items-center justify-between p-4 md:p-12\">\n      <LiveRaceDashboardNoSSR />\n    </main>\n  );\n}\n"
+}

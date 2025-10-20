@@ -1,0 +1,4 @@
+{
+    "file_path": "web_platform/frontend/app/page.tsx",
+    "content": "'use client';\n\nimport { LiveRaceDashboard } from '../src/components/LiveRaceDashboard';\n\nexport default function Home() {\n  return (\n      <LiveRaceDashboard />\n  );\n}"
+}

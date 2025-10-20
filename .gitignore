@@ -29,6 +29,7 @@ env/
 node_modules/
 /ui/node_modules/
 /ui/build/
+web_platform/frontend/.next/
 
 # Environment files
 .env
@@ -43,3 +44,6 @@ node_modules/
 
 # Security
 .key
+
+# Archives
+FORTUNA_ALL_PART*.JSON
