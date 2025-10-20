@@ -1,0 +1,4 @@
+{
+    "file_path": "electron/installer.nsh",
+    "content": "; electron/installer.nsh\n; NSIS include script for running dependency installation after file copy.\n\n!macro customInstall\n  ; This is where we run our dependency installer\n  DetailPrint \"Running post-installation setup (Python & Node.js dependencies)...\"\n  ; We execute the bundled node to run our script\n  nsExec::ExecToLog '\"$INSTDIR\\resources\\app\\electron\\install-dependencies.js\"'\n!macroend"
+}

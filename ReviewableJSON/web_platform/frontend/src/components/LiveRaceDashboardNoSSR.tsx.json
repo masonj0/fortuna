@@ -1,0 +1,4 @@
+{
+    "file_path": "web_platform/frontend/src/components/LiveRaceDashboardNoSSR.tsx",
+    "content": "// web_platform/frontend/src/components/LiveRaceDashboardNoSSR.tsx\nimport dynamic from 'next/dynamic';\n\nconst LiveRaceDashboardNoSSR = dynamic(\n  () => import('./LiveRaceDashboard').then((mod) => mod.LiveRaceDashboard),\n  { ssr: false }\n);\n\nexport default LiveRaceDashboardNoSSR;\n"
+}

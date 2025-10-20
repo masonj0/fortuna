@@ -1,0 +1,4 @@
+{
+    "file_path": "tests/test_uninstall.ps1",
+    "content": "Write-Host \"Testing uninstall...\" -ForegroundColor Cyan\n\n$regPath = 'HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*'\n$product = Get-ItemProperty $regPath | Where-Object { $_.DisplayName -like '*Fortuna*' }\n\nif ($product) {\n    & msiexec.exe /x $product.PSChildName /qn /l*v \"uninstall_test.log\"\n\n    Start-Sleep -Seconds 2\n\n    $programFiles = \"$env:PROGRAMFILES\\Fortuna Faucet\"\n    if (-not (Test-Path $programFiles)) {\n        Write-Host \"\u2713 Uninstall successful\"\n    } else {\n        Write-Host \"\u2717 Uninstall incomplete\"\n        exit 1\n    }\n} else {\n    Write-Host \"\u2717 Product not found in registry\"\n    exit 1\n}"
+}

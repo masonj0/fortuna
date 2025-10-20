@@ -1,0 +1,4 @@
+{
+    "file_path": "web_platform/frontend/.next/static/development/_buildManifest.js",
+    "content": "self.__BUILD_MANIFEST = {__rewrites:{afterFiles:[],beforeFiles:[],fallback:[]},sortedPages:[\"\\u002F_app\"]};self.__BUILD_MANIFEST_CB && self.__BUILD_MANIFEST_CB()"
+}
