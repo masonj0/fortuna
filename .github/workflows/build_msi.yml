@@ -10,6 +10,9 @@ jobs:
   build_msi:
     runs-on: windows-latest
 
+    env:
+      CERT_BASE64_ENV: ${{ secrets.WINDOWS_SIGNING_CERT }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -30,7 +33,7 @@ jobs:
           npm run build
 
       - name: Install Code Signing Certificate
-        if: runner.os == 'Windows' && secrets.WINDOWS_SIGNING_CERT != ''
+        if: runner.os == 'Windows' && env.CERT_BASE64_ENV != ''
         env:
           CERT_BASE64: ${{ secrets.WINDOWS_SIGNING_CERT }}
           CERT_PASSWORD: ${{ secrets.WINDOWS_SIGNING_PASSWORD }}
