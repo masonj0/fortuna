@@ -19,6 +19,8 @@
 
     <Media Id="1" Cabinet="fortuna.cab" EmbedCab="yes"/>
 
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+
     <!-- Directory Structure -->
     <Directory Id="TARGETDIR" Name="SourceDir">
       <Directory Id="ProgramFilesFolder">
@@ -60,7 +62,9 @@
 
 
     <!-- UI Customization -->
-    <UIRef Id="WixUI_InstallScope"/>
+    <UI>
+      <UIRef Id="WixUI_InstallScope" />
+    </UI>
     <WixVariable Id="WixUILicenseRtf" Value="assets\license.rtf"/>
     <WixVariable Id="WixUIBannerBmp" Value="assets\banner.bmp"/>
     <WixVariable Id="WixUIDialogBmp" Value="assets\dialog.bmp"/>
