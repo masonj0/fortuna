@@ -11,7 +11,7 @@ import requests
 
 # --- Configuration ---
 VERSION_FILE = "VERSION.txt"
-GITHUB_REPO = "masonj0/scrape-sort_races-toteboards"
+GITHUB_REPO = "masonj0/fortuna"
 CURRENT_VERSION = "0.0.0" # Default if file not found
 
 # --- Helper Functions ---

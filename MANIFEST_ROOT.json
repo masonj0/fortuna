@@ -5,7 +5,7 @@
     "ARCHITECTURAL_MANDATE_V8.1.md",
     "ARCHIVE_PROJECT.py",
     "BUILD_INSTALLER.bat",
-    "BUILD_RELEASE.ps1",
+    "HISTORY.MD",
     "HISTORY.md",
     "JSON_BACKUP_MANIFEST.md",
     "MANIFEST.md",
@@ -17,6 +17,7 @@
     "README.md",
     "README_WINDOWS.md",
     "REBRANDING_AUDIT.md",
+    "ROADMAP_APPENDICES.MD",
     "ROADMAP_APPENDICES.md",
     "ROADMAP_LEGACY_ARCHIVAL.md",
     "STATUS.md",
@@ -30,7 +31,6 @@
     "fortuna_monitor.py",
     "fortuna_tray.py",
     "install.sh",
-    "jules-scratch/verification/verify_dashboard.py",
     "launcher.ps1",
     "manual_override_tool.py",
     "pyproject.toml",
@@ -44,11 +44,5 @@
     "scripts/repair_fortuna.bat",
     "scripts/uninstall_fortuna.bat",
     "windows_service.py",
-    "wix/product.wxs",
-    "MANIFEST_BACKEND.json",
-    "MANIFEST_FRONTEND.json",
-    "MANIFEST_ROOT.json",
-    "env.example",
-    "github/workflows/build_msi.yml",
-    "gitignore"
+    "wix/product.wxs"
 ]

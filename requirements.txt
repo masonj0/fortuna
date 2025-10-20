@@ -26,7 +26,7 @@ redis==5.0.1
 # --- Windows Native Edition ---
 pywin32==306; sys_platform == 'win32'
 colorama==0.4.6; sys_platform == 'win32'
-win10toast-py3==0.9; sys_platform == 'win32'
+windows-toasts; sys_platform == 'win32'
 matplotlib==3.8.2; sys_platform == 'win32'
 pystray==0.19.5; sys_platform == 'win32'
 pillow==10.1.0; sys_platform == 'win32'
