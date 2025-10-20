@@ -286,7 +286,88 @@ class FortunaApp(tk.Tk):
         else:
             self.destroy()
 
+# --- NEW: Self-Setup UI and Logic ---
+class SetupApp(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("Fortuna Faucet - First-Time Setup")
+        self.geometry("700x500")
+        self.configure(bg='#1a1a2e')
+
+        self.protocol("WM_DELETE_WINDOW", self.quit)
+
+        header_font = tk.font.Font(family="Segoe UI", size=16, weight="bold")
+        body_font = tk.font.Font(family="Segoe UI", size=10)
+        button_font = tk.font.Font(family="Segoe UI", size=12, weight="bold")
+
+        tk.Label(self, text="📦 Welcome to Fortuna Faucet", font=header_font, bg='#1a1a2e', fg='#00ff88').pack(pady=(20, 10))
+        tk.Label(self, text="The necessary dependencies are not installed. Click 'Start Installation' to begin.", font=body_font, bg='#1a1a2e', fg='#ffffff').pack(pady=(0, 20))
+
+        self.install_button = tk.Button(self, text="▶️ Start Installation", font=button_font, bg='#00ff88', fg='#000000', command=self.start_installation, relief=tk.FLAT, padx=20, pady=10)
+        self.install_button.pack(pady=10)
+
+        self.output_box = scrolledtext.ScrolledText(self, height=15, bg="#0f3460", fg="#cccccc", state=tk.DISABLED, relief=tk.FLAT, bd=0, padx=10, pady=10)
+        self.output_box.pack(pady=10, padx=40, fill=tk.BOTH, expand=True)
+
+        self.status_label = tk.Label(self, text="Waiting to start...", font=body_font, bg='#1a1a2e', fg='#ffffff')
+        self.status_label.pack(pady=10)
+
+    def log(self, message):
+        self.output_box.config(state=tk.NORMAL)
+        self.output_box.insert(tk.END, message + "\n")
+        self.output_box.config(state=tk.DISABLED)
+        self.output_box.see(tk.END)
+        self.update_idletasks()
+
+    def start_installation(self):
+        self.install_button.config(state=tk.DISABLED, text="Installation in progress...")
+        self.log("--- Starting installation ---")
+        self.status_label.config(text="Installing... Please be patient, this may take several minutes.")
+        threading.Thread(target=self.run_install_commands, daemon=True).start()
+
+    def run_command(self, command):
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace', shell=True)
+        for line in iter(process.stdout.readline, ''):
+            self.log(line.strip())
+        process.wait()
+        return process.returncode
+
+    def run_install_commands(self):
+        commands = [
+            ("1/3: Creating Python virtual environment...", f'{sys.executable} -m venv .venv'),
+            ("2/3: Installing Python dependencies...", '\"' + str(Path(".venv/Scripts/python.exe")) + '\" -m pip install -r requirements.txt'),
+            ("3/3: Installing Node.js dependencies...", 'npm install --prefix web_platform/frontend')
+        ]
+
+        for i, (msg, cmd) in enumerate(commands):
+            self.log(f'\\n--- STEP {msg} ---')
+            return_code = self.run_command(cmd)
+            if return_code != 0:
+                self.log(f'\\n--- ERROR: Step {i+1} failed with code {return_code}. ---')
+                self.status_label.config(text="Installation Failed. Please see log for details.", fg="#ff4444")
+                self.install_button.config(state=tk.NORMAL, text="Retry Installation")
+                return
+
+        self.log("\\n--- ✅ INSTALLATION COMPLETE! ---")
+        self.status_label.config(text="Setup successful! You can now launch the application.", fg="#00ff88")
+        self.install_button.destroy()
+        launch_button = tk.Button(self, text="🚀 Launch Fortuna", font=tk.font.Font(family="Segoe UI", size=12, weight="bold"), bg='#00ff88', fg='#000000', command=self.launch_app, relief=tk.FLAT, padx=20, pady=10)
+        launch_button.pack(pady=10)
+
+    def launch_app(self):
+        self.destroy()
+        # Relaunch the script to start the main app
+        subprocess.Popen([sys.executable, __file__])
+
+# --- NEW: Main Execution Block ---
 if __name__ == "__main__":
-    app = FortunaApp()
-    app.protocol("WM_DELETE_WINDOW", app.on_closing)
-    app.mainloop()
+    VENV_PATH = Path(__file__).parent / ".venv"
+    if not VENV_PATH.exists() or not (VENV_PATH / "Scripts" / "python.exe").exists():
+        # If the virtual environment doesn't exist, run the setup wizard.
+        setup_app = SetupApp()
+        setup_app.mainloop()
+    else:
+        # Otherwise, run the main application.
+        app = FortunaApp()
+        app.protocol("WM_DELETE_WINDOW", app.on_closing)
+        app.mainloop()
