@@ -29,6 +29,7 @@ from .adapters.sporting_life_adapter import SportingLifeAdapter
 from .adapters.the_racing_api_adapter import TheRacingApiAdapter
 from .adapters.timeform_adapter import TimeformAdapter
 from .adapters.tvg_adapter import TVGAdapter
+from .adapters.pointsbet_greyhound_adapter import PointsBetGreyhoundAdapter
 from .cache_manager import cache_async_result
 from .health import health_monitor
 from .models import AggregatedResponse
@@ -67,6 +68,7 @@ class FortunaEngine:
                 url="https://betfair-data-supplier-prod.herokuapp.com/api/widgets/kvs-ratings/datasets?id=thoroughbred-model&date=",
             ),
             TVGAdapter(config=self.config),
+            PointsBetGreyhoundAdapter(source_name="PointsBetGreyhound", base_url="https://api.pointsbet.com"),
         ]
         self.http_limits = httpx.Limits(
             max_connections=config.HTTP_POOL_CONNECTIONS, max_keepalive_connections=config.HTTP_MAX_KEEPALIVE
