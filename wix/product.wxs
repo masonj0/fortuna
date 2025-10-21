@@ -78,7 +78,7 @@
     </Condition>
 
     <Condition Message="Administrator privileges are required">
-      <![CDATA[Privileged]]]>
+      <![CDATA[AdminUser]]]>
     </Condition>
 
   </Product>
