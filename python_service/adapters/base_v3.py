@@ -8,7 +8,7 @@ import structlog
 from ..models import Race
 from .base import BaseAdapter # Inherit to retain retry logic, logging, circuit breaker state, etc.
 
-class BaseAdapterV3(ABC):
+class BaseAdapterV3(BaseAdapter):
     """
     An architecturally superior abstract base class for data adapters.
 
@@ -16,18 +16,12 @@ class BaseAdapterV3(ABC):
     subclasses to implement their own `_fetch_data` and `_parse_races` methods.
     It also includes a built-in circuit breaker to enhance resilience.
     """
-    def __init__(self, source_name: str, base_url: str, timeout: int = 20, max_retries: int = 3):
-        self.source_name = source_name
-        self.base_url = base_url
+    def __init__(self, source_name: str, base_url: str, config=None, timeout: int = 20, max_retries: int = 3):
+        super().__init__(source_name=source_name, base_url=base_url, config=config)
         self.timeout = timeout
         self.max_retries = max_retries
         self.logger = structlog.get_logger(adapter_name=source_name)
-        # Circuit Breaker State
-        self.circuit_breaker_tripped = False
-        self.circuit_breaker_failure_count = 0
-        self.circuit_breaker_last_failure = 0
-        self.FAILURE_THRESHOLD = 3
-        self.COOLDOWN_PERIOD_SECONDS = 300  # 5 minutes
+        # Circuit Breaker State is inherited from BaseAdapter
 
     @abstractmethod
     async def _fetch_data(self, date: str) -> Any:
