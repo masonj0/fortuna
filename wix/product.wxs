@@ -77,9 +77,6 @@
       <![CDATA[Installed OR (VersionNT64 >= 601)]]>
     </Condition>
 
-    <Condition Message="Administrator privileges are required">
-      <![CDATA[AdminUser]]]>
-    </Condition>
 
   </Product>
 </Wix>
