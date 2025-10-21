@@ -73,14 +73,14 @@ $objDir = "$buildDir\obj"
 New-Item -ItemType Directory -Path $objDir -Force | Out-Null
 Copy-Item ".\wix\*.wxs" "$buildDir"
 
-@("$buildDir\product.wxs", "$buildDir\WixUI_CustomInstallDir.wxs", "$buildDir\WixUI_CustomProgress.wxs", "$buildDir\backend_files.wxs", "$buildDir\frontend_files.wxs", "$build_dir\venv_files.wxs") | ForEach-Object {
+@("$buildDir\product.wxs", "$buildDir\WixUI_CustomInstallDir.wxs", "$buildDir\WixUI_CustomProgress.wxs", "$buildDir\backend_files.wxs", "$buildDir\frontend_files.wxs", "$buildDir\venv_files.wxs") | ForEach-Object {
     Write-Info "Compiling $(Split-Path $_ -Leaf)..."
     & candle.exe $_ -o "$objDir\" `
         -ext WixUtilExtension `
         -d"BackendSourceDir=.\python_service" `
         -d"FrontendSourceDir=.\web_platform\frontend\out" `
         -d"VenvSourceDir=.\.venv" `
-        -dVersion="$AppVersion.0" `
+        -dVersion="$AppVersion" `
         -arch x64
     if ($LASTEXITCODE -ne 0) { throw "Compilation failed for $_" }
 }
