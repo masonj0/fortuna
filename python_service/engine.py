@@ -33,6 +33,7 @@ from .adapters.tvg_adapter import TVGAdapter
 from .cache_manager import cache_async_result
 from .health import health_monitor
 from .models import AggregatedResponse
+from .notifications import send_toast
 from .models import OddsData
 from .models import Race
 from .models import Runner
@@ -313,14 +314,10 @@ class FortunaEngine:
         )
 
         # --- Add Success Notification ---
-        try:
-            from windows_toasts import Toast, WindowsToaster
-            toaster = WindowsToaster("Fortuna Faucet Data Refresh")
-            new_toast = Toast()
-            new_toast.text_fields = [f"Successfully fetched {len(deduped_races)} races from {len(source_infos)} sources."]
-            toaster.show_toast(new_toast)
-        except (ImportError, RuntimeError):
-            pass
+        send_toast(
+            "Fortuna Faucet Data Refresh",
+            f"Successfully fetched {len(deduped_races)} races from {len(source_infos)} sources."
+        )
 
         return response_obj.model_dump()
 
