@@ -25,6 +25,7 @@
         </Control>
         <Publish Dialog="InstallProgressDlg" Control="Cancel" Event="SpawnDialog" Value="CancelDlg">1</Publish>
       </Dialog>
+      <Publish Dialog="InstallProgressDlg" Control="Cancel" Event="SpawnDialog" Value="CancelDlg">1</Publish>
     </UI>
   </Fragment>
 </Wix>
