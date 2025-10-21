@@ -93,6 +93,7 @@ $msiPath = "$OutputPath\Fortuna-Faucet-$AppVersion-x64.msi"
 
 Write-Info "Linking objects into MSI..."
 & light.exe -out $msiPath (Get-ChildItem "$objDir\*.wixobj") `
+    -sw1076 `
     -ext WixUIExtension -ext WixUtilExtension `
     -cultures:en-us -b $buildDir
 
