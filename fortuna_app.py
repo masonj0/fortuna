@@ -227,30 +227,56 @@ class SystemToolsTab(tk.Frame):
         self.output_box.see(tk.END)
 
     def run_create_shortcuts(self):
-        self.log_output("Running shortcut creation...")
+        self.log_output("--- Creating Desktop Shortcut ---")
         try:
             from win32com.client import Dispatch
             desktop = Path(os.environ["USERPROFILE"]) / "Desktop"
             app_path = Path(__file__).resolve()
-            shortcut_path = desktop / "🐴 Launch Fortuna.lnk"
+            shortcut_path = desktop / "🐴 Launch Fortuna Faucet.lnk"
+
+            if shortcut_path.exists():
+                self.log_output("🟡 Shortcut already exists. Overwriting.")
+
             shell = Dispatch("WScript.Shell")
             shortcut = shell.CreateShortCut(str(shortcut_path))
             shortcut.TargetPath = sys.executable
-            shortcut.Arguments = f'\"{app_path}\"'
+            shortcut.Arguments = f'"{app_path}"'
             shortcut.WorkingDirectory = str(app_path.parent)
-            shortcut.IconLocation = str(app_path.parent / "fortuna.ico")
+
+            ico_path = app_path.parent / "fortuna.ico"
+            if ico_path.exists():
+                shortcut.IconLocation = str(ico_path)
+            else:
+                self.log_output("🟡 Icon file not found, using default.")
+
             shortcut.save()
             self.log_output("✅ Success: Shortcut created on Desktop.")
+        except ImportError:
+            self.log_output("❌ ERROR: 'pywin32' is not installed. Cannot create shortcuts.")
+            self.log_output("  Please run: pip install pywin32")
         except Exception as e:
-            self.log_output(f"❌ ERROR: Could not create shortcut. Make sure 'pywin32' is installed (`pip install pywin32`). Details: {e}")
+            self.log_output(f"❌ ERROR: An unexpected error occurred: {e}")
 
     def run_verification(self):
-        self.log_output("Running installation verification...")
-        # Placeholder for full verification logic
-        py_ok = sys.version_info >= (3, 11)
-        self.log_output(f"- Python 3.11+ Check: {'✅' if py_ok else '❌'}")
-        # ... Add other checks (Node.js, pip packages, etc.)
-        self.log_output("Verification complete.")
+        self.log_output("\n--- Verifying System Setup ---")
+        verifications = [
+            ("Python 3.11+", lambda: sys.version_info >= (3, 11)),
+            ("Python Virtual Env (.venv)", lambda: Path(".venv").exists() and Path(".venv/Scripts/python.exe").exists()),
+            ("Node.js (npm)", lambda: subprocess.run("npm -v", shell=True, capture_output=True).returncode == 0),
+            ("Frontend Dependencies (node_modules)", lambda: Path("web_platform/frontend/node_modules").exists()),
+        ]
+
+        all_ok = True
+        for name, check in verifications:
+            result = check()
+            self.log_output(f"- {name}: {'✅ OK' if result else '❌ FAILED'}")
+            if not result:
+                all_ok = False
+
+        if all_ok:
+            self.log_output("\n✅ All checks passed. System is ready.")
+        else:
+            self.log_output("\n❌ Some checks failed. Please review the log.")
 
 # --- Main Application Window ---
 class FortunaApp(tk.Tk):
