@@ -64,6 +64,7 @@ Copy-Item ".\wix\product.wxs" "$buildDir\product.wxs"
 @("$buildDir\product.wxs", "$buildDir\backend_files.wxs", "$buildDir\frontend_files.wxs") | ForEach-Object {
     Write-Info "Compiling $(Split-Path $_ -Leaf)..."
     & candle.exe $_ -o "$objDir\" `
+        -ext WixUtilExtension `
         -d"BackendSourceDir=.\python_service" `
         -d"FrontendSourceDir=.\web_platform\frontend\out" `
         -dVersion="$AppVersion.0" `
