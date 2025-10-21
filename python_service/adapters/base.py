@@ -1,6 +1,8 @@
 # python_service/adapters/base.py
 import httpx
 import structlog
+import threading
+import time
 from tenacity import AsyncRetrying, stop_after_attempt, wait_exponential
 
 class BaseAdapter:
@@ -11,6 +13,7 @@ class BaseAdapter:
         self.base_url = base_url
         self.config = config or {}
         self.logger = structlog.get_logger(self.__class__.__name__)
+        self._breaker_lock = threading.Lock()
         self.retryer = AsyncRetrying(
             stop=stop_after_attempt(3),
             wait=wait_exponential(multiplier=1, min=2, max=10)
@@ -23,6 +26,16 @@ class BaseAdapter:
         self.COOLDOWN_PERIOD_SECONDS = 300  # 5 minutes
 
     async def make_request(self, http_client: httpx.AsyncClient, method: str, url: str, **kwargs):
+        with self._breaker_lock:
+            if self.circuit_breaker_tripped:
+                if time.time() - self.circuit_breaker_last_failure > self.COOLDOWN_PERIOD_SECONDS:
+                    self.logger.info("Circuit breaker cooldown expired. Attempting to reset.")
+                    self.circuit_breaker_tripped = False
+                    self.circuit_breaker_failure_count = 0
+                else:
+                    self.logger.warning("Circuit breaker is tripped. Skipping request.")
+                    return None
+
         full_url = url if url.startswith('http') else f"{self.base_url}{url}"
 
         async def _make_request():
@@ -36,8 +49,17 @@ class BaseAdapter:
         try:
             async for attempt in self.retryer:
                 with attempt:
-                    return await _make_request()
+                    response = await _make_request()
+                    with self._breaker_lock:
+                        self.circuit_breaker_failure_count = 0
+                    return response
         except httpx.HTTPStatusError as e:
+            with self._breaker_lock:
+                self.circuit_breaker_failure_count += 1
+                self.circuit_breaker_last_failure = time.time()
+                if self.circuit_breaker_failure_count >= self.FAILURE_THRESHOLD:
+                    self.circuit_breaker_tripped = True
+                    self.logger.error("Circuit breaker tripped due to repeated failures.")
             self.logger.error(
                 "http_error",
                 adapter=self.source_name,
@@ -49,6 +71,12 @@ class BaseAdapter:
             )
             return None
         except httpx.RequestError as e:
+            with self._breaker_lock:
+                self.circuit_breaker_failure_count += 1
+                self.circuit_breaker_last_failure = time.time()
+                if self.circuit_breaker_failure_count >= self.FAILURE_THRESHOLD:
+                    self.circuit_breaker_tripped = True
+                    self.logger.error("Circuit breaker tripped due to repeated failures.")
             self.logger.error("request_error", adapter=self.source_name, error=str(e), url=full_url)
             self._show_windows_toast("Adapter Network Error", f"{self.source_name}: Could not connect to {full_url}")
             return None
