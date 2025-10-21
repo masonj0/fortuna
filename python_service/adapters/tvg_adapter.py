@@ -47,40 +47,56 @@ class TVGAdapter(BaseAdapterV3):
     def _parse_races(self, raw_data: Any) -> List[Race]:
         """Parses the list of detailed race JSON objects into Race models."""
         races = []
+        if not isinstance(raw_data, list):
+            self.logger.warning("raw_data is not a list, cannot parse races.")
+            return races
+
         for race_detail in raw_data:
-            try:
-                track = race_detail.get('track', {})
-                race_info = race_detail.get('race', {})
+            track = race_detail.get('track')
+            race_info = race_detail.get('race')
 
-                runners = []
-                for runner_data in race_detail.get('runners', []):
-                    if runner_data.get('scratched'):
-                        continue
-
-                    odds = runner_data.get('odds', {})
-                    current_odds = odds.get('currentPrice', {})
-                    odds_str = current_odds.get('fractional') or odds.get('morningLinePrice', {}).get('fractional')
-
-                    runners.append(Runner(
-                        number=int(runner_data.get('programNumber', '0').replace('A', '')),
-                        name=clean_text(runner_data.get('name')),
-                        odds=odds_str,
-                        scratched=False
-                    ))
-
-                if runners:
-                    race = Race(
-                        id=f"tvg_{track.get('code', 'UNK')}_{race_info.get('date', 'NODATE')}_{race_info.get('number', 0)}",
-                        venue=track.get('name'),
-                        race_number=race_info.get('number'),
-                        start_time=datetime.fromisoformat(race_info.get('postTime').replace('Z', '+00:00')),
-                        runners=runners,
-                        source=self.SOURCE_NAME
-                    )
-                    races.append(race)
-            except (ValueError, AttributeError):
-                self.logger.warning("Failed to parse a TVG race detail.", exc_info=True)
+            if not track or not race_info:
+                self.logger.warning("Missing track or race info in race detail, skipping.")
                 continue
+
+            runners = []
+            for runner_data in race_detail.get('runners', []):
+                if runner_data.get('scratched'):
+                    continue
+
+                odds = runner_data.get('odds', {})
+                current_odds = odds.get('currentPrice', {})
+                odds_str = current_odds.get('fractional') or odds.get('morningLinePrice', {}).get('fractional')
+
+                try:
+                    number = int(runner_data.get('programNumber', '0').replace('A', ''))
+                except (ValueError, TypeError):
+                    self.logger.warning(f"Could not parse program number: {runner_data.get('programNumber')}")
+                    continue
+
+                runners.append(Runner(
+                    number=number,
+                    name=clean_text(runner_data.get('name')),
+                    odds=odds_str,
+                    scratched=False
+                ))
+
+            if runners:
+                try:
+                    start_time = datetime.fromisoformat(race_info.get('postTime').replace('Z', '+00:00'))
+                except (ValueError, TypeError, AttributeError):
+                    self.logger.warning(f"Could not parse post time: {race_info.get('postTime')}")
+                    continue
+
+                race = Race(
+                    id=f"tvg_{track.get('code', 'UNK')}_{race_info.get('date', 'NODATE')}_{race_info.get('number', 0)}",
+                    venue=track.get('name'),
+                    race_number=race_info.get('number'),
+                    start_time=start_time,
+                    runners=runners,
+                    source=self.SOURCE_NAME
+                )
+                races.append(race)
         return races
 
     async def fetch_races(self, date: str, http_client):

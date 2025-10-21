@@ -28,6 +28,12 @@ jobs:
           cache: 'npm'
           cache-dependency-path: web_platform/frontend/package-lock.json
 
+      - name: Install Python dependencies
+        run: |
+          python -m venv .venv
+          .\.venv\Scripts\Activate.ps1
+          pip install -r requirements.txt
+
       - name: Cache Next.js build
         uses: actions/cache@v4
         with:
