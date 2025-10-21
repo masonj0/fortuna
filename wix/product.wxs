@@ -35,17 +35,16 @@
     <Feature Id="ProductFeature" Title="Fortuna Faucet" Level="1">
         <ComponentGroupRef Id="ProductComponents"/>
         <ComponentGroupRef Id="ShortcutsComponentGroup"/>
+        <ComponentGroupRef Id="BackendFileGroup"/>
+        <ComponentGroupRef Id="FrontendFileGroup"/>
     </Feature>
 
     <!-- Components (Logical file groupings) -->
     <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
-      <Component Id="PythonBackendComponent" Guid="*">
-        <RegistryValue Root="HKLM" Key="Software\Fortuna Faucet\Backend" Name="Installed" Value="1" Type="integer"/>
-      </Component>
-      <Component Id="ReactFrontendComponent" Guid="*">
-        <RegistryValue Root="HKLM" Key="Software\Fortuna Faucet\Frontend" Name="Installed" Value="1" Type="integer"/>
-      </Component>
-      <Component Id="WindowsServiceComponent" Guid="*">
+      <Component Id="RegistryAndServiceComponent" Guid="F25A1181-9943-4753-9095-585A826B6D21">
+        <RegistryValue Root="HKLM" Key="Software\Fortuna Faucet\Backend" Name="Installed" Type="integer" Value="1" />
+        <RegistryValue Root="HKLM" Key="Software\Fortuna Faucet\Frontend" Name="Installed" Type="integer" Value="1" />
+        <RegistryValue Root="HKLM" Key="Software\Fortuna Faucet" Name="Installed" Type="integer" Value="1" KeyPath="yes"/>
         <ServiceInstall Id="FortunaService" Name="FortunaFaucetBackend" DisplayName="Fortuna Faucet Background Service" Description="Continuous horse racing data monitoring engine" Type="ownProcess" Start="auto" Account="LocalSystem" ErrorControl="normal"/>
         <ServiceControl Id="StartService" Name="FortunaFaucetBackend" Start="install" Stop="both" Remove="uninstall"/>
       </Component>
