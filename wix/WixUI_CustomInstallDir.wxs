@@ -3,8 +3,6 @@
      xmlns:WixUI="http://schemas.microsoft.com/wix/WixUIExtension">
   <Fragment>
     <UI Id="WixUI_CustomInstallDir">
-        <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
-
         <DialogRef Id="BrowseDlg" />
         <DialogRef Id="DiskCostDlg" />
         <DialogRef Id="ErrorDlg" />

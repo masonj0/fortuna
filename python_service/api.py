@@ -70,7 +70,14 @@ async def lifespan(app: FastAPI):
 limiter = Limiter(key_func=get_remote_address)
 
 # Pass the lifespan manager to the FastAPI app
-app = FastAPI(title="Fortuna Faucet API", version="2.1", lifespan=lifespan)
+app = FastAPI(
+    title="Fortuna Faucet API",
+    version="2.1",
+    lifespan=lifespan,
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json"
+)
 
 # Add the new error handling middleware FIRST, to catch exceptions from all other middleware
 app.add_middleware(UserFriendlyErrorMiddleware)

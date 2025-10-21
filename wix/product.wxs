@@ -44,7 +44,7 @@
 
     <!-- Components (Logical file groupings) -->
     <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
-      <Component Id="RegistryAndServiceComponent" Guid="F25A1181-9943-4753-9095-585A826B6D21" Vital="no">
+      <Component Id="RegistryAndServiceComponent" Guid="F25A1181-9943-4753-9095-585A826B6D21">
         <RegistryValue Root="HKLM" Key="Software\Fortuna Faucet\Backend" Name="Installed" Type="integer" Value="1" />
         <RegistryValue Root="HKLM" Key="Software\Fortuna Faucet\Frontend" Name="Installed" Type="integer" Value="1" />
         <RegistryValue Root="HKLM" Key="Software\Fortuna Faucet" Name="Installed" Type="integer" Value="1" KeyPath="yes"/>
@@ -65,12 +65,12 @@
 
     <!-- UI Customization -->
     <UI>
-      <UIRef Id="WixUI_CustomInstallDir" />
-      <ProgressText Action="CostInitialize">Preparing installation...</ProgressText>
-      <ProgressText Action="FileCost">Calculating space requirements...</ProgressText>
-      <ProgressText Action="CostFinalize">Finalizing preparation...</ProgressText>
-      <ProgressText Action="InstallValidate">Validating install...</ProgressText>
+      <UIRef Id="WixUI_InstallDir" />
+      <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="InstallDirDlg" Order="2">1</Publish>
+      <Publish Dialog="InstallDirDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg">1</Publish>
     </UI>
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+    <UIRef Id="WixUI_Common" />
     <WixVariable Id="WixUILicenseRtf" Value="electron\assets\license.rtf"/>
     <!-- The following two variables are for custom UI images. -->
     <!-- To enable them, create the files and uncomment the lines. -->
