@@ -41,20 +41,30 @@ log = structlog.get_logger()
 # Define the lifespan context manager for robust startup/shutdown
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    configure_logging()
     """
     Manage the application's lifespan. On startup, it initializes the OddsEngine
     with validated settings and attaches it to the app state. On shutdown, it
     properly closes the engine's resources.
     """
-    settings = get_settings()
-    app.state.engine = FortunaEngine(config=settings)
-    app.state.analyzer_engine = AnalyzerEngine()
-    log.info("Server startup: Configuration validated and FortunaEngine initialized.")
+    configure_logging()
+    log.info("Server startup sequence initiated.")
+    try:
+        settings = get_settings()
+        app.state.engine = FortunaEngine(config=settings)
+        app.state.analyzer_engine = AnalyzerEngine()
+        log.info("Server startup: Configuration validated and FortunaEngine initialized successfully.")
+    except Exception as e:
+        log.critical("FATAL: Failed to initialize FortunaEngine during server startup.", exc_info=True)
+        # Re-raise the exception to ensure FastAPI's startup failure handling is triggered
+        raise e
+
     yield
+
     # Clean up the engine resources
-    await app.state.engine.close()
-    log.info("Server shutdown: HTTP client resources closed.")
+    if hasattr(app.state, 'engine') and app.state.engine:
+        log.info("Server shutdown: Closing HTTP client resources.")
+        await app.state.engine.close()
+    log.info("Server shutdown sequence complete.")
 
 
 limiter = Limiter(key_func=get_remote_address)

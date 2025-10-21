@@ -34,5 +34,9 @@ class UserFriendlyErrorMiddleware(BaseHTTPMiddleware):
 
             return JSONResponse(
                 status_code=status_code,
-                content={"detail": message}
+                content={
+                    "status": "error",
+                    "user_message": message,
+                    "technical_details": f"{type(exc).__name__}: {exc}"
+                }
             )

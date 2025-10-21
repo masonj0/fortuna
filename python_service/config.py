@@ -5,6 +5,7 @@ from typing import Optional, List
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 import structlog
+from pydantic import model_validator
 
 # --- Encryption Setup ---
 try:
@@ -35,12 +36,6 @@ from .credentials_manager import SecureCredentialsManager
 class Settings(BaseSettings):
     API_KEY: str = ""
 
-    def __init__(self, **data):
-        super().__init__(**data)
-        # If .env doesn't have API_KEY, try to load from credential manager
-        if not self.API_KEY:
-            self.API_KEY = SecureCredentialsManager.get_api_key() or "MISSING"
-
     # --- Optional Betfair Credentials ---
     BETFAIR_APP_KEY: Optional[str] = None
     BETFAIR_USERNAME: Optional[str] = None
@@ -60,6 +55,7 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
 
     # --- Optional Adapter Keys ---
+    NEXT_PUBLIC_API_KEY: Optional[str] = None # Allow frontend key to be present in .env
     TVG_API_KEY: Optional[str] = None
     RACING_AND_SPORTS_TOKEN: Optional[str] = None
     POINTSBET_API_KEY: Optional[str] = None
@@ -71,12 +67,24 @@ class Settings(BaseSettings):
 
     model_config = {"env_file": ".env", "case_sensitive": True}
 
-    def __init__(self, **values):
-        super().__init__(**values)
-        # Decrypt sensitive fields after initial loading
+    @model_validator(mode='after')
+    def process_settings(self) -> 'Settings':
+        """
+        This validator runs after the initial settings are loaded from .env and
+        performs two key functions:
+        1. If API_KEY is missing, it falls back to the SecureCredentialsManager.
+        2. It decrypts any fields that were loaded from the .env file.
+        """
+        # 1. Fallback for API_KEY
+        if not self.API_KEY:
+            self.API_KEY = SecureCredentialsManager.get_api_key() or "MISSING"
+
+        # 2. Decrypt sensitive fields
         self.BETFAIR_APP_KEY = decrypt_value(self.BETFAIR_APP_KEY)
         self.BETFAIR_USERNAME = decrypt_value(self.BETFAIR_USERNAME)
         self.BETFAIR_PASSWORD = decrypt_value(self.BETFAIR_PASSWORD)
+
+        return self
 
 
 @lru_cache()
