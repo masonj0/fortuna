@@ -80,7 +80,7 @@ Copy-Item ".\wix\*.wxs" "$buildDir"
         -d"BackendSourceDir=.\python_service" `
         -d"FrontendSourceDir=.\web_platform\frontend\out" `
         -d"VenvSourceDir=.\.venv" `
-        -dVersion="$AppVersion.0" `
+        -dVersion="$AppVersion" `
         -arch x64
     if ($LASTEXITCODE -ne 0) { throw "Compilation failed for $_" }
 }
