@@ -73,7 +73,7 @@ $objDir = "$buildDir\obj"
 New-Item -ItemType Directory -Path $objDir -Force | Out-Null
 Copy-Item ".\wix\*.wxs" "$buildDir"
 
-@("$buildDir\product.wxs", "$buildDir\WixUI_CustomInstallDir.wxs", "$buildDir\WixUI_CustomProgress.wxs", "$buildDir\backend_files.wxs", "$buildDir\frontend_files.wxs", "$build_dir\venv_files.wxs") | ForEach-Object {
+@("$buildDir\product.wxs", "$buildDir\WixUI_CustomInstallDir.wxs", "$buildDir\WixUI_CustomProgress.wxs", "$buildDir\backend_files.wxs", "$buildDir\frontend_files.wxs", "$buildDir\venv_files.wxs") | ForEach-Object {
     Write-Info "Compiling $(Split-Path $_ -Leaf)..."
     & candle.exe $_ -o "$objDir\" `
         -ext WixUtilExtension `
