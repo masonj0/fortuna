@@ -23,6 +23,7 @@
         <Control Id="ProgressBar" Type="ProgressBar" X="35" Y="120" Width="300" Height="10" ProgressBlocks="yes" Text="Progress">
           <Subscribe Event="SetProgress" Attribute="Progress" />
         </Control>
+        <Publish Dialog="InstallProgressDlg" Control="Cancel" Event="SpawnDialog" Value="CancelDlg">1</Publish>
       </Dialog>
     </UI>
   </Fragment>
