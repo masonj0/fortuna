@@ -125,3 +125,13 @@ This campaign, guided by a new "Grand Strategy" blueprint, was executed with rap
 -   **A Unified Command Console (`SERVICE_MANAGER.bat`):** Unify all individual scripts under a single, user-friendly, menu-driven service manager, providing a 'single pane of glass' for all common operations.
 
 This era solidified the kingdom's foundations, making it not just powerful, but stable, reliable, and a pleasure to operate. The Faucet was no longer just an engine; it was a complete, professional-grade machine.
+
+---
+
+## The Gauntlet of CI/CD (Late October 2025)
+
+With a professional-grade application in hand, the final frontier was professional-grade *delivery*. This campaign focused on automating the creation of the MSI installer through a continuous integration pipeline, a process that proved to be a formidable challenge.
+
+The kingdom's engineers faced a relentless series of cryptic build errors from the WiX Toolset, a hostile environment that tested their resolve. Through a series of rapid, iterative fixes—addressing everything from component GUIDs and 64-bit architecture mismatches to obscure linker errors and frontend dependency warnings—they systematically conquered each obstacle.
+
+This trial by fire culminated in a triumphant success: a fully automated GitHub Actions workflow that reliably compiles, links, and delivers a polished, distributable MSI installer. This victory transformed the project's delivery model from a manual, error-prone process into a repeatable, one-click release pipeline, marking the true completion of the "Windows Ascension."

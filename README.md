@@ -1,16 +1,20 @@
 # 🐴 Fortuna Faucet - Racing Analysis Engine
 
-Welcome to Fortuna Faucet! This guide will help you get the application running.
+Welcome to Fortuna Faucet! This guide provides instructions for both end-users and developers.
 
-## Getting Started (for Users)
+## Getting Started: The Official Installation
 
-If you have downloaded this project as a ZIP file, you can get started right away.
+The easiest way to get started is with our official MSI installer, which handles all setup and configuration automatically.
 
-1.  **Run the Application:** Double-click the `fortuna_app.py` file.
-2.  **One-Click Setup:** A setup window will appear to automatically install all required dependencies. Click **'Start Installation'** and wait for the process to complete.
-3.  **Launch:** Once finished, click **'Launch'** to start the main application dashboard.
+1.  **Download the Installer:**
+    *   Go to the [latest release page](https://github.com/masonj0/fortuna/releases/latest) on GitHub.
+    *   Download the `Fortuna-Faucet-Setup-vX.X.X.msi` file.
 
-That's it! The application is now ready to use.
+2.  **Run the Installer:**
+    *   Double-click the downloaded `.msi` file.
+    *   Follow the on-screen instructions in the setup wizard.
+
+Once installed, a "Fortuna Faucet" folder will be created in your Start Menu. The application's backend will run automatically as a background service, and you can access the dashboard via the Start Menu shortcut.
 
 ---
 
