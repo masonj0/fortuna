@@ -19,6 +19,11 @@
       "main.js",
       "preload.js",
       "assets/**/*",
+      "../.venv/**/*",
+      "../python_service/**/*",
+      "../web_platform/frontend/out/**/*",
+      "../requirements.txt",
+      "../VERSION.txt",
       "!node_modules/**/*"
     ],
     "win": {

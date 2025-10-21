@@ -10,15 +10,7 @@ def mock_config():
     Provides a mock config object for the adapter, ensuring it doesn't
     load from any .env files, which prevents test pollution.
     """
-    class TestSettings(Settings):
-        class Config:
-            env_file = None
-
-    return TestSettings(
-        BETFAIR_APP_KEY="test_key",
-        BETFAIR_USERNAME="test_user",
-        BETFAIR_PASSWORD="test_password",
-        API_KEY="test_api_key",
+    return Settings(
         GREYHOUND_API_URL="https://api.example.com"
     )
 
@@ -68,14 +60,9 @@ async def test_fetch_races_parses_correctly(mock_make_request, mock_config):
     mock_make_request.return_value = mock_response
 
     # ACT
-    result = await adapter.fetch_races(today, AsyncMock())
+    races = await adapter.fetch_races(today, AsyncMock())
 
     # ASSERT
-    assert result is not None
-    assert result['source_info']['status'] == 'SUCCESS'
-    assert result['source_info']['races_fetched'] == 1
-
-    races = result['races']
     assert len(races) == 1
 
     race = races[0]
@@ -102,11 +89,7 @@ async def test_fetch_races_handles_empty_response(mock_make_request, mock_config
     mock_make_request.return_value = mock_response
 
     # ACT
-    result = await adapter.fetch_races(today, AsyncMock())
+    races = await adapter.fetch_races(today, AsyncMock())
 
     # ASSERT
-    assert result is not None
-    assert result['source_info']['status'] == 'SUCCESS'
-    assert result['source_info']['races_fetched'] == 0
-    assert result['source_info']['error_message'] == "No race cards found for date."
-    assert len(result['races']) == 0
+    assert races == []

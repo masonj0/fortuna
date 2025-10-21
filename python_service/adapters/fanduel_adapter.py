@@ -1,19 +1,14 @@
 # python_service/adapters/fanduel_adapter.py
 
-from datetime import datetime
-from datetime import timedelta
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Any
-from typing import Dict
-from typing import List
+from typing import Any, Dict, List, Optional
 
 import httpx
 import structlog
 
-from ..models import OddsData
-from ..models import Race
-from ..models import Runner
+from ..core.exceptions import AdapterParsingError
+from ..models import OddsData, Race, Runner
 from .base import BaseAdapter
 
 log = structlog.get_logger()
@@ -22,30 +17,21 @@ log = structlog.get_logger()
 class FanDuelAdapter(BaseAdapter):
     """Adapter for fetching horse racing odds from FanDuel's private API."""
 
-    source_name = "FanDuel"
-    API_URL = "https://sb-api.nj.sportsbook.fanduel.com/api/markets?_ak=Fh2e68s832c41d4b&eventId="
+    def __init__(self, config):
+        super().__init__(source_name="FanDuel", base_url="https://sb-api.nj.sportsbook.fanduel.com/api/", config=config)
 
     async def fetch_races(self, date: str, http_client: httpx.AsyncClient) -> List[Race]:
         """Fetches races for a given date. Note: FanDuel API is event-based, not date-based."""
         # This is a placeholder for a more robust event discovery mechanism.
-        # For now, we'll use a known event ID for a major race day as a proof of concept.
-        # A full implementation would need to first find the relevant event IDs for the day.
         event_id = "38183.3"  # Example: A major race event
 
         log.info("Fetching races from FanDuel", event_id=event_id)
-        start_time = datetime.now()
-        try:
-            response = await http_client.get(self.API_URL + event_id)
-            response.raise_for_status()
-            data = response.json()
-            races = self._parse_races(data)
-            return self._format_response(races, start_time, is_success=True)
-        except httpx.HTTPStatusError as e:
-            log.error("FanDuel API request failed", status_code=e.response.status_code, response=e.response.text)
-            return self._format_response([], start_time, is_success=False, error_message=str(e))
-        except Exception as e:
-            log.error("An unexpected error occurred fetching FanDuel data", error=str(e), exc_info=True)
-            return self._format_response([], start_time, is_success=False, error_message=str(e))
+
+        endpoint = f"markets?_ak=Fh2e68s832c41d4b&eventId={event_id}"
+        response = await self.make_request(http_client, "GET", endpoint)
+        data = response.json()
+
+        return self._parse_races(data)
 
     def _parse_races(self, data: Dict[str, Any]) -> List[Race]:
         races = []
@@ -60,19 +46,18 @@ class FanDuelAdapter(BaseAdapter):
                         race = self._parse_single_race(market)
                         if race:
                             races.append(race)
-                    except Exception as e:
-                        log.error("Failed to parse a FanDuel market", market=market, error=str(e), exc_info=True)
+                    except AdapterParsingError as e:
+                        log.error("Failed to parse a FanDuel market", market=market, error=str(e))
         return races
 
-    def _parse_single_race(self, market: Dict[str, Any]) -> Race | None:
+    def _parse_single_race(self, market: Dict[str, Any]) -> Optional[Race]:
         market_name = market.get("marketName", "")
         if not market_name.startswith("Race"):
             return None
 
-        # Extract race number and track from market name (e.g., "Race 5 - Churchill Downs")
         parts = market_name.split(" - ")
         if len(parts) < 2:
-            return None
+            raise AdapterParsingError(self.source_name, f"Could not parse race and track from market name: {market_name}")
 
         race_number_str = parts[0].replace("Race ", "")
         track_name = parts[1]
@@ -88,7 +73,6 @@ class FanDuelAdapter(BaseAdapter):
                 continue
 
             try:
-                # Price is given as a fraction string, e.g., "12/5"
                 numerator, denominator = map(int, win_odds.split("/"))
                 decimal_odds = Decimal(numerator) / Decimal(denominator) + 1
             except (ValueError, ZeroDivisionError):
@@ -97,15 +81,13 @@ class FanDuelAdapter(BaseAdapter):
 
             odds = OddsData(win=decimal_odds, source=self.source_name, last_updated=datetime.now(timezone.utc))
 
-            # Placeholder for program number
             program_number_str = runner_name.split(".")[0].strip()
 
-            runner = Runner(
+            runners.append(Runner(
                 name=runner_name.split(".")[1].strip(),
                 number=int(program_number_str) if program_number_str.isdigit() else None,
                 odds={self.source_name: odds},
-            )
-            runners.append(runner)
+            ))
 
         if not runners:
             return None
