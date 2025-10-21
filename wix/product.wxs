@@ -19,6 +19,8 @@
 
     <Media Id="1" Cabinet="fortuna.cab" EmbedCab="yes"/>
 
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+
     <!-- Directory Structure -->
     <Directory Id="TARGETDIR" Name="SourceDir">
       <Directory Id="ProgramFilesFolder">
@@ -60,10 +62,14 @@
 
 
     <!-- UI Customization -->
-    <UIRef Id="WixUI_InstallScope"/>
-    <WixVariable Id="WixUILicenseRtf" Value="assets\license.rtf"/>
-    <WixVariable Id="WixUIBannerBmp" Value="assets\banner.bmp"/>
-    <WixVariable Id="WixUIDialogBmp" Value="assets\dialog.bmp"/>
+    <UI>
+      <UIRef Id="WixUI_InstallDir" />
+    </UI>
+    <WixVariable Id="WixUILicenseRtf" Value="electron\assets\license.rtf"/>
+    <!-- The following two variables are for custom UI images. -->
+    <!-- To enable them, create the files and uncomment the lines. -->
+    <!-- <WixVariable Id="WixUIBannerBmp" Value="electron\assets\banner.bmp"/> -->
+    <!-- <WixVariable Id="WixUIDialogBmp" Value="electron\assets\dialog.bmp"/> -->
 
     <!-- System Requirements -->
     <Condition Message="Windows 7 or later (64-bit) is required">
