@@ -2,19 +2,14 @@
 
 import asyncio
 from datetime import datetime
-from typing import Any
-from typing import Dict
-from typing import List
-from typing import Optional
+from typing import List, Optional
 
 import httpx
 import structlog
-from bs4 import BeautifulSoup
-from bs4 import Tag
+from bs4 import BeautifulSoup, Tag
 
-from ..models import OddsData
-from ..models import Race
-from ..models import Runner
+from ..core.exceptions import AdapterParsingError
+from ..models import OddsData, Race, Runner
 from ..utils.odds import parse_odds_to_decimal
 from .base import BaseAdapter
 
@@ -27,32 +22,23 @@ def _clean_text(text: Optional[str]) -> Optional[str]:
 
 class SportingLifeAdapter(BaseAdapter):
     def __init__(self, config):
-        super().__init__(source_name="SportingLife", base_url="https://www.sportinglife.com")
+        super().__init__(source_name="SportingLife", base_url="https://www.sportinglife.com", config=config)
 
-    async def fetch_races(self, date: str, http_client: httpx.AsyncClient) -> Dict[str, Any]:
-        start_time = datetime.now()
-        try:
-            race_links = await self._get_race_links(http_client)
-            tasks = [self._fetch_and_parse_race(link, http_client) for link in race_links]
-            races = [race for race in await asyncio.gather(*tasks) if race]
-            return self._format_response(races, start_time, is_success=True)
-        except Exception as e:
-            return self._format_response([], start_time, is_success=False, error_message=str(e))
+    async def fetch_races(self, date: str, http_client: httpx.AsyncClient) -> List[Race]:
+        race_links = await self._get_race_links(http_client)
+        tasks = [self._fetch_and_parse_race(link, http_client) for link in race_links]
+        return [race for race in await asyncio.gather(*tasks) if race]
 
     async def _get_race_links(self, http_client: httpx.AsyncClient) -> List[str]:
-        response_html = await self.make_request(http_client, "GET", "/horse-racing/racecards")
-        if not response_html:
-            return []
-        soup = BeautifulSoup(response_html, "html.parser")
+        response = await self.make_request(http_client, "GET", "/horse-racing/racecards")
+        soup = BeautifulSoup(response.text, "html.parser")
         links = {a["href"] for a in soup.select("a.hr-race-card-meeting__race-link[href]")}
         return [f"{self.base_url}{link}" for link in links]
 
     async def _fetch_and_parse_race(self, url: str, http_client: httpx.AsyncClient) -> Optional[Race]:
         try:
-            response_html = await self.make_request(http_client, "GET", url)
-            if not response_html:
-                return None
-            soup = BeautifulSoup(response_html, "html.parser")
+            response = await self.make_request(http_client, "GET", url)
+            soup = BeautifulSoup(response.text, "html.parser")
             track_name = _clean_text(soup.select_one("a.hr-race-header-course-name__link").get_text())
             race_time_str = _clean_text(soup.select_one("span.hr-race-header-time__time").get_text())
             start_time = datetime.strptime(f"{datetime.now().date()} {race_time_str}", "%Y-%m-%d %H:%M")
@@ -67,9 +53,9 @@ class SportingLifeAdapter(BaseAdapter):
                 runners=[r for r in runners if r],
                 source=self.source_name,
             )
-        except Exception as e:
+        except (AttributeError, ValueError) as e:
             log.error("Error parsing race from SportingLife", url=url, exc_info=e)
-            return None
+            raise AdapterParsingError(self.source_name, f"Failed to parse race at {url}") from e
 
     def _parse_runner(self, row: Tag) -> Optional[Runner]:
         try:
@@ -84,6 +70,6 @@ class SportingLifeAdapter(BaseAdapter):
                 else {}
             )
             return Runner(number=number, name=name, odds=odds_data)
-        except Exception as e:
-            log.warning("Failed to parse runner from SportingLife", exc_info=e)
+        except (AttributeError, ValueError):
+            log.warning("Failed to parse runner from SportingLife, skipping.")
             return None

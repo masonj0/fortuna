@@ -61,13 +61,12 @@ async def test_fetch_gbgb_races_successfully(gbgb_adapter):
 
     # ACT
     async with httpx.AsyncClient() as client:
-        result = await gbgb_adapter.fetch_races(mock_date, client)
+        races = await gbgb_adapter.fetch_races(mock_date, client)
 
     # ASSERT
-    assert result['source_info']['status'] == 'SUCCESS'
-    assert len(result['races']) == 1
+    assert len(races) == 1
 
-    race = result['races'][0]
+    race = races[0]
     assert race.venue == "Towcester"
     assert race.race_number == 1
     assert race.race_name == "The October Sprint"

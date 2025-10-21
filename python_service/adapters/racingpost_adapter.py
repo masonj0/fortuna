@@ -1,71 +1,67 @@
 # python_service/adapters/racingpost_adapter.py
 from datetime import datetime
-from typing import AsyncGenerator
+from typing import List, Optional
+import asyncio
 
 from selectolax.parser import HTMLParser
 
-from ..models import OddsData
-from ..models import Race
-from ..models import Runner
+from ..core.exceptions import AdapterParsingError
+from ..models import OddsData, Race, Runner
 from ..utils.odds import parse_odds_to_decimal
-from ..utils.text import clean_text
-from ..utils.text import normalize_venue_name
+from ..utils.text import clean_text, normalize_venue_name
 from .base import BaseAdapter
 
 
 class RacingPostAdapter(BaseAdapter):
     """A production-ready adapter for scraping Racing Post racecards."""
 
-    SOURCE_NAME = "RacingPost"
-    BASE_URL = "https://www.racingpost.com"
-
     def __init__(self, config=None):
-        super().__init__(self.SOURCE_NAME, self.BASE_URL)
+        super().__init__(source_name="RacingPost", base_url="https://www.racingpost.com", config=config)
 
-    async def fetch_races(self, date: str) -> AsyncGenerator[Race, None]:
+    async def fetch_races(self, date: str, http_client) -> List[Race]:
         """
         Fetches all UK & Ireland races for a given date from racingpost.com.
         """
-        race_card_urls = await self._get_race_card_urls(date)
-        for url in race_card_urls:
-            try:
-                response = await self.http_client.get(url, headers=self._get_headers())
-                response.raise_for_status()
-                parser = HTMLParser(response.text)
+        race_card_urls = await self._get_race_card_urls(date, http_client)
 
-                venue_raw = parser.css_first('a[data-test-selector="RC-course__name"]').text(strip=True)
-                venue = normalize_venue_name(venue_raw)
+        tasks = [self._fetch_and_parse_race(url, date, http_client) for url in race_card_urls]
+        return [race for race in await asyncio.gather(*tasks) if race]
 
-                race_time_str = parser.css_first('span[data-test-selector="RC-course__time"]').text(strip=True)
-                race_datetime_str = f"{date} {race_time_str}"
-                start_time = datetime.strptime(race_datetime_str, "%Y-%m-%d %H:%M")
-
-                runners = self._parse_runners(parser)
-
-                if venue and runners:
-                    race_number = self._get_race_number(parser, start_time)
-                    yield Race(
-                        id=f"rp_{venue.lower().replace(' ', '')}_{date}_{race_number}",
-                        venue=venue,
-                        race_number=race_number,
-                        start_time=start_time,
-                        runners=runners,
-                        source=self.SOURCE_NAME,
-                    )
-
-            except Exception:
-                # Assuming a logger is available, as per standard practice in the project.
-                # If self.logger is not on BaseAdapter, this would need to be structlog.
-                # self.logger.error(f"Failed to process race card at {url}", exc_info=True)
-                continue
-
-    async def _get_race_card_urls(self, date: str) -> list[str]:
+    async def _get_race_card_urls(self, date: str, http_client) -> list[str]:
         """Gets all individual race card URLs for a given date."""
-        url = f"{self.BASE_URL}/racecards/{date}"
-        response = await self.http_client.get(url, headers=self._get_headers())
+        url = f"/racecards/{date}"
+        response = await self.make_request(http_client, "GET", url, headers=self._get_headers())
         parser = HTMLParser(response.text)
         links = parser.css('a[data-test-selector^="RC-meetingItem__link_race"]')
-        return [f"{self.BASE_URL}{link.attributes['href']}" for link in links]
+        return [f"{self.base_url}{link.attributes['href']}" for link in links]
+
+    async def _fetch_and_parse_race(self, url: str, date: str, http_client) -> Optional[Race]:
+        try:
+            response = await self.make_request(http_client, "GET", url.replace(self.base_url, ""), headers=self._get_headers())
+            parser = HTMLParser(response.text)
+
+            venue_raw = parser.css_first('a[data-test-selector="RC-course__name"]').text(strip=True)
+            venue = normalize_venue_name(venue_raw)
+
+            race_time_str = parser.css_first('span[data-test-selector="RC-course__time"]').text(strip=True)
+            race_datetime_str = f"{date} {race_time_str}"
+            start_time = datetime.strptime(race_datetime_str, "%Y-%m-%d %H:%M")
+
+            runners = self._parse_runners(parser)
+
+            if venue and runners:
+                race_number = self._get_race_number(parser, start_time)
+                return Race(
+                    id=f"rp_{venue.lower().replace(' ', '')}_{date}_{race_number}",
+                    venue=venue,
+                    race_number=race_number,
+                    start_time=start_time,
+                    runners=runners,
+                    source=self.source_name,
+                )
+            return None
+        except (AttributeError, ValueError) as e:
+            raise AdapterParsingError(self.source_name, f"Failed to parse race at {url}") from e
 
     def _get_race_number(self, parser: HTMLParser, start_time: datetime) -> int:
         """Derives the race number by finding the active time in the nav bar."""
@@ -100,13 +96,14 @@ class RacingPostAdapter(BaseAdapter):
                     win_odds = parse_odds_to_decimal(odds_str)
                     if win_odds and win_odds < 999:
                         odds = {
-                            self.SOURCE_NAME: OddsData(
-                                win=win_odds, source=self.SOURCE_NAME, last_updated=datetime.now()
+                            self.source_name: OddsData(
+                                win=win_odds, source=self.source_name, last_updated=datetime.now()
                             )
                         }
 
                 runners.append(Runner(number=number, name=name, odds=odds, scratched=scratched))
             except (ValueError, AttributeError):
+                self.logger.warning("Could not parse runner, skipping.", parser=parser)
                 continue
         return runners
 
