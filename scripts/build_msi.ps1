@@ -53,6 +53,10 @@ Write-Info "Harvesting frontend files..."
 & heat.exe dir ".\web_platform\frontend\out" -o "$buildDir\frontend_files.wxs" `
     -gg -sf -srd -cg FrontendFileGroup -dr INSTALLFOLDER -var "var.FrontendSourceDir"
 
+Write-Info "Harvesting Python environment files..."
+& heat.exe dir ".\.venv" -o "$buildDir\venv_files.wxs" `
+    -gg -sf -srd -cg VenvFileGroup -dr INSTALLFOLDER -var "var.VenvSourceDir"
+
 Write-Success "File harvesting complete."
 
 # ==================== PHASE 3: COMPILATION ====================
@@ -61,12 +65,13 @@ $objDir = "$buildDir\obj"
 New-Item -ItemType Directory -Path $objDir -Force | Out-Null
 Copy-Item ".\wix\product.wxs" "$buildDir\product.wxs"
 
-@("$buildDir\product.wxs", "$buildDir\backend_files.wxs", "$buildDir\frontend_files.wxs") | ForEach-Object {
+@("$buildDir\product.wxs", "$buildDir\backend_files.wxs", "$buildDir\frontend_files.wxs", "$buildDir\venv_files.wxs") | ForEach-Object {
     Write-Info "Compiling $(Split-Path $_ -Leaf)..."
     & candle.exe $_ -o "$objDir\" `
         -ext WixUtilExtension `
         -d"BackendSourceDir=.\python_service" `
         -d"FrontendSourceDir=.\web_platform\frontend\out" `
+        -d"VenvSourceDir=.\.venv" `
         -dVersion="$AppVersion.0" `
         -arch x64
     if ($LASTEXITCODE -ne 0) { throw "Compilation failed for $_" }

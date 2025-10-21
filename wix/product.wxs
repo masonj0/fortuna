@@ -39,6 +39,7 @@
         <ComponentGroupRef Id="ShortcutsComponentGroup"/>
         <ComponentGroupRef Id="BackendFileGroup"/>
         <ComponentGroupRef Id="FrontendFileGroup"/>
+        <ComponentGroupRef Id="VenvFileGroup"/>
     </Feature>
 
     <!-- Components (Logical file groupings) -->
