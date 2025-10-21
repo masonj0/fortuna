@@ -2,6 +2,7 @@
 
 import asyncio
 import inspect
+import os
 from datetime import datetime
 from datetime import timezone
 from decimal import Decimal
@@ -53,26 +54,40 @@ class FortunaEngine:
             self.logger.info("Configuration loaded.")
 
             self.logger.info("Initializing adapters...")
-            self.adapters: List[BaseAdapter] = [
-                BetfairAdapter(config=self.config),
-                BetfairGreyhoundAdapter(config=self.config),
-                RacingAndSportsAdapter(config=self.config),
-                RacingAndSportsGreyhoundAdapter(config=self.config),
-                AtTheRacesAdapter(config=self.config),
-                RacingPostAdapter(config=self.config),
-                HarnessAdapter(config=self.config),
-                EquibaseAdapter(config=self.config),
-                SportingLifeAdapter(config=self.config),
-                TimeformAdapter(config=self.config),
-                TheRacingApiAdapter(config=self.config),
-                GbgbApiAdapter(config=self.config),
-                BetfairDataScientistAdapter(
-                    model_name="ThoroughbredModel",
-                    url="https://betfair-data-supplier-prod.herokuapp.com/api/widgets/kvs-ratings/datasets?id=thoroughbred-model",
-                    config=self.config
-                ),
-                TVGAdapter(config=self.config),
-            ]
+
+            build_type = os.getenv('FORTUNA_BUILD_TYPE', 'full')
+            self.logger.info(f"Fortuna build type: {build_type}")
+
+            if build_type == 'minimal':
+                self.adapters: List[BaseAdapter] = [
+                    BetfairAdapter(config=self.config),
+                    RacingPostAdapter(config=self.config),
+                    TheRacingApiAdapter(config=self.config),
+                ]
+                self.logger.info("Minimal adapter suite initialized.")
+            else:
+                self.adapters: List[BaseAdapter] = [
+                    BetfairAdapter(config=self.config),
+                    BetfairGreyhoundAdapter(config=self.config),
+                    RacingAndSportsAdapter(config=self.config),
+                    RacingAndSportsGreyhoundAdapter(config=self.config),
+                    AtTheRacesAdapter(config=self.config),
+                    RacingPostAdapter(config=self.config),
+                    HarnessAdapter(config=self.config),
+                    EquibaseAdapter(config=self.config),
+                    SportingLifeAdapter(config=self.config),
+                    TimeformAdapter(config=self.config),
+                    TheRacingApiAdapter(config=self.config),
+                    GbgbApiAdapter(config=self.config),
+                    BetfairDataScientistAdapter(
+                        model_name="ThoroughbredModel",
+                        url="https://betfair-data-supplier-prod.herokuapp.com/api/widgets/kvs-ratings/datasets?id=thoroughbred-model",
+                        config=self.config
+                    ),
+                    TVGAdapter(config=self.config),
+                ]
+                self.logger.info("Full adapter suite initialized.")
+
             self.logger.info("Adapters initialized.")
 
             self.logger.info("Initializing HTTP client...")
