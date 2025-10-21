@@ -53,6 +53,14 @@ Write-Info "Harvesting frontend files..."
 & heat.exe dir ".\web_platform\frontend\out" -o "$buildDir\frontend_files.wxs" `
     -gg -sf -srd -cg FrontendFileGroup -dr INSTALLFOLDER -var "var.FrontendSourceDir"
 
+Write-Info "Verifying Python virtual environment..."
+if (-not (Test-Path ".\.venv")) {
+    Write-Error "Python virtual environment not found at '.\.venv'."
+    Write-Error "Please run the initial setup script to create the environment before building the MSI."
+    exit 1
+}
+Write-Success "Python virtual environment found."
+
 Write-Info "Harvesting Python environment files..."
 & heat.exe dir ".\.venv" -o "$buildDir\venv_files.wxs" `
     -gg -sf -srd -cg VenvFileGroup -dr INSTALLFOLDER -var "var.VenvSourceDir"
