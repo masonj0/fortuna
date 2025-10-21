@@ -44,5 +44,7 @@
     "scripts/repair_fortuna.bat",
     "scripts/uninstall_fortuna.bat",
     "windows_service.py",
-    "wix/product.wxs"
+    "wix/product.wxs",
+    ".github/workflows/build_msi.yml",
+    "wix/WixUI_CustomProgress.wxs"
 ]
