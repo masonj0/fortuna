@@ -1,4 +1,4 @@
 {
     "file_path": "web_platform/frontend/app/page.tsx",
-    "content": "'use client';\n\nimport { LiveRaceDashboard } from '../src/components/LiveRaceDashboard';\n\nexport default function Home() {\n  return (\n      <LiveRaceDashboard />\n  );\n}"
+    "content": "'use client';\n\nimport dynamic from 'next/dynamic';\nimport React from 'react';\n\nconst LiveRaceDashboard = dynamic(\n  () => import('../src/components/LiveRaceDashboard').then((mod) => mod.LiveRaceDashboard),\n  {\n    ssr: false,\n    loading: () => <p className=\"text-center text-xl mt-8\">Loading Dashboard...</p>\n  }\n);\n\nexport default function Home() {\n  return (\n    <LiveRaceDashboard />\n  );\n}"
 }
