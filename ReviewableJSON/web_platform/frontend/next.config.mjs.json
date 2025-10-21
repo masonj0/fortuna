@@ -1,4 +1,4 @@
 {
     "file_path": "web_platform/frontend/next.config.mjs",
-    "content": "/** @type {import('next').NextConfig} */\n\nimport nextPWA from 'next-pwa';\n\nconst withPWA = nextPWA({\n  dest: 'public',\n  register: true,\n  skipWaiting: true,\n  disable: process.env.NODE_ENV === 'development'\n});\n\nconst nextConfig = {};\n\nexport default withPWA(nextConfig);\n"
+    "content": "/** @type {import('next').NextConfig} */\n\nimport nextPWA from 'next-pwa';\n\nconst withPWA = nextPWA({\n  dest: 'public',\n  register: true,\n  skipWaiting: true,\n  disable: process.env.NODE_ENV === 'development'\n});\n\nconst nextConfig = {\n  output: 'export',\n};\n\nexport default withPWA(nextConfig);\n"
 }
