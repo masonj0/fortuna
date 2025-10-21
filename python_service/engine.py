@@ -44,36 +44,52 @@ log = structlog.get_logger(__name__)
 class FortunaEngine:
     def __init__(self, config=None):
         from .config import get_settings
-
-        self.config = config or get_settings()
         self.logger = structlog.get_logger(__name__)
-        self.adapters: List[BaseAdapter] = [
-            BetfairAdapter(source_name=BetfairAdapter.SOURCE_NAME, base_url=BetfairAdapter.BASE_URL),
-            BetfairGreyhoundAdapter(source_name=BetfairGreyhoundAdapter.SOURCE_NAME, base_url=BetfairGreyhoundAdapter.BASE_URL),
-            RacingAndSportsAdapter(config=self.config),
-            RacingAndSportsGreyhoundAdapter(config=self.config),
-            AtTheRacesAdapter(config=self.config),
-            RacingPostAdapter(config=self.config),
-            HarnessAdapter(config=self.config),
-            EquibaseAdapter(config=self.config),
-            SportingLifeAdapter(config=self.config),
-            TimeformAdapter(config=self.config),
-            TheRacingApiAdapter(config=self.config),
-            GbgbApiAdapter(config=self.config),
-        ]
-        # V3 ADAPTERS
-        self.v3_adapters = [
-            BetfairDataScientistAdapter(
-                model_name="ThoroughbredModel",
-                url="https://betfair-data-supplier-prod.herokuapp.com/api/widgets/kvs-ratings/datasets?id=thoroughbred-model&date=",
-            ),
-            TVGAdapter(config=self.config),
-            # PointsBetGreyhoundAdapter(source_name="PointsBetGreyhound", base_url="https://api.pointsbet.com"),
-        ]
-        self.http_limits = httpx.Limits(
-            max_connections=config.HTTP_POOL_CONNECTIONS, max_keepalive_connections=config.HTTP_MAX_KEEPALIVE
-        )
-        self.http_client = httpx.AsyncClient(limits=self.http_limits, http2=True)
+        self.logger.info("Initializing FortunaEngine...")
+
+        try:
+            self.config = config or get_settings()
+            self.logger.info("Configuration loaded.")
+
+            self.logger.info("Initializing V2 adapters...")
+            self.adapters: List[BaseAdapter] = [
+                BetfairAdapter(source_name=BetfairAdapter.SOURCE_NAME, base_url=BetfairAdapter.BASE_URL),
+                BetfairGreyhoundAdapter(source_name=BetfairGreyhoundAdapter.SOURCE_NAME, base_url=BetfairGreyhoundAdapter.BASE_URL),
+                RacingAndSportsAdapter(config=self.config),
+                RacingAndSportsGreyhoundAdapter(config=self.config),
+                AtTheRacesAdapter(config=self.config),
+                RacingPostAdapter(config=self.config),
+                HarnessAdapter(config=self.config),
+                EquibaseAdapter(config=self.config),
+                SportingLifeAdapter(config=self.config),
+                TimeformAdapter(config=self.config),
+                TheRacingApiAdapter(config=self.config),
+                GbgbApiAdapter(config=self.config),
+            ]
+            self.logger.info("V2 adapters initialized.")
+
+            self.logger.info("Initializing V3 adapters...")
+            self.v3_adapters = [
+                BetfairDataScientistAdapter(
+                    model_name="ThoroughbredModel",
+                    url="https://betfair-data-supplier-prod.herokuapp.com/api/widgets/kvs-ratings/datasets?id=thoroughbred-model&date=",
+                ),
+                TVGAdapter(config=self.config),
+            ]
+            self.logger.info("V3 adapters initialized.")
+
+            self.logger.info("Initializing HTTP client...")
+            self.http_limits = httpx.Limits(
+                max_connections=self.config.HTTP_POOL_CONNECTIONS, max_keepalive_connections=self.config.HTTP_MAX_KEEPALIVE
+            )
+            self.http_client = httpx.AsyncClient(limits=self.http_limits, http2=True)
+            self.logger.info("HTTP client initialized.")
+
+            self.logger.info("FortunaEngine initialization complete.")
+
+        except Exception as e:
+            self.logger.critical("CRITICAL FAILURE during FortunaEngine initialization.", exc_info=True)
+            raise e
 
     async def close(self):
         await self.http_client.aclose()

@@ -37,12 +37,29 @@ const ConnectionStatus = ({ isError, isLoading }) => {
 
 // --- Error Modal Component ---
 const ErrorModal = ({ error, onClose }) => {
+    const [detailsVisible, setDetailsVisible] = useState(false);
     if (!error) return null;
+
+    const userMessage = error?.user_message || 'An unexpected error occurred.';
+    const technicalDetails = error?.technical_details || error?.message || 'No technical details available.';
+
     return (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
             <div className="bg-gray-800 border border-red-500/50 rounded-lg shadow-xl p-6 max-w-md w-full">
-                <h3 className="text-xl font-bold text-red-400 mb-4">API Connection Error</h3>
-                <p className="text-gray-300 mb-6">{error.message}</p>
+                <h3 className="text-xl font-bold text-red-400 mb-4">Application Alert</h3>
+                <p className="text-gray-300 mb-6">{userMessage}</p>
+
+                <div className="mb-4">
+                    <button onClick={() => setDetailsVisible(!detailsVisible)} className="text-sm text-gray-400 hover:underline">
+                        {detailsVisible ? 'Hide' : 'Show'} Technical Details
+                    </button>
+                    {detailsVisible && (
+                        <div className="mt-2 p-3 bg-gray-900/50 rounded-md border border-gray-700 text-xs text-gray-400">
+                            <code>{technicalDetails}</code>
+                        </div>
+                    )}
+                </div>
+
                 <button
                     onClick={onClose}
                     className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded w-full"
@@ -54,19 +71,35 @@ const ErrorModal = ({ error, onClose }) => {
     );
 };
 
+
 // --- Main Component ---
 export const LiveRaceDashboard: React.FC = () => {
   const [filterConfig, setFilterConfig] = useState({ minScore: 0, maxFieldSize: 999, sortBy: 'score' });
   const [showErrorModal, setShowErrorModal] = useState(false);
+
+  const fetchWithStructuredError = async (url: string, headers: HeadersInit) => {
+    console.log("Fetching URL:", url); // DEBUGGING
+    const res = await fetch(url, { headers });
+    console.log("Response Status:", res.status); // DEBUGGING
+    if (!res.ok) {
+        try {
+            // Try to parse the structured error from the backend
+            const errorBody = await res.json();
+            throw errorBody;
+        } catch (e) {
+            // If parsing fails, fall back to a generic error
+            throw new Error(`Request failed with status: ${res.statusText}`);
+        }
+    }
+    return res.json();
+  };
 
   const { data: qualifiedData, error: racesError, isLoading: racesLoading } = useQuery({
     queryKey: ['qualifiedRaces'],
     queryFn: async () => {
       const apiKey = process.env.NEXT_PUBLIC_API_KEY;
       if (!apiKey) throw new Error('API key not configured.');
-      const res = await fetch(`/api/races/qualified/trifecta`, { headers: { 'X-API-Key': apiKey } });
-      if (!res.ok) throw new Error(`Failed to fetch qualified races: ${res.statusText}`);
-      return res.json();
+      return fetchWithStructuredError(`/api/races/qualified/trifecta`, { 'X-API-Key': apiKey });
     },
     refetchInterval: 30000,
   });
@@ -76,9 +109,7 @@ export const LiveRaceDashboard: React.FC = () => {
     queryFn: async () => {
       const apiKey = process.env.NEXT_PUBLIC_API_KEY;
       if (!apiKey) throw new Error('API key not configured.');
-      const res = await fetch(`/api/adapters/status`, { headers: { 'X-API-Key': apiKey } });
-      if (!res.ok) throw new Error(`Failed to fetch adapter statuses: ${res.statusText}`);
-      return res.json();
+      return fetchWithStructuredError(`/api/adapters/status`, { 'X-API-Key': apiKey });
     },
     refetchInterval: 60000,
   });
