@@ -1,14 +1,42 @@
 # tests/conftest.py
 import pytest
+from unittest.mock import patch, Mock
 from fastapi.testclient import TestClient
-from python_service.api import app
 import httpx
-from unittest.mock import Mock
 import os
+
+from python_service.config import Settings
+from python_service.api import app
+
+@pytest.fixture(scope="session", autouse=True)
+def override_settings():
+    """
+    This fixture is automatically used for the entire test session.
+    It patches the `get_settings` function to return a test-specific,
+    fully-populated Settings object. This prevents AdapterConfigErrors
+    during app startup and ensures tests run in a controlled environment.
+    """
+    def get_test_settings():
+        return Settings(
+            API_KEY="test_api_key",
+            THE_RACING_API_KEY="test_racing_api_key",
+            BETFAIR_APP_KEY="test_betfair_key",
+            BETFAIR_USERNAME="test_user",
+            BETFAIR_PASSWORD="test_password",
+            TVG_API_KEY="test_tvg_key",
+            RACING_AND_SPORTS_TOKEN="test_token",
+            GREYHOUND_API_URL="https://api.example.com" # Added for GreyhoundAdapter
+        )
+
+    # The engine gets its settings from the API module, so we only need to patch it there.
+    with patch("python_service.api.get_settings", new=get_test_settings):
+        yield
+
 
 @pytest.fixture(scope="module")
 def client():
     """A TestClient instance for testing the FastAPI app."""
+    # The override_settings fixture will have already patched the settings
     with TestClient(app) as c:
         yield c
 
@@ -16,23 +44,3 @@ def client():
 def mock_httpx_client():
     """Mocks the httpx.AsyncClient for testing adapters."""
     return Mock(spec=httpx.AsyncClient)
-
-@pytest.fixture(scope="session", autouse=True)
-def setup_test_environment():
-    """
-    Creates a dummy .env file in the project root for the test suite and
-    ensures it's loaded.
-    """
-    env_content = 'API_KEY="test_api_key"'
-    env_path = ".env"
-    with open(env_path, "w") as f:
-        f.write(env_content)
-
-    # Force reload of settings to pick up the new .env file
-    from python_service.config import get_settings
-    get_settings.cache_clear()
-
-    yield
-
-    os.remove(env_path)
-    get_settings.cache_clear()

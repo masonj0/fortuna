@@ -1,29 +1,33 @@
 # python_service/adapters/betfair_adapter.py
 from datetime import datetime
-from typing import Any, List
+from typing import List
 
+import httpx
+
+from ..core.exceptions import AdapterAuthError, AdapterParsingError
 from ..models import Race, Runner
-from .base_v3 import BaseAdapterV3
+from .base import BaseAdapter
 from .betfair_auth_mixin import BetfairAuthMixin
 
-class BetfairAdapter(BetfairAuthMixin, BaseAdapterV3):
-    """Adapter for fetching horse racing data from the Betfair Exchange API, using V3 architecture."""
 
-    SOURCE_NAME = "BetfairExchange"
-    BASE_URL = "https://api.betfair.com/exchange/betting/rest/v1.0/"
+class BetfairAdapter(BetfairAuthMixin, BaseAdapter):
+    """Adapter for fetching horse racing data from the Betfair Exchange API."""
 
-    async def _fetch_data(self, date: str) -> Any:
-        """Fetches the raw market catalogue for a given date."""
-        await self._authenticate()
+    def __init__(self, config: dict):
+        super().__init__(source_name="BetfairExchange", base_url="https://api.betfair.com/exchange/betting/rest/v1.0/", config=config)
+
+    async def fetch_races(self, date: str, http_client: httpx.AsyncClient) -> List[Race]:
+        """Fetches the raw market catalogue for a given date and parses it."""
+        await self._authenticate(http_client)
         if not self.session_token:
-            self.logger.error("Authentication failed, cannot fetch data.")
-            return None
+            raise AdapterAuthError(self.source_name, "Authentication failed, cannot fetch data.")
 
         start_time, end_time = self._get_datetime_range(date)
 
-        return await self.make_request(
+        response = await self.make_request(
+            http_client=http_client,
             method="post",
-            url=f"{self.BASE_URL}listMarketCatalogue/",
+            url="listMarketCatalogue/",
             json={
                 "filter": {
                     "eventTypeIds": ["7"],  # Horse Racing
@@ -35,9 +39,8 @@ class BetfairAdapter(BetfairAuthMixin, BaseAdapterV3):
                 "marketProjection": ["EVENT", "RUNNER_DESCRIPTION"]
             }
         )
+        raw_data = response.json()
 
-    def _parse_races(self, raw_data: Any) -> List[Race]:
-        """Parses the raw market catalogue into a list of Race objects."""
         if not raw_data:
             return []
 
@@ -45,9 +48,9 @@ class BetfairAdapter(BetfairAuthMixin, BaseAdapterV3):
         for market in raw_data:
             try:
                 races.append(self._parse_race(market))
-            except (KeyError, TypeError):
+            except (KeyError, TypeError) as e:
                 self.logger.warning("Failed to parse a Betfair market.", exc_info=True, market=market)
-                continue
+                raise AdapterParsingError(self.source_name, f"Failed to parse market: {market.get('marketId')}") from e
         return races
 
     def _parse_race(self, market: dict) -> Race:

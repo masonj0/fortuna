@@ -52,10 +52,10 @@ class FortunaEngine:
             self.config = config or get_settings()
             self.logger.info("Configuration loaded.")
 
-            self.logger.info("Initializing V2 adapters...")
+            self.logger.info("Initializing adapters...")
             self.adapters: List[BaseAdapter] = [
-                BetfairAdapter(source_name=BetfairAdapter.SOURCE_NAME, base_url=BetfairAdapter.BASE_URL),
-                BetfairGreyhoundAdapter(source_name=BetfairGreyhoundAdapter.SOURCE_NAME, base_url=BetfairGreyhoundAdapter.BASE_URL),
+                BetfairAdapter(config=self.config),
+                BetfairGreyhoundAdapter(config=self.config),
                 RacingAndSportsAdapter(config=self.config),
                 RacingAndSportsGreyhoundAdapter(config=self.config),
                 AtTheRacesAdapter(config=self.config),
@@ -66,18 +66,14 @@ class FortunaEngine:
                 TimeformAdapter(config=self.config),
                 TheRacingApiAdapter(config=self.config),
                 GbgbApiAdapter(config=self.config),
-            ]
-            self.logger.info("V2 adapters initialized.")
-
-            self.logger.info("Initializing V3 adapters...")
-            self.v3_adapters = [
                 BetfairDataScientistAdapter(
                     model_name="ThoroughbredModel",
-                    url="https://betfair-data-supplier-prod.herokuapp.com/api/widgets/kvs-ratings/datasets?id=thoroughbred-model&date=",
+                    url="https://betfair-data-supplier-prod.herokuapp.com/api/widgets/kvs-ratings/datasets?id=thoroughbred-model",
+                    config=self.config
                 ),
                 TVGAdapter(config=self.config),
             ]
-            self.logger.info("V3 adapters initialized.")
+            self.logger.info("Adapters initialized.")
 
             self.logger.info("Initializing HTTP client...")
             self.http_limits = httpx.Limits(
@@ -105,7 +101,7 @@ class FortunaEngine:
         Handles both modern async adapters and legacy sync adapters.
         """
         start_time = datetime.now()
-        races = []
+        races: List[Race] = []
         error_message = None
         is_success = False
 
@@ -122,8 +118,11 @@ class FortunaEngine:
                 )
                 result = await asyncio.to_thread(adapter.fetch_races, date, self.http_client)
 
-            # Assuming the result is a dictionary with a 'races' key
-            if result and 'races' in result:
+            # This is the new logic to handle both return types
+            if isinstance(result, list): # New exception-based adapters return a list of races
+                races = result
+                is_success = True
+            elif isinstance(result, dict) and 'races' in result: # Legacy adapters return a dict
                 races = result.get('races', [])
                 is_success = True
             else:
@@ -244,17 +243,6 @@ class FortunaEngine:
             target_adapters = [a for a in self.adapters if a.source_name.lower() == source_filter.lower()]
 
         tasks = [self._time_adapter_fetch(adapter, date) for adapter in target_adapters]
-
-        # Run V3 adapters
-        for adapter in self.v3_adapters:
-            if hasattr(adapter, 'fetch_and_normalize'):
-                # Handle synchronous V3 adapters
-                v3_task = asyncio.to_thread(adapter.fetch_and_normalize)
-                tasks.append(v3_task)
-            elif hasattr(adapter, 'get_races'):
-                # Handle asynchronous V3 adapters
-                v3_task = adapter.get_races(date)
-                tasks.append(v3_task)
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
