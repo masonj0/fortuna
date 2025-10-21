@@ -13,8 +13,7 @@ class TVGAdapter(BaseAdapterV3):
     BASE_URL = "https://api.tvg.com/v2/races/"
 
     def __init__(self, config=None):
-        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL)
-        self.config = config or {}
+        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
         self.tvg_api_key = self.config.TVG_API_KEY
         if not self.tvg_api_key:
             self.logger.warning("TVG_API_KEY is not set. Adapter will be non-functional.")
@@ -25,8 +24,12 @@ class TVGAdapter(BaseAdapterV3):
             return None
 
         headers = {"X-Api-Key": self.tvg_api_key}
-        tracks_response = await self.http_client.get(f"{self.BASE_URL}summary?date={date}&country=USA", headers=headers)
-        tracks_response.raise_for_status()
+        summary_url = f"summary?date={date}&country=USA"
+
+        # Use the resilient make_request method
+        tracks_response = await self.make_request(self.http_client, "GET", summary_url, headers=headers)
+        if not tracks_response:
+            return None
         tracks_data = tracks_response.json()
 
         all_race_details = []
@@ -35,8 +38,9 @@ class TVGAdapter(BaseAdapterV3):
             for race in track.get('races', []):
                 race_id = race.get('id')
                 if track_id and race_id:
-                    details_response = await self.http_client.get(f"{self.BASE_URL}{track_id}/{race_id}", headers=headers)
-                    if details_response.status_code == 200:
+                    details_url = f"{track_id}/{race_id}"
+                    details_response = await self.make_request(self.http_client, "GET", details_url, headers=headers)
+                    if details_response:
                         all_race_details.append(details_response.json())
         return all_race_details
 

@@ -33,8 +33,7 @@ web_platform/frontend/.next/
 
 # Environment files
 .env
-# --- Allow dummy .env files for portability ---
-!/.env
+.env.*
 !/web_platform/frontend/.env.local
 
 # Log files

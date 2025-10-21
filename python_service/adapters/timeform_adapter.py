@@ -53,12 +53,34 @@ class TimeformAdapter(BaseAdapter):
             if not response:
                 return None
             soup = BeautifulSoup(response.text, "html.parser")
-            track_name = _clean_text(soup.select_one("h1.rp-raceTimeCourseName_name").get_text())
-            race_time_str = _clean_text(soup.select_one("span.rp-raceTimeCourseName_time").get_text())
+
+            track_name_tag = soup.select_one("h1.rp-raceTimeCourseName_name")
+            if not track_name_tag:
+                log.warning("Could not find track name", url=url)
+                return None
+            track_name = _clean_text(track_name_tag.get_text())
+
+            race_time_tag = soup.select_one("span.rp-raceTimeCourseName_time")
+            if not race_time_tag:
+                log.warning("Could not find race time", url=url)
+                return None
+            race_time_str = _clean_text(race_time_tag.get_text())
+
+            if not track_name or not race_time_str:
+                log.warning("Missing track name or race time", url=url)
+                return None
+
             start_time = datetime.strptime(f"{datetime.now().date()} {race_time_str}", "%Y-%m-%d %H:%M")
             all_times = [_clean_text(a.get_text()) for a in soup.select("a.rp-racecard-off-link")]
             race_number = all_times.index(race_time_str) + 1 if race_time_str in all_times else 1
-            runners = [self._parse_runner(row) for row in soup.select("div.rp-horseTable_mainRow")]
+
+            runner_rows = soup.select("div.rp-horseTable_mainRow")
+            if not runner_rows:
+                log.warning("No runners found for race", url=url)
+                return None # A race with no runners is not a race
+
+            runners = [self._parse_runner(row) for row in runner_rows]
+
             return Race(
                 id=f"tf_{track_name.replace(' ', '')}_{start_time.strftime('%Y%m%d')}_R{race_number}",
                 venue=track_name,
@@ -73,19 +95,42 @@ class TimeformAdapter(BaseAdapter):
 
     def _parse_runner(self, row: Tag) -> Optional[Runner]:
         try:
-            name = _clean_text(row.select_one("a.rp-horseTable_horse-name").get_text())
-            num_str = _clean_text(row.select_one("span.rp-horseTable_horse-number").get_text()).strip("()")
-            number = int("".join(filter(str.isdigit, num_str)))
-            odds_str = _clean_text(row.select_one("button.rp-bet-placer-btn__odds").get_text())
-            win_odds = parse_odds_to_decimal(odds_str)
-            odds_data = (
-                {self.source_name: OddsData(win=win_odds, source=self.source_name, last_updated=datetime.now())}
-                if win_odds and win_odds < 999
-                else {}
-            )
+            name_tag = row.select_one("a.rp-horseTable_horse-name")
+            if not name_tag:
+                return None
+            name = _clean_text(name_tag.get_text())
+
+            num_tag = row.select_one("span.rp-horseTable_horse-number")
+            if not num_tag:
+                return None
+            num_str = _clean_text(num_tag.get_text())
+            if not num_str:
+                return None
+            number_part = "".join(filter(str.isdigit, num_str.strip("()")))
+            if not number_part:
+                return None
+            number = int(number_part)
+
+            if not name or not number:
+                return None
+
+            odds_data = {}
+            odds_tag = row.select_one("button.rp-bet-placer-btn__odds")
+            if odds_tag:
+                odds_str = _clean_text(odds_tag.get_text())
+                win_odds = parse_odds_to_decimal(odds_str)
+                if win_odds and win_odds < 999:
+                    odds_data = {
+                        self.source_name: OddsData(
+                            win=win_odds,
+                            source=self.source_name,
+                            last_updated=datetime.now(),
+                        )
+                    }
+
             return Runner(number=number, name=name, odds=odds_data)
-        except Exception as e:
-            log.warning("Failed to parse runner from Timeform", exc_info=e)
+        except (AttributeError, ValueError, TypeError) as e:
+            log.warning("Failed to parse runner from Timeform", detail=str(e), exc_info=True)
             return None
 
     def _format_response(
