@@ -31,15 +31,13 @@
     ],
     "win": {
       "target": "msi",
-      "icon": "assets/icon.ico",
-      "shortcutName": "Fortuna Faucet"
+      "icon": "assets/icon.ico"
     },
     "msi": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
       "perMachine": true,
       "createDesktopShortcut": true,
-      "installerIcon": "assets/icon.ico"
+      "shortcutName": "Fortuna Faucet"
     },
     "nsis": {
       "oneClick": false,
