@@ -20,13 +20,21 @@
 
     <Media Id="1" Cabinet="fortuna.cab" EmbedCab="yes"/>
 
-    <!-- Add the validation script to the installer's binary table -->
+    <!-- 1. Find PowerShell.exe -->
+    <Property Id="POWERSHELL">
+      <RegistrySearch Id="PowerShellPath" Root="HKLM" Key="SOFTWARE\Microsoft\PowerShell\1\ShellIds\Microsoft.PowerShell" Name="Path" Type="raw" />
+    </Property>
+    <Condition Message="PowerShell is required to complete this installation.">
+      <![CDATA[Installed OR POWERSHELL]]>
+    </Condition>
+
+    <!-- 2. Add the validation script to the installer's binary table -->
     <Binary Id="ValidateInstallScript" SourceFile="..\scripts\validate_installation.ps1" />
 
-    <!-- Define the Custom Action -->
+    <!-- 3. Define the Custom Action to run the script -->
     <CustomAction Id="ValidateInstallation"
-                  BinaryKey="ValidateInstallScript"
-                  PowerShellCommand="-InstallPath `"[INSTALLFOLDER]`""
+                  Directory="INSTALLFOLDER"
+                  ExeCommand="[POWERSHELL] -NoProfile -ExecutionPolicy Bypass -File &quot;[#ValidateInstallScript]&quot; -InstallPath &quot;[INSTALLFOLDER]&quot;"
                   Execute="deferred"
                   Return="check"
                   Impersonate="no" />
@@ -84,7 +92,7 @@
     <WixVariable Id="WixUIBannerBmp" Value="electron\assets\banner.bmp"/>
     <WixVariable Id="WixUIDialogBmp" Value="electron\assets\dialog.bmp"/>
 
-    <!-- Schedule the Custom Action to run after installation files are finalized -->
+    <!-- 4. Schedule the Custom Action -->
     <InstallExecuteSequence>
         <Custom Action="ValidateInstallation" After="InstallFinalize">NOT Installed</Custom>
     </InstallExecuteSequence>
