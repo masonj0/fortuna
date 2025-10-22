@@ -19,6 +19,7 @@
     "appId": "com.fortuna.faucet",
     "productName": "Fortuna Faucet",
     "beforeBuild": "scripts/prepare_portable_python.ps1",
+    "msiProjectCreated": "scripts/modify_wix_project.ps1",
     "files": [
       "main.js",
       "preload.js",
@@ -26,6 +27,7 @@
       "python/**/*",
       "../python_service/**/*",
       "../web_platform/frontend/out/**/*",
+      "../scripts/validate_installation.ps1",
       "!../.venv/",
       "!node_modules/**/*"
     ],
@@ -37,8 +39,7 @@
       "oneClick": false,
       "perMachine": true,
       "createDesktopShortcut": true,
-      "shortcutName": "Fortuna Faucet",
-      "template": "wix/product.wxs"
+      "shortcutName": "Fortuna Faucet"
     },
     "nsis": {
       "oneClick": false,
