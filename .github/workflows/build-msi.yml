@@ -1,55 +1,35 @@
-name: Build Fortuna Faucet MSI Installers
+name: Build Fortuna Faucet MSI Installer
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
     tags:
       - 'v*'
   pull_request:
-    branches: [main, develop]
+    branches: [main]
   workflow_dispatch:
-    inputs:
-      build_minimal:
-        description: 'Build minimal version'
-        required: true
-        default: 'true'
-
-env:
-  NODE_VERSION: '18'
-  PYTHON_VERSION: '3.11'
 
 jobs:
-  build-full:
-    name: Build Full Version MSI
+  build-installer:
+    name: Build MSI Installer
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: '18'
           cache: 'npm'
-          cache-dependency-path: 'electron/package-lock.json'
+          cache-dependency-path: |
+            electron/package-lock.json
+            web_platform/frontend/package-lock.json
 
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
-          cache-dependency-path: 'python_service/requirements.txt'
-
-      - name: Create Python Virtual Environment
+      - name: Install Frontend Dependencies & Build
         run: |
-          cd python_service
-          python -m venv .venv
-          .venv\\Scripts\\python.exe -m pip install --upgrade pip
-          .venv\\Scripts\\pip.exe install -r requirements.txt
-
-      - name: Install Frontend Dependencies
-        run: |
-          cd web_platform\\frontend
+          cd web_platform/frontend
           npm ci
           npm run build
 
@@ -58,179 +38,27 @@ jobs:
           cd electron
           npm ci
 
-      - name: Build Full Version MSI
+      - name: Build MSI Installer using electron-builder
         run: |
           cd electron
           npm run dist
         env:
-          FORTUNA_BUILD_TYPE: 'full'
+          FORTUNA_BUILD_TYPE: 'full' # For now, we only build the full version
 
-      - name: Upload Full MSI Artifact
+      - name: Upload MSI Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: fortuna-faucet-full-${{ github.ref_name }}
-          path: 'electron/dist/Fortuna Faucet-*.msi'
+          name: fortuna-faucet-installer-${{ github.ref_name }}
+          path: 'electron/dist/Fortuna Faucet*.msi'
           retention-days: 30
 
       - name: Create Release (on tag)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
-          files: 'electron/dist/Fortuna Faucet-*.msi'
-          name: Fortuna Faucet Full Version ${{ github.ref_name }}
+          files: 'electron/dist/Fortuna Faucet*.msi'
+          name: Fortuna Faucet ${{ github.ref_name }}
           draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build-minimal:
-    name: Build Minimal Version MSI
-    runs-on: windows-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: 'electron/package-lock.json'
-
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
-          cache-dependency-path: 'python_service/requirements_minimal.txt'
-
-      - name: Create Python Virtual Environment (Minimal)
-        run: |
-          cd python_service
-          python -m venv .venv
-          .venv\\Scripts\\python.exe -m pip install --upgrade pip
-          .venv\\Scripts\\pip.exe install -r requirements_minimal.txt
-
-      - name: Prepare Minimal Build
-        run: python scripts/prepare_minimal_build.py
-
-      - name: Build Minimal Frontend
-        run: |
-          cd web_platform\\frontend
-          npm ci
-          npm run build
-        env:
-          REACT_APP_MINIMAL_MODE: 'true'
-          REACT_APP_MAX_RACES: '50'
-
-      - name: Install Electron Dependencies
-        run: |
-          cd electron
-          npm ci
-
-      - name: Build Minimal Version MSI
-        run: |
-          cd electron
-          npm run dist
-        env:
-          FORTUNA_BUILD_TYPE: 'minimal'
-          ELECTRON_BUILDER_ALLOW_UNRESOLVED_DEPENDENCIES: 'true'
-
-      - name: Upload Minimal MSI Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: fortuna-faucet-minimal-${{ github.ref_name }}
-          path: 'electron/dist/Fortuna Faucet-*.msi'
-          retention-days: 30
-
-      - name: Create Release (on tag)
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v1
-        with:
-          files: 'electron/dist/Fortuna Faucet-*.msi'
-          name: Fortuna Faucet Minimal Version ${{ github.ref_name }}
-          draft: false
-          prerelease: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  test-minimal-build:
-    name: Test Minimal MSI Installation
-    runs-on: windows-latest
-    needs: build-minimal
-
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: fortuna-faucet-minimal-${{ github.ref_name }}
-          path: ./installers
-
-      - name: List Downloaded Files
-        run: |
-          Get-ChildItem -Path ./installers -Recurse | Select-Object FullName, Length
-
-      - name: Extract MSI for Inspection
-        run: |
-          $msiPath = Get-ChildItem ./installers/*.msi | Select-Object -First 1
-          if ($msiPath) {
-              Write-Host "Testing MSI: $($msiPath.FullName)"
-
-              # Use msiexec to get info without installing
-              msiexec /i "$($msiPath.FullName)" /qb ALLUSERS=1 /l*v "msi_test_log.txt" 2>&1 | Tee-Object -Variable output
-
-              Write-Host "MSI Test Output:"
-              Write-Host $output
-          } else {
-              Write-Host "No MSI file found!"
-              exit 1
-          }
-
-      - name: Upload Test Log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: minimal-msi-test-log
-          path: 'msi_test_log.txt'
-
-  compare-builds:
-    name: Compare Build Sizes
-    runs-on: ubuntu-latest
-    needs: [build-full, build-minimal]
-    if: always()
-
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: fortuna-faucet-full-${{ github.ref_name }}
-          path: ./full
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: fortuna-faucet-minimal-${{ github.ref_name }}
-          path: ./minimal
-
-      - name: Calculate and Report Sizes
-        run: |
-          full_size=$(du -sh ./full | cut -f1)
-          minimal_size=$(du -sh ./minimal | cut -f1)
-
-          full_bytes=$(du -sb ./full | cut -f1)
-          minimal_bytes=$(du -sb ./minimal | cut -f1)
-
-          reduction=$((100 - (minimal_bytes * 100 / full_bytes)))
-
-          echo "## Build Size Comparison" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Version | Size |" >> $GITHUB_STEP_SUMMARY
-          echo "|---------|------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Full | $full_size |" >> $GITHUB_STEP_SUMMARY
-          echo "| Minimal | $minimal_size |" >> $GITHUB_STEP_SUMMARY
-          echo "| Reduction | $reduction% |" >> $GITHUB_STEP_SUMMARY
-
-      - name: List Build Artifacts
-        run: |
-          echo "## Full Version" >> $GITHUB_STEP_SUMMARY
-          ls -lh ./full >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "## Minimal Version" >> $GITHUB_STEP_SUMMARY
-          ls -lh ./minimal >> $GITHUB_STEP_SUMMARY
