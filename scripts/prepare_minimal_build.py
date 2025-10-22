@@ -1,54 +1,50 @@
+# scripts/prepare_minimal_build.py
 import os
-import glob
+import shutil
+
+# This script prepares the source tree for a 'minimal' build.
+# A minimal build includes only the core application and a small, curated
+# set of essential data adapters, excluding the larger, more specialized ones.
+
+ADAPTERS_TO_KEEP = [
+    "__init__.py",
+    "base_adapter.py",
+    "handler_factory.py",
+    # --- Essential Adapters ---
+    "betfair_adapter.py",
+    "sporting_life_adapter.py",
+    "racing_post_adapter.py",
+]
 
 def main():
     """
-    Prepares the repository for a minimal build by removing adapter files that are
-    not part of the core set required for the minimal version. This is used in the
-    CI/CD pipeline to create a smaller installer.
+    Removes non-essential adapter files from the python_service/adapters
+    directory to create a minimal build artifact.
     """
     adapters_dir = os.path.join("python_service", "adapters")
-
-    # These are the only adapters included in the minimal build, based on engine.py
-    core_adapters = [
-        "greyhound_adapter.py",
-        "the_racing_api_adapter.py",
-        "gbgb_api_adapter.py",
-    ]
-
-    # These files are essential base classes, utilities, or initializers
-    essential_files = [
-        "__init__.py",
-        "base.py",
-        "utils.py",
-        "betfair_auth_mixin.py", # Kept as it might be linked to base classes
-    ]
-
-    files_to_keep = set(core_adapters + essential_files)
-
-    print("Preparing for minimal build...")
-    print(f"Adapters directory: {adapters_dir}")
-    print(f"Core adapter files to keep: {core_adapters}")
-
     if not os.path.isdir(adapters_dir):
-        print(f"Error: Adapters directory not found at '{adapters_dir}'")
-        return
+        print(f"[ERROR] Adapters directory not found at: {adapters_dir}")
+        exit(1)
 
-    # Get all python files in the adapters directory
-    adapter_files = [f for f in os.listdir(adapters_dir) if f.endswith(".py")]
-
-    deleted_count = 0
-    for filename in adapter_files:
-        if filename not in files_to_keep:
+    print(f"Scanning adapters directory: {adapters_dir}")
+    removed_count = 0
+    for filename in os.listdir(adapters_dir):
+        if filename not in ADAPTERS_TO_KEEP:
+            file_path = os.path.join(adapters_dir, filename)
             try:
-                filepath = os.path.join(adapters_dir, filename)
-                os.remove(filepath)
-                print(f"  - Deleted non-core adapter: {filename}")
-                deleted_count += 1
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+                    print(f"  - Removed file: {filename}")
+                    removed_count += 1
+                elif os.path.isdir(file_path):
+                    shutil.rmtree(file_path)
+                    print(f"  - Removed directory: {filename}")
+                    removed_count += 1
             except OSError as e:
-                print(f"Error deleting file {filename}: {e}")
+                print(f"[ERROR] Failed to remove {file_path}: {e}")
+                exit(1)
 
-    print(f"\nMinimal build preparation complete. Deleted {deleted_count} adapter file(s).")
+    print(f"\nMinimal build preparation complete. Removed {removed_count} non-essential adapter(s).")
 
 if __name__ == "__main__":
     main()
