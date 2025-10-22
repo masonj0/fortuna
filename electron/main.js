@@ -4,76 +4,12 @@ const { spawn, exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
-// --- Python Backend Manager ---
-class PythonManager {
-    constructor() {
-        this.venvPath = path.join(app.getPath('userData'), 'backend_env');
-        this.pythonPath = path.join(this.venvPath, 'Scripts', 'python.exe');
-        this.backendProcess = null;
-    }
-
-    async setupEnvironment() {
-        return new Promise((resolve, reject) => {
-            if (fs.existsSync(this.pythonPath)) {
-                console.log('Python environment already exists.');
-                return resolve();
-            }
-
-            console.log('Creating Python virtual environment...');
-            exec(`python -m venv "${this.venvPath}"`, (error, stdout, stderr) => {
-                if (error) {
-                    console.error(`Failed to create venv: ${stderr}`);
-                    dialog.showErrorBox('Fatal Error', 'Failed to create the Python virtual environment. Please ensure Python 3.9+ is installed and in your PATH.');
-                    return reject(error);
-                }
-                console.log('Virtual environment created. Installing backend...');
-                this.installBackend().then(resolve).catch(reject);
-            });
-        });
-    }
-
-    async installBackend() {
-        return new Promise((resolve, reject) => {
-            const pipPath = path.join(this.venvPath, 'Scripts', 'pip.exe');
-            const wheelPath = path.resolve(__dirname, '..', 'dist', 'fortuna_engine-1.0.0-py3-none-any.whl'); // Assuming a wheel is built
-            const reqsPath = path.resolve(__dirname, '..', 'requirements.txt');
-
-            exec(`"${pipPath}" install -r "${reqsPath}"`, (error, stdout, stderr) => {
-                if (error) {
-                    console.error(`Failed to install dependencies: ${stderr}`);
-                    dialog.showErrorBox('Backend Error', 'Failed to install Python dependencies.');
-                    return reject(error);
-                }
-                console.log('Backend installed successfully.');
-                resolve();
-            });
-        });
-    }
-
-    start() {
-        console.log(`Spawning backend from: ${this.pythonPath}`);
-        this.backendProcess = spawn(this.pythonPath, ['-m', 'python_service.run_api'], {
-            cwd: path.resolve(__dirname, '..')
-        });
-
-        this.backendProcess.stdout.on('data', (data) => console.log(`Backend: ${data}`));
-        this.backendProcess.stderr.on('data', (data) => console.error(`Backend ERR: ${data}`));
-    }
-
-    stop() {
-        if (this.backendProcess) {
-            this.backendProcess.kill();
-        }
-    }
-}
-
-
 // --- Main Application Class ---
 class FortunaDesktopApp {
   constructor() {
     this.mainWindow = null;
     this.tray = null;
-    this.pythonManager = new PythonManager();
+    this.backendProcess = null;
 
     const gotTheLock = app.requestSingleInstanceLock();
     if (!gotTheLock) {
@@ -152,13 +88,56 @@ class FortunaDesktopApp {
     app.quit();
   }
 
+  async startBackend() {
+    return new Promise((resolve, reject) => {
+        const isDev = process.env.NODE_ENV !== 'production';
+        const rootPath = isDev ? path.join(__dirname, '..') : process.resourcesPath;
+        const pythonPath = path.join(rootPath, '.venv', 'Scripts', 'python.exe');
+        const apiPath = path.join(rootPath, 'python_service', 'api.py');
+
+        // DEBUG: Verify paths exist
+        if (!fs.existsSync(pythonPath)) {
+            return reject(new Error(`Python not found: ${pythonPath}`));
+        }
+        if (!fs.existsSync(apiPath)) {
+            return reject(new Error(`API module not found: ${apiPath}`));
+        }
+
+        this.backendProcess = spawn(pythonPath, ['-m', 'uvicorn', 'api:app', '--host', '127.0.0.1', '--port', '8000'], {
+            cwd: path.join(rootPath, 'python_service'),
+            stdio: ['ignore', 'pipe', 'pipe']  // Prevent inherit conflicts
+        });
+
+        const timeout = setTimeout(() => {
+            reject(new Error('Backend startup timeout'));
+        }, 15000);  // 15 second timeout
+
+        this.backendProcess.stdout.on('data', (data) => {
+            console.log(`Backend: ${data}`);
+            if (data.toString().includes('Uvicorn running')) {
+                clearTimeout(timeout);
+                resolve();
+            }
+        });
+
+        this.backendProcess.stderr.on('data', (data) => {
+            console.error(`Backend error: ${data}`);
+        });
+
+        this.backendProcess.on('error', (err) => {
+            clearTimeout(timeout);
+            reject(err);
+        });
+    });
+  }
+
   async initialize() {
     try {
-        await this.pythonManager.setupEnvironment();
-        this.pythonManager.start();
+        await this.startBackend();
         this.createMainWindow();
         this.createSystemTray();
     } catch(err) {
+        dialog.showErrorBox('Fatal Error', `Failed to start the backend service: ${err.message}`);
         console.error("Initialization failed:", err);
         app.quit();
     }
@@ -166,7 +145,9 @@ class FortunaDesktopApp {
 
   cleanup() {
     console.log('Cleaning up processes...');
-    this.pythonManager.stop();
+    if (this.backendProcess) {
+        this.backendProcess.kill();
+    }
   }
 }
 

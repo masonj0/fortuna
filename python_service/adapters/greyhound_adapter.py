@@ -1,16 +1,14 @@
+# python_service/adapters/greyhound_adapter.py
 from datetime import datetime
 from decimal import Decimal
-from typing import Any
-from typing import Dict
-from typing import List
+from typing import Any, Dict, List
 
 import httpx
 import structlog
 from pydantic import ValidationError
 
-from ..models import OddsData
-from ..models import Race
-from ..models import Runner
+from ..core.exceptions import AdapterConfigError, AdapterParsingError
+from ..models import OddsData, Race, Runner
 from .base import BaseAdapter
 
 log = structlog.get_logger(__name__)
@@ -21,62 +19,20 @@ class GreyhoundAdapter(BaseAdapter):
 
     def __init__(self, config):
         if not config.GREYHOUND_API_URL:
-            raise ValueError("GreyhoundAdapter cannot be initialized without GREYHOUND_API_URL.")
+            raise AdapterConfigError(self.source_name, "GREYHOUND_API_URL is not configured.")
         super().__init__(source_name="Greyhound Racing", base_url=config.GREYHOUND_API_URL, config=config)
-        # Example for future use: self.api_key = config.GREYHOUND_API_KEY
 
-    async def fetch_races(self, date: str, http_client: httpx.AsyncClient) -> Dict[str, Any]:
+    async def fetch_races(self, date: str, http_client: httpx.AsyncClient) -> List[Race]:
         """Fetches upcoming greyhound races for the specified date."""
-        start_time = datetime.now()
-        endpoint = f"v1/cards/{date}"  # Using date parameter
-        try:
-            response = await self.make_request(http_client, "GET", endpoint)
-            if not response:
-                log.warning("GreyhoundAdapter: No response from make_request.")
-                return self._format_response(
-                    [], start_time, is_success=True, error_message="No data received from provider."
-                )
+        endpoint = f"v1/cards/{date}"
+        response = await self.make_request(http_client, "GET", endpoint)
 
-            response_json = response.json()
-            if not response_json or not response_json.get("cards"):
-                log.warning("GreyhoundAdapter: No 'cards' in response or empty list.")
-                return self._format_response(
-                    [], start_time, is_success=True, error_message="No race cards found for date."
-                )
+        response_json = response.json()
+        if not response_json or not response_json.get("cards"):
+            log.warning("GreyhoundAdapter: No 'cards' in response or empty list.")
+            return []
 
-            all_races = self._parse_cards(response_json["cards"])
-            if not all_races:
-                return self._format_response(
-                    [], start_time, is_success=True, error_message="Races found, but none could be parsed."
-                )
-
-            return self._format_response(all_races, start_time, is_success=True)
-        except httpx.HTTPError as e:
-            log.error("GreyhoundAdapter: HTTP request failed after retries", error=str(e), exc_info=True)
-            return self._format_response(
-                [], start_time, is_success=False, error_message="API request failed after multiple retries."
-            )
-        except Exception as e:
-            log.error("GreyhoundAdapter: An unexpected error occurred", error=str(e), exc_info=True)
-            return self._format_response(
-                [], start_time, is_success=False, error_message=f"An unexpected error occurred: {str(e)}"
-            )
-
-    def _format_response(
-        self, races: List[Race], start_time: datetime, is_success: bool = True, error_message: str = None
-    ) -> Dict[str, Any]:
-        """Formats the adapter's response consistently."""
-        fetch_duration = (datetime.now() - start_time).total_seconds()
-        return {
-            "races": races,
-            "source_info": {
-                "name": self.source_name,
-                "status": "SUCCESS" if is_success else "FAILED",
-                "races_fetched": len(races),
-                "error_message": error_message,
-                "fetch_duration": fetch_duration,
-            },
-        }
+        return self._parse_cards(response_json["cards"])
 
     def _parse_cards(self, cards: List[Dict[str, Any]]) -> List[Race]:
         """Parses a list of cards and their races into Race objects."""
@@ -106,6 +62,7 @@ class GreyhoundAdapter(BaseAdapter):
                         error=str(e),
                         race_data=race_data,
                     )
+                    raise AdapterParsingError(self.source_name, f"Failed to parse race: {race_data.get('race_id')}") from e
         return all_races
 
     def _parse_runners(self, runners_data: List[Dict[str, Any]]) -> List[Runner]:
@@ -117,7 +74,6 @@ class GreyhoundAdapter(BaseAdapter):
                     continue
 
                 odds_data = {}
-                # The directive's example was flawed. Correcting to a more realistic structure.
                 win_odds_val = runner_data.get("odds", {}).get("win")
                 if win_odds_val is not None:
                     win_odds = Decimal(str(win_odds_val))
@@ -126,13 +82,13 @@ class GreyhoundAdapter(BaseAdapter):
                             win=win_odds, source=self.source_name, last_updated=datetime.now()
                         )
 
-                runner = Runner(
+                runners.append(Runner(
                     number=runner_data["trap_number"],
                     name=runner_data["dog_name"],
                     scratched=runner_data.get("scratched", False),
                     odds=odds_data,
-                )
-                runners.append(runner)
-            except (KeyError, ValidationError) as e:
-                log.error("GreyhoundAdapter: Error parsing runner", error=str(e), runner_data=runner_data)
+                ))
+            except (KeyError, ValidationError):
+                log.warning("GreyhoundAdapter: Error parsing runner, skipping.", runner_data=runner_data)
+                continue
         return runners

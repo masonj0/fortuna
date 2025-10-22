@@ -5,8 +5,25 @@ import threading
 import time
 from tenacity import AsyncRetrying, stop_after_attempt, wait_exponential
 
+from ..core.exceptions import (
+    AdapterAuthError,
+    AdapterConnectionError,
+    AdapterHttpError,
+    AdapterRateLimitError,
+    AdapterRequestError,
+    AdapterTimeoutError,
+)
+
 class BaseAdapter:
-    """The base class for all data adapters, now with enhanced error handling."""
+    """
+    The consolidated, unified base class for all data adapters.
+
+    This class provides a standard interface and robust error handling for all adapters.
+    It includes:
+    - Tenacity-based request retries with exponential backoff.
+    - A thread-safe circuit breaker to prevent hammering failing services.
+    - Standardized error handling that raises specific custom exceptions.
+    """
 
     def __init__(self, source_name: str, base_url: str = "", config: dict = None):
         self.source_name = source_name
@@ -25,7 +42,27 @@ class BaseAdapter:
         self.FAILURE_THRESHOLD = 3
         self.COOLDOWN_PERIOD_SECONDS = 300  # 5 minutes
 
-    async def make_request(self, http_client: httpx.AsyncClient, method: str, url: str, **kwargs):
+    async def make_request(
+        self, http_client: httpx.AsyncClient, method: str, url: str, **kwargs
+    ) -> httpx.Response:
+        """
+        Makes an HTTP request with retries, circuit breaker logic, and standardized error handling.
+
+        Args:
+            http_client: An httpx.AsyncClient instance.
+            method: The HTTP method (e.g., "GET", "POST").
+            url: The URL endpoint.
+            **kwargs: Additional arguments for httpx.request.
+
+        Returns:
+            An httpx.Response object on success.
+
+        Raises:
+            AdapterHttpError: For 4xx/5xx responses.
+            AdapterTimeoutError: For request timeouts.
+            AdapterConnectionError: For connection-level errors.
+            AdapterRequestError: For other httpx request errors or a tripped circuit breaker.
+        """
         with self._breaker_lock:
             if self.circuit_breaker_tripped:
                 if time.time() - self.circuit_breaker_last_failure > self.COOLDOWN_PERIOD_SECONDS:
@@ -34,64 +71,53 @@ class BaseAdapter:
                     self.circuit_breaker_failure_count = 0
                 else:
                     self.logger.warning("Circuit breaker is tripped. Skipping request.")
-                    return None
+                    raise AdapterRequestError(self.source_name, "Circuit breaker is tripped")
 
         full_url = url if url.startswith('http') else f"{self.base_url}{url}"
 
         async def _make_request():
             response = await http_client.request(method, full_url, **kwargs)
             response.raise_for_status()
-            # Note: Previously, this returned response.json(), but that prevents
-            # the Timeform adapter from reading .text for HTML parsing.
-            # Returning the full response object is more flexible.
             return response
 
         try:
             async for attempt in self.retryer:
                 with attempt:
                     response = await _make_request()
+                    # On success, reset the circuit breaker failure count
                     with self._breaker_lock:
-                        self.circuit_breaker_failure_count = 0
+                        if self.circuit_breaker_failure_count > 0:
+                            self.logger.info("Request successful. Resetting circuit breaker failure count.")
+                            self.circuit_breaker_failure_count = 0
                     return response
+        except httpx.TimeoutException as e:
+            self._handle_failure()
+            self.logger.error("request_timeout", url=full_url, error=str(e))
+            raise AdapterTimeoutError(self.source_name, f"Request timed out for {full_url}") from e
+        except httpx.ConnectError as e:
+            self._handle_failure()
+            self.logger.error("request_connection_error", url=full_url, error=str(e))
+            raise AdapterConnectionError(self.source_name, f"Connection failed for {full_url}") from e
         except httpx.HTTPStatusError as e:
-            with self._breaker_lock:
-                self.circuit_breaker_failure_count += 1
-                self.circuit_breaker_last_failure = time.time()
-                if self.circuit_breaker_failure_count >= self.FAILURE_THRESHOLD:
-                    self.circuit_breaker_tripped = True
-                    self.logger.error("Circuit breaker tripped due to repeated failures.")
-            self.logger.error(
-                "http_error",
-                adapter=self.source_name,
-                status_code=e.response.status_code,
-                url=full_url,
-            )
-            self._show_windows_toast(
-                "Adapter HTTP Error", f"{self.source_name}: Received status {e.response.status_code} from {full_url}"
-            )
-            return None
+            self._handle_failure()
+            status = e.response.status_code
+            self.logger.error("http_status_error", status_code=status, url=full_url)
+            if status in [401, 403]:
+                raise AdapterAuthError(self.source_name, status, full_url) from e
+            if status == 429:
+                raise AdapterRateLimitError(self.source_name, status, full_url) from e
+            raise AdapterHttpError(self.source_name, status, full_url) from e
         except httpx.RequestError as e:
-            with self._breaker_lock:
-                self.circuit_breaker_failure_count += 1
-                self.circuit_breaker_last_failure = time.time()
-                if self.circuit_breaker_failure_count >= self.FAILURE_THRESHOLD:
-                    self.circuit_breaker_tripped = True
-                    self.logger.error("Circuit breaker tripped due to repeated failures.")
-            self.logger.error("request_error", adapter=self.source_name, error=str(e), url=full_url)
-            self._show_windows_toast("Adapter Network Error", f"{self.source_name}: Could not connect to {full_url}")
-            return None
-        except Exception as e:
-            self.logger.error("unexpected_adapter_error", adapter=self.source_name, error=str(e), exc_info=True)
-            self._show_windows_toast("Adapter Unexpected Error", f"{self.source_name}: An unknown error occurred.")
-            return None
+            self._handle_failure()
+            self.logger.error("request_error", url=full_url, error=str(e))
+            raise AdapterRequestError(self.source_name, f"An unexpected request error occurred for {full_url}") from e
 
-    def _show_windows_toast(self, title: str, message: str):
-        try:
-            from windows_toasts import Toast, WindowsToaster
-            toaster = WindowsToaster(title)
-            new_toast = Toast()
-            new_toast.text_fields = [message]
-            toaster.show_toast(new_toast)
-        except (ImportError, RuntimeError):
-            # Fail silently if not on Windows or if notifier fails
-            pass
+    def _handle_failure(self):
+        """Manages the circuit breaker state on any request failure."""
+        with self._breaker_lock:
+            self.circuit_breaker_failure_count += 1
+            self.circuit_breaker_last_failure = time.time()
+            if self.circuit_breaker_failure_count >= self.FAILURE_THRESHOLD:
+                if not self.circuit_breaker_tripped:
+                    self.circuit_breaker_tripped = True
+                    self.logger.critical("Circuit breaker tripped due to repeated failures.")

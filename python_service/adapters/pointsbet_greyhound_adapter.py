@@ -1,28 +1,25 @@
-import asyncio
-from datetime import datetime
 import httpx
-from python_service.adapters.base_v3 import BaseAdapterV3
-from python_service.models_v3 import NormalizedRace, NormalizedRunner
-from decimal import Decimal
+from typing import List
+
+from ..models import Race, Runner
+from .base import BaseAdapter
+
 
 # NOTE: This is a hypothetical implementation based on a potential API structure.
 
-class PointsBetGreyhoundAdapter(BaseAdapterV3):
-    SOURCE_NAME = "PointsBetGreyhound"
+class PointsBetGreyhoundAdapter(BaseAdapter):
+    def __init__(self, config: dict):
+        super().__init__(source_name="PointsBetGreyhound", base_url="https://api.pointsbet.com/api/v2/", config=config)
 
-    async def _fetch_data(self, session: httpx.AsyncClient, date: str) -> list:
+    async def fetch_races(self, date: str, http_client: httpx.AsyncClient) -> List[Race]:
         """Fetches all greyhound events for a given date from the hypothetical PointsBet API."""
-        api_url = f'https://api.pointsbet.com/api/v2/sports/greyhound-racing/events/by-date/{date}'
-        try:
-            response = await session.get(api_url, timeout=20)
-            response.raise_for_status()
-            return response.json().get('events', [])
-        except (httpx.RequestError, httpx.HTTPStatusError) as e:
-            self.logger.error(f'Failed to fetch data from PointsBet Greyhound: {e}')
-            return []
+        endpoint = f'sports/greyhound-racing/events/by-date/{date}'
+        response = await self.make_request(http_client, "GET", endpoint)
+        raw_data = response.json().get('events', [])
+        return self._parse_races(raw_data)
 
-    def _parse_races(self, raw_data: list) -> list[NormalizedRace]:
-        """Parses the raw event data into a list of standardized NormalizedRace objects."""
+    def _parse_races(self, raw_data: list) -> List[Race]:
+        """Parses the raw event data into a list of standardized Race objects."""
         races = []
         for event in raw_data:
             if not event.get('competitors') or not event.get('startTime'):
@@ -31,22 +28,21 @@ class PointsBetGreyhoundAdapter(BaseAdapterV3):
             runners = []
             for competitor in event.get('competitors', []):
                 if competitor.get('price'):
-                    runner = NormalizedRunner(
-                        runner_id=competitor.get('id', 'N/A'),
+                    runner = Runner(
+                        number=competitor.get('number', 99),
                         name=competitor.get('name', 'Unknown'),
-                        saddle_cloth=str(competitor.get('number', '99')),
-                        odds_decimal=float(competitor['price'])
+                        odds={'win': float(competitor['price'])}
                     )
                     runners.append(runner)
 
             if runners:
-                race = NormalizedRace(
-                    race_key=f'pbg_{event["id"]}',
-                    track_key=event.get('venue', {}).get('name', 'Unknown Venue'),
-                    start_time_iso=event['startTime'],
-                    race_name=f"R{event.get('raceNumber', 1)}",
+                race = Race(
+                    id=f'pbg_{event["id"]}',
+                    venue=event.get('venue', {}).get('name', 'Unknown Venue'),
+                    start_time=event['startTime'],
+                    race_number=event.get('raceNumber', 1),
                     runners=runners,
-                    source_ids=[self.SOURCE_NAME]
+                    source=self.source_name,
                 )
                 races.append(race)
         return races

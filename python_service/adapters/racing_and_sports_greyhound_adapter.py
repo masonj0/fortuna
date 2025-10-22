@@ -1,15 +1,13 @@
 # python_service/adapters/racing_and_sports_greyhound_adapter.py
 
 from datetime import datetime
-from typing import Any
-from typing import Dict
-from typing import List
+from typing import Any, Dict, List, Optional
 
 import httpx
 import structlog
 
-from ..models import Race
-from ..models import Runner
+from ..core.exceptions import AdapterConfigError, AdapterParsingError
+from ..models import Race, Runner
 from .base import BaseAdapter
 
 log = structlog.get_logger(__name__)
@@ -18,70 +16,47 @@ log = structlog.get_logger(__name__)
 class RacingAndSportsGreyhoundAdapter(BaseAdapter):
     def __init__(self, config):
         super().__init__(source_name="Racing and Sports Greyhound", base_url="https://api.racingandsports.com.au/")
+        if not hasattr(config, "RACING_AND_SPORTS_TOKEN") or not config.RACING_AND_SPORTS_TOKEN:
+            raise AdapterConfigError(self.source_name, "RACING_AND_SPORTS_TOKEN is not configured.")
         self.api_token = config.RACING_AND_SPORTS_TOKEN
 
-    async def fetch_races(self, date: str, http_client: httpx.AsyncClient) -> Dict[str, Any]:
-        start_time = datetime.now()
-        all_races: List[Race] = []
+    async def fetch_races(self, date: str, http_client: httpx.AsyncClient) -> List[Race]:
         headers = {"Authorization": f"Bearer {self.api_token}", "Accept": "application/json"}
+        meetings_url = "v1/greyhound/meetings"
+        params = {"date": date, "jurisdiction": "AUS"}
 
-        if not self.api_token:
-            return self._format_response(
-                [], start_time, is_success=False, error_message="ConfigurationError: Token not set"
-            )
+        meetings_response = await self.make_request(http_client, "GET", meetings_url, headers=headers, params=params)
 
         try:
-            # HYPOTHESIS: The greyhound endpoint is parallel to the racing one.
-            meetings_url = "v1/greyhound/meetings"
-            params = {"date": date, "jurisdiction": "AUS"}  # Jurisdiction may need to be adjusted
-            meetings_data = await self.make_request(http_client, "GET", meetings_url, headers=headers, params=params)
-
+            meetings_data = meetings_response.json()
             if not meetings_data or not meetings_data.get("meetings"):
-                return self._format_response(
-                    all_races, start_time, is_success=True, error_message="No greyhound meetings found."
-                )
+                log.warning("No greyhound meetings found in RacingAndSports response.")
+                return []
 
+            all_races = []
             for meeting in meetings_data["meetings"]:
                 for race_summary in meeting.get("races", []):
                     try:
-                        parsed_race = self._parse_ras_race(meeting, race_summary)
-                        all_races.append(parsed_race)
-                    except Exception as e:
-                        log.error(
-                            "RacingAndSportsGreyhoundAdapter: Failed to parse race",
+                        if parsed_race := self._parse_ras_race(meeting, race_summary):
+                            all_races.append(parsed_race)
+                    except (KeyError, TypeError, ValueError) as e:
+                        log.warning(
+                            "RacingAndSportsGreyhoundAdapter: Failed to parse race, skipping",
                             meeting=meeting.get("venueName"),
+                            race_id=race_summary.get("raceId"),
                             error=str(e),
-                            exc_info=True,
                         )
+            return all_races
+        except (ValueError, TypeError) as e:
+            log.error("RacingAndSportsGreyhoundAdapter: Failed to parse response JSON", error=str(e))
+            raise AdapterParsingError(self.source_name, "Failed to parse API response JSON.") from e
 
-            return self._format_response(all_races, start_time, is_success=True)
-        except httpx.HTTPError as e:
-            log.error("RacingAndSportsGreyhoundAdapter: HTTP request failed after retries", error=str(e), exc_info=True)
-            return self._format_response(
-                [], start_time, is_success=False, error_message="API request failed after multiple retries."
-            )
-        except Exception as e:
-            log.error("RacingAndSportsGreyhoundAdapter: An unexpected error occurred", error=str(e), exc_info=True)
-            return self._format_response(
-                [], start_time, is_success=False, error_message=f"An unexpected error occurred: {e}"
-            )
+    def _parse_ras_race(self, meeting: Dict[str, Any], race: Dict[str, Any]) -> Optional[Race]:
+        race_id = race.get("raceId")
+        start_time_str = race.get("startTime")
+        if not race_id or not start_time_str:
+            return None
 
-    def _format_response(
-        self, races: List[Race], start_time: datetime, is_success: bool = True, error_message: str = None
-    ) -> Dict[str, Any]:
-        fetch_duration = (datetime.now() - start_time).total_seconds()
-        return {
-            "races": races,
-            "source_info": {
-                "name": self.source_name,
-                "status": "SUCCESS" if is_success else "FAILED",
-                "races_fetched": len(races),
-                "error_message": error_message,
-                "fetch_duration": fetch_duration,
-            },
-        }
-
-    def _parse_ras_race(self, meeting: Dict[str, Any], race: Dict[str, Any]) -> Race:
         runners = [
             Runner(
                 number=rd.get("runnerNumber"),
@@ -92,10 +67,10 @@ class RacingAndSportsGreyhoundAdapter(BaseAdapter):
         ]
 
         return Race(
-            id=f"rasg_{race.get('raceId')}",
+            id=f"rasg_{race_id}",
             venue=meeting.get("venueName", "Unknown Venue"),
             race_number=race.get("raceNumber"),
-            start_time=datetime.fromisoformat(race.get("startTime")),
+            start_time=datetime.fromisoformat(start_time_str),
             runners=runners,
             source=self.source_name,
         )
