@@ -37,10 +37,10 @@
       "oneClick": false,
       "perMachine": true,
       "createDesktopShortcut": true,
-      "shortcutName": "Fortuna Faucet"
-    },
-    "wix": {
-      "template": "wix/product.wxs"
+      "shortcutName": "Fortuna Faucet",
+      "wix": {
+        "template": "wix/product.wxs"
+      }
     },
     "nsis": {
       "oneClick": false,
