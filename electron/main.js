@@ -1,18 +1,16 @@
 // electron/main.js
 const { app, BrowserWindow, Tray, Menu, nativeImage, dialog } = require('electron');
-const { spawn, exec } = require('child_process');
+const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
-// --- Main Application Class ---
 class FortunaDesktopApp {
   constructor() {
     this.mainWindow = null;
     this.tray = null;
     this.backendProcess = null;
 
-    const gotTheLock = app.requestSingleInstanceLock();
-    if (!gotTheLock) {
+    if (!app.requestSingleInstanceLock()) {
       app.quit();
     } else {
       app.on('second-instance', () => {
@@ -45,10 +43,9 @@ class FortunaDesktopApp {
         event.preventDefault();
         this.mainWindow.hide();
       }
-      return false;
     });
 
-    const isDev = process.env.NODE_ENV !== 'production';
+    const isDev = process.env.NODE_ENV === 'development';
     if (isDev) {
       this.mainWindow.loadURL('http://localhost:3000');
     } else {
@@ -56,7 +53,7 @@ class FortunaDesktopApp {
     }
 
     this.mainWindow.once('ready-to-show', () => {
-        this.mainWindow.show();
+      this.mainWindow.show();
     });
   }
 
@@ -89,64 +86,101 @@ class FortunaDesktopApp {
   }
 
   async startBackend() {
+    const isDev = process.env.NODE_ENV === 'development';
+
+    let pythonPath;
+    let serviceCwd;
+
+    if (isDev) {
+        pythonPath = path.join(process.cwd(), '.venv', 'Scripts', 'python.exe');
+        serviceCwd = path.join(process.cwd(), 'python_service');
+    } else {
+        pythonPath = path.join(process.resourcesPath, 'app', 'python', 'python.exe');
+        serviceCwd = path.join(process.resourcesPath, 'app', 'python_service');
+    }
+
+    if (!fs.existsSync(pythonPath)) {
+        throw new Error(`Python executable not found at: ${pythonPath}`);
+    }
+
+    // --- ENHANCED LOGGING ---
+    const logDir = app.getPath('userData');
+    const logFile = path.join(logDir, 'backend_diagnostics.log');
+    // Ensure log directory exists and create a writable stream
+    if (!fs.existsSync(logDir)) {
+      fs.mkdirSync(logDir, { recursive: true });
+    }
+    const logStream = fs.createWriteStream(logFile, { flags: 'a' });
+    logStream.write(`--- Log session started at ${new Date().toISOString()} ---\n`);
+    logStream.write(`Python Path: ${pythonPath}\n`);
+    logStream.write(`Service CWD: ${serviceCwd}\n`);
+
+    this.backendProcess = spawn(pythonPath,
+        ['-m', 'uvicorn', 'api:app', '--host', '127.0.0.1', '--port', '8000'],
+        {
+            cwd: serviceCwd,
+            // Detach the process from the parent, and pipe output to files
+            detached: true,
+            stdio: ['ignore', 'pipe', 'pipe']
+        }
+    );
+
+    // Redirect stdout and stderr to the log file
+    this.backendProcess.stdout.pipe(logStream);
+    this.backendProcess.stderr.pipe(logStream);
+
     return new Promise((resolve, reject) => {
-        const isDev = process.env.NODE_ENV !== 'production';
-        const rootPath = isDev ? path.join(__dirname, '..') : process.resourcesPath;
-        const pythonPath = path.join(rootPath, '.venv', 'Scripts', 'python.exe');
-        const apiPath = path.join(rootPath, 'python_service', 'api.py');
-
-        // DEBUG: Verify paths exist
-        if (!fs.existsSync(pythonPath)) {
-            return reject(new Error(`Python not found: ${pythonPath}`));
-        }
-        if (!fs.existsSync(apiPath)) {
-            return reject(new Error(`API module not found: ${apiPath}`));
-        }
-
-        this.backendProcess = spawn(pythonPath, ['-m', 'uvicorn', 'api:app', '--host', '127.0.0.1', '--port', '8000'], {
-            cwd: path.join(rootPath, 'python_service'),
-            stdio: ['ignore', 'pipe', 'pipe']  // Prevent inherit conflicts
-        });
-
         const timeout = setTimeout(() => {
-            reject(new Error('Backend startup timeout'));
-        }, 15000);  // 15 second timeout
+            this.backendProcess.kill();
+            logStream.write('--- Backend startup timed out ---\n');
+            reject(new Error('Backend startup timed out after 15 seconds. Check backend_diagnostics.log for details.'));
+        }, 15000);
 
-        this.backendProcess.stdout.on('data', (data) => {
-            console.log(`Backend: ${data}`);
-            if (data.toString().includes('Uvicorn running')) {
-                clearTimeout(timeout);
+        const onData = (data) => {
+            const output = data.toString();
+            if (output.includes('Uvicorn running')) {
+                logStream.write('--- Backend started successfully ---\n');
+                cleanupListeners();
                 resolve();
             }
-        });
+        };
 
-        this.backendProcess.stderr.on('data', (data) => {
-            console.error(`Backend error: ${data}`);
-        });
+        const onError = (data) => {
+            const errorOutput = data.toString();
+            logStream.write(`--- Backend failed to start: ${errorOutput} ---\n`);
+            cleanupListeners();
+            reject(new Error(`Backend failed to start. Check backend_diagnostics.log.`));
+        };
 
-        this.backendProcess.on('error', (err) => {
+        const cleanupListeners = () => {
             clearTimeout(timeout);
-            reject(err);
-        });
+            this.backendProcess.stdout.removeListener('data', onData);
+            this.backendProcess.stderr.removeListener('data', onError);
+        };
+
+        this.backendProcess.stdout.on('data', onData);
+        this.backendProcess.stderr.on('data', onError);
     });
   }
 
   async initialize() {
     try {
-        await this.startBackend();
-        this.createMainWindow();
-        this.createSystemTray();
+      await this.startBackend();
+      this.createMainWindow();
+      this.createSystemTray();
     } catch(err) {
-        dialog.showErrorBox('Fatal Error', `Failed to start the backend service: ${err.message}`);
-        console.error("Initialization failed:", err);
-        app.quit();
+      const logPath = path.join(app.getPath('userData'), 'backend_diagnostics.log');
+      const errorMessage = `Failed to initialize Fortuna Faucet: ${err.message}\n\nPlease check the log file for more details:\n${logPath}`;
+      dialog.showErrorBox('Fatal Initialization Error', errorMessage);
+      console.error(errorMessage, err);
+      app.quit();
     }
   }
 
   cleanup() {
-    console.log('Cleaning up processes...');
+    console.log('Cleaning up backend process...');
     if (this.backendProcess) {
-        this.backendProcess.kill();
+      this.backendProcess.kill();
     }
   }
 }
@@ -163,7 +197,7 @@ app.on('window-all-closed', (event) => {
 });
 
 app.on('before-quit', () => {
-  if(fortunaApp) {
+  if (fortunaApp) {
     fortunaApp.cleanup();
   }
 });
