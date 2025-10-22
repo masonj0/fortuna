@@ -69,7 +69,6 @@
       <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="InstallDirDlg" Order="2">1</Publish>
       <Publish Dialog="InstallDirDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg">1</Publish>
     </UI>
-    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
     <UIRef Id="WixUI_Common" />
     <WixVariable Id="WixUILicenseRtf" Value="electron\assets\license.rtf"/>
     <!-- The following two variables are for custom UI images. -->

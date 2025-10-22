@@ -9,6 +9,7 @@ from typing import List
 import httpx
 import structlog
 
+from ..core.exceptions import AdapterConfigError
 from ..models import OddsData
 from ..models import Race
 from ..models import Runner
@@ -21,44 +22,35 @@ class TheRacingApiAdapter(BaseAdapter):
     """Adapter for the high-value JSON-based The Racing API."""
 
     def __init__(self, config):
-        super().__init__(source_name="TheRacingAPI", base_url="https://api.theracingapi.com/v1/", config=config)
+        super().__init__(
+            source_name="TheRacingAPI",
+            base_url="https://api.theracingapi.com/v1/",
+            config=config,
+        )
+        if not hasattr(config, "THE_RACING_API_KEY") or not config.THE_RACING_API_KEY:
+            raise AdapterConfigError(self.source_name, "THE_RACING_API_KEY is not configured.")
         self.api_key = config.THE_RACING_API_KEY
 
-    async def fetch_races(self, date: str, http_client: httpx.AsyncClient) -> Dict[str, Any]:
-        start_time = datetime.now()
-        if not self.api_key:
-            return self._format_response(
-                [], start_time, is_success=False, error_message="ConfigurationError: THE_RACING_API_KEY not set"
-            )
+    async def fetch_races(self, date: str, http_client: httpx.AsyncClient) -> List[Race]:
+        """
+        Fetches race data from The Racing API and parses it into Race objects.
 
-        try:
-            endpoint = f"racecards?date={date}&course=all&region=gb,ire"
-            headers = {"Authorization": f"Bearer {self.api_key}"}
-            response = await self.make_request(http_client, "GET", endpoint, headers=headers)
+        Raises:
+            AdapterError: If the request fails or the response is invalid.
+        """
+        endpoint = f"racecards?date={date}&course=all&region=gb,ire"
+        headers = {"Authorization": f"Bearer {self.api_key}"}
 
-            if not response:
-                return self._format_response(
-                    [], start_time, is_success=True, error_message="No response from API."
-                )
+        # make_request will now raise an exception on failure, which will be handled
+        # by the upstream service (e.g., the main engine).
+        response = await self.make_request(http_client, "GET", endpoint, headers=headers)
 
-            response_json = response.json()
-            if not response_json or not response_json.get("racecards"):
-                return self._format_response(
-                    [], start_time, is_success=True, error_message="No racecards found in API response."
-                )
+        response_json = response.json()
+        if not response_json or "racecards" not in response_json:
+            log.warning(f"{self.source_name}: 'racecards' key missing in API response.")
+            return []
 
-            all_races = self._parse_races(response_json["racecards"])
-            return self._format_response(all_races, start_time, is_success=True)
-        except httpx.HTTPError as e:
-            log.error(f"{self.source_name}: HTTP request failed after retries", error=str(e), exc_info=True)
-            return self._format_response(
-                [], start_time, is_success=False, error_message="API request failed after multiple retries."
-            )
-        except Exception as e:
-            log.error(f"{self.source_name}: An unexpected error occurred", error=str(e), exc_info=True)
-            return self._format_response(
-                [], start_time, is_success=False, error_message=f"An unexpected error occurred: {e}"
-            )
+        return self._parse_races(response_json["racecards"])
 
     def _parse_races(self, racecards: List[Dict[str, Any]]) -> List[Race]:
         races = []

@@ -1,16 +1,13 @@
 # python_service/adapters/gbgb_api_adapter.py
 
 from datetime import datetime
-from typing import Any
-from typing import Dict
-from typing import List
+from typing import Any, Dict, List
 
 import httpx
 import structlog
 
-from ..models import OddsData
-from ..models import Race
-from ..models import Runner
+from ..core.exceptions import AdapterParsingError
+from ..models import OddsData, Race, Runner
 from ..utils.odds import parse_odds_to_decimal
 from .base import BaseAdapter
 
@@ -23,30 +20,14 @@ class GbgbApiAdapter(BaseAdapter):
     def __init__(self, config):
         super().__init__(source_name="GBGB", base_url="https://api.gbgb.org.uk/api/", config=config)
 
-    async def fetch_races(self, date: str, http_client: httpx.AsyncClient) -> Dict[str, Any]:
-        start_time = datetime.now()
-        try:
-            # The endpoint appears to be structured by date for all meetings
-            endpoint = f"results/meeting/{date}"
-            response = await self.make_request(http_client, "GET", endpoint)
+    async def fetch_races(self, date: str, http_client: httpx.AsyncClient) -> List[Race]:
+        endpoint = f"results/meeting/{date}"
+        response = await self.make_request(http_client, "GET", endpoint)
 
-            if not response:
-                return self._format_response(
-                    [], start_time, is_success=True, error_message="No meetings found in API response."
-                )
+        if not response:
+            return []
 
-            all_races = self._parse_meetings(response.json())
-            return self._format_response(all_races, start_time, is_success=True)
-        except httpx.HTTPError as e:
-            log.error(f"{self.source_name}: HTTP request failed after retries", error=str(e), exc_info=True)
-            return self._format_response(
-                [], start_time, is_success=False, error_message="API request failed after multiple retries."
-            )
-        except Exception as e:
-            log.error(f"{self.source_name}: An unexpected error occurred", error=str(e), exc_info=True)
-            return self._format_response(
-                [], start_time, is_success=False, error_message=f"An unexpected error occurred: {e}"
-            )
+        return self._parse_meetings(response.json())
 
     def _parse_meetings(self, meetings_data: List[Dict[str, Any]]) -> List[Race]:
         races = []
@@ -57,8 +38,9 @@ class GbgbApiAdapter(BaseAdapter):
             for race_data in meeting.get("races", []):
                 try:
                     races.append(self._parse_race(race_data, track_name))
-                except Exception as e:
+                except (KeyError, TypeError) as e:
                     log.error(f"{self.source_name}: Error parsing race", race_id=race_data.get("raceId"), error=str(e))
+                    raise AdapterParsingError(self.source_name, f"Failed to parse race: {race_data.get('raceId')}") from e
         return races
 
     def _parse_race(self, race_data: Dict[str, Any], track_name: str) -> Race:
@@ -77,7 +59,6 @@ class GbgbApiAdapter(BaseAdapter):
         runners = []
         for runner_data in runners_data:
             try:
-                # The API provides SP as a fraction, e.g., '5/2'
                 odds_data = {}
                 sp = runner_data.get("sp")
                 win_odds = parse_odds_to_decimal(sp)
@@ -93,22 +74,8 @@ class GbgbApiAdapter(BaseAdapter):
                         odds=odds_data,
                     )
                 )
-            except Exception as e:
-                log.error(
-                    f"{self.source_name}: Error parsing runner", runner_name=runner_data.get("dogName"), error=str(e)
-                )
+            except (KeyError, TypeError):
+                log.warning(f"{self.source_name}: Error parsing runner", runner_name=runner_data.get("dogName"))
+                # Skip runner, but don't fail the whole race
+                continue
         return runners
-
-    def _format_response(
-        self, races: List[Race], start_time: datetime, is_success: bool = True, error_message: str = None
-    ) -> Dict[str, Any]:
-        return {
-            "races": races,
-            "source_info": {
-                "name": self.source_name,
-                "status": "SUCCESS" if is_success else "FAILED",
-                "races_fetched": len(races),
-                "error_message": error_message,
-                "fetch_duration": (datetime.now() - start_time).total_seconds(),
-            },
-        }

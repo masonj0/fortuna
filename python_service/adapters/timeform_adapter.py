@@ -2,19 +2,14 @@
 
 import asyncio
 from datetime import datetime
-from typing import Any
-from typing import Dict
-from typing import List
-from typing import Optional
+from typing import List, Optional
 
 import httpx
 import structlog
-from bs4 import BeautifulSoup
-from bs4 import Tag
+from bs4 import BeautifulSoup, Tag
 
-from ..models import OddsData
-from ..models import Race
-from ..models import Runner
+from ..core.exceptions import AdapterParsingError
+from ..models import OddsData, Race, Runner
 from ..utils.odds import parse_odds_to_decimal
 from .base import BaseAdapter
 
@@ -29,20 +24,13 @@ class TimeformAdapter(BaseAdapter):
     def __init__(self, config):
         super().__init__(source_name="Timeform", base_url="https://www.timeform.com", config=config)
 
-    async def fetch_races(self, date: str, http_client: httpx.AsyncClient) -> Dict[str, Any]:
-        start_time = datetime.now()
-        try:
-            race_links = await self._get_race_links(http_client)
-            tasks = [self._fetch_and_parse_race(link, http_client) for link in race_links]
-            races = [race for race in await asyncio.gather(*tasks) if race]
-            return self._format_response(races, start_time, is_success=True)
-        except Exception as e:
-            return self._format_response([], start_time, is_success=False, error_message=str(e))
+    async def fetch_races(self, date: str, http_client: httpx.AsyncClient) -> List[Race]:
+        race_links = await self._get_race_links(http_client)
+        tasks = [self._fetch_and_parse_race(link, http_client) for link in race_links]
+        return [race for race in await asyncio.gather(*tasks) if race]
 
     async def _get_race_links(self, http_client: httpx.AsyncClient) -> List[str]:
         response = await self.make_request(http_client, "GET", "/horse-racing/racecards")
-        if not response:
-            return []
         soup = BeautifulSoup(response.text, "html.parser")
         links = {a["href"] for a in soup.select("a.rp-racecard-off-link[href]")}
         return [f"{self.base_url}{link}" for link in links]
@@ -50,25 +38,10 @@ class TimeformAdapter(BaseAdapter):
     async def _fetch_and_parse_race(self, url: str, http_client: httpx.AsyncClient) -> Optional[Race]:
         try:
             response = await self.make_request(http_client, "GET", url)
-            if not response:
-                return None
             soup = BeautifulSoup(response.text, "html.parser")
 
-            track_name_tag = soup.select_one("h1.rp-raceTimeCourseName_name")
-            if not track_name_tag:
-                log.warning("Could not find track name", url=url)
-                return None
-            track_name = _clean_text(track_name_tag.get_text())
-
-            race_time_tag = soup.select_one("span.rp-raceTimeCourseName_time")
-            if not race_time_tag:
-                log.warning("Could not find race time", url=url)
-                return None
-            race_time_str = _clean_text(race_time_tag.get_text())
-
-            if not track_name or not race_time_str:
-                log.warning("Missing track name or race time", url=url)
-                return None
+            track_name = _clean_text(soup.select_one("h1.rp-raceTimeCourseName_name").get_text())
+            race_time_str = _clean_text(soup.select_one("span.rp-raceTimeCourseName_time").get_text())
 
             start_time = datetime.strptime(f"{datetime.now().date()} {race_time_str}", "%Y-%m-%d %H:%M")
             all_times = [_clean_text(a.get_text()) for a in soup.select("a.rp-racecard-off-link")]
@@ -76,8 +49,7 @@ class TimeformAdapter(BaseAdapter):
 
             runner_rows = soup.select("div.rp-horseTable_mainRow")
             if not runner_rows:
-                log.warning("No runners found for race", url=url)
-                return None # A race with no runners is not a race
+                return None
 
             runners = [self._parse_runner(row) for row in runner_rows]
 
@@ -89,60 +61,27 @@ class TimeformAdapter(BaseAdapter):
                 runners=[r for r in runners if r],
                 source=self.source_name,
             )
-        except Exception as e:
+        except (AttributeError, ValueError, TypeError) as e:
             log.error("Error parsing race from Timeform", url=url, exc_info=e)
-            return None
+            raise AdapterParsingError(self.source_name, f"Failed to parse race at {url}") from e
 
     def _parse_runner(self, row: Tag) -> Optional[Runner]:
         try:
-            name_tag = row.select_one("a.rp-horseTable_horse-name")
-            if not name_tag:
-                return None
-            name = _clean_text(name_tag.get_text())
-
-            num_tag = row.select_one("span.rp-horseTable_horse-number")
-            if not num_tag:
-                return None
-            num_str = _clean_text(num_tag.get_text())
-            if not num_str:
-                return None
+            name = _clean_text(row.select_one("a.rp-horseTable_horse-name").get_text())
+            num_str = _clean_text(row.select_one("span.rp-horseTable_horse-number").get_text())
             number_part = "".join(filter(str.isdigit, num_str.strip("()")))
-            if not number_part:
-                return None
             number = int(number_part)
 
-            if not name or not number:
-                return None
-
             odds_data = {}
-            odds_tag = row.select_one("button.rp-bet-placer-btn__odds")
-            if odds_tag:
+            if odds_tag := row.select_one("button.rp-bet-placer-btn__odds"):
                 odds_str = _clean_text(odds_tag.get_text())
-                win_odds = parse_odds_to_decimal(odds_str)
-                if win_odds and win_odds < 999:
-                    odds_data = {
-                        self.source_name: OddsData(
-                            win=win_odds,
-                            source=self.source_name,
-                            last_updated=datetime.now(),
-                        )
-                    }
+                if win_odds := parse_odds_to_decimal(odds_str):
+                    if win_odds < 999:
+                        odds_data = {
+                            self.source_name: OddsData(win=win_odds, source=self.source_name, last_updated=datetime.now())
+                        }
 
             return Runner(number=number, name=name, odds=odds_data)
-        except (AttributeError, ValueError, TypeError) as e:
-            log.warning("Failed to parse runner from Timeform", detail=str(e), exc_info=True)
+        except (AttributeError, ValueError, TypeError):
+            log.warning("Failed to parse runner from Timeform, skipping.")
             return None
-
-    def _format_response(
-        self, races: List[Race], start_time: datetime, is_success: bool, error_message: str = None
-    ) -> Dict[str, Any]:
-        return {
-            "races": races,
-            "source_info": {
-                "name": self.source_name,
-                "status": "SUCCESS" if is_success else "FAILED",
-                "races_fetched": len(races),
-                "error_message": error_message,
-                "fetch_duration": (datetime.now() - start_time).total_seconds(),
-            },
-        }
