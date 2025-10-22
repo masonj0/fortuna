@@ -39,6 +39,9 @@
       "createDesktopShortcut": true,
       "shortcutName": "Fortuna Faucet"
     },
+    "wix": {
+      "template": "wix/product.wxs"
+    },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
