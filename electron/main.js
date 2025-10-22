@@ -193,6 +193,8 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', (event) => {
+  // Prevent app from quitting when all windows are closed.
+  // The app will continue to run in the system tray.
   event.preventDefault();
 });
 

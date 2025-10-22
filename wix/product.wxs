@@ -89,10 +89,13 @@
     <UIRef Id="WixUI_Common" />
     <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
     <WixVariable Id="WixUILicenseRtf" Value="electron\assets\license.rtf"/>
-    <!-- The following two variables are for custom UI images. -->
-    <!-- To enable them, create the files and uncomment the lines. -->
-    <!-- <WixVariable Id="WixUIBannerBmp" Value="electron\assets\banner.bmp"/> -->
-    <!-- <WixVariable Id="WixUIDialogBmp" Value="electron\assets\dialog.bmp"/> -->
+    <WixVariable Id="WixUIBannerBmp" Value="electron\assets\banner.bmp"/>
+    <WixVariable Id="WixUIDialogBmp" Value="electron\assets\dialog.bmp"/>
+
+    <!-- 4. Schedule the Custom Action -->
+    <InstallExecuteSequence>
+        <Custom Action="ValidateInstallation" After="InstallFinalize">NOT Installed</Custom>
+    </InstallExecuteSequence>
 
     <!-- 4. Schedule the Custom Action -->
     <InstallExecuteSequence>
