@@ -44,10 +44,8 @@
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
       "perMachine": true,
       "createDesktopShortcut": true,
-      "installerIcon": "assets/icon.ico",
       "include": "electron/installer.nsh"
     }
   }
