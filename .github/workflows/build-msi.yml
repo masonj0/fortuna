@@ -111,6 +111,9 @@ jobs:
           .venv\\Scripts\\python.exe -m pip install --upgrade pip
           .venv\\Scripts\\pip.exe install -r requirements_minimal.txt
 
+      - name: Prepare Minimal Build
+        run: python scripts/prepare_minimal_build.py
+
       - name: Build Minimal Frontend
         run: |
           cd web_platform\\frontend
