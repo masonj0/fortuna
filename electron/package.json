@@ -18,35 +18,33 @@
   "build": {
     "appId": "com.fortuna.faucet",
     "productName": "Fortuna Faucet",
+    "beforeBuild": "scripts/prepare_portable_python.ps1",
+    "msiProjectCreated": "scripts/modify_wix_project.ps1",
     "files": [
       "main.js",
       "preload.js",
       "assets/**/*",
-      "../.venv/**/*",
+      "python/**/*",
       "../python_service/**/*",
       "../web_platform/frontend/out/**/*",
-      "../requirements.txt",
-      "../VERSION.txt",
+      "../scripts/validate_installation.ps1",
+      "!../.venv/",
       "!node_modules/**/*"
     ],
     "win": {
       "target": "msi",
-      "icon": "assets/icon.ico",
-      "shortcutName": "Fortuna Faucet"
+      "icon": "assets/icon.ico"
     },
     "msi": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
       "perMachine": true,
       "createDesktopShortcut": true,
-      "installerIcon": "assets/icon.ico"
+      "shortcutName": "Fortuna Faucet"
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
       "perMachine": true,
       "createDesktopShortcut": true,
-      "installerIcon": "assets/icon.ico",
       "include": "electron/installer.nsh"
     }
   }
