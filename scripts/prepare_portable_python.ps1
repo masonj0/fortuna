@@ -23,7 +23,7 @@ function Write-Success {
 Write-Header "Step 1: Initializing Configuration"
 $PythonEmbedUrl = "https://www.python.org/ftp/python/3.11.7/python-3.11.7-embed-amd64.zip"
 $TempDir = ".\temp_build"
-$PythonDir = ".\electron\portable_python"
+$PythonDir = ".\electron\python"
 $PythonZipPath = Join-Path $TempDir "python_embed.zip"
 $PythonExePath = Join-Path $PythonDir "python.exe"
 $RequirementsPath = ".\requirements.txt"

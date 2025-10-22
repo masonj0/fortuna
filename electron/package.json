@@ -23,7 +23,7 @@
       "main.js",
       "preload.js",
       "assets/**/*",
-      "portable_python/**/*",
+      "python/**/*",
       "../python_service/**/*",
       "../web_platform/frontend/out/**/*",
       "!../.venv/",
@@ -37,9 +37,7 @@
       "oneClick": false,
       "perMachine": true,
       "createDesktopShortcut": true,
-      "shortcutName": "Fortuna Faucet"
-    },
-    "wix": {
+      "shortcutName": "Fortuna Faucet",
       "template": "wix/product.wxs"
     },
     "nsis": {

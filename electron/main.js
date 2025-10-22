@@ -92,65 +92,74 @@ class FortunaDesktopApp {
     let serviceCwd;
 
     if (isDev) {
-        // In development, use the project's virtual environment
         pythonPath = path.join(process.cwd(), '.venv', 'Scripts', 'python.exe');
         serviceCwd = path.join(process.cwd(), 'python_service');
     } else {
-        // In production, use the embedded Python in the installed app resources
-        pythonPath = path.join(process.resourcesPath, 'python', 'python.exe');
+        pythonPath = path.join(process.resourcesPath, 'app', 'python', 'python.exe');
         serviceCwd = path.join(process.resourcesPath, 'app', 'python_service');
     }
 
-    // Verify the executable path exists before attempting to spawn
     if (!fs.existsSync(pythonPath)) {
         throw new Error(`Python executable not found at: ${pythonPath}`);
     }
+
+    // --- ENHANCED LOGGING ---
+    const logDir = app.getPath('userData');
+    const logFile = path.join(logDir, 'backend_diagnostics.log');
+    // Ensure log directory exists and create a writable stream
+    if (!fs.existsSync(logDir)) {
+      fs.mkdirSync(logDir, { recursive: true });
+    }
+    const logStream = fs.createWriteStream(logFile, { flags: 'a' });
+    logStream.write(`--- Log session started at ${new Date().toISOString()} ---\n`);
+    logStream.write(`Python Path: ${pythonPath}\n`);
+    logStream.write(`Service CWD: ${serviceCwd}\n`);
 
     this.backendProcess = spawn(pythonPath,
         ['-m', 'uvicorn', 'api:app', '--host', '127.0.0.1', '--port', '8000'],
         {
             cwd: serviceCwd,
-            stdio: 'pipe' // Use 'pipe' to capture output
+            // Detach the process from the parent, and pipe output to files
+            detached: true,
+            stdio: ['ignore', 'pipe', 'pipe']
         }
     );
+
+    // Redirect stdout and stderr to the log file
+    this.backendProcess.stdout.pipe(logStream);
+    this.backendProcess.stderr.pipe(logStream);
 
     return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
             this.backendProcess.kill();
-            reject(new Error('Backend startup timed out after 15 seconds.'));
+            logStream.write('--- Backend startup timed out ---\n');
+            reject(new Error('Backend startup timed out after 15 seconds. Check backend_diagnostics.log for details.'));
         }, 15000);
 
-        this.backendProcess.stdout.on('data', (data) => {
+        const onData = (data) => {
             const output = data.toString();
-            console.log(`[Backend STDOUT]: ${output}`);
             if (output.includes('Uvicorn running')) {
-                console.log('Backend started successfully.');
-                clearTimeout(timeout);
+                logStream.write('--- Backend started successfully ---\n');
+                cleanupListeners();
                 resolve();
             }
-        });
+        };
 
-        this.backendProcess.stderr.on('data', (data) => {
+        const onError = (data) => {
             const errorOutput = data.toString();
-            console.error(`[Backend STDERR]: ${errorOutput}`);
-            // Reject on first error to fail fast
-            clearTimeout(timeout);
-            reject(new Error(`Backend failed to start: ${errorOutput}`));
-        });
+            logStream.write(`--- Backend failed to start: ${errorOutput} ---\n`);
+            cleanupListeners();
+            reject(new Error(`Backend failed to start. Check backend_diagnostics.log.`));
+        };
 
-        this.backendProcess.on('close', (code) => {
-            if (code !== 0) {
-                console.error(`Backend process exited with code ${code}`);
-                clearTimeout(timeout);
-                reject(new Error(`Backend process exited with code ${code}`));
-            }
-        });
-
-        this.backendProcess.on('error', (err) => {
-            console.error('Failed to start backend process:', err);
+        const cleanupListeners = () => {
             clearTimeout(timeout);
-            reject(err);
-        });
+            this.backendProcess.stdout.removeListener('data', onData);
+            this.backendProcess.stderr.removeListener('data', onError);
+        };
+
+        this.backendProcess.stdout.on('data', onData);
+        this.backendProcess.stderr.on('data', onError);
     });
   }
 
@@ -160,7 +169,8 @@ class FortunaDesktopApp {
       this.createMainWindow();
       this.createSystemTray();
     } catch(err) {
-      const errorMessage = `Failed to initialize Fortuna Faucet: ${err.message}\n\nPlease check the logs for more details.`;
+      const logPath = path.join(app.getPath('userData'), 'backend_diagnostics.log');
+      const errorMessage = `Failed to initialize Fortuna Faucet: ${err.message}\n\nPlease check the log file for more details:\n${logPath}`;
       dialog.showErrorBox('Fatal Initialization Error', errorMessage);
       console.error(errorMessage, err);
       app.quit();
