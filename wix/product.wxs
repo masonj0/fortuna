@@ -21,8 +21,6 @@
 
     <Media Id="1" Cabinet="fortuna.cab" EmbedCab="yes"/>
 
-    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
-
     <!-- Directory Structure -->
     <Directory Id="TARGETDIR" Name="SourceDir">
       <Directory Id="ProgramFiles64Folder">
