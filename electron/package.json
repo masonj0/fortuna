@@ -18,8 +18,7 @@
   "build": {
     "appId": "com.fortuna.faucet",
     "productName": "Fortuna Faucet",
-    "beforeBuild": "scripts/prepare_portable_python.ps1",
-    "msiProjectCreated": "scripts/modify_wix_project.ps1",
+    "beforeBuild": "../scripts/setup_embedded_python.ps1",
     "files": [
       "main.js",
       "preload.js",
