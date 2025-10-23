@@ -94,11 +94,29 @@ export const LiveRaceDashboard: React.FC = () => {
     return res.json();
   };
 
+  // A new helper function to abstract the logic of getting the API key.
+  // It first tries the secure Electron API and falls back to the .env variable for standalone development.
+  const getApiKey = async (): Promise<string> => {
+    // The preload script exposes the electronAPI on the window object.
+    if (window.electronAPI && typeof window.electronAPI.getApiKey === 'function') {
+      console.log("Using electronAPI.getApiKey() to fetch key.");
+      const key = await window.electronAPI.getApiKey();
+      if (key) return key;
+      console.warn("electronAPI.getApiKey() returned a null or empty value.");
+    }
+
+    console.log("Falling back to process.env.NEXT_PUBLIC_API_KEY.");
+    const fallbackKey = process.env.NEXT_PUBLIC_API_KEY;
+    if (fallbackKey) return fallbackKey;
+
+    // If both methods fail, we throw an error.
+    throw new Error('API key could not be retrieved from secure storage or .env fallback.');
+  };
+
   const { data: qualifiedData, error: racesError, isLoading: racesLoading } = useQuery({
     queryKey: ['qualifiedRaces'],
     queryFn: async () => {
-      const apiKey = process.env.NEXT_PUBLIC_API_KEY;
-      if (!apiKey) throw new Error('API key not configured.');
+      const apiKey = await getApiKey();
       return fetchWithStructuredError(`/api/races/qualified/trifecta`, { 'X-API-Key': apiKey });
     },
     refetchInterval: 30000,
@@ -107,8 +125,7 @@ export const LiveRaceDashboard: React.FC = () => {
   const { data: statuses, error: statusError } = useQuery({
     queryKey: ['adapterStatuses'],
     queryFn: async () => {
-      const apiKey = process.env.NEXT_PUBLIC_API_KEY;
-      if (!apiKey) throw new Error('API key not configured.');
+      const apiKey = await getApiKey();
       return fetchWithStructuredError(`/api/adapters/status`, { 'X-API-Key': apiKey });
     },
     refetchInterval: 60000,
