@@ -11,16 +11,17 @@ OUTPUT_FILENAME_TEMPLATE = "FORTUNA_ALL_PART{}.JSON"
 
 # Map manifest files to their corresponding archive part number
 MANIFEST_MAP = {
-    "MANIFEST_BACKEND.json": 1,
-    "MANIFEST_FRONTEND.json": 2,
-    "MANIFEST_ROOT.json": 3
+    "MANIFEST_PART1_BACKEND.json": 1,
+    "MANIFEST_PART2_FRONTEND.json": 2,
+    "MANIFEST_PART3_SUPPORT.json": 3,
+    "MANIFEST_PART4_ROOT.json": 4
 }
 
 def run_archiver():
     print("--- Fortuna Faucet Manifest-Driven Scribe ---")
     print("Generating archives from JSON manifests...")
 
-    archives = {1: {}, 2: {}, 3: {}}
+    archives = {1: {}, 2: {}, 3: {}, 4: {}}
     total_files_archived = 0
 
     for manifest_file, part_num in MANIFEST_MAP.items():
