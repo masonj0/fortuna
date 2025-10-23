@@ -15,7 +15,7 @@ REM --- Phase 2: Pre-Flight Checks ---
 ECHO [1/4] Running pre-flight environment checks...
 npm -v >nul 2>&1
 IF %ERRORLEVEL% NEQ 0 ( ECHO [FAIL] Node.js (npm) is not found. && PAUSE && EXIT /B 1 )
-IF NOT EXIST .venv\Scripts\activate.bat ( ECHO [FAIL] Python environment not found. Please run INSTALL_FORTUNA.bat once. && PAUSE && EXIT /B 1 )
+IF NOT EXIST .venv\Scripts\activate.bat ( ECHO [FAIL] Python environment not found. Please run run_dev_environment.bat once. && PAUSE && EXIT /B 1 )
 ECHO [OK] Environment is ready for build.
 ECHO.
 
