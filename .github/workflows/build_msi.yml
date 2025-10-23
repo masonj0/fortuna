@@ -28,12 +28,6 @@ jobs:
           cache: 'npm'
           cache-dependency-path: web_platform/frontend/package-lock.json
 
-      - name: Install Python dependencies
-        run: |
-          python -m venv .venv
-          .\.venv\Scripts\Activate.ps1
-          pip install -r requirements.txt
-
       - name: Cache Next.js build
         uses: actions/cache@v4
         with:
@@ -47,6 +41,9 @@ jobs:
           cd web_platform\frontend
           npm install
           npm run build
+
+      - name: Prepare Embedded Python
+        run: powershell -ExecutionPolicy Bypass -File scripts/setup_embedded_python.ps1
 
       - name: Install Code Signing Certificate
         if: runner.os == 'Windows' && env.CERT_BASE64_ENV != ''

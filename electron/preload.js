@@ -6,13 +6,11 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 // Expose a safe, limited API to the frontend.
 contextBridge.exposeInMainWorld('electronAPI', {
-  // Example: expose a function to send a message to the main process
-  // send: (channel, data) => ipcRenderer.send(channel, data),
-
-  // Example: expose a function to receive a message from the main process
-  // on: (channel, func) => {
-  //   ipcRenderer.on(channel, (event, ...args) => func(...args));
-  // }
+  /**
+   * Asynchronously fetches the secure API key from the main process.
+   * @returns {Promise<string|null>} A promise that resolves with the API key or null if not found.
+   */
+  getApiKey: () => ipcRenderer.invoke('get-api-key'),
 });
 
-console.log('Preload script loaded.');
+console.log('Preload script loaded and electronAPI is exposed.');
