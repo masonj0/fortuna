@@ -1,6 +1,7 @@
 [
     "electron/assets/.gitkeep",
     "electron/install-dependencies.js",
+    "electron/install-validator.js",
     "electron/installer.nsh",
     "electron/main.js",
     "electron/package.json",
@@ -29,6 +30,7 @@
     "web_platform/frontend/src/components/TrifectaFactors.tsx",
     "web_platform/frontend/src/hooks/useRealTimeRaces.ts",
     "web_platform/frontend/src/lib/queryClient.ts",
+    "web_platform/frontend/src/types/electron.d.ts",
     "web_platform/frontend/src/types/racing.ts",
     "web_platform/frontend/src/utils/exportManager.ts",
     "web_platform/frontend/tailwind.config.ts",
