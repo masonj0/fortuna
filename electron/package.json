@@ -18,7 +18,6 @@
   "build": {
     "appId": "com.fortuna.faucet",
     "productName": "Fortuna Faucet",
-    "beforeBuild": "../scripts/setup_embedded_python.ps1",
     "files": [
       "main.js",
       "preload.js",
