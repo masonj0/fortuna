@@ -4,7 +4,7 @@ $pythonUrl = "https://www.python.org/ftp/python/$pythonVersion/python-$pythonVer
 $buildDir = ".\build"
 $pythonDir = "$buildDir\python"
 
-Write-Host "📦 Setting up embedded Python..." -ForegroundColor Green
+Write-Host "[INFO] Setting up embedded Python..." -ForegroundColor Green
 
 # Create build directory if it doesn't exist
 if (-not (Test-Path $buildDir)) {
@@ -13,7 +13,7 @@ if (-not (Test-Path $buildDir)) {
 
 # Download
 if (-not (Test-Path "$buildDir\python-embed.zip")) {
-    Write-Host "⬇️ Downloading Python $pythonVersion..."
+    Write-Host "[DOWNLOAD] Downloading Python $pythonVersion..."
     Invoke-WebRequest -Uri $pythonUrl -OutFile "$buildDir\python-embed.zip"
 }
 
@@ -24,14 +24,14 @@ if (Test-Path $pythonDir) {
 Expand-Archive -Path "$buildDir\python-embed.zip" -DestinationPath $pythonDir -Force
 
 # Install pip
-Write-Host "📦 Installing pip..."
+Write-Host "[INFO] Installing pip..."
 $getpip = "$buildDir\get-pip.py"
 Invoke-WebRequest -Uri "https://bootstrap.pypa.io/get-pip.py" -OutFile $getpip
 & "$pythonDir\python.exe" $getpip
 
 # Install requirements
-Write-Host "📦 Installing Python dependencies..."
+Write-Host "[INFO] Installing Python dependencies..."
 # Note: --target is used to install packages to a specific directory, which is essential for embedded/portable environments.
 & "$pythonDir\Scripts\pip.exe" install --quiet -r "requirements.txt" --target "$pythonDir\Lib\site-packages"
 
-Write-Host "✅ Embedded Python ready at $pythonDir" -ForegroundColor Green
+Write-Host "[SUCCESS] Embedded Python ready at $pythonDir" -ForegroundColor Green
