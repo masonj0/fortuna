@@ -135,3 +135,19 @@ With a professional-grade application in hand, the final frontier was profession
 The kingdom's engineers faced a relentless series of cryptic build errors from the WiX Toolset, a hostile environment that tested their resolve. Through a series of rapid, iterative fixes—addressing everything from component GUIDs and 64-bit architecture mismatches to obscure linker errors and frontend dependency warnings—they systematically conquered each obstacle.
 
 This trial by fire culminated in a triumphant success: a fully automated GitHub Actions workflow that reliably compiles, links, and delivers a polished, distributable MSI installer. This victory transformed the project's delivery model from a manual, error-prone process into a repeatable, one-click release pipeline, marking the true completion of the "Windows Ascension."
+
+---
+
+## The Great Unbundling (Late October 2025)
+
+The CI/CD pipeline was technically successful, but it revealed a deeper, philosophical flaw in the architecture. The installer, while automated, was a fragile monolith. It attempted to bundle raw source code (Python, JavaScript) and orchestrate their setup on the user's machine using post-install scripts. This approach was fraught with peril, vulnerable to failures from network issues, corporate firewalls, and unpredictable machine states.
+
+A final, decisive architectural mandate was issued, informed by the wisdom of external AI consultants: **The application must be delivered, not assembled.**
+
+This mandate triggered "The Great Unbundling," a swift and transformative refactoring of the entire delivery pipeline:
+
+*   **The Backend Forged:** The Python backend was no longer treated as source code to be installed, but as a product to be delivered. **PyInstaller** was used to forge the entire FastAPI service—interpreter and all dependencies—into a single, standalone `.exe`.
+*   **The Frontend Solidified:** The Next.js frontend was no longer a service to be run, but a static asset to be displayed. The `npm run build` process was configured to produce a clean, static HTML/CSS/JS export.
+*   **The Installer Perfected:** With the application components now self-contained, the MSI installer's role was radically simplified. All complex post-install scripting was eliminated. The WiX toolset was now used for its core competency: reliably copying pre-compiled, robust artifacts to the user's machine.
+
+This final act of architectural purification created the "Three-Executable Architecture" (the backend executable, the Electron wrapper, and the MSI installer itself), achieving true portability and eliminating an entire class of deployment failures. The Windows Ascension was not just complete; it was perfected.
