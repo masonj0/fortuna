@@ -21,6 +21,7 @@
     "files": [
       "main.js",
       "preload.js",
+      "install-validator.js",
       "assets/**/*",
       "python/**/*",
       "../python_service/**/*",
