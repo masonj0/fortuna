@@ -40,7 +40,7 @@
     "scripts/validate_installation.ps1",
     "windows_service.py",
     "wix/product.wxs",
-    ".github/workflows/build_msi.yml",
+    ".github/workflows/build-msi.yml",
     "wix/WixUI_CustomProgress.wxs",
     "electron/assets/banner.bmp",
     "electron/assets/dialog.bmp",
