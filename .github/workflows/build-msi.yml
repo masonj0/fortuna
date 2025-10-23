@@ -45,10 +45,15 @@ jobs:
         env:
           FORTUNA_BUILD_TYPE: 'full' # For now, we only build the full version
 
+      - name: Generate sanitized artifact name
+        id: sanitize
+        shell: bash
+        run: echo "name=fortuna-faucet-installer-$(echo ${{ github.ref_name }} | sed 's/\//-/g')" >> $GITHUB_OUTPUT
+
       - name: Upload MSI Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: fortuna-faucet-installer-${{ github.ref_name }}
+          name: ${{ steps.sanitize.outputs.name }}
           path: 'electron/dist/Fortuna Faucet*.msi'
           retention-days: 30
 
