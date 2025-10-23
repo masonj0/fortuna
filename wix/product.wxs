@@ -94,20 +94,8 @@
 
     <!-- 4. Schedule the Custom Action -->
     <InstallExecuteSequence>
-        <Custom Action="ValidateInstallation" After="InstallFinalize">NOT Installed</Custom>
+      <Custom Action="ValidateInstallation" After="InstallFinalize">NOT Installed</Custom>
     </InstallExecuteSequence>
-
-    <!-- 4. Schedule the Custom Action -->
-    <InstallExecuteSequence>
-        <Custom Action="ValidateInstallation" After="InstallFinalize">NOT Installed</Custom>
-    </InstallExecuteSequence>
-
-    <!-- 4. Schedule the Custom Action -->
-    <InstallExecuteSequence>
-        <Custom Action="ValidateInstallation" After="InstallFinalize">NOT Installed</Custom>
-    </InstallExecuteSequence>
-
-    <!-- System Requirements -->
     <Condition Message="Windows 7 or later (64-bit) is required">
       <![CDATA[Installed OR (VersionNT64 >= 601)]]>
     </Condition>
