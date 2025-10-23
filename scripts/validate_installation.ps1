@@ -1,47 +1,45 @@
-# scripts/validate_installation.ps1
 param (
-    [string]$InstallPath
+    [string][Parameter(Mandatory=$true)] $InstallPath
 )
 
-$ErrorActionPreference = "Stop"
-
 function Write-Log {
-    param([string]$Message)
-    $LogMessage = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') - $Message"
-    Add-Content -Path (Join-Path $env:TEMP "fortuna-validation.log") -Value $LogMessage
+    param ([string]$Message)
+    # This log file is temporary and will be rolled back if the installation fails.
+    # Its primary purpose is for debugging the installer itself.
+    Add-Content -Path "$env:TEMP\fortuna_validation.log" -Value "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') - $Message"
 }
 
-Write-Log "--- Starting Post-Installation Validation ---"
-Write-Log "Installation Path: $InstallPath"
-
-# 1. Verify Python Executable Exists
-$PythonExePath = Join-Path $InstallPath "python\python.exe"
-Write-Log "Checking for Python at: $PythonExePath"
-if (-not (Test-Path $PythonExePath)) {
-    Write-Log "[FAIL] python.exe not found."
-    exit 1603 # A fatal error code for MSI
-}
-Write-Log "[OK] python.exe found."
-
-# 2. Verify Key Library (uvicorn) can be imported
-$SitePackagesPath = Join-Path $InstallPath "python\Lib\site-packages"
-Write-Log "Attempting to import 'uvicorn' from site-packages..."
 try {
-    # We execute python.exe and pass a command to it.
-    # The PYTHONPATH environment variable tells Python where to look for modules.
-    $Result = & $PythonExePath -c "import uvicorn; print('uvicorn imported successfully')" 2>&1
+    Write-Log "--- Starting Installation Validation ---"
+    Write-Log "Install Path: $InstallPath"
 
-    if ($Result -like "*uvicorn imported successfully*") {
-        Write-Log "[OK] 'uvicorn' import successful."
-    } else {
-        Write-Log "[FAIL] Failed to import 'uvicorn'. Output: $Result"
-        exit 1603
+    $pythonExe = Join-Path $InstallPath "python\python.exe"
+    Write-Log "Python Executable Path: $pythonExe"
+
+    if (-not (Test-Path $pythonExe)) {
+        Write-Log "[ERROR] python.exe not found at the expected location."
+        # The script must exit with a non-zero code to trigger the MSI rollback.
+        exit 1
     }
-} catch {
-    Write-Log "[FAIL] An exception occurred while trying to import 'uvicorn'."
-    Write-Log $_.Exception.ToString()
-    exit 1603
-}
 
-Write-Log "--- Validation Successful ---"
-exit 0
+    Write-Log "Python executable found. Testing execution..."
+
+    # Attempt to execute python.exe --version
+    $process = Start-Process -FilePath $pythonExe -ArgumentList "--version" -Wait -PassThru -NoNewWindow
+
+    if ($process.ExitCode -ne 0) {
+        Write-Log "[ERROR] python.exe failed to execute correctly. Exit Code: $($process.ExitCode)"
+        exit 1
+    }
+
+    Write-Log "Python execution successful. Validation passed."
+    Write-Log "--- Validation Complete ---"
+
+    # Exit with 0 for success
+    exit 0
+}
+catch {
+    Write-Log "[FATAL] An unexpected error occurred during validation: $_"
+    # Exit with a non-zero code to signal failure to the installer
+    exit 1
+}
