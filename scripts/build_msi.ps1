@@ -39,8 +39,14 @@ Write-Header "Phase 1: Checking Prerequisites"
     Write-Success "$_ found in PATH."
 }
 
-# ==================== PHASE 2: FILE HARVESTING ====================
-Write-Header "Phase 2: Harvesting File Structure"
+# ==================== PHASE 2: PREPARE & HARVEST FILES ====================
+Write-Header "Phase 2: Preparing & Harvesting Files"
+
+Write-Info "Setting up embedded Python environment..."
+# Run the setup script to download and install dependencies for our portable Python
+& ".\scripts\setup_embedded_python.ps1"
+Write-Success "Embedded Python is ready."
+
 $buildDir = ".\wix_build"
 if (Test-Path $buildDir) { Remove-Item $buildDir -Recurse -Force }
 New-Item -ItemType Directory -Path $buildDir -Force | Out-Null
@@ -53,17 +59,9 @@ Write-Info "Harvesting frontend files..."
 & heat.exe dir ".\web_platform\frontend\out" -o "$buildDir\frontend_files.wxs" `
     -gg -sf -srd -cg FrontendFileGroup -dr INSTALLFOLDER -var "var.FrontendSourceDir"
 
-Write-Info "Verifying Python virtual environment..."
-if (-not (Test-Path ".\.venv")) {
-    Write-Error "Python virtual environment not found at '.\.venv'."
-    Write-Error "Please run the initial setup script to create the environment before building the MSI."
-    exit 1
-}
-Write-Success "Python virtual environment found."
-
-Write-Info "Harvesting Python environment files..."
-& heat.exe dir ".\.venv" -o "$buildDir\venv_files.wxs" `
-    -gg -sf -srd -cg VenvFileGroup -dr INSTALLFOLDER -var "var.VenvSourceDir"
+Write-Info "Harvesting embedded Python runtime files..."
+& heat.exe dir ".\build\python" -o "$buildDir\python_runtime_files.wxs" `
+    -gg -sf -srd -cg PythonRuntimeFiles -dr PythonDir -var "var.PythonSourceDir"
 
 Write-Success "File harvesting complete."
 
@@ -73,13 +71,13 @@ $objDir = "$buildDir\obj"
 New-Item -ItemType Directory -Path $objDir -Force | Out-Null
 Copy-Item ".\wix\*.wxs" "$buildDir"
 
-@("$buildDir\product.wxs", "$buildDir\WixUI_CustomInstallDir.wxs", "$buildDir\WixUI_CustomProgress.wxs", "$buildDir\backend_files.wxs", "$buildDir\frontend_files.wxs", "$buildDir\venv_files.wxs") | ForEach-Object {
+@("$buildDir\product.wxs", "$buildDir\WixUI_CustomInstallDir.wxs", "$buildDir\WixUI_CustomProgress.wxs", "$buildDir\backend_files.wxs", "$buildDir\frontend_files.wxs", "$buildDir\python_runtime_files.wxs") | ForEach-Object {
     Write-Info "Compiling $(Split-Path $_ -Leaf)..."
     & candle.exe $_ -o "$objDir\" `
         -ext WixUtilExtension `
         -d"BackendSourceDir=.\python_service" `
         -d"FrontendSourceDir=.\web_platform\frontend\out" `
-        -d"VenvSourceDir=.\.venv" `
+        -d"PythonSourceDir=.\build\python" `
         -dVersion="$AppVersion" `
         -arch x64
     if ($LASTEXITCODE -ne 0) { throw "Compilation failed for $_" }
