@@ -42,6 +42,17 @@ The project has a distinct architecture for production and development environme
 2.  **Clone:** `git clone https://github.com/masonj0/fortuna.git`
 3.  **Run the Setup Script:** For a one-time setup of both the Python virtual environment and Node.js dependencies, simply run the `run_dev_environment.bat` script.
 
+### Quick Start (No Installation Required)
+
+For developers and advanced users who want to run the application directly from source without a formal installation, the `scripts/fortuna-quick-start.ps1` script provides a powerful alternative.
+
+*   **What it does:** This PowerShell script automates all pre-flight checks, dependency installations, and launches both the backend and frontend servers concurrently. It also includes robust process management and cleanup.
+*   **How to use:**
+    1.  Ensure your system meets the prerequisites (Python, Node.js).
+    2.  Run `run_dev_environment.bat` once to create the initial virtual environment.
+    3.  From a PowerShell terminal, execute `.\scripts\fortuna-quick-start.ps1`.
+*   **Options:** The script includes parameters for skipping dependency checks (`-SkipChecks`) and running only the backend (`-NoFrontend`) for maximum flexibility.
+
 ### Creating a Release Build (MSI Installer)
 
 The project uses the WiX Toolset to create a professional, distributable MSI installer based on the production architecture.
