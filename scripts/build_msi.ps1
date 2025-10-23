@@ -1,5 +1,5 @@
 # Comprehensive MSI build pipeline for Fortuna Faucet
-# Version 2.0 - ASCII-safe and dynamically versioned.
+# Version 3.0 - Three-Executable Architecture
 
 param(
     [ValidateSet("Debug", "Release")]
@@ -28,10 +28,7 @@ Write-Success "Application version loaded from VERSION.txt: $AppVersion"
 
 # ==================== PHASE 1: PREREQUISITES ====================
 Write-Header "Phase 1: Checking Prerequisites"
-
-# This script assumes it's running in an environment where WiX and other tools are in the PATH.
-# The GitHub Actions workflow handles this setup.
-@("git", "python", "heat.exe", "candle.exe", "light.exe") | ForEach-Object {
+@("python", "npm", "heat.exe", "candle.exe", "light.exe") | ForEach-Object {
     if (-not (Get-Command $_ -ErrorAction SilentlyContinue)) {
         Write-Error "$_ not found in PATH. Please ensure it is installed and accessible."
         exit 1
@@ -39,53 +36,63 @@ Write-Header "Phase 1: Checking Prerequisites"
     Write-Success "$_ found in PATH."
 }
 
-# ==================== PHASE 2: PREPARE & HARVEST FILES ====================
-Write-Header "Phase 2: Preparing & Harvesting Files"
+# ==================== PHASE 2: BUILD BACKEND EXECUTABLE ====================
+Write-Header "Phase 2: Building Standalone Backend"
+Write-Info "Installing Python dependencies and running PyInstaller..."
+# Activate venv if it exists, otherwise assume packages are globally available
+if (Test-Path ".\.venv\Scripts\Activate.ps1") {
+    & ".\.venv\Scripts\Activate.ps1"
+}
+python -m pip install -r requirements.txt
+pyinstaller --onefile --name fortuna-api --add-data "python_service:python_service" python_service/api.py
+Write-Success "Backend executable created at .\dist\fortuna-api"
 
-Write-Info "Setting up embedded Python environment..."
-# Run the setup script to download and install dependencies for our portable Python
-& ".\scripts\setup_embedded_python.ps1"
-Write-Success "Embedded Python is ready."
 
+# ==================== PHASE 3: BUILD STATIC FRONTEND ====================
+Write-Header "Phase 3: Building Static Frontend"
+Write-Info "Installing Node.js dependencies and running Next.js build..."
+Push-Location ".\web_platform\frontend"
+npm install
+npm run build
+Pop-Location
+Write-Success "Static frontend created at .\web_platform\frontend\out"
+
+# ==================== PHASE 4: PREPARE & HARVEST FILES ====================
+Write-Header "Phase 4: Preparing & Harvesting Files for WiX"
 $buildDir = ".\wix_build"
 if (Test-Path $buildDir) { Remove-Item $buildDir -Recurse -Force }
 New-Item -ItemType Directory -Path $buildDir -Force | Out-Null
 
-Write-Info "Harvesting backend files..."
-& heat.exe dir ".\python_service" -o "$buildDir\backend_files.wxs" `
+Write-Info "Harvesting backend executable..."
+& heat.exe file ".\dist\fortuna-api" -o "$buildDir\backend_files.wxs" `
     -gg -sf -srd -cg BackendFileGroup -dr INSTALLFOLDER -var "var.BackendSourceDir"
 
-Write-Info "Harvesting frontend files..."
+Write-Info "Harvesting frontend static files..."
 & heat.exe dir ".\web_platform\frontend\out" -o "$buildDir\frontend_files.wxs" `
     -gg -sf -srd -cg FrontendFileGroup -dr INSTALLFOLDER -var "var.FrontendSourceDir"
 
-Write-Info "Harvesting embedded Python runtime files..."
-& heat.exe dir ".\build\python" -o "$buildDir\python_runtime_files.wxs" `
-    -gg -sf -srd -cg PythonRuntimeFiles -dr PythonDir -var "var.PythonSourceDir"
-
 Write-Success "File harvesting complete."
 
-# ==================== PHASE 3: COMPILATION ====================
-Write-Header "Phase 3: Compiling WiX Sources"
+# ==================== PHASE 5: COMPILATION ====================
+Write-Header "Phase 5: Compiling WiX Sources"
 $objDir = "$buildDir\obj"
 New-Item -ItemType Directory -Path $objDir -Force | Out-Null
 Copy-Item ".\wix\*.wxs" "$buildDir"
 
-@("$buildDir\product.wxs", "$buildDir\WixUI_CustomInstallDir.wxs", "$buildDir\WixUI_CustomProgress.wxs", "$buildDir\backend_files.wxs", "$buildDir\frontend_files.wxs", "$buildDir\python_runtime_files.wxs") | ForEach-Object {
+@("$buildDir\product.wxs", "$buildDir\backend_files.wxs", "$buildDir\frontend_files.wxs") | ForEach-Object {
     Write-Info "Compiling $(Split-Path $_ -Leaf)..."
     & candle.exe $_ -o "$objDir\" `
         -ext WixUtilExtension `
-        -d"BackendSourceDir=.\python_service" `
+        -d"BackendSourceDir=.\dist" `
         -d"FrontendSourceDir=.\web_platform\frontend\out" `
-        -d"PythonSourceDir=.\build\python" `
         -dVersion="$AppVersion" `
         -arch x64
     if ($LASTEXITCODE -ne 0) { throw "Compilation failed for $_" }
 }
 Write-Success "Compilation complete."
 
-# ==================== PHASE 4: LINKING ====================
-Write-Header "Phase 4: Linking MSI Package"
+# ==================== PHASE 6: LINKING ====================
+Write-Header "Phase 6: Linking MSI Package"
 New-Item -ItemType Directory -Path $OutputPath -Force | Out-Null
 $msiPath = "$OutputPath\Fortuna-Faucet-$AppVersion-x64.msi"
 
@@ -100,20 +107,14 @@ if ($LASTEXITCODE -ne 0) { throw "MSI linking failed" }
 $fileSize = (Get-Item $msiPath).Length / 1MB
 Write-Success "MSI created: $msiPath ($($fileSize.ToString('F2')) MB)"
 
-# ==================== PHASE 5: METADATA ====================
-Write-Header "Phase 5: Generating Installation Metadata"
+# ==================== PHASE 7: METADATA ====================
+Write-Header "Phase 7: Generating Installation Metadata"
 $metadata = @{
     Version = $AppVersion
     BuildDate = (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
     Configuration = $Configuration
     FileSize_MB = [math]::Round($fileSize, 2)
     SHA256 = (Get-FileHash $msiPath -Algorithm SHA256).Hash
-    Requirements = @{
-        Windows = "Windows 7 SP1 or later (64-bit)"
-        AdminRights = $true
-        DiskSpace_GB = 2
-        RAM_GB = 4
-    }
 } | ConvertTo-Json -Depth 5
 
 $metadata | Out-File "$OutputPath\metadata.json" -Encoding UTF8

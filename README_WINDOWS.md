@@ -15,6 +15,6 @@ Welcome to Fortuna Faucet! Installing the application is now a simple, one-step 
     *   Double-click the downloaded `.msi` file.
     *   Follow the on-screen instructions in the setup wizard.
 
-Once the installation is complete, you will find a "Fortuna Faucet" folder in your Start Menu containing the main application. The application is a single, unified program with tabs for the Control Panel, Setup, and System Tools.
+Once the installation is complete, you will find a "Fortuna Faucet" folder in your Start Menu. This folder contains a shortcut to launch the **Fortuna Faucet Dashboard**. The application's backend will run automatically as a background service whenever the application is open.
 
 That's it! All previous methods involving Python scripts or batch files are now obsolete.
