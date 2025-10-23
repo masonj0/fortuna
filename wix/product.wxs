@@ -15,36 +15,15 @@
       Compressed="yes"
       InstallScope="perMachine"
       Platform="x64"
-      Description="Horse racing analysis platform with Python backend and React frontend"
+      Description="Horse racing analysis platform"
       Comments="Professional-grade installer"/>
 
     <Media Id="1" Cabinet="fortuna.cab" EmbedCab="yes"/>
-
-    <!-- 1. Find PowerShell.exe -->
-    <Property Id="POWERSHELL">
-      <RegistrySearch Id="PowerShellPath" Root="HKLM" Key="SOFTWARE\Microsoft\PowerShell\1\ShellIds\Microsoft.PowerShell" Name="Path" Type="raw" />
-    </Property>
-    <Condition Message="PowerShell is required to complete this installation.">
-      <![CDATA[Installed OR POWERSHELL]]>
-    </Condition>
-
-    <!-- 2. Add the validation script to the installer's binary table -->
-    <Binary Id="ValidateInstallScript" SourceFile="..\scripts\validate_installation.ps1" />
-
-    <!-- 3. Define the Custom Action to run the script -->
-    <CustomAction Id="ValidateInstallation"
-                  Directory="INSTALLFOLDER"
-                  ExeCommand="[POWERSHELL] -NoProfile -ExecutionPolicy Bypass -File &quot;[#ValidateInstallScript]&quot; -InstallPath &quot;[INSTALLFOLDER]&quot;"
-                  Execute="deferred"
-                  Return="check"
-                  Impersonate="no" />
 
     <!-- Directory Structure -->
     <Directory Id="TARGETDIR" Name="SourceDir">
       <Directory Id="ProgramFiles64Folder">
         <Directory Id="INSTALLFOLDER" Name="Fortuna Faucet">
-          <Directory Id="PythonDir" Name="python" />
-          <Directory Id="AppDir" Name="app" />
         </Directory>
       </Directory>
       <Directory Id="ProgramMenuFolder">
@@ -54,21 +33,10 @@
 
     <!-- Features -->
     <Feature Id="ProductFeature" Title="Fortuna Faucet" Level="1">
-        <ComponentGroupRef Id="PythonRuntimeFiles"/>
         <ComponentGroupRef Id="BackendFileGroup"/>
         <ComponentGroupRef Id="FrontendFileGroup"/>
-        <ComponentGroupRef Id="ProductComponents"/>
         <ComponentGroupRef Id="ShortcutsComponentGroup"/>
     </Feature>
-
-    <!-- Core Application Components -->
-    <ComponentGroup Id="ProductComponents" Directory="AppDir">
-      <Component Id="RegistryAndServiceComponent" Guid="*">
-        <RegistryValue Root="HKLM" Key="Software\Fortuna Faucet" Name="Installed" Type="integer" Value="1" KeyPath="yes"/>
-        <ServiceInstall Id="FortunaService" Name="FortunaFaucetBackend" DisplayName="Fortuna Faucet Background Service" Description="Continuous horse racing data monitoring engine" Type="ownProcess" Start="auto" Account="LocalSystem" ErrorControl="normal"/>
-        <ServiceControl Id="StartService" Name="FortunaFaucetBackend" Start="install" Stop="both" Remove="uninstall"/>
-      </Component>
-    </ComponentGroup>
 
     <!-- Shortcuts -->
     <ComponentGroup Id="ShortcutsComponentGroup" Directory="ApplicationProgramsFolder">
@@ -92,10 +60,6 @@
     <WixVariable Id="WixUIBannerBmp" Value="electron\assets\banner.bmp"/>
     <WixVariable Id="WixUIDialogBmp" Value="electron\assets\dialog.bmp"/>
 
-    <!-- 4. Schedule the Custom Action -->
-    <InstallExecuteSequence>
-      <Custom Action="ValidateInstallation" After="InstallFinalize">NOT Installed</Custom>
-    </InstallExecuteSequence>
     <Condition Message="Windows 7 or later (64-bit) is required">
       <![CDATA[Installed OR (VersionNT64 >= 601)]]>
     </Condition>
