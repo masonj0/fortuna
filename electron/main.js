@@ -87,7 +87,7 @@ class FortunaDesktopApp {
     if (isDev) {
       this.mainWindow.loadURL('http://localhost:3000');
     } else {
-      this.mainWindow.loadFile(path.join(__dirname, '..', 'web_platform', 'frontend', 'out', 'index.html'));
+      this.mainWindow.loadFile(path.join(app.getAppPath(), '..', 'app.asar.unpacked', 'web_platform', 'frontend', 'out', 'index.html'));
     }
 
     this.mainWindow.once('ready-to-show', () => {
@@ -123,113 +123,48 @@ class FortunaDesktopApp {
     app.quit();
   }
 
-  async startBackend() {
-    const isDev = process.env.NODE_ENV !== 'production';
-    const rootPath = isDev ? path.join(__dirname, '..') : process.resourcesPath;
+    async startBackend() {
+        const isDev = process.env.NODE_ENV === 'development';
 
-    // CRITICAL: These paths MUST exist
-    const pythonPath = isDev
-      ? path.join(rootPath, '.venv', 'Scripts', 'python.exe')
-      : path.join(rootPath, 'python', 'python.exe');
+        if (isDev) {
+            // Use Python venv for development
+            const pythonPath = path.join(__dirname, '..', '.venv', 'Scripts', 'python.exe');
+            this.backendProcess = spawn(pythonPath, ['-m', 'uvicorn', 'python_service.api:app', '--host', '127.0.0.1', '--port', '8000']);
+        } else {
+            // Use bundled executable for production
+            const backendExe = path.join(process.resourcesPath, 'dist', 'fortuna-api');
+            if (!fs.existsSync(backendExe)) {
+                throw new Error('Backend executable not found!');
+            }
+            this.backendProcess = spawn(backendExe);
+        }
 
-    const apiPath = path.join(rootPath, 'python_service', 'api.py');
-    const diagnosticsPath = path.join(app.getPath('userData'), 'backend_diagnostics.log');
-
-    console.log('🔍 BACKEND STARTUP DIAGNOSTICS');
-    console.log(`Root path: ${rootPath}`);
-    console.log(`Python path: ${pythonPath}`);
-    console.log(`Python exists: ${fs.existsSync(pythonPath)}`);
-    console.log(`API path: ${apiPath}`);
-    console.log(`API exists: ${fs.existsSync(apiPath)}`);
-
-    // VALIDATION: Fail LOUDLY if prerequisites are missing
-    if (!fs.existsSync(pythonPath)) {
-        const msg = `❌ FATAL: Python not found at ${pythonPath}`;
-        console.error(msg);
-        fs.writeFileSync(diagnosticsPath, `${new Date().toISOString()}: ${msg}\n`);
-        throw new Error(msg);
+        // Implement actual health check polling
+        await this.waitForBackendHealth();
     }
 
-    if (!fs.existsSync(apiPath)) {
-        const msg = `❌ FATAL: API module not found at ${apiPath}`;
-        console.error(msg);
-        fs.writeFileSync(diagnosticsPath, `${new Date().toISOString()}: ${msg}\n`);
-        throw new Error(msg);
+    async waitForBackendHealth() {
+        const maxAttempts = 30;
+        for (let i = 0; i < maxAttempts; i++) {
+            try {
+                const response = await fetch('http://127.0.0.1:8000/health');
+                if (response.ok) return;
+            } catch {}
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+        throw new Error('Backend failed to start');
     }
 
-    // Spawn with detailed error capture
-    return new Promise((resolve, reject) => {
-        const pythonProcess = spawn(pythonPath, ['-m', 'uvicorn', 'api:app', '--host', '127.0.0.1', '--port', '8000'], {
-            cwd: path.join(rootPath, 'python_service'),
-            stdio: 'pipe'
-        });
-
-        this.backendProcess = pythonProcess;
-
-        let stdoutData = '';
-        let stderrData = '';
-
-        const logStream = fs.createWriteStream(diagnosticsPath, { flags: 'a' });
-        logStream.write(`\n--- New Session: ${new Date().toISOString()} ---\n`);
-
-        pythonProcess.stdout.on('data', (data) => {
-            const msg = data.toString();
-            stdoutData += msg;
-            console.log(`[Python STDOUT] ${msg.trim()}`);
-            logStream.write(`${new Date().toISOString()}: STDOUT: ${msg}`);
-
-            if (msg.includes('Uvicorn running')) {
-                clearTimeout(timeout);
-                console.log('✅ Backend started successfully');
-                resolve();
-            }
-        });
-
-        pythonProcess.stderr.on('data', (data) => {
-            const msg = data.toString();
-            stderrData += msg;
-            console.error(`[Python STDERR] ${msg.trim()}`);
-            logStream.write(`${new Date().toISOString()}: STDERR: ${msg}`);
-        });
-
-        pythonProcess.on('error', (error) => {
-            clearTimeout(timeout);
-            const msg = `❌ Process error: ${error.message}`;
-            console.error(msg);
-            logStream.write(`${new Date().toISOString()}: ${msg}\n`);
-            reject(error);
-        });
-
-        pythonProcess.on('exit', (code, signal) => {
-            clearTimeout(timeout);
-            if (code !== 0 && !app.isQuitting) {
-                const msg = `❌ Python exited with code ${code}, signal ${signal}\n${stderrData}`;
-                console.error(msg);
-                logStream.write(`${new Date().toISOString()}: ${msg}\n`);
-                reject(new Error(msg));
-            }
-        });
-
-        const timeout = setTimeout(() => {
-            pythonProcess.kill();
-            const msg = `❌ Backend startup timeout (10s)`;
-            console.error(msg);
-            logStream.write(`${new Date().toISOString()}: ${msg}\n`);
-            reject(new Error(msg));
-        }, 10000);
-    });
-  }
 
   async initialize() {
     try {
-        await validateInstallation();
         await this.startBackend();
         this.createMainWindow();
         this.createSystemTray();
     } catch (error) {
         dialog.showErrorBox(
-            'Installation Error',
-            `Fortuna Faucet failed to start: ${error.message}\n\nPlease see backend_diagnostics.log for details.`
+            'Application Error',
+            `Fortuna Faucet failed to start: ${error.message}`
         );
         app.quit();
     }
