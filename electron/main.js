@@ -123,41 +123,106 @@ class FortunaDesktopApp {
     app.quit();
   }
 
-    async startBackend() {
-        const isDev = process.env.NODE_ENV === 'development';
-        const rootPath = isDev ? path.join(__dirname, '..') : process.resourcesPath;
+  async startBackend() {
+    return new Promise((resolve, reject) => {
+      const isDev = process.env.NODE_ENV === 'development';
+      const rootPath = isDev ? path.join(__dirname, '..') : process.resourcesPath;
 
-        if (isDev) {
-            // Development: use uvicorn
-            const pythonPath = path.join(rootPath, '.venv', 'Scripts', 'python.exe');
-            this.backendProcess = spawn(pythonPath, ['-m', 'uvicorn', 'python_service.api:app', '--host', '127.0.0.1', '--port', '8000'], {
-              cwd: path.join(rootPath, 'python_service')
-            });
-        } else {
-            // Production: use standalone exe
-            const backendExe = path.join(rootPath, 'api.exe');
-            this.backendProcess = spawn(backendExe);
+      let executablePath;
+      let spawnOptions;
+
+      if (isDev) {
+        executablePath = path.join(rootPath, '.venv', 'Scripts', 'python.exe');
+        spawnOptions = {
+          cwd: path.join(rootPath, 'python_service'),
+          stdio: ['ignore', 'pipe', 'pipe'],
+          detached: false,
+          args: ['-m', 'uvicorn', 'api:app', '--host', '127.0.0.1', '--port', '8000']
+        };
+      } else {
+        executablePath = path.join(rootPath, 'api.exe');
+        spawnOptions = {
+          stdio: ['ignore', 'pipe', 'pipe'],
+          detached: false,
+          args: []
+        };
+      }
+
+      if (!fs.existsSync(executablePath)) {
+        const errorMsg = `Backend executable not found at: ${executablePath}`;
+        console.error(`[ERROR] ${errorMsg}`);
+        return reject(new Error(errorMsg));
+      }
+
+      this.backendProcess = spawn(executablePath, spawnOptions.args, spawnOptions);
+
+      let stdoutBuffer = '';
+      let startupResolved = false;
+
+      this.backendProcess.stdout.on('data', (data) => {
+        const logMsg = data.toString();
+        console.log(`[Backend] ${logMsg}`);
+        if (!startupResolved) {
+          stdoutBuffer += logMsg;
+          if (stdoutBuffer.includes('Uvicorn running on') || stdoutBuffer.includes('Application startup complete')) {
+            console.log('[✓] Backend started successfully');
+            startupResolved = true;
+            resolve();
+          }
         }
+      });
 
-        // Implement actual health check polling
-        await this.waitForBackendHealth();
-    }
+      this.backendProcess.stderr.on('data', (data) => {
+        console.error(`[Backend STDERR] ${data}`);
+      });
 
-    async waitForBackendHealth() {
-        const maxAttempts = 30;
-        for (let i = 0; i < maxAttempts; i++) {
-            try {
-                const response = await fetch('http://127.0.0.1:8000/health');
-                if (response.ok) return;
-            } catch {}
-            await new Promise(resolve => setTimeout(resolve, 1000));
+      this.backendProcess.on('error', (error) => {
+        console.error(`[Backend ERROR] ${error}`);
+        if (!startupResolved) {
+          startupResolved = true;
+          reject(error);
         }
-        throw new Error('Backend failed to start');
-    }
+      });
+
+      this.backendProcess.on('close', (code) => {
+        console.log(`[Backend] Process exited with code ${code}`);
+        if (!startupResolved) {
+          startupResolved = true;
+          reject(new Error(`Backend process exited prematurely with code ${code}`));
+        }
+      });
+
+      // Safety timeout
+      setTimeout(() => {
+        if (!startupResolved) {
+          startupResolved = true;
+          reject(new Error('Backend startup timed out after 15 seconds.'));
+        }
+      }, 15000);
+    });
+  }
 
 
   async initialize() {
     try {
+        // Port conflict check from Claude4AI document
+        const isDev = process.env.NODE_ENV === 'development';
+        const rootPath = isDev ? path.join(__dirname, '..') : process.resourcesPath;
+        const pythonPath = isDev
+          ? path.join(rootPath, '.venv', 'Scripts', 'python.exe')
+          : path.join(rootPath, 'api.exe'); // In prod, the exe *is* the python path
+
+        if (isDev) { // Only run the script directly in dev mode
+            const healthCheckScriptPath = path.join(rootPath, 'python_service', 'health_check.py');
+            if (fs.existsSync(healthCheckScriptPath)) {
+                try {
+                    execFileSync(pythonPath, [healthCheckScriptPath], { stdio: 'pipe' });
+                } catch (e) {
+                    throw new Error('Port 8000 is already in use.');
+                }
+            }
+        }
+
         await this.startBackend();
         this.createMainWindow();
         this.createSystemTray();
