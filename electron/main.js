@@ -125,17 +125,17 @@ class FortunaDesktopApp {
 
     async startBackend() {
         const isDev = process.env.NODE_ENV === 'development';
+        const rootPath = isDev ? path.join(__dirname, '..') : process.resourcesPath;
 
         if (isDev) {
-            // Use Python venv for development
-            const pythonPath = path.join(__dirname, '..', '.venv', 'Scripts', 'python.exe');
-            this.backendProcess = spawn(pythonPath, ['-m', 'uvicorn', 'python_service.api:app', '--host', '127.0.0.1', '--port', '8000']);
+            // Development: use uvicorn
+            const pythonPath = path.join(rootPath, '.venv', 'Scripts', 'python.exe');
+            this.backendProcess = spawn(pythonPath, ['-m', 'uvicorn', 'python_service.api:app', '--host', '127.0.0.1', '--port', '8000'], {
+              cwd: path.join(rootPath, 'python_service')
+            });
         } else {
-            // Use bundled executable for production
-            const backendExe = path.join(process.resourcesPath, 'dist', 'fortuna-api');
-            if (!fs.existsSync(backendExe)) {
-                throw new Error('Backend executable not found!');
-            }
+            // Production: use standalone exe
+            const backendExe = path.join(rootPath, 'api.exe');
             this.backendProcess = spawn(backendExe);
         }
 
