@@ -172,32 +172,46 @@ class FortunaEngine:
         return f"{race.venue.lower().strip()}|{race.race_number}|{race.start_time.strftime('%H:%M')}"
 
     def _dedupe_races(self, races: List[Race]) -> List[Race]:
-        """Deduplicates races from multiple sources and reconciles odds."""
+        """Deduplicates races, reconciles odds, and identifies the favorite."""
         race_map: Dict[str, Race] = {}
         for race in races:
-            # Use a robust key: venue, date, and race number
             key = f"{race.venue.upper()}-{race.start_time.strftime('%Y-%m-%d')}-{race.race_number}"
 
             if key not in race_map:
                 race_map[key] = race
             else:
-                # Merge runners and odds into the existing race object
                 existing_race = race_map[key]
                 runner_map = {r.number: r for r in existing_race.runners}
-
                 for new_runner in race.runners:
                     if new_runner.number in runner_map:
-                        # Runner exists, reconcile odds
                         existing_runner = runner_map[new_runner.number]
                         updated_odds = existing_runner.odds.copy()
                         updated_odds.update(new_runner.odds)
                         existing_runner.odds = updated_odds
                     else:
-                        # New runner, add to the existing race
                         existing_race.runners.append(new_runner)
-
-                # Update source count
                 existing_race.source += f", {race.source}"
+
+        # --- New Logic: Identify the favorite for each race ---
+        for race in race_map.values():
+            favorite_runner = None
+            lowest_odds = float('inf')
+
+            for runner in race.runners:
+                if runner.scratched:
+                    continue
+
+                # Find the best odds for the current runner across all sources
+                best_runner_odds = float('inf')
+                for odds_data in runner.odds.values():
+                    if odds_data.win is not None and odds_data.win < best_runner_odds:
+                        best_runner_odds = odds_data.win
+
+                if best_runner_odds < lowest_odds:
+                    lowest_odds = best_runner_odds
+                    favorite_runner = runner
+
+            race.favorite = favorite_runner
 
         return list(race_map.values())
 

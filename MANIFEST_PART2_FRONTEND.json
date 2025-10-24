@@ -33,6 +33,7 @@
     "web_platform/frontend/src/components/RaceCard.tsx",
     "web_platform/frontend/src/components/RaceCardSkeleton.tsx",
     "web_platform/frontend/src/components/ScoreBadge.tsx",
+    "web_platform/frontend/src/components/StatusDetailModal.tsx",
     "web_platform/frontend/src/components/TrifectaFactors.tsx",
     "web_platform/frontend/src/hooks/useRealTimeRaces.ts",
     "web_platform/frontend/src/lib/queryClient.ts",
