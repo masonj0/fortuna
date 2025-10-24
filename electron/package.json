@@ -9,7 +9,7 @@
     "dist:full": "cross-env FORTUNA_BUILD_TYPE=full electron-builder",
     "dist:minimal": "cross-env FORTUNA_BUILD_TYPE=minimal electron-builder"
   },
-  "author": "Fortuna Development Team",
+  "author": "JBMason",
   "devDependencies": {
     "cross-env": "^7.0.3",
     "electron": "^28.0.0",
@@ -17,18 +17,22 @@
   },
   "build": {
     "appId": "com.fortuna.faucet",
-    "productName": "Fortuna Faucet",
+    "productName": "JBMason's 1st App",
     "files": [
       "main.js",
       "preload.js",
       "install-validator.js",
       "assets/**/*",
-      "python/**/*",
-      "../python_service/**/*",
       "../web_platform/frontend/out/**/*",
       "../scripts/validate_installation.ps1",
       "!../.venv/",
       "!node_modules/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../python_service/dist/api.exe",
+        "to": "api.exe"
+      }
     ],
     "win": {
       "target": "msi",
@@ -38,13 +42,12 @@
       "oneClick": false,
       "perMachine": true,
       "createDesktopShortcut": true,
-      "shortcutName": "Fortuna Faucet"
+      "shortcutName": "JBMason's 1st App"
     },
     "nsis": {
       "oneClick": false,
       "perMachine": true,
-      "createDesktopShortcut": true,
-      "include": "electron/installer.nsh"
+      "createDesktopShortcut": true
     }
   }
 }
