@@ -1,8 +1,6 @@
 [
     "electron/assets/.gitkeep",
-    "electron/install-dependencies.js",
     "electron/install-validator.js",
-    "electron/installer.nsh",
     "electron/main.js",
     "electron/package.json",
     "electron/preload.js",

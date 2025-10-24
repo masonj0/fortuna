@@ -135,7 +135,7 @@ class FortunaDesktopApp {
             });
         } else {
             // Production: use standalone exe
-            const backendExe = path.join(rootPath, 'api');
+            const backendExe = path.join(rootPath, 'api.exe');
             this.backendProcess = spawn(backendExe);
         }
 
