@@ -4,6 +4,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { RaceCard } from './RaceCard';
+import { RaceCardSkeleton } from './RaceCardSkeleton';
+import { EmptyState } from './EmptyState';
 import { Race, AdapterStatus } from '../types/racing';
 
 // --- Connection Status Component ---
@@ -189,14 +191,24 @@ export const LiveRaceDashboard: React.FC = () => {
             {/* ... */}
         </div>
 
-        {racesLoading && <p className="text-center text-xl">Searching for qualified races...</p>}
+        {racesLoading && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[...Array(6)].map((_, i) => <RaceCardSkeleton key={i} />)}
+          </div>
+        )}
 
         {!racesLoading && !combinedError && (
           <>
-            <div className='text-center mb-4 text-gray-400'>Displaying <span className='font-bold text-white'>{filteredAndSortedRaces.length}</span> of <span className='font-bold text-white'>{qualifiedData?.races.length || 0}</span> total qualified races.</div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredAndSortedRaces.map(race => <RaceCard key={race.id} race={race} />)}
-            </div>
+            {filteredAndSortedRaces.length > 0 ? (
+              <>
+                <div className='text-center mb-4 text-gray-400'>Displaying <span className='font-bold text-white'>{filteredAndSortedRaces.length}</span> of <span className='font-bold text-white'>{qualifiedData?.races.length || 0}</span> total qualified races.</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {filteredAndSortedRaces.map(race => <RaceCard key={race.id} race={race} />)}
+                </div>
+              </>
+            ) : (
+              <EmptyState />
+            )}
           </>
         )}
       </main>
