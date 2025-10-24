@@ -30,6 +30,7 @@ export interface Race {
   qualification_score?: number;
   distance?: string;
   surface?: string;
+  favorite?: Runner;
 }
 
 // --- Adapter Status Interface ---
@@ -39,6 +40,7 @@ export interface AdapterStatus {
   races_fetched?: number;
   fetch_duration?: number;
   error_message?: string;
+  last_updated?: string;
 }
 
 // --- Analysis Factor Interfaces (retained from previous version) ---
