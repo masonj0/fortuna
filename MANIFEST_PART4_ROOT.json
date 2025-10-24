@@ -24,6 +24,7 @@
     "configure_startup.py",
     "create_fortuna_json.py",
     "fortuna_app.py",
+    "fortuna_engine.spec",
     "fortuna_monitor.py",
     "launcher.ps1",
     "manual_override_tool.py",
