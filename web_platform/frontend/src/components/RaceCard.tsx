@@ -1,7 +1,7 @@
 // web_platform/frontend/src/components/RaceCard.tsx
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import type { Race, Runner } from '../types/racing';
 
 // Local types removed, now importing from '../types/racing'
@@ -10,19 +10,36 @@ interface RaceCardProps {
   race: Race;
 }
 
-// Helper function from the UI Bible
-function formatTimeUntilPost(startTime: string): string {
-  const now = new Date();
-  const post = new Date(startTime);
-  const diff = post.getTime() - now.getTime();
+const Countdown: React.FC<{ startTime: string }> = ({ startTime }) => {
+  const [currentTime, setCurrentTime] = useState(new Date());
 
-  if (diff < 0) return 'Post Time Passed';
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
-  const hours = Math.floor(diff / (1000 * 60 * 60));
-  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+  const getCountdown = (startTimeStr: string) => {
+    const postTime = new Date(startTimeStr);
+    const diff = postTime.getTime() - currentTime.getTime();
 
-  return `${hours}h ${minutes}m`;
-}
+    if (diff <= 0) return { text: "RACE CLOSED", color: "text-gray-500" };
+
+    const minutes = Math.floor(diff / 60000);
+    const seconds = Math.floor((diff % 60000) / 1000).toString().padStart(2, '0');
+
+    let color = "text-green-400";
+    if (minutes < 2) color = "text-red-500 font-bold animate-pulse";
+    else if (minutes < 10) color = "text-yellow-400";
+
+    return { text: `${minutes}:${seconds} to post`, color };
+  };
+
+  const countdown = getCountdown(startTime);
+
+  return (
+    <span className={`font-mono text-sm ${countdown.color}`}>{countdown.text}</span>
+  );
+};
 
 export const RaceCard: React.FC<RaceCardProps> = ({ race }) => {
   const activeRunners = race.runners.filter(r => !r.scratched);
@@ -56,7 +73,7 @@ export const RaceCard: React.FC<RaceCardProps> = ({ race }) => {
             <div className="flex gap-2 text-sm text-gray-400">
               <span>Race {race.race_number}</span>
               <span>•</span>
-              <span>{formatTimeUntilPost(race.start_time)}</span>
+              <Countdown startTime={race.start_time} />
             </div>
           </div>
         </div>

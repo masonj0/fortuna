@@ -12,13 +12,36 @@ from pathlib import Path
 
 # --- Control Panel Tab (from former launcher_gui.py) ---
 class ControlPanelTab(tk.Frame):
-    def __init__(self, parent):
+    def __init__(self, parent, master_app):
         super().__init__(parent, bg='#1a1a2e')
+        self.master_app = master_app
         self.backend_proc = None
         self.frontend_proc = None
+        self.backend_unresponsive_count = 0
+        self.frontend_unresponsive_count = 0
+        self.first_launch = not (Path(os.environ["USERPROFILE"]) / "Desktop" / "🐴 Launch Fortuna Faucet.lnk").exists()
         self._create_ui()
         self.monitor_thread = threading.Thread(target=self.monitor_services, daemon=True)
         self.monitor_thread.start()
+
+    def log_output(self, message):
+        self.log_text.config(state=tk.NORMAL)
+        self.log_text.insert(tk.END, f"[{time.strftime('%H:%M:%S')}] {message}\n")
+        self.log_text.config(state=tk.DISABLED)
+        self.log_text.see(tk.END)
+
+    def smart_start(self):
+        """On first launch, run verification, create shortcuts, and then start."""
+        if messagebox.askokcancel("First-Time Setup", "Welcome to Fortuna Faucet!\n\nThis first launch will verify your system and create a desktop shortcut for easy access. Proceed?"):
+            # Steal and run the logic from the System Tools Tab
+            self.master_app.notebook.select(self.master_app.system_tools_tab)
+            self.master_app.system_tools_tab.run_verification()
+            self.master_app.system_tools_tab.run_create_shortcuts()
+
+            # Once done, revert to a normal start button
+            messagebox.showinfo("Setup Complete", "Setup is complete! The main services will now start.")
+            self.launch_btn.config(text="▶ START FORTUNA", bg='#00ff88', command=self.launch_services)
+            self.launch_services()
 
     def _create_ui(self):
         title = tk.Label(self, text="🐴 System Control Panel", font=("Segoe UI", 16, "bold"), bg='#1a1a2e', fg='#00ff88')
@@ -42,11 +65,18 @@ class ControlPanelTab(tk.Frame):
         button_frame = tk.Frame(self, bg='#1a1a2e')
         button_frame.pack(fill=tk.X, padx=40, pady=20)
 
-        self.launch_btn = tk.Button(button_frame, text="▶ START FORTUNA", font=("Segoe UI", 14, "bold"), bg='#00ff88', fg='#000000', command=self.launch_services, height=2, relief=tk.FLAT)
+        self.launch_btn = tk.Button(button_frame, text="▶ START FORTUNA", font=("Segoe UI", 14, "bold"), bg='#00ff88', fg='#000000', height=2, relief=tk.FLAT)
+        if self.first_launch:
+            self.launch_btn.config(text="▶ FIRST-TIME START & SETUP", bg="#ff9900", command=self.smart_start)
+        else:
+            self.launch_btn.config(command=self.launch_services)
         self.launch_btn.pack(fill=tk.X, pady=(0, 10))
 
         self.stop_btn = tk.Button(button_frame, text="⏹ STOP SERVICES", font=("Segoe UI", 12), bg='#ff4444', fg='#ffffff', command=self.stop_services, state=tk.DISABLED, height=1, relief=tk.FLAT)
         self.stop_btn.pack(fill=tk.X)
+
+        self.log_text = scrolledtext.ScrolledText(self, height=5, bg="#000000", fg="#00ff88", state=tk.DISABLED)
+        self.log_text.pack(pady=10, padx=40, fill=tk.X)
 
     def check_ports(self, ports=[8000, 3000]):
         unavailable_ports = []
@@ -104,29 +134,80 @@ class ControlPanelTab(tk.Frame):
             setattr(self, f"{proc_name}_proc", None)
         self.launch_btn.config(state=tk.NORMAL)
 
+    def restart_service(self, service_name: str):
+        """Gracefully stop and restart a single failed service."""
+        proc_attr = f"{service_name}_proc"
+        proc = getattr(self, proc_attr)
+
+        # Stop the specific process
+        if proc and proc.poll() is None:
+            try:
+                parent = psutil.Process(proc.pid)
+                for child in parent.children(recursive=True):
+                    child.kill()
+                parent.kill()
+            except psutil.NoSuchProcess:
+                pass
+        setattr(self, proc_attr, None)
+
+        # Wait a moment
+        time.sleep(2)
+
+        # Relaunch the specific process
+        self.update_status(service_name, "starting", "Attempting auto-restart...")
+        try:
+            if service_name == "backend":
+                venv_python = Path(".venv/Scripts/python.exe")
+                new_proc = subprocess.Popen(
+                    [str(venv_python), "-m", "uvicorn", "python_service.api:app", "--host", "127.0.0.1", "--port", "8000"],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=Path(__file__).parent.parent, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+                )
+            else: # frontend
+                new_proc = subprocess.Popen(
+                    ["npm", "run", "dev"], shell=True,
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd="web_platform/frontend", creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+                )
+            setattr(self, proc_attr, new_proc)
+        except Exception as e:
+            self.update_status(service_name, "error", f"Auto-restart failed: {e}")
+
     def monitor_services(self):
         while True:
+            # --- Backend Monitoring ---
             if self.backend_proc and self.backend_proc.poll() is None:
                 try:
                     r = requests.get("http://localhost:8000/health", timeout=2)
                     if r.status_code == 200:
                         self.update_status("backend", "ok", "Healthy (200 OK)")
+                        self.backend_unresponsive_count = 0 # Reset counter on success
                     else:
                         self.update_status("backend", "error", f"Error ({r.status_code})")
                 except requests.RequestException:
                     self.update_status("backend", "unresponsive", "Unresponsive")
+                    self.backend_unresponsive_count += 1
+                    if self.backend_unresponsive_count >= 3: # If unresponsive for 3 cycles (15s)
+                        self.log_output("Backend unresponsive. Attempting automatic restart...")
+                        self.restart_service("backend")
+                        self.backend_unresponsive_count = 0 # Reset after attempt
             else:
                 self.update_status("backend", "stopped", "Stopped")
 
+            # --- Frontend Monitoring ---
             if self.frontend_proc and self.frontend_proc.poll() is None:
                 try:
                     r = requests.get("http://localhost:3000", timeout=2)
                     if r.status_code == 200:
                         self.update_status("frontend", "ok", "Healthy (200 OK)")
+                        self.frontend_unresponsive_count = 0
                     else:
                         self.update_status("frontend", "error", f"Error ({r.status_code})")
                 except requests.RequestException:
                     self.update_status("frontend", "unresponsive", "Unresponsive")
+                    self.frontend_unresponsive_count += 1
+                    if self.frontend_unresponsive_count >= 3:
+                        self.log_output("Frontend unresponsive. Attempting automatic restart...")
+                        self.restart_service("frontend")
+                        self.frontend_unresponsive_count = 0
             else:
                 self.update_status("frontend", "stopped", "Stopped")
             time.sleep(5)
@@ -294,7 +375,7 @@ class FortunaApp(tk.Tk):
 
         self.notebook = ttk.Notebook(self)
 
-        self.control_panel_tab = ControlPanelTab(self.notebook)
+        self.control_panel_tab = ControlPanelTab(self.notebook, self)
         self.setup_wizard_tab = SetupWizardTab(self.notebook)
         self.system_tools_tab = SystemToolsTab(self.notebook)
 
