@@ -4,10 +4,13 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { RaceCard } from './RaceCard';
+import { RaceCardSkeleton } from './RaceCardSkeleton';
+import { EmptyState } from './EmptyState';
+import { StatusDetailModal } from './StatusDetailModal';
 import { Race, AdapterStatus } from '../types/racing';
 
 // --- Connection Status Component ---
-const ConnectionStatus = ({ isError, isLoading }) => {
+const ConnectionStatus = ({ isError, isLoading, onClick }) => {
   const [status, setStatus] = useState({ color: 'gray', text: 'Connecting...' });
 
   useEffect(() => {
@@ -28,10 +31,10 @@ const ConnectionStatus = ({ isError, isLoading }) => {
   };
 
   return (
-    <div className="fixed bottom-4 right-4 flex items-center bg-gray-800/80 backdrop-blur-sm text-white text-xs px-3 py-2 rounded-full shadow-lg border border-gray-700">
+    <button onClick={onClick} className="fixed bottom-4 right-4 flex items-center bg-gray-800/80 backdrop-blur-sm text-white text-xs px-3 py-2 rounded-full shadow-lg border border-gray-700 transition-transform hover:scale-105">
       <div className={`w-3 h-3 rounded-full mr-2 ${colorClasses[status.color]}`}></div>
       <span>{status.text}</span>
-    </div>
+    </button>
   );
 };
 
@@ -76,6 +79,15 @@ const ErrorModal = ({ error, onClose }) => {
 export const LiveRaceDashboard: React.FC = () => {
   const [filterConfig, setFilterConfig] = useState({ minScore: 0, maxFieldSize: 999, sortBy: 'score' });
   const [showErrorModal, setShowErrorModal] = useState(false);
+  const [selectedStatus, setSelectedStatus] = useState<AdapterStatus | null>(null);
+
+  const handleStatusClick = (status: AdapterStatus) => {
+    setSelectedStatus(status);
+  };
+
+  const handleCloseModal = () => {
+    setSelectedStatus(null);
+  };
 
   const fetchWithStructuredError = async (url: string, headers: HeadersInit) => {
     console.log("Fetching URL:", url); // DEBUGGING
@@ -181,7 +193,7 @@ export const LiveRaceDashboard: React.FC = () => {
           <h2 className='text-lg font-semibold text-gray-300 mb-3'>Adapter Status</h2>
           <div className='flex flex-wrap gap-2'>
             {statuses?.map(s => (
-              <span key={s.adapter_name} className={`px-2 py-1 text-xs font-bold rounded-full ${s.status === 'SUCCESS' || s.status === 'OK' ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'}`}>{s.adapter_name}</span>
+              <button key={s.adapter_name} onClick={() => handleStatusClick(s)} className={`px-2 py-1 text-xs font-bold rounded-full transition-transform hover:scale-110 ${s.status === 'SUCCESS' || s.status === 'OK' ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'}`}>{s.adapter_name}</button>
             )) ?? <span className='text-gray-500 text-sm'>Loading statuses...</span>}
           </div>
         </div>
@@ -189,20 +201,46 @@ export const LiveRaceDashboard: React.FC = () => {
             {/* ... */}
         </div>
 
-        {racesLoading && <p className="text-center text-xl">Searching for qualified races...</p>}
+        {racesLoading && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[...Array(6)].map((_, i) => <RaceCardSkeleton key={i} />)}
+          </div>
+        )}
 
         {!racesLoading && !combinedError && (
           <>
-            <div className='text-center mb-4 text-gray-400'>Displaying <span className='font-bold text-white'>{filteredAndSortedRaces.length}</span> of <span className='font-bold text-white'>{qualifiedData?.races.length || 0}</span> total qualified races.</div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredAndSortedRaces.map(race => <RaceCard key={race.id} race={race} />)}
-            </div>
+            {filteredAndSortedRaces.length > 0 ? (
+              <>
+                <div className='text-center mb-4 text-gray-400'>Displaying <span className='font-bold text-white'>{filteredAndSortedRaces.length}</span> of <span className='font-bold text-white'>{qualifiedData?.races.length || 0}</span> total qualified races.</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {filteredAndSortedRaces.map(race => <RaceCard key={race.id} race={race} />)}
+                </div>
+              </>
+            ) : (
+              <EmptyState />
+            )}
           </>
         )}
       </main>
 
-      <ConnectionStatus isError={!!combinedError} isLoading={racesLoading} />
+      <ConnectionStatus
+        isError={!!combinedError}
+        isLoading={racesLoading}
+        onClick={() => handleStatusClick({
+          adapter_name: 'Live Connection',
+          status: combinedError ? 'ERROR' : 'OK',
+          last_updated: new Date().toISOString(),
+          races_fetched: qualifiedData?.races?.length || 0,
+        })}
+      />
       <ErrorModal error={combinedError} onClose={() => setShowErrorModal(false)} />
+      {selectedStatus && (
+        <StatusDetailModal
+          title={`${selectedStatus.adapter_name} Status`}
+          details={selectedStatus}
+          onClose={handleCloseModal}
+        />
+      )}
     </>
   );
 };
