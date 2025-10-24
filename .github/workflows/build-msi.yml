@@ -38,6 +38,13 @@ jobs:
           cd electron
           npm ci
 
+      - name: Build Backend Executable with PyInstaller
+        run: |
+          pip install -r requirements-dev.txt
+          cd python_service
+          pyinstaller --onefile --hidden-import=uvicorn --add-data "adapters;adapters" api.py
+        shell: bash
+
       - name: Build MSI Installer using electron-builder
         run: |
           cd electron
