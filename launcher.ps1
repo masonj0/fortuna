@@ -10,7 +10,7 @@ $TrayAppPath = ".\\fortuna_tray.py"
 
 if (-not (Test-Path $VenvPath)) {
     Write-Host "❌ ERROR: Virtual environment not found at $VenvPath" -ForegroundColor Red
-    Write-Host "Please run INSTALL_FORTUNA.bat first."
+    Write-Host "Please run run_dev_environment.bat first."
     Read-Host "Press Enter to exit"
     exit 1
 }

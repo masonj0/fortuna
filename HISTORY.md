@@ -107,7 +107,7 @@ This era saw the rapid creation of a new, third layer of the kingdom, built upon
 *   **The Electron Shell:** The Next.js frontend was wrapped in an Electron container, transforming it from a website into a true, installable desktop application with its own window, icon, and system tray integration.
 *   **The Engine Room:** The Python backend was re-architected to run as a persistent, background **Windows Service**, making it a true, always-on component of the operating system, independent of the UI.
 *   **The Native GUI:** A dedicated Tkinter-based "Observatory" was forged—a standalone GUI mission control for monitoring the health and performance of the background service.
-*   **The One-Click Kingdom:** A complete suite of professional tooling (`INSTALL_FORTuna.bat`, `setup_wizard.py`, `LAUNCH_FORTuna.bat`, `SCHEDULE_FORTuna.bat`) was created to provide a seamless, zero-friction installation and management experience.
+*   **The One-Click Kingdom:** A complete suite of professional tooling (including installation scripts, a setup wizard, and launchers) was created to provide a seamless, zero-friction installation and management experience.
 
 This ascension represents the current state of the art, transforming a powerful engine into a polished, autonomous, and user-focused product.
 
