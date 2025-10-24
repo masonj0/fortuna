@@ -38,6 +38,18 @@ jobs:
           cd electron
           npm ci
 
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build Backend Executable with PyInstaller
+        run: |
+          pip install -r requirements-dev.txt
+          cd python_service
+          pyinstaller --onefile --hidden-import=uvicorn --add-data "adapters;adapters" api.py
+        shell: bash
+
       - name: Build MSI Installer using electron-builder
         run: |
           cd electron
@@ -54,15 +66,15 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.sanitize.outputs.name }}
-          path: 'electron/dist/Fortuna Faucet*.msi'
+          path: "electron/dist/JBMason's 1st App*.msi"
           retention-days: 30
 
       - name: Create Release (on tag)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
-          files: 'electron/dist/Fortuna Faucet*.msi'
-          name: Fortuna Faucet ${{ github.ref_name }}
+          files: "electron/dist/JBMason's 1st App*.msi"
+          name: "JBMason's 1st App ${{ github.ref_name }}"
           draft: false
           prerelease: false
         env:
