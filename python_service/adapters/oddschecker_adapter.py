@@ -9,14 +9,18 @@
 import asyncio
 from datetime import datetime
 from decimal import Decimal
-from typing import List, Optional
+from typing import List
+from typing import Optional
 
 import httpx
 import structlog
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup
+from bs4 import Tag
 
 from ..core.exceptions import AdapterParsingError
-from ..models import OddsData, Race, Runner
+from ..models import OddsData
+from ..models import Race
+from ..models import Runner
 from .base import BaseAdapter
 from .utils import parse_odds
 

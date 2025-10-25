@@ -1,13 +1,17 @@
 # python_service/adapters/gbgb_api_adapter.py
 
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any
+from typing import Dict
+from typing import List
 
 import httpx
 import structlog
 
 from ..core.exceptions import AdapterParsingError
-from ..models import OddsData, Race, Runner
+from ..models import OddsData
+from ..models import Race
+from ..models import Runner
 from ..utils.odds import parse_odds_to_decimal
 from .base import BaseAdapter
 
@@ -39,8 +43,15 @@ class GbgbApiAdapter(BaseAdapter):
                 try:
                     races.append(self._parse_race(race_data, track_name))
                 except (KeyError, TypeError) as e:
-                    log.error(f"{self.source_name}: Error parsing race", race_id=race_data.get("raceId"), error=str(e))
-                    raise AdapterParsingError(self.source_name, f"Failed to parse race: {race_data.get('raceId')}") from e
+                    log.error(
+                        f"{self.source_name}: Error parsing race",
+                        race_id=race_data.get("raceId"),
+                        error=str(e),
+                    )
+                    raise AdapterParsingError(
+                        self.source_name,
+                        f"Failed to parse race: {race_data.get('raceId')}",
+                    ) from e
         return races
 
     def _parse_race(self, race_data: Dict[str, Any], track_name: str) -> Race:

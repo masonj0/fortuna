@@ -1,8 +1,6 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
-from pathlib import Path
-import asyncio
-import httpx
+from tkinter import messagebox
+
 
 class FortunaSetupWizard(tk.Tk):
     def __init__(self):
@@ -86,7 +84,10 @@ class FortunaSetupWizard(tk.Tk):
 
         tk.Label(
             self.content_frame,
-            text="A secure API key will be generated and stored in Windows Credential Manager.\nNo file will contain your secrets.",
+            text=(
+                "A secure API key will be generated and stored in Windows Credential Manager.\n"
+                "No file will contain your secrets."
+            ),
             wraplength=600,
             justify=tk.LEFT,
             bg='#1a1a2e',
@@ -225,8 +226,9 @@ class FortunaSetupWizard(tk.Tk):
     def update_buttons(self):
         """Enable/disable navigation buttons"""
         self.prev_btn.config(state=tk.NORMAL if self.current_step > 0 else tk.DISABLED)
+        step_titles = ["API Key", "Betfair (Optional)", "Verification", "Complete"]
         self.step_label.config(
-            text=f"Step {self.current_step + 1} of 4: {['API Key', 'Betfair (Optional)', 'Verification', 'Complete'][self.current_step]}"
+            text=f"Step {self.current_step + 1} of 4: {step_titles[self.current_step]}"
         )
 
     def next_step(self):

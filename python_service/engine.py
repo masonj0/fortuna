@@ -11,7 +11,6 @@ from typing import Dict
 from typing import List
 from typing import Tuple
 
-import asyncio
 import httpx
 import structlog
 
@@ -30,15 +29,16 @@ from .adapters.sporting_life_adapter import SportingLifeAdapter
 from .adapters.the_racing_api_adapter import TheRacingApiAdapter
 from .adapters.timeform_adapter import TimeformAdapter
 from .adapters.tvg_adapter import TVGAdapter
+
 # from .adapters.pointsbet_greyhound_adapter import PointsBetGreyhoundAdapter
 from .cache_manager import cache_async_result
 from .health import health_monitor
 from .models import AggregatedResponse
-from .notifications import send_toast
 from .models import OddsData
 from .models import Race
 from .models import Runner
 from .models_v3 import NormalizedRace
+from .notifications import send_toast
 
 log = structlog.get_logger(__name__)
 
@@ -92,7 +92,8 @@ class FortunaEngine:
 
             self.logger.info("Initializing HTTP client...")
             self.http_limits = httpx.Limits(
-                max_connections=self.config.HTTP_POOL_CONNECTIONS, max_keepalive_connections=self.config.HTTP_MAX_KEEPALIVE
+            max_connections=self.config.HTTP_POOL_CONNECTIONS,
+            max_keepalive_connections=self.config.HTTP_MAX_KEEPALIVE,
             )
             self.http_client = httpx.AsyncClient(limits=self.http_limits, http2=True)
             self.logger.info("HTTP client initialized.")

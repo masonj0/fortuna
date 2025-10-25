@@ -2,14 +2,18 @@
 
 import asyncio
 from datetime import datetime
-from typing import List, Optional
+from typing import List
+from typing import Optional
 
 import httpx
 import structlog
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup
+from bs4 import Tag
 
 from ..core.exceptions import AdapterParsingError
-from ..models import OddsData, Race, Runner
+from ..models import OddsData
+from ..models import Race
+from ..models import Runner
 from ..utils.odds import parse_odds_to_decimal
 from .base import BaseAdapter
 
@@ -78,7 +82,11 @@ class TimeformAdapter(BaseAdapter):
                 if win_odds := parse_odds_to_decimal(odds_str):
                     if win_odds < 999:
                         odds_data = {
-                            self.source_name: OddsData(win=win_odds, source=self.source_name, last_updated=datetime.now())
+                        self.source_name: OddsData(
+                            win=win_odds,
+                            source=self.source_name,
+                            last_updated=datetime.now(),
+                        )
                         }
 
             return Runner(number=number, name=name, odds=odds_data)

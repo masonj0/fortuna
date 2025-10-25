@@ -1,40 +1,40 @@
 # python_service/api.py
 
+import os
 from contextlib import asynccontextmanager
-from .logging_config import configure_logging
 from datetime import date
-from datetime import datetime, timedelta
+from datetime import datetime
+from datetime import timedelta
 from typing import List
 from typing import Optional
 
 import aiosqlite
 import structlog
-import os
 from fastapi import Depends
 from fastapi import FastAPI
 from fastapi import HTTPException
 from fastapi import Query
 from fastapi import Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-from .middleware.error_handler import validation_exception_handler
-from fastapi.exceptions import RequestValidationError
 from slowapi.util import get_remote_address
-
 
 from .analyzer import AnalyzerEngine
 from .config import get_settings
 from .engine import FortunaEngine
 from .health import router as health_router
 from .logging_config import configure_logging
+from .middleware.error_handler import UserFriendlyErrorMiddleware
+from .middleware.error_handler import validation_exception_handler
 from .models import AggregatedResponse
 from .models import QualifiedRacesResponse
+from .models import Race
 from .models import TipsheetRace
 from .security import verify_api_key
-
 
 log = structlog.get_logger()
 

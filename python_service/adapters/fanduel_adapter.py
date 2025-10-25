@@ -1,14 +1,21 @@
 # python_service/adapters/fanduel_adapter.py
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
+from datetime import timedelta
+from datetime import timezone
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Optional
 
 import httpx
 import structlog
 
 from ..core.exceptions import AdapterParsingError
-from ..models import OddsData, Race, Runner
+from ..models import OddsData
+from ..models import Race
+from ..models import Runner
 from .base import BaseAdapter
 
 log = structlog.get_logger()
@@ -57,7 +64,10 @@ class FanDuelAdapter(BaseAdapter):
 
         parts = market_name.split(" - ")
         if len(parts) < 2:
-            raise AdapterParsingError(self.source_name, f"Could not parse race and track from market name: {market_name}")
+            raise AdapterParsingError(
+                self.source_name,
+                f"Could not parse race and track from market name: {market_name}",
+            )
 
         race_number_str = parts[0].replace("Race ", "")
         track_name = parts[1]

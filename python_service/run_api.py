@@ -1,6 +1,7 @@
 # python_service/run_api.py
+
 import uvicorn
-import os
+
 
 def main():
     # This entry point is for the packaged application

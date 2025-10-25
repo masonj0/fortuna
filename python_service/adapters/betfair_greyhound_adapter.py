@@ -1,11 +1,14 @@
 # python_service/adapters/betfair_greyhound_adapter.py
+import re
 from datetime import datetime
 from typing import List
-import re
+
 import httpx
 
-from ..core.exceptions import AdapterAuthError, AdapterParsingError
-from ..models import Race, Runner
+from ..core.exceptions import AdapterAuthError
+from ..core.exceptions import AdapterParsingError
+from ..models import Race
+from ..models import Runner
 from .base import BaseAdapter
 from .betfair_auth_mixin import BetfairAuthMixin
 
@@ -14,7 +17,11 @@ class BetfairGreyhoundAdapter(BetfairAuthMixin, BaseAdapter):
     """Adapter for fetching greyhound racing data from the Betfair Exchange API."""
 
     def __init__(self, config: dict):
-        super().__init__(source_name="BetfairGreyhounds", base_url="https://api.betfair.com/exchange/betting/rest/v1.0/", config=config)
+        super().__init__(
+            source_name="BetfairGreyhound",
+            base_url="https://api.betfair.com/exchange/betting/rest/v1.0/",
+            config=config,
+        )
 
     async def fetch_races(self, date: str, http_client: httpx.AsyncClient) -> List[Race]:
         """Fetches the raw market catalogue for greyhound races on a given date."""
@@ -80,6 +87,5 @@ class BetfairGreyhoundAdapter(BetfairAuthMixin, BaseAdapter):
 
     def _extract_race_number(self, name: str) -> int:
         """Extracts the race number from a market name (e.g., 'R1 480m')."""
-        import re
         match = re.search(r'\bR(\d{1,2})\b', name)
         return int(match.group(1)) if match else 0

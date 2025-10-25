@@ -4,8 +4,10 @@ from typing import List
 
 import httpx
 
-from ..core.exceptions import AdapterAuthError, AdapterParsingError
-from ..models import Race, Runner
+from ..core.exceptions import AdapterAuthError
+from ..core.exceptions import AdapterParsingError
+from ..models import Race
+from ..models import Runner
 from .base import BaseAdapter
 from .betfair_auth_mixin import BetfairAuthMixin
 
@@ -14,7 +16,11 @@ class BetfairAdapter(BetfairAuthMixin, BaseAdapter):
     """Adapter for fetching horse racing data from the Betfair Exchange API."""
 
     def __init__(self, config: dict):
-        super().__init__(source_name="BetfairExchange", base_url="https://api.betfair.com/exchange/betting/rest/v1.0/", config=config)
+        super().__init__(
+            source_name="BetfairExchange",
+            base_url="https://api.betfair.com/exchange/betting/rest/v1.0/",
+            config=config,
+        )
 
     async def fetch_races(self, date: str, http_client: httpx.AsyncClient) -> List[Race]:
         """Fetches the raw market catalogue for a given date and parses it."""

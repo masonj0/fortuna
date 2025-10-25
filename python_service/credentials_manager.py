@@ -1,5 +1,5 @@
+
 import keyring
-from pathlib import Path
 
 try:
     import keyring.backends.windows
@@ -55,5 +55,5 @@ class SecureCredentialsManager:
                 SecureCredentialsManager.SERVICE_NAME,
                 "api_key"
             )
-        except:
+        except Exception:
             pass

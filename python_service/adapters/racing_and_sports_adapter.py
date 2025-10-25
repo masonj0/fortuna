@@ -1,13 +1,18 @@
 # python_service/adapters/racing_and_sports_adapter.py
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Optional
 
 import httpx
 import structlog
 
-from ..core.exceptions import AdapterConfigError, AdapterParsingError
-from ..models import Race, Runner
+from ..core.exceptions import AdapterConfigError
+from ..core.exceptions import AdapterParsingError
+from ..models import Race
+from ..models import Runner
 from .base import BaseAdapter
 
 log = structlog.get_logger(__name__)

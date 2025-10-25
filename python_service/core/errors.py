@@ -1,6 +1,7 @@
 # python_service/core/errors.py
 from enum import Enum
 
+
 class ErrorCategory(Enum):
     CONFIGURATION_ERROR = "Configuration missing or invalid"
     NETWORK_ERROR = "HTTP/Network request failed"

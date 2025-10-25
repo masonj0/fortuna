@@ -1,9 +1,10 @@
-import httpx
 from typing import List
 
-from ..models import Race, Runner
-from .base import BaseAdapter
+import httpx
 
+from ..models import Race
+from ..models import Runner
+from .base import BaseAdapter
 
 # NOTE: This is a hypothetical implementation based on a potential API structure.
 

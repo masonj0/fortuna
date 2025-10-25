@@ -1,8 +1,9 @@
 # python_service/middleware/error_handler.py
 
 from fastapi import Request
-from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+
 
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     """Convert Pydantic validation errors to user-friendly messages."""
