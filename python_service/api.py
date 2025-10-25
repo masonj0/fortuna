@@ -81,7 +81,6 @@ app = FastAPI(
 )
 
 # Add the new error handling middleware FIRST, to catch exceptions from all other middleware
-app.add_middleware(UserFriendlyErrorMiddleware)
 app.add_middleware(SlowAPIMiddleware)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
