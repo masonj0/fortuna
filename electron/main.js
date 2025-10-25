@@ -151,19 +151,38 @@ class FortunaDesktopApp {
       if (!fs.existsSync(executablePath)) {
         const errorMsg = `Backend executable not found at: ${executablePath}`;
         console.error(`[ERROR] ${errorMsg}`);
+        // Immediately reject if the file doesn't exist. No need for detailed logs.
         return reject(new Error(errorMsg));
       }
 
       this.backendProcess = spawn(executablePath, spawnOptions.args, spawnOptions);
 
       let stdoutBuffer = '';
+      let stderrBuffer = '';
       let startupResolved = false;
+
+      const rejectWithDetails = (baseError) => {
+        if (!startupResolved) {
+          startupResolved = true;
+          const detailMessage = `
+--- Backend Process Failed ---
+Error: ${baseError.message}
+
+--- STDOUT ---
+${stdoutBuffer.trim() || '(No standard output)'}
+
+--- STDERR ---
+${stderrBuffer.trim() || '(No standard error output)'}
+          `;
+          reject(new Error(detailMessage));
+        }
+      };
 
       this.backendProcess.stdout.on('data', (data) => {
         const logMsg = data.toString();
+        stdoutBuffer += logMsg;
         console.log(`[Backend] ${logMsg}`);
         if (!startupResolved) {
-          stdoutBuffer += logMsg;
           if (stdoutBuffer.includes('Uvicorn running on') || stdoutBuffer.includes('Application startup complete')) {
             console.log('[✓] Backend started successfully');
             startupResolved = true;
@@ -173,30 +192,27 @@ class FortunaDesktopApp {
       });
 
       this.backendProcess.stderr.on('data', (data) => {
-        console.error(`[Backend STDERR] ${data}`);
+        const errorMsg = data.toString();
+        stderrBuffer += errorMsg;
+        console.error(`[Backend STDERR] ${errorMsg}`);
       });
 
       this.backendProcess.on('error', (error) => {
-        console.error(`[Backend ERROR] ${error}`);
-        if (!startupResolved) {
-          startupResolved = true;
-          reject(error);
-        }
+        console.error(`[Backend ERROR] Spawning process failed: ${error}`);
+        rejectWithDetails(error);
       });
 
       this.backendProcess.on('close', (code) => {
         console.log(`[Backend] Process exited with code ${code}`);
         if (!startupResolved) {
-          startupResolved = true;
-          reject(new Error(`Backend process exited prematurely with code ${code}`));
+          rejectWithDetails(new Error(`Process exited prematurely with code ${code}.`));
         }
       });
 
       // Safety timeout
       setTimeout(() => {
         if (!startupResolved) {
-          startupResolved = true;
-          reject(new Error('Backend startup timed out after 15 seconds.'));
+          rejectWithDetails(new Error('Startup timed out after 15 seconds.'));
         }
       }, 15000);
     });
