@@ -2,25 +2,9 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { RaceFilters, RaceFiltersProps } from './RaceFilters';
+import { RaceFilters } from './RaceFilters';
 import { RaceCard } from './RaceCard';
-
-interface Race {
-  id: string;
-  venue: string;
-  race_number: number;
-  start_time: string;
-  runners: Runner[];
-  source: string;
-  qualification_score?: number;
-}
-
-interface Runner {
-  number: number;
-  name: string;
-  scratched?: boolean;
-  odds?: Record<string, any>;
-}
+import { Race } from '@/types/racing';
 
 interface RaceFilterParams {
   maxFieldSize: number;
