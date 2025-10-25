@@ -1,14 +1,19 @@
 # python_service/adapters/greyhound_adapter.py
 from datetime import datetime
 from decimal import Decimal
-from typing import Any, Dict, List
+from typing import Any
+from typing import Dict
+from typing import List
 
 import httpx
 import structlog
 from pydantic import ValidationError
 
-from ..core.exceptions import AdapterConfigError, AdapterParsingError
-from ..models import OddsData, Race, Runner
+from ..core.exceptions import AdapterConfigError
+from ..core.exceptions import AdapterParsingError
+from ..models import OddsData
+from ..models import Race
+from ..models import Runner
 from .base import BaseAdapter
 
 log = structlog.get_logger(__name__)
@@ -62,7 +67,10 @@ class GreyhoundAdapter(BaseAdapter):
                         error=str(e),
                         race_data=race_data,
                     )
-                    raise AdapterParsingError(self.source_name, f"Failed to parse race: {race_data.get('race_id')}") from e
+                    raise AdapterParsingError(
+                        self.source_name,
+                        f"Failed to parse race: {race_data.get('race_id')}",
+                    ) from e
         return all_races
 
     def _parse_runners(self, runners_data: List[Dict[str, Any]]) -> List[Runner]:

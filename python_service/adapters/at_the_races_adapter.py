@@ -2,16 +2,21 @@
 
 import asyncio
 from datetime import datetime
-from typing import List, Optional
+from typing import List
+from typing import Optional
 
 import httpx
 import structlog
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup
+from bs4 import Tag
 
 from ..core.exceptions import AdapterParsingError
-from ..models import OddsData, Race, Runner
+from ..models import OddsData
+from ..models import Race
+from ..models import Runner
 from ..utils.odds import parse_odds_to_decimal
-from ..utils.text import clean_text, normalize_venue_name
+from ..utils.text import clean_text
+from ..utils.text import normalize_venue_name
 from .base import BaseAdapter
 
 log = structlog.get_logger(__name__)

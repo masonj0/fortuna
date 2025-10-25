@@ -1,39 +1,40 @@
 # python_service/api.py
 
+import os
 from contextlib import asynccontextmanager
-from .logging_config import configure_logging
 from datetime import date
 from datetime import datetime
+from datetime import timedelta
 from typing import List
 from typing import Optional
 
 import aiosqlite
 import structlog
-import os
 from fastapi import Depends
 from fastapi import FastAPI
 from fastapi import HTTPException
 from fastapi import Query
 from fastapi import Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-from .middleware.error_handler import UserFriendlyErrorMiddleware
 from slowapi.util import get_remote_address
-
 
 from .analyzer import AnalyzerEngine
 from .config import get_settings
 from .engine import FortunaEngine
 from .health import router as health_router
 from .logging_config import configure_logging
+from .middleware.error_handler import UserFriendlyErrorMiddleware
+from .middleware.error_handler import validation_exception_handler
 from .models import AggregatedResponse
 from .models import QualifiedRacesResponse
+from .models import Race
 from .models import TipsheetRace
 from .security import verify_api_key
-
 
 log = structlog.get_logger()
 
@@ -84,6 +85,7 @@ app.add_middleware(UserFriendlyErrorMiddleware)
 app.add_middleware(SlowAPIMiddleware)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
 
 settings = get_settings()
 
@@ -197,6 +199,83 @@ async def get_qualified_races(
     except Exception as e:
         log.error("Error in /api/races/qualified", error=str(e), exc_info=True)
         raise HTTPException(status_code=500, detail="Internal Server Error")
+
+
+@app.get("/api/races/filter-suggestions")
+async def get_filter_suggestions(engine: FortunaEngine = Depends(get_engine)):
+    """
+    Returns historical statistics to help users choose appropriate filter values.
+    """
+    try:
+        # Fetch races for the past day
+        date_str = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+        aggregated = await engine.get_races(date_str, background_tasks=set())
+
+        if not aggregated or not aggregated.get("races"):
+            return {
+                "suggestions": {
+                    "max_field_size": {"min": 2, "max": 20, "recommended": 10},
+                    "min_favorite_odds": {"min": 1.5, "max": 5, "recommended": 2.5},
+                    "min_second_favorite_odds": {"min": 2.0, "max": 8, "recommended": 4.0},
+                }
+            }
+
+        # Analyze field sizes
+        field_sizes = [len(r["runners"]) for r in aggregated["races"]]
+
+        # Analyze odds
+        favorite_odds = []
+        second_favorite_odds = []
+
+        for race_data in aggregated["races"]:
+            race = Race(**race_data) # Convert dict to Race model
+            runners = race.runners
+            if len(runners) >= 2:
+                odds_list = []
+                for runner in runners:
+                    if not runner.scratched and runner.odds:
+                        # Find the best (lowest) win odd from any source for the runner
+                        best_odd = min(
+                            (
+                                o.win
+                                for o in runner.odds.values()
+                                if o.win is not None
+                            ),
+                            default=None,
+                        )
+                        if best_odd is not None:
+                            odds_list.append(float(best_odd))
+
+                if len(odds_list) >= 2:
+                    odds_list.sort()
+                    favorite_odds.append(odds_list[0])
+                    second_favorite_odds.append(odds_list[1])
+
+        return {
+            "suggestions": {
+                "max_field_size": {
+                    "min": 2,
+                    "max": 20,
+                    "recommended": int(sum(field_sizes) / len(field_sizes)) if field_sizes else 10,
+                    "average": sum(field_sizes) / len(field_sizes) if field_sizes else 0,
+                },
+                "min_favorite_odds": {
+                    "min": 1.5,
+                    "max": 5,
+                    "recommended": 2.5,
+                    "average": sum(favorite_odds) / len(favorite_odds) if favorite_odds else 0,
+                },
+                "min_second_favorite_odds": {
+                    "min": 2.0,
+                    "max": 8,
+                    "recommended": 4.0,
+                    "average": sum(second_favorite_odds) / len(second_favorite_odds) if second_favorite_odds else 0,
+                },
+            }
+        }
+    except Exception as e:
+        log.error(f"Error generating filter suggestions: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate suggestions")
 
 
 @app.get("/api/races", response_model=AggregatedResponse)

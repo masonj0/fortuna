@@ -1,11 +1,15 @@
 # python_service/config.py
 import os
-from pathlib import Path
-from typing import Optional, List
-from pydantic_settings import BaseSettings
 from functools import lru_cache
+from pathlib import Path
+from typing import List
+from typing import Optional
+
 import structlog
 from pydantic import model_validator
+from pydantic_settings import BaseSettings
+
+from .credentials_manager import SecureCredentialsManager
 
 # --- Encryption Setup ---
 try:
@@ -31,7 +35,6 @@ def decrypt_value(value: Optional[str]) -> Optional[str]:
             return value
     return value
 
-from .credentials_manager import SecureCredentialsManager
 
 class Settings(BaseSettings):
     API_KEY: str = ""
@@ -92,7 +95,11 @@ def get_settings() -> Settings:
     """Loads settings and performs a proactive check for legacy paths."""
     log = structlog.get_logger(__name__)
     if ENCRYPTION_ENABLED and not KEY_FILE.exists():
-        log.warning("encryption_key_not_found", file=str(KEY_FILE), recommendation="Run 'python manage_secrets.py' to generate a key.")
+        log.warning(
+            "encryption_key_not_found",
+            file=str(KEY_FILE),
+            recommendation="Run 'python manage_secrets.py' to generate a key.",
+        )
 
     settings = Settings()
 

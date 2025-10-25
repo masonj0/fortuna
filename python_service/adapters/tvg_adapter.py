@@ -1,13 +1,17 @@
 # python_service/adapters/tvg_adapter.py
+import asyncio
 from datetime import datetime
 from typing import List
-import httpx
-import asyncio
 
-from ..core.exceptions import AdapterConfigError, AdapterParsingError
-from ..models import Race, Runner
+import httpx
+
+from ..core.exceptions import AdapterConfigError
+from ..core.exceptions import AdapterParsingError
+from ..models import Race
+from ..models import Runner
 from ..utils.text import clean_text
 from .base import BaseAdapter
+
 
 class TVGAdapter(BaseAdapter):
     """Adapter for fetching US racing data from the TVG API."""
@@ -84,9 +88,13 @@ class TVGAdapter(BaseAdapter):
             raise AdapterParsingError(self.source_name, "No non-scratched runners found.")
 
         try:
-            start_time = datetime.fromisoformat(race_info.get('postTime').replace('Z', '+00:00'))
+            start_time = datetime.fromisoformat(
+                race_info.get("postTime").replace("Z", "+00:00")
+            )
         except (ValueError, TypeError, AttributeError) as e:
-            raise AdapterParsingError(self.source_name, f"Could not parse post time: {race_info.get('postTime')}") from e
+            raise AdapterParsingError(
+                self.source_name, f"Could not parse post time: {race_info.get('postTime')}"
+            ) from e
 
         return Race(
             id=f"tvg_{track.get('code', 'UNK')}_{race_info.get('date', 'NODATE')}_{race_info.get('number', 0)}",

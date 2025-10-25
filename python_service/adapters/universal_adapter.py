@@ -18,7 +18,11 @@ class UniversalAdapter(BaseAdapter):
         with open(definition_path, "r") as f:
             self.definition = json.load(f)
 
-        super().__init__(source_name=self.definition["adapter_name"], base_url=self.definition["base_url"], config=config)
+        super().__init__(
+            source_name=self.definition["adapter_name"],
+            base_url=self.definition["base_url"],
+            config=config,
+        )
 
     async def fetch_races(self, date: str, http_client: httpx.AsyncClient) -> List[Race]:
         # NOTE: This is a simplified proof-of-concept implementation.

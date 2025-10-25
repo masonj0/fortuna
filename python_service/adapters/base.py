@@ -1,18 +1,20 @@
 # python_service/adapters/base.py
-import httpx
-import structlog
 import threading
 import time
-from tenacity import AsyncRetrying, stop_after_attempt, wait_exponential
 
-from ..core.exceptions import (
-    AdapterAuthError,
-    AdapterConnectionError,
-    AdapterHttpError,
-    AdapterRateLimitError,
-    AdapterRequestError,
-    AdapterTimeoutError,
-)
+import httpx
+import structlog
+from tenacity import AsyncRetrying
+from tenacity import stop_after_attempt
+from tenacity import wait_exponential
+
+from ..core.exceptions import AdapterAuthError
+from ..core.exceptions import AdapterConnectionError
+from ..core.exceptions import AdapterHttpError
+from ..core.exceptions import AdapterRateLimitError
+from ..core.exceptions import AdapterRequestError
+from ..core.exceptions import AdapterTimeoutError
+
 
 class BaseAdapter:
     """

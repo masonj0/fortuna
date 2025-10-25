@@ -1,12 +1,15 @@
 # python_service/adapters/equibase_adapter.py
-from datetime import datetime
-from typing import List, Optional
 import asyncio
+from datetime import datetime
+from typing import List
+from typing import Optional
 
 from selectolax.parser import HTMLParser
 
 from ..core.exceptions import AdapterParsingError
-from ..models import OddsData, Race, Runner
+from ..models import OddsData
+from ..models import Race
+from ..models import Runner
 from ..utils.odds import parse_odds_to_decimal
 from ..utils.text import clean_text
 from .base import BaseAdapter
@@ -49,7 +52,12 @@ class EquibaseAdapter(BaseAdapter):
         parser = HTMLParser(response.text)
         race_links = parser.css("a.program-race-link")
 
-        tasks = [self._parse_race_page(f"{self.base_url}{link.attributes['href']}", date_str, http_client) for link in race_links]
+        tasks = [
+            self._parse_race_page(
+                f"{self.base_url}{link.attributes['href']}", date_str, http_client
+            )
+            for link in race_links
+        ]
         return [race for race in await asyncio.gather(*tasks) if race]
 
 

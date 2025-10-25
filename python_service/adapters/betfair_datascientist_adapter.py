@@ -6,10 +6,10 @@ from typing import List
 
 import httpx
 import pandas as pd
-import structlog
 
 from ..core.exceptions import AdapterParsingError
-from ..models import Race, Runner
+from ..models import Race
+from ..models import Runner
 from ..utils.text import normalize_course_name
 from .base import BaseAdapter
 

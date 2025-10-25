@@ -4,6 +4,7 @@ import sys
 
 import structlog
 
+
 def configure_logging(log_level: str = "INFO"):
     """Configures structlog for structured, JSON-formatted logging."""
     logging.basicConfig(
