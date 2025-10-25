@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { RaceFilters } from './RaceFilters';
 import { RaceCard } from './RaceCard';
-import { Race } from '@/types/racing';
+import { Race } from '../types/racing';
 
 interface RaceFilterParams {
   maxFieldSize: number;
