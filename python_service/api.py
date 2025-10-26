@@ -28,10 +28,24 @@ from .config import get_settings
 from .engine import FortunaEngine
 from .health import router as health_router
 from .logging_config import configure_logging
-from .middleware.error_handler import UserFriendlyErrorMiddleware
 from .middleware.error_handler import validation_exception_handler
 from .models import AggregatedResponse
 from .models import QualifiedRacesResponse
+from starlette.middleware.base import BaseHTTPMiddleware
+from typing import Callable
+
+class UserFriendlyErrorMiddleware(BaseHTTPMiddleware):
+    async def dispatch(
+        self, request: Request, call_next: Callable
+    ):
+        try:
+            return await call_next(request)
+        except Exception as e:
+            # Log the exception here if you have a logger configured
+            return JSONResponse(
+                status_code=500,
+                content={"detail": "An unexpected error occurred."},
+            )
 from .models import Race
 from .models import TipsheetRace
 from .security import verify_api_key
@@ -156,7 +170,7 @@ async def get_all_adapter_statuses(
         404: {"description": "The specified analyzer was not found."},
     },
 )
-@limiter.limit("30/minute")
+@limiter.limit("120/minute")
 async def get_qualified_races(
     analyzer_name: str,
     request: Request,
@@ -164,9 +178,9 @@ async def get_qualified_races(
     engine: FortunaEngine = Depends(get_engine),
     _=Depends(verify_api_key),
     # --- Dynamic Analyzer Parameters ---
-    max_field_size: Optional[int] = Query(None, description="Override the max field size for the analyzer."),
-    min_favorite_odds: Optional[float] = Query(None, description="Override the min favorite odds."),
-    min_second_favorite_odds: Optional[float] = Query(None, description="Override the min second favorite odds."),
+    max_field_size: int = Query(10, ge=3, le=20),
+    min_favorite_odds: float = Query(2.5, ge=1.0, le=100.0),
+    min_second_favorite_odds: float = Query(4.0, ge=1.0, le=100.0),
 ):
     """
     Gets all races for a given date, filters them for qualified betting
@@ -182,12 +196,11 @@ async def get_qualified_races(
         races = aggregated_data.get("races", [])
 
         analyzer_engine = request.app.state.analyzer_engine
-        analyzer_params = {
+        custom_params = {
             "max_field_size": max_field_size,
             "min_favorite_odds": min_favorite_odds,
-            "min_second_favorite_odds": min_second_favorite_odds,
+            "min_second_favorite_odds": min_second_favorite_odds
         }
-        custom_params = {k: v for k, v in analyzer_params.items() if v is not None}
 
         analyzer = analyzer_engine.get_analyzer(analyzer_name, **custom_params)
         result = analyzer.qualify_races(races)
