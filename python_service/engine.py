@@ -17,6 +17,8 @@ import structlog
 from .adapters.at_the_races_adapter import AtTheRacesAdapter
 from .adapters.base import BaseAdapter
 from .adapters.betfair_adapter import BetfairAdapter
+from .adapters.brisnet_adapter import BrisnetAdapter
+from .adapters.drf_adapter import DRFAdapter
 from .adapters.betfair_datascientist_adapter import BetfairDataScientistAdapter
 from .adapters.betfair_greyhound_adapter import BetfairGreyhoundAdapter
 from .adapters.equibase_adapter import EquibaseAdapter
@@ -87,6 +89,8 @@ class FortunaEngine:
                     ),
                     TVGAdapter(config=self.config),
                     TwinSpiresAdapter(config=self.config),
+                    BrisnetAdapter(config=self.config),
+                    DRFAdapter(config=self.config),
                 ]
                 self.logger.info("Full adapter suite initialized.")
 

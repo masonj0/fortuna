@@ -44,6 +44,7 @@ class Race(FortunaBaseModel):
     start_time: datetime = Field(..., alias="startTime")
     runners: List[Runner]
     source: str
+    field_size: Optional[int] = None
     qualification_score: Optional[float] = Field(None, alias="qualificationScore")
     favorite: Optional[Runner] = None
     race_name: Optional[str] = None
