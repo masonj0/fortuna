@@ -7,7 +7,8 @@ import structlog
 from tenacity import AsyncRetrying
 from tenacity import stop_after_attempt
 from tenacity import wait_exponential
-
+from typing import Any, List
+from ..models import Race
 from ..core.exceptions import AdapterAuthError
 from ..core.exceptions import AdapterConnectionError
 from ..core.exceptions import AdapterHttpError
@@ -43,6 +44,73 @@ class BaseAdapter:
         self.circuit_breaker_last_failure = 0
         self.FAILURE_THRESHOLD = 3
         self.COOLDOWN_PERIOD_SECONDS = 300  # 5 minutes
+
+    # --- New Modern Pattern ---
+
+    async def _fetch_data(self, http_client: httpx.AsyncClient, date: str) -> Any:
+        """
+        (Modern Pattern) Fetches the raw data for a given date from the source.
+        This method should only contain network-related logic.
+        """
+        raise NotImplementedError
+
+    def _parse_races(self, raw_data: Any) -> List[Race]:
+        """
+        (Modern Pattern) Parses the raw data into a list of Race objects.
+        This method should be a pure function with no side effects.
+        """
+        raise NotImplementedError
+
+    async def get_races(self, date: str, http_client: httpx.AsyncClient) -> List[Race]:
+        """
+        (Modern Pattern) Orchestrates the fetching and parsing of race data.
+        This method implements the circuit breaker and handles the pipeline.
+        Subclasses should NOT override this method.
+        """
+        with self._breaker_lock:
+            if self.circuit_breaker_tripped:
+                if time.time() - self.circuit_breaker_last_failure > self.COOLDOWN_PERIOD_SECONDS:
+                    self.logger.info("Circuit breaker cooldown expired. Attempting to reset.")
+                    self.circuit_breaker_tripped = False
+                    self.circuit_breaker_failure_count = 0
+                else:
+                    self.logger.warning("Circuit breaker is tripped. Skipping fetch.")
+                    return []
+
+        try:
+            raw_data = await self._fetch_data(http_client, date)
+            if raw_data is None:
+                self.logger.warning("No data returned from fetch.", adapter=self.source_name)
+                return []
+
+            parsed_races = self._parse_races(raw_data)
+
+            with self._breaker_lock:
+                if self.circuit_breaker_failure_count > 0:
+                    self.logger.info("Request successful. Resetting circuit breaker failure count.")
+                    self.circuit_breaker_failure_count = 0
+
+            return parsed_races
+        except Exception as e:
+            self.logger.error(
+                "Pipeline error in adapter.",
+                adapter=self.source_name,
+                error=str(e),
+                exc_info=True
+            )
+            self._handle_failure()
+            return []
+
+    # --- Engine Interface ---
+
+    async def fetch_races(self, date: str, http_client: httpx.AsyncClient) -> List[Race]:
+        """
+        Primary entry point called by the FortunaEngine.
+        Legacy adapters should override this method directly.
+        Modern adapters that implement _fetch_data and _parse_races can
+        rely on this default implementation.
+        """
+        return await self.get_races(date, http_client)
 
     async def make_request(
         self, http_client: httpx.AsyncClient, method: str, url: str, **kwargs

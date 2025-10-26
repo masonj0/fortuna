@@ -25,41 +25,61 @@ def _clean_text(text: Optional[str]) -> Optional[str]:
 
 
 class SportingLifeAdapter(BaseAdapter):
+    """
+    Adapter for sportinglife.com.
+    This adapter now follows the modern fetch/parse pattern.
+    """
+
     def __init__(self, config):
         super().__init__(source_name="SportingLife", base_url="https://www.sportinglife.com", config=config)
 
-    async def fetch_races(self, date: str, http_client: httpx.AsyncClient) -> List[Race]:
-        race_links = await self._get_race_links(http_client)
-        tasks = [self._fetch_and_parse_race(link, http_client) for link in race_links]
-        return [race for race in await asyncio.gather(*tasks) if race]
+    async def _fetch_data(self, http_client: httpx.AsyncClient, date: str) -> Optional[List[str]]:
+        """
+        Fetches the raw HTML for all race pages. This involves first getting the
+        racecard index, then fetching each individual race page concurrently.
+        """
+        index_response = await self.make_request(http_client, "GET", "/horse-racing/racecards")
+        index_soup = BeautifulSoup(index_response.text, "html.parser")
+        links = {a["href"] for a in index_soup.select("a.hr-race-card-meeting__race-link[href]")}
 
-    async def _get_race_links(self, http_client: httpx.AsyncClient) -> List[str]:
-        response = await self.make_request(http_client, "GET", "/horse-racing/racecards")
-        soup = BeautifulSoup(response.text, "html.parser")
-        links = {a["href"] for a in soup.select("a.hr-race-card-meeting__race-link[href]")}
-        return [f"{self.base_url}{link}" for link in links]
+        async def fetch_single_html(url_path: str):
+            response = await self.make_request(http_client, "GET", url_path)
+            return response.text
 
-    async def _fetch_and_parse_race(self, url: str, http_client: httpx.AsyncClient) -> Optional[Race]:
-        try:
-            response = await self.make_request(http_client, "GET", url)
-            soup = BeautifulSoup(response.text, "html.parser")
-            track_name = _clean_text(soup.select_one("a.hr-race-header-course-name__link").get_text())
-            race_time_str = _clean_text(soup.select_one("span.hr-race-header-time__time").get_text())
-            start_time = datetime.strptime(f"{datetime.now().date()} {race_time_str}", "%Y-%m-%d %H:%M")
-            active_link = soup.select_one("a.hr-race-header-navigation-link--active")
-            race_number = soup.select("a.hr-race-header-navigation-link").index(active_link) + 1 if active_link else 1
-            runners = [self._parse_runner(row) for row in soup.select("div.hr-racing-runner-card")]
-            return Race(
-                id=f"sl_{track_name.replace(' ', '')}_{start_time.strftime('%Y%m%d')}_R{race_number}",
-                venue=track_name,
-                race_number=race_number,
-                start_time=start_time,
-                runners=[r for r in runners if r],
-                source=self.source_name,
-            )
-        except (AttributeError, ValueError) as e:
-            log.error("Error parsing race from SportingLife", url=url, exc_info=e)
-            raise AdapterParsingError(self.source_name, f"Failed to parse race at {url}") from e
+        tasks = [fetch_single_html(link) for link in links]
+        return await asyncio.gather(*tasks)
+
+    def _parse_races(self, raw_data: List[str]) -> List[Race]:
+        """Parses a list of raw HTML strings into Race objects."""
+        if not raw_data:
+            return []
+
+        all_races = []
+        for html in raw_data:
+            try:
+                soup = BeautifulSoup(html, "html.parser")
+                track_name = _clean_text(soup.select_one("a.hr-race-header-course-name__link").get_text())
+                race_time_str = _clean_text(soup.select_one("span.hr-race-header-time__time").get_text())
+                start_time = datetime.strptime(f"{datetime.now().date()} {race_time_str}", "%Y-%m-%d %H:%M")
+                active_link = soup.select_one("a.hr-race-header-navigation-link--active")
+                race_number = (
+                    soup.select("a.hr-race-header-navigation-link").index(active_link) + 1 if active_link else 1
+                )
+                runners = [self._parse_runner(row) for row in soup.select("div.hr-racing-runner-card")]
+
+                race = Race(
+                    id=f"sl_{track_name.replace(' ', '')}_{start_time.strftime('%Y%m%d')}_R{race_number}",
+                    venue=track_name,
+                    race_number=race_number,
+                    start_time=start_time,
+                    runners=[r for r in runners if r],
+                    source=self.source_name,
+                )
+                all_races.append(race)
+            except (AttributeError, ValueError) as e:
+                self.logger.error("Error parsing race from SportingLife", exc_info=e)
+                continue  # Continue to the next HTML page
+        return all_races
 
     def _parse_runner(self, row: Tag) -> Optional[Runner]:
         try:
