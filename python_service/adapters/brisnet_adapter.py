@@ -15,28 +15,28 @@ log = structlog.get_logger(__name__)
 
 
 class BrisnetAdapter(BaseAdapter):
-    """Adapter for brisnet.com."""
+    """
+    Adapter for brisnet.com.
+    This adapter now follows the modern fetch/parse pattern.
+    """
 
     def __init__(self, config):
         super().__init__(source_name="Brisnet", base_url="https://www.brisnet.com", config=config)
 
-    async def fetch_races(self, date: str, http_client: httpx.AsyncClient) -> Dict[str, Any]:
-        start_time = datetime.now()
-        url = f"{self.base_url}/race/{date}/CD"
+    async def _fetch_data(self, http_client: httpx.AsyncClient, date: str) -> Any:
+        """Fetches the raw HTML from the Brisnet race page."""
+        url = f"/race/{date}/CD"
+        response = await self.make_request(http_client, "GET", url)
+        return {"html": response.text, "date": date} if response else None
 
-        try:
-            response = await self.make_request(http_client, "GET", url)
-            if not response or response.status_code != 200:
-                return self._format_response([], start_time, error_message="Failed to fetch data from Brisnet")
+    def _parse_races(self, raw_data: Any) -> List[Race]:
+        """Parses the raw HTML into a list of Race objects."""
+        if not raw_data or not raw_data.get("html"):
+            return []
 
-            races = self._parse_races(response.text, date)
-            return self._format_response(races, start_time)
-        except Exception as e:
-            log.error("Error fetching races from Brisnet", error=str(e), exc_info=True)
-            return self._format_response([], start_time, error_message=str(e))
-
-    def _parse_races(self, raw_data: str, race_date: str) -> List[Race]:
-        soup = BeautifulSoup(raw_data, "html.parser")
+        html = raw_data["html"]
+        race_date = raw_data["date"]
+        soup = BeautifulSoup(html, "html.parser")
 
         venue_text = soup.select_one("header h1").text
         venue = normalize_venue_name(venue_text.split(" - ")[0])
@@ -76,15 +76,3 @@ class BrisnetAdapter(BaseAdapter):
             races.append(race)
 
         return races
-
-    def _format_response(self, races: List[Race], start_time: datetime, **kwargs) -> Dict[str, Any]:
-        return {
-            "races": [race.model_dump() for race in races],
-            "source_info": {
-                "name": self.source_name,
-                "status": "SUCCESS" if not kwargs.get("error_message") else "FAILED",
-                "races_fetched": len(races),
-                "error_message": kwargs.get("error_message"),
-                "fetch_duration": (datetime.now() - start_time).total_seconds(),
-            },
-        }
