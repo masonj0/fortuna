@@ -1,73 +1,82 @@
 # python_service/adapters/racingpost_adapter.py
 import asyncio
 from datetime import datetime
-from typing import List
-from typing import Optional
-
+from typing import Any, List, Optional
+import httpx
 from selectolax.parser import HTMLParser
 
 from ..core.exceptions import AdapterParsingError
-from ..models import OddsData
-from ..models import Race
-from ..models import Runner
+from ..models import OddsData, Race, Runner
 from ..utils.odds import parse_odds_to_decimal
-from ..utils.text import clean_text
-from ..utils.text import normalize_venue_name
+from ..utils.text import clean_text, normalize_venue_name
 from .base import BaseAdapter
 
 
 class RacingPostAdapter(BaseAdapter):
-    """A production-ready adapter for scraping Racing Post racecards."""
+    """
+    A production-ready adapter for scraping Racing Post racecards.
+    This adapter now follows the modern fetch/parse pattern.
+    """
 
     def __init__(self, config=None):
         super().__init__(source_name="RacingPost", base_url="https://www.racingpost.com", config=config)
 
-    async def fetch_races(self, date: str, http_client) -> List[Race]:
+    async def _fetch_data(self, http_client: httpx.AsyncClient, date: str) -> Any:
         """
-        Fetches all UK & Ireland races for a given date from racingpost.com.
+        Fetches the raw HTML content for all races on a given date.
+        This involves a two-step process: first get the index of race URLs,
+        then fetch the content of each URL concurrently.
         """
-        race_card_urls = await self._get_race_card_urls(date, http_client)
+        # Step 1: Get all individual race card URLs
+        index_url = f"/racecards/{date}"
+        index_response = await self.make_request(http_client, "GET", index_url, headers=self._get_headers())
+        index_parser = HTMLParser(index_response.text)
+        links = index_parser.css('a[data-test-selector^="RC-meetingItem__link_race"]')
+        race_card_urls = [link.attributes['href'] for link in links]
 
-        tasks = [self._fetch_and_parse_race(url, date, http_client) for url in race_card_urls]
-        return [race for race in await asyncio.gather(*tasks) if race]
+        # Step 2: Fetch the HTML for each race card URL concurrently
+        async def fetch_single_html(url: str):
+            response = await self.make_request(http_client, "GET", url, headers=self._get_headers())
+            return response.text
 
-    async def _get_race_card_urls(self, date: str, http_client) -> list[str]:
-        """Gets all individual race card URLs for a given date."""
-        url = f"/racecards/{date}"
-        response = await self.make_request(http_client, "GET", url, headers=self._get_headers())
-        parser = HTMLParser(response.text)
-        links = parser.css('a[data-test-selector^="RC-meetingItem__link_race"]')
-        return [f"{self.base_url}{link.attributes['href']}" for link in links]
+        tasks = [fetch_single_html(url) for url in race_card_urls]
+        html_contents = await asyncio.gather(*tasks)
 
-    async def _fetch_and_parse_race(self, url: str, date: str, http_client) -> Optional[Race]:
-        try:
-            response = await self.make_request(
-                http_client, "GET", url.replace(self.base_url, ""), headers=self._get_headers()
-            )
-            parser = HTMLParser(response.text)
+        # Pass along the date, as it's needed for parsing the start_time
+        return {"date": date, "html_contents": html_contents}
 
-            venue_raw = parser.css_first('a[data-test-selector="RC-course__name"]').text(strip=True)
-            venue = normalize_venue_name(venue_raw)
+    def _parse_races(self, raw_data: Any) -> List[Race]:
+        """Parses a list of raw HTML strings into Race objects."""
+        date = raw_data["date"]
+        html_contents = raw_data["html_contents"]
+        all_races: List[Race] = []
 
-            race_time_str = parser.css_first('span[data-test-selector="RC-course__time"]').text(strip=True)
-            race_datetime_str = f"{date} {race_time_str}"
-            start_time = datetime.strptime(race_datetime_str, "%Y-%m-%d %H:%M")
+        for html in html_contents:
+            try:
+                parser = HTMLParser(html)
+                venue_raw = parser.css_first('a[data-test-selector="RC-course__name"]').text(strip=True)
+                venue = normalize_venue_name(venue_raw)
+                race_time_str = parser.css_first('span[data-test-selector="RC-course__time"]').text(strip=True)
+                race_datetime_str = f"{date} {race_time_str}"
+                start_time = datetime.strptime(race_datetime_str, "%Y-%m-%d %H:%M")
+                runners = self._parse_runners(parser)
 
-            runners = self._parse_runners(parser)
-
-            if venue and runners:
-                race_number = self._get_race_number(parser, start_time)
-                return Race(
-                    id=f"rp_{venue.lower().replace(' ', '')}_{date}_{race_number}",
-                    venue=venue,
-                    race_number=race_number,
-                    start_time=start_time,
-                    runners=runners,
-                    source=self.source_name,
-                )
-            return None
-        except (AttributeError, ValueError) as e:
-            raise AdapterParsingError(self.source_name, f"Failed to parse race at {url}") from e
+                if venue and runners:
+                    race_number = self._get_race_number(parser, start_time)
+                    race = Race(
+                        id=f"rp_{venue.lower().replace(' ', '')}_{date}_{race_number}",
+                        venue=venue,
+                        race_number=race_number,
+                        start_time=start_time,
+                        runners=runners,
+                        source=self.source_name,
+                    )
+                    all_races.append(race)
+            except (AttributeError, ValueError) as e:
+                self.logger.error("Failed to parse race from HTML content.", exc_info=True)
+                # Continue parsing other races
+                continue
+        return all_races
 
     def _get_race_number(self, parser: HTMLParser, start_time: datetime) -> int:
         """Derives the race number by finding the active time in the nav bar."""
