@@ -22,23 +22,13 @@ const DEFAULT_PARAMS: FilterParams = {
 };
 
 export function RaceFilters({ onParamsChange, isLoading }: RaceFiltersProps) {
-  const [params, setParams] = useState<FilterParams>(() => {
-    // Load from localStorage on mount
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('fortuna:filter-params');
-      return saved ? JSON.parse(saved) : DEFAULT_PARAMS;
-    }
-    return DEFAULT_PARAMS;
-  });
-
+  const [params, setParams] = useState<FilterParams>(DEFAULT_PARAMS);
   const [isExpanded, setIsExpanded] = useState(false);
 
   // Handle individual parameter changes
   const handleChange = useCallback((key: keyof FilterParams, value: number) => {
     setParams(prev => {
       const updated = { ...prev, [key]: value };
-      // Persist to localStorage
-      localStorage.setItem('fortuna:filter-params', JSON.stringify(updated));
       onParamsChange(updated);
       return updated;
     });
@@ -47,7 +37,6 @@ export function RaceFilters({ onParamsChange, isLoading }: RaceFiltersProps) {
   // Reset to defaults
   const handleReset = useCallback(() => {
     setParams(DEFAULT_PARAMS);
-    localStorage.setItem('fortuna:filter-params', JSON.stringify(DEFAULT_PARAMS));
     onParamsChange(DEFAULT_PARAMS);
   }, [onParamsChange]);
 

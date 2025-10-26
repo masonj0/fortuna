@@ -35,11 +35,11 @@ export function LiveRaceDashboard() {
       }
 
       // Build query string with filter parameters
-      const queryParams = new URLSearchParams({
-        max_field_size: params.maxFieldSize.toString(),
-        min_favorite_odds: params.minFavoriteOdds.toString(),
-        min_second_favorite_odds: params.minSecondFavoriteOdds.toString(),
-      });
+      const queryParams = new URLSearchParams();
+      queryParams.append('max_field_size', params.maxFieldSize.toString());
+      queryParams.append('min_favorite_odds', params.minFavoriteOdds.toString());
+      queryParams.append('min_second_favorite_odds', params.minSecondFavoriteOdds.toString());
+
 
       const response = await fetch(
         `/api/races/qualified/trifecta?${queryParams.toString()}`,
