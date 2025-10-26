@@ -39,6 +39,15 @@ def decrypt_value(value: Optional[str]) -> Optional[str]:
 class Settings(BaseSettings):
     API_KEY: str = ""
 
+    # --- API Gateway Configuration ---
+    UVICORN_HOST: str = "127.0.0.1"
+    UVICORN_PORT: int = 8000
+    UVICORN_RELOAD: bool = True
+
+    # --- Database Configuration ---
+    DATABASE_TYPE: str = "sqlite"
+    DATABASE_URL: str = "sqlite:///./fortuna.db"
+
     # --- Optional Betfair Credentials ---
     BETFAIR_APP_KEY: Optional[str] = None
     BETFAIR_USERNAME: Optional[str] = None
