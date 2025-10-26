@@ -23,46 +23,61 @@ log = structlog.get_logger(__name__)
 
 
 class AtTheRacesAdapter(BaseAdapter):
+    """
+    Adapter for attheraces.com.
+    This adapter now follows the modern fetch/parse pattern.
+    """
+
     def __init__(self, config):
         super().__init__(source_name="AtTheRaces", base_url="https://www.attheraces.com", config=config)
 
-    async def fetch_races(self, date: str, http_client: httpx.AsyncClient) -> List[Race]:
-        race_links = await self._get_race_links(http_client)
-        if not race_links:
+    async def _fetch_data(self, http_client: httpx.AsyncClient, date: str) -> Optional[List[str]]:
+        """
+        Fetches the raw HTML for all race pages. This involves first getting the
+        racecard index, then fetching each individual race page concurrently.
+        """
+        index_response = await self.make_request(http_client, "GET", "/racecards")
+        index_soup = BeautifulSoup(index_response.text, "html.parser")
+        links = {a["href"] for a in index_soup.select("a.race-time-link[href]")}
+
+        async def fetch_single_html(url_path: str):
+            response = await self.make_request(http_client, "GET", url_path)
+            return response.text
+
+        tasks = [fetch_single_html(link) for link in links]
+        return await asyncio.gather(*tasks)
+
+    def _parse_races(self, raw_data: List[str]) -> List[Race]:
+        """Parses a list of raw HTML strings into Race objects."""
+        if not raw_data:
             return []
 
-        tasks = [self._fetch_and_parse_race(link, http_client) for link in race_links]
-        races = [race for race in await asyncio.gather(*tasks) if race]
-        return races
-
-    async def _get_race_links(self, http_client: httpx.AsyncClient) -> List[str]:
-        response = await self.make_request(http_client, "GET", "/racecards")
-        soup = BeautifulSoup(response.text, "html.parser")
-        links = {a["href"] for a in soup.select("a.race-time-link[href]")}
-        return [f"{self.base_url}{link}" for link in links]
-
-    async def _fetch_and_parse_race(self, url: str, http_client: httpx.AsyncClient) -> Optional[Race]:
-        try:
-            response = await self.make_request(http_client, "GET", url)
-            soup = BeautifulSoup(response.text, "html.parser")
-            header = soup.select_one("h1.heading-racecard-title").get_text()
-            track_name_raw, race_time = [p.strip() for p in header.split("|")[:2]]
-            track_name = normalize_venue_name(track_name_raw)
-            active_link = soup.select_one("a.race-time-link.active")
-            race_number = active_link.find_parent("div", "races").select("a.race-time-link").index(active_link) + 1
-            start_time = datetime.strptime(f"{datetime.now().date()} {race_time}", "%Y-%m-%d %H:%M")
-            runners = [self._parse_runner(row) for row in soup.select("div.card-horse")]
-            return Race(
-                id=f"atr_{track_name.replace(' ', '')}_{start_time.strftime('%Y%m%d')}_R{race_number}",
-                venue=track_name,
-                race_number=race_number,
-                start_time=start_time,
-                runners=[r for r in runners if r],
-                source=self.source_name,
-            )
-        except (AttributeError, IndexError, ValueError) as e:
-            log.error("Error parsing race from AtTheRaces", url=url, exc_info=e)
-            raise AdapterParsingError(self.source_name, f"Failed to parse race from {url}") from e
+        all_races = []
+        for html in raw_data:
+            try:
+                soup = BeautifulSoup(html, "html.parser")
+                header = soup.select_one("h1.heading-racecard-title").get_text()
+                track_name_raw, race_time = [p.strip() for p in header.split("|")[:2]]
+                track_name = normalize_venue_name(track_name_raw)
+                active_link = soup.select_one("a.race-time-link.active")
+                race_number = (
+                    active_link.find_parent("div", "races").select("a.race-time-link").index(active_link) + 1
+                )
+                start_time = datetime.strptime(f"{datetime.now().date()} {race_time}", "%Y-%m-%d %H:%M")
+                runners = [self._parse_runner(row) for row in soup.select("div.card-horse")]
+                race = Race(
+                    id=f"atr_{track_name.replace(' ', '')}_{start_time.strftime('%Y%m%d')}_R{race_number}",
+                    venue=track_name,
+                    race_number=race_number,
+                    start_time=start_time,
+                    runners=[r for r in runners if r],
+                    source=self.source_name,
+                )
+                all_races.append(race)
+            except (AttributeError, IndexError, ValueError) as e:
+                self.logger.error("Error parsing race from AtTheRaces", exc_info=True)
+                continue
+        return all_races
 
     def _parse_runner(self, row: Tag) -> Optional[Runner]:
         try:

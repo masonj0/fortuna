@@ -1,17 +1,11 @@
 # python_service/adapters/gbgb_api_adapter.py
 
 from datetime import datetime
-from typing import Any
-from typing import Dict
-from typing import List
-
+from typing import Any, Dict, List, Optional
 import httpx
 import structlog
-
 from ..core.exceptions import AdapterParsingError
-from ..models import OddsData
-from ..models import Race
-from ..models import Runner
+from ..models import OddsData, Race, Runner
 from ..utils.odds import parse_odds_to_decimal
 from .base import BaseAdapter
 
@@ -19,40 +13,44 @@ log = structlog.get_logger(__name__)
 
 
 class GbgbApiAdapter(BaseAdapter):
-    """Adapter for the undocumented JSON API for the Greyhound Board of Great Britain."""
+    """
+    Adapter for the undocumented JSON API for the Greyhound Board of Great Britain.
+    This adapter now follows the modern fetch/parse pattern.
+    """
 
     def __init__(self, config):
         super().__init__(source_name="GBGB", base_url="https://api.gbgb.org.uk/api/", config=config)
 
-    async def fetch_races(self, date: str, http_client: httpx.AsyncClient) -> List[Race]:
+    async def _fetch_data(self, http_client: httpx.AsyncClient, date: str) -> Optional[List[Dict[str, Any]]]:
+        """Fetches the raw meeting data from the GBGB API."""
         endpoint = f"results/meeting/{date}"
         response = await self.make_request(http_client, "GET", endpoint)
+        return response.json() if response else None
 
-        if not response:
+    def _parse_races(self, meetings_data: List[Dict[str, Any]]) -> List[Race]:
+        """Parses the raw meeting data into a list of Race objects."""
+        if not meetings_data:
             return []
 
-        return self._parse_meetings(response.json())
-
-    def _parse_meetings(self, meetings_data: List[Dict[str, Any]]) -> List[Race]:
-        races = []
-        if meetings_data is None:
-            return races
+        all_races = []
         for meeting in meetings_data:
             track_name = meeting.get("trackName")
             for race_data in meeting.get("races", []):
                 try:
-                    races.append(self._parse_race(race_data, track_name))
+                    all_races.append(self._parse_race(race_data, track_name))
                 except (KeyError, TypeError) as e:
                     log.error(
                         f"{self.source_name}: Error parsing race",
                         race_id=race_data.get("raceId"),
                         error=str(e),
+                        exc_info=True,
                     )
+                    # Propagate the error to be handled by the base class orchestrator
                     raise AdapterParsingError(
                         self.source_name,
                         f"Failed to parse race: {race_data.get('raceId')}",
                     ) from e
-        return races
+        return all_races
 
     def _parse_race(self, race_data: Dict[str, Any], track_name: str) -> Race:
         return Race(
