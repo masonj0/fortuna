@@ -50,6 +50,12 @@ from .models import Race
 from .models import TipsheetRace
 from .security import verify_api_key
 
+# --- PyInstaller Explicit Imports ---
+# These imports are not used directly in this file but are required
+# to ensure PyInstaller bundles all necessary adapter modules.
+from .adapters import *
+# ------------------------------------
+
 log = structlog.get_logger()
 
 
