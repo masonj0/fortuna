@@ -137,9 +137,10 @@ class FortunaDesktopApp {
           cwd: path.join(rootPath, 'python_service'),
           stdio: ['ignore', 'pipe', 'pipe'],
           detached: false,
-          args: ['-m', 'uvicorn', 'api:app', '--host', '127.0.0.1', '--port', '8000']
+          args: ['run_server.py']
         };
       } else {
+        // In production, the executable is the server runner itself.
         executablePath = path.join(rootPath, 'api.exe');
         spawnOptions = {
           stdio: ['ignore', 'pipe', 'pipe'],
@@ -183,10 +184,11 @@ ${stderrBuffer.trim() || '(No standard error output)'}
         stdoutBuffer += logMsg;
         console.log(`[Backend] ${logMsg}`);
         if (!startupResolved) {
-          if (stdoutBuffer.includes('Uvicorn running on') || stdoutBuffer.includes('Application startup complete')) {
-            console.log('[✓] Backend started successfully');
+          if (stdoutBuffer.includes('Backend ready')) {
+            console.log('[✓] Backend startup signal received.');
             startupResolved = true;
-            resolve();
+            // Add a small delay for safety, as recommended
+            setTimeout(resolve, 1000);
           }
         }
       });
