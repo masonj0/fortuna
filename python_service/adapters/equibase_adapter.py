@@ -16,97 +16,98 @@ from .base import BaseAdapter
 
 
 class EquibaseAdapter(BaseAdapter):
-    """A production-ready adapter for scraping Equibase race entries."""
+    """
+    A production-ready adapter for scraping Equibase race entries.
+    This adapter now follows the modern fetch/parse pattern.
+    """
 
     def __init__(self, config=None):
         super().__init__(source_name="Equibase", base_url="https://www.equibase.com", config=config)
 
-    async def fetch_races(self, date_str: str, http_client) -> List[Race]:
+    async def _fetch_data(self, http_client, date_str: str) -> Optional[List[str]]:
         """
-        Fetches all US & Canadian races for a given date from equibase.com.
+        Fetches the raw HTML for all race pages. This involves a multi-step process:
+        1. Fetch the main entries page to get links to each track.
+        2. Fetch each track page to get links to each race.
+        3. Fetch each race page's HTML content concurrently.
         """
-        entry_urls = await self._get_entry_urls(date_str, http_client)
-
-        tasks = [self._fetch_races_from_entry_page(url, date_str, http_client) for url in entry_urls]
-        results = await asyncio.gather(*tasks)
-
-        # Flatten the list of lists into a single list of races
-        return [race for sublist in results for race in sublist]
-
-    async def _get_entry_urls(self, date_str: str, http_client) -> list[str]:
-        """Gets all individual track entry page URLs for a given date."""
+        # Step 1: Get track URLs
         d = datetime.strptime(date_str, "%Y-%m-%d").date()
         url = f"/entries/Entries.cfm?ELEC_DATE={d.month}/{d.day}/{d.year}&STYLE=EQB"
         response = await self.make_request(http_client, "GET", url, headers=self._get_headers())
         parser = HTMLParser(response.text)
-        links = parser.css("div.track-information a")
-        return [
-            f"{self.base_url}{link.attributes['href']}"
-            for link in links
+        track_links = [
+            link.attributes['href'] for link in parser.css("div.track-information a")
             if "race=" not in link.attributes.get("href", "")
         ]
 
-    async def _fetch_races_from_entry_page(self, url: str, date_str: str, http_client) -> List[Race]:
-        """Fetches all race data from a single track's entry page."""
-        response = await self.make_request(http_client, "GET", url, headers=self._get_headers())
-        parser = HTMLParser(response.text)
-        race_links = parser.css("a.program-race-link")
-
-        tasks = [
-            self._parse_race_page(
-                f"{self.base_url}{link.attributes['href']}", date_str, http_client
-            )
-            for link in race_links
-        ]
-        return [race for race in await asyncio.gather(*tasks) if race]
-
-
-    async def _parse_race_page(self, url: str, date_str: str, http_client) -> Optional[Race]:
-        """Parses a single race card page."""
-        try:
-            response = await self.make_request(http_client, "GET", url, headers=self._get_headers())
+        # Step 2: Get race URLs from all tracks
+        async def get_race_links_from_track(track_url: str):
+            response = await self.make_request(http_client, "GET", track_url, headers=self._get_headers())
             parser = HTMLParser(response.text)
+            return [link.attributes['href'] for link in parser.css("a.program-race-link")]
 
-            venue = clean_text(parser.css_first("div.track-information strong").text())
-            race_number = int(parser.css_first("div.race-information strong").text().replace("Race", "").strip())
-            post_time_str = parser.css_first("p.post-time span").text().strip()
-            start_time = self._parse_post_time(date_str, post_time_str)
+        tasks = [get_race_links_from_track(link) for link in track_links]
+        results = await asyncio.gather(*tasks)
+        race_links = [f"{self.base_url}{link}" for sublist in results for link in sublist]
 
-            runners = []
-            runner_nodes = parser.css("table.entries-table tbody tr")
-            for node in runner_nodes:
-                try:
-                    number = int(node.css_first("td:nth-child(1)").text(strip=True))
-                    name = clean_text(node.css_first("td:nth-child(3)").text())
-                    odds_str = clean_text(node.css_first("td:nth-child(10)").text())
-                    scratched = "scratched" in node.attributes.get("class", "").lower()
+        # Step 3: Fetch HTML for all races concurrently
+        async def fetch_single_html(race_url: str):
+            response = await self.make_request(http_client, "GET", race_url, headers=self._get_headers())
+            return response.text
 
-                    odds = {}
-                    if not scratched:
-                        win_odds = parse_odds_to_decimal(odds_str)
-                        if win_odds and win_odds < 999:
-                            odds = {
-                                self.source_name: OddsData(
-                                    win=win_odds, source=self.source_name, last_updated=datetime.now()
-                                )
-                            }
+        tasks = [fetch_single_html(link) for link in race_links]
+        return await asyncio.gather(*tasks)
 
-                    runners.append(Runner(number=number, name=name, odds=odds, scratched=scratched))
-                except (ValueError, AttributeError):
-                    # Log and skip the problematic runner
-                    self.logger.warning("Could not parse runner, skipping.", url=url)
-                    continue
+    def _parse_races(self, raw_data: List[str]) -> List[Race]:
+        """Parses a list of raw HTML strings into Race objects."""
+        if not raw_data:
+            return []
 
-            return Race(
-                id=f"eqb_{venue.lower().replace(' ', '')}_{date_str}_{race_number}",
-                venue=venue,
-                race_number=race_number,
-                start_time=start_time,
-                runners=runners,
-                source=self.source_name,
-            )
-        except (AttributeError, ValueError) as e:
-            raise AdapterParsingError(self.source_name, f"Failed to parse race page at {url}") from e
+        all_races = []
+        for html in raw_data:
+            try:
+                parser = HTMLParser(html)
+                venue = clean_text(parser.css_first("div.track-information strong").text())
+                race_number = int(parser.css_first("div.race-information strong").text().replace("Race", "").strip())
+                post_time_str = parser.css_first("p.post-time span").text().strip()
+                date_str = datetime.now().strftime("%Y-%m-%d")
+                start_time = self._parse_post_time(date_str, post_time_str)
+                runners = []
+                runner_nodes = parser.css("table.entries-table tbody tr")
+                for node in runner_nodes:
+                    try:
+                        number = int(node.css_first("td:nth-child(1)").text(strip=True))
+                        name = clean_text(node.css_first("td:nth-child(3)").text())
+                        odds_str = clean_text(node.css_first("td:nth-child(10)").text())
+                        scratched = "scratched" in node.attributes.get("class", "").lower()
+                        odds = {}
+                        if not scratched:
+                            win_odds = parse_odds_to_decimal(odds_str)
+                            if win_odds and win_odds < 999:
+                                odds = {
+                                    self.source_name: OddsData(
+                                        win=win_odds, source=self.source_name, last_updated=datetime.now()
+                                    )
+                                }
+                        runners.append(Runner(number=number, name=name, odds=odds, scratched=scratched))
+                    except (ValueError, AttributeError):
+                        self.logger.warning("Could not parse runner, skipping.")
+                        continue
+
+                race = Race(
+                    id=f"eqb_{venue.lower().replace(' ', '')}_{date_str}_{race_number}",
+                    venue=venue,
+                    race_number=race_number,
+                    start_time=start_time,
+                    runners=runners,
+                    source=self.source_name,
+                )
+                all_races.append(race)
+            except (AttributeError, ValueError) as e:
+                self.logger.error("Failed to parse Equibase race page.", exc_info=True)
+                continue
+        return all_races
 
     def _parse_post_time(self, date_str: str, time_str: str) -> datetime:
         """Parses a time string like 'Post Time: 12:30 PM ET' into a datetime object."""

@@ -22,39 +22,37 @@ log = structlog.get_logger()
 
 
 class FanDuelAdapter(BaseAdapter):
-    """Adapter for fetching horse racing odds from FanDuel's private API."""
+    """
+    Adapter for fetching horse racing odds from FanDuel's private API.
+    This adapter now follows the modern fetch/parse pattern.
+    """
 
     def __init__(self, config):
         super().__init__(source_name="FanDuel", base_url="https://sb-api.nj.sportsbook.fanduel.com/api/", config=config)
 
-    async def fetch_races(self, date: str, http_client: httpx.AsyncClient) -> List[Race]:
-        """Fetches races for a given date. Note: FanDuel API is event-based, not date-based."""
-        # This is a placeholder for a more robust event discovery mechanism.
-        event_id = "38183.3"  # Example: A major race event
-
-        log.info("Fetching races from FanDuel", event_id=event_id)
-
+    async def _fetch_data(self, http_client: httpx.AsyncClient, date: str) -> Any:
+        """Fetches the raw market data from the FanDuel API."""
+        event_id = "38183.3"  # Placeholder for event discovery
+        self.logger.info("Fetching races from FanDuel", event_id=event_id)
         endpoint = f"markets?_ak=Fh2e68s832c41d4b&eventId={event_id}"
         response = await self.make_request(http_client, "GET", endpoint)
-        data = response.json()
+        return response.json()
 
-        return self._parse_races(data)
-
-    def _parse_races(self, data: Dict[str, Any]) -> List[Race]:
-        races = []
-        if "marketGroups" not in data:
-            log.warning("FanDuel response missing 'marketGroups' key")
+    def _parse_races(self, raw_data: Dict[str, Any]) -> List[Race]:
+        """Parses the raw API response into a list of Race objects."""
+        if "marketGroups" not in raw_data:
+            self.logger.warning("FanDuel response missing 'marketGroups' key")
             return []
 
-        for group in data["marketGroups"]:
+        races = []
+        for group in raw_data["marketGroups"]:
             if group.get("marketGroupName") == "Win":
                 for market in group.get("markets", []):
                     try:
-                        race = self._parse_single_race(market)
-                        if race:
+                        if race := self._parse_single_race(market):
                             races.append(race)
                     except AdapterParsingError as e:
-                        log.error("Failed to parse a FanDuel market", market=market, error=str(e))
+                        self.logger.error("Failed to parse a FanDuel market", market=market, error=str(e))
         return races
 
     def _parse_single_race(self, market: Dict[str, Any]) -> Optional[Race]:
