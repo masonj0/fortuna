@@ -29,27 +29,23 @@ async def test_twinspires_adapter_fetch_races_successfully(twinspires_adapter):
     )
 
     async with httpx.AsyncClient() as client:
-        result = await twinspires_adapter.fetch_races(race_date, client)
+        races = await twinspires_adapter.fetch_races(race_date, client)
 
     assert mock_route.called
-    assert result["source_info"]["status"] == "SUCCESS"
-    assert result["source_info"]["races_fetched"] == 1
-
-    races = result["races"]
     assert len(races) == 1
     race = races[0]
 
-    assert race["venue"] == "Churchill Downs"
-    assert race["race_number"] == 5
-    assert len(race["runners"]) == 3  # One runner is scratched
+    assert race.venue == "Churchill Downs"
+    assert race.race_number == 5
+    assert len(race.runners) == 3  # One runner is scratched
 
-    braveheart = next((r for r in race["runners"] if r["name"] == 'Braveheart'), None)
+    braveheart = next((r for r in race.runners if r.name == 'Braveheart'), None)
     assert braveheart is not None
-    assert braveheart["odds"]['TwinSpires']["win"] == Decimal('3.5')
+    assert braveheart.odds['TwinSpires'].win == Decimal('3.5')
 
-    gallant_gus = next((r for r in race["runners"] if r["name"] == 'Gallant Gus'), None)
+    gallant_gus = next((r for r in race.runners if r.name == 'Gallant Gus'), None)
     assert gallant_gus is not None
-    assert gallant_gus["odds"]['TwinSpires']["win"] == Decimal('4.0')
+    assert gallant_gus.odds['TwinSpires'].win == Decimal('4.0')
 
     # Check that the start time was parsed correctly
-    assert race["start_time"] == datetime(2025, 10, 26, 16, 30)
+    assert race.start_time == datetime(2025, 10, 26, 16, 30)

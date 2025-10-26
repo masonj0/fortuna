@@ -87,21 +87,22 @@ async def test_fetch_races_handles_empty_response(mock_config):
     assert races == []
 
 @pytest.mark.asyncio
-async def test_fetch_races_raises_adapter_http_error_on_api_failure(mock_config):
+async def test_fetch_races_returns_empty_list_on_api_failure(mock_config):
     """
-    Tests that fetch_races propagates AdapterHttpError from make_request.
+    Tests that fetch_races returns an empty list when make_request fails,
+    as the new base class orchestrator now handles the exception.
     """
     # ARRANGE
     adapter = TheRacingApiAdapter(config=mock_config)
     today = date.today().strftime('%Y-%m-%d')
     mock_http_client = AsyncMock(spec=httpx.AsyncClient)
 
-    # Configure the mock to raise the specific exception we expect
+    # Configure the mock to raise an exception, simulating a request failure
     adapter.make_request = AsyncMock(side_effect=AdapterHttpError(adapter.source_name, 500, "http://test.url"))
 
-    # ACT & ASSERT
-    with pytest.raises(AdapterHttpError) as excinfo:
-        await adapter.fetch_races(today, mock_http_client)
+    # ACT
+    result = await adapter.fetch_races(today, mock_http_client)
 
-    assert excinfo.value.status_code == 500
-    assert "Received HTTP 500" in str(excinfo.value)
+    # ASSERT
+    # The new pattern handles the exception and returns an empty list
+    assert result == []
