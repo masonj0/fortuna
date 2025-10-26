@@ -48,7 +48,6 @@ class Race(FortunaBaseModel):
     favorite: Optional[Runner] = None
     race_name: Optional[str] = None
     distance: Optional[str] = None
-    field_size: Optional[int] = None
 
 
 class SourceInfo(FortunaBaseModel):

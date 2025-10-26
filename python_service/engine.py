@@ -18,8 +18,6 @@ from .adapters.at_the_races_adapter import AtTheRacesAdapter
 from .adapters.base import BaseAdapter
 from .adapters.betfair_adapter import BetfairAdapter
 from .adapters.betfair_datascientist_adapter import BetfairDataScientistAdapter
-from .adapters.brisnet_adapter import BrisnetAdapter
-from .adapters.drf_adapter import DRFAdapter
 from .adapters.betfair_greyhound_adapter import BetfairGreyhoundAdapter
 from .adapters.equibase_adapter import EquibaseAdapter
 from .adapters.gbgb_api_adapter import GbgbApiAdapter
@@ -31,7 +29,6 @@ from .adapters.sporting_life_adapter import SportingLifeAdapter
 from .adapters.the_racing_api_adapter import TheRacingApiAdapter
 from .adapters.timeform_adapter import TimeformAdapter
 from .adapters.tvg_adapter import TVGAdapter
-from .adapters.twinspires_adapter import TwinSpiresAdapter
 
 # from .adapters.pointsbet_greyhound_adapter import PointsBetGreyhoundAdapter
 from .cache_manager import cache_async_result
@@ -88,9 +85,6 @@ class FortunaEngine:
                         config=self.config
                     ),
                     TVGAdapter(config=self.config),
-                    TwinSpiresAdapter(config=self.config),
-                    DRFAdapter(config=self.config),
-                    BrisnetAdapter(config=self.config),
                 ]
                 self.logger.info("Full adapter suite initialized.")
 

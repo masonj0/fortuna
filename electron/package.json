@@ -5,9 +5,7 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder",
-    "dist:full": "cross-env FORTUNA_BUILD_TYPE=full electron-builder",
-    "dist:minimal": "cross-env FORTUNA_BUILD_TYPE=minimal electron-builder"
+    "dist": "electron-builder"
   },
   "author": "JBMason",
   "devDependencies": {
@@ -30,8 +28,11 @@
     ],
     "extraResources": [
       {
-        "from": "../python_service/dist/api.exe",
-        "to": "api.exe"
+        "from": "../python_service/dist/",
+        "to": "./",
+        "filter": [
+          "**/api.exe"
+        ]
       }
     ],
     "win": {
