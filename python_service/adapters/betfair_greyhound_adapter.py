@@ -1,6 +1,6 @@
 # python_service/adapters/betfair_greyhound_adapter.py
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, List
 
 from ..models import Race, Runner
@@ -13,6 +13,9 @@ class BetfairGreyhoundAdapter(BetfairAuthMixin, BaseAdapterV3):
 
     SOURCE_NAME = "BetfairGreyhounds"
     BASE_URL = "https://api.betfair.com/exchange/betting/rest/v1.0/"
+
+    def __init__(self, config=None):
+        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
 
     async def _fetch_data(self, date: str) -> Any:
         """Fetches the raw market catalogue for greyhound races on a given date."""
@@ -75,10 +78,16 @@ class BetfairGreyhoundAdapter(BetfairAuthMixin, BaseAdapterV3):
             race_number=self._extract_race_number(market.get('marketName', '')),
             start_time=start_time,
             runners=runners,
-            source=self.SOURCE_NAME
+            source=self.source_name
         )
 
     def _extract_race_number(self, name: str) -> int:
         """Extracts the race number from a market name (e.g., 'R1 480m')."""
         match = re.search(r'\bR(\d{1,2})\b', name)
         return int(match.group(1)) if match else 0
+
+    def _get_datetime_range(self, date_str: str):
+        # Helper to create a datetime range for the Betfair API
+        start_time = datetime.strptime(date_str, "%Y-%m-%d")
+        end_time = start_time + timedelta(days=1)
+        return start_time, end_time

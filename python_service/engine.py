@@ -27,8 +27,34 @@ class FortunaEngine:
             self.logger.info("Configuration loaded.")
 
             self.logger.info("Initializing adapters...")
-            self.adapters: List[BaseAdapterV3] = self._initialize_adapters()
-            self.logger.info(f"{len(self.adapters)} adapters initialized.")
+            self.adapters: List[BaseAdapterV3] = []
+            adapter_classes = [
+                AtTheRacesAdapter, BetfairAdapter, BetfairGreyhoundAdapter, BrisnetAdapter,
+                DRFAdapter, EquibaseAdapter, FanDuelAdapter, GbgbApiAdapter, GreyhoundAdapter,
+                HarnessAdapter, HorseRacingNationAdapter, NYRABetsAdapter, OddscheckerAdapter,
+                PuntersAdapter, RacingAndSportsAdapter, RacingAndSportsGreyhoundAdapter,
+                RacingPostAdapter, RacingTVAdapter, SportingLifeAdapter, TabAdapter,
+                TheRacingApiAdapter, TimeformAdapter, TwinSpiresAdapter, TVGAdapter,
+                XpressbetAdapter, PointsBetGreyhoundAdapter
+            ]
+
+            for adapter_cls in adapter_classes:
+                try:
+                    self.adapters.append(adapter_cls(config=self.config))
+                except Exception:
+                    self.logger.warning(f"Failed to initialize adapter: {adapter_cls.__name__}", exc_info=True)
+
+            # Special case for BetfairDataScientistAdapter with extra args
+            try:
+                self.adapters.append(BetfairDataScientistAdapter(
+                    model_name="ThoroughbredModel",
+                    url="https://betfair-data-supplier-prod.herokuapp.com/api/widgets/kvs-ratings/datasets",
+                    config=self.config
+                ))
+            except Exception:
+                self.logger.warning("Failed to initialize adapter: BetfairDataScientistAdapter", exc_info=True)
+
+            self.logger.info(f"{len(self.adapters)} adapters initialized successfully.")
 
             self.logger.info("Initializing HTTP client...")
             self.http_limits = httpx.Limits(
@@ -47,41 +73,6 @@ class FortunaEngine:
         except Exception:
             self.logger.critical("CRITICAL FAILURE during FortunaEngine initialization.", exc_info=True)
             raise
-
-    def _initialize_adapters(self) -> List[BaseAdapterV3]:
-        """Dynamically initializes all available adapters."""
-        adapters = []
-        adapter_classes = [
-            AtTheRacesAdapter, BetfairAdapter, BetfairGreyhoundAdapter, BrisnetAdapter,
-            DRFAdapter, EquibaseAdapter, FanDuelAdapter, GbgbApiAdapter,
-            GreyhoundAdapter, HarnessAdapter, HorseRacingNationAdapter, NYRABetsAdapter,
-            OddscheckerAdapter, PuntersAdapter, RacingAndSportsAdapter,
-            RacingAndSportsGreyhoundAdapter, RacingPostAdapter, RacingTVAdapter,
-            SportingLifeAdapter, TabAdapter, TheRacingApiAdapter, TimeformAdapter,
-            TwinSpiresAdapter, TVGAdapter, XpressbetAdapter
-        ]
-        for adapter_class in adapter_classes:
-            try:
-                # Handle adapters with special initialization
-                if adapter_class is BetfairDataScientistAdapter:
-                    adapters.append(BetfairDataScientistAdapter(
-                        model_name="ThoroughbredModel",
-                        url="https://betfair-data-supplier-prod.herokuapp.com/api/widgets/kvs-ratings/datasets",
-                        config=self.config
-                    ))
-                elif adapter_class is PointsBetGreyhoundAdapter:
-                     # This is a hypothetical adapter, so it's initialized but may not be functional
-                    adapters.append(PointsBetGreyhoundAdapter(config=self.config))
-                elif adapter_class is UniversalAdapter:
-                    # This is a PoC adapter and is not expected to be functional
-                    # It requires a definition file, which we will ignore for now.
-                    self.logger.warning("UniversalAdapter is a proof-of-concept and will not be initialized.")
-                    continue
-                else:
-                    adapters.append(adapter_class(config=self.config))
-            except Exception:
-                self.logger.error(f"Failed to initialize adapter: {adapter_class.__name__}", exc_info=True)
-        return adapters
 
     async def close(self):
         await self.http_client.aclose()

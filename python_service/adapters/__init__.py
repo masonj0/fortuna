@@ -3,6 +3,7 @@
 # Import all adapter classes to make them available for dynamic loading.
 from .at_the_races_adapter import AtTheRacesAdapter
 from .betfair_adapter import BetfairAdapter
+from .betfair_datascientist_adapter import BetfairDataScientistAdapter
 from .betfair_greyhound_adapter import BetfairGreyhoundAdapter
 from .brisnet_adapter import BrisnetAdapter
 from .drf_adapter import DRFAdapter
@@ -14,6 +15,7 @@ from .harness_adapter import HarnessAdapter
 from .horseracingnation_adapter import HorseRacingNationAdapter
 from .nyrabets_adapter import NYRABetsAdapter
 from .oddschecker_adapter import OddscheckerAdapter
+from .pointsbet_greyhound_adapter import PointsBetGreyhoundAdapter
 from .punters_adapter import PuntersAdapter
 from .racing_and_sports_adapter import RacingAndSportsAdapter
 from .racing_and_sports_greyhound_adapter import RacingAndSportsGreyhoundAdapter
@@ -26,6 +28,7 @@ from .the_racing_api_adapter import TheRacingApiAdapter
 from .timeform_adapter import TimeformAdapter
 from .tvg_adapter import TVGAdapter
 from .twinspires_adapter import TwinSpiresAdapter
+from .universal_adapter import UniversalAdapter
 from .xpressbet_adapter import XpressbetAdapter
 
 # Define the public API for the adapters package, making it easy for the
@@ -33,6 +36,7 @@ from .xpressbet_adapter import XpressbetAdapter
 __all__ = [
     "AtTheRacesAdapter",
     "BetfairAdapter",
+    "BetfairDataScientistAdapter",
     "BetfairGreyhoundAdapter",
     "BrisnetAdapter",
     "DRFAdapter",
@@ -44,6 +48,7 @@ __all__ = [
     "HorseRacingNationAdapter",
     "NYRABetsAdapter",
     "OddscheckerAdapter",
+    "PointsBetGreyhoundAdapter",
     "PuntersAdapter",
     "RacingAndSportsAdapter",
     "RacingAndSportsGreyhoundAdapter",
@@ -56,5 +61,6 @@ __all__ = [
     "TimeformAdapter",
     "TVGAdapter",
     "TwinSpiresAdapter",
+    "UniversalAdapter",
     "XpressbetAdapter",
 ]

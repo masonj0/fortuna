@@ -9,31 +9,12 @@ from python_service.models import Race, Runner, OddsData, TipsheetRace, Aggregat
 from python_service.api import app, get_settings
 from python_service.config import Settings
 
-# --- Test Configuration ---
-
-def get_test_settings():
-    """Provides a mock settings object with all required API keys for testing."""
-    return Settings(
-        API_KEY="test_api_key",
-        THE_RACING_API_KEY="test_racing_api_key",
-        BETFAIR_APP_KEY="test_betfair_key",
-        BETFAIR_USERNAME="test_user",
-        BETFAIR_PASSWORD="test_password",
-        TVG_API_KEY="test_tvg_key",
-    )
-
-app.dependency_overrides[get_settings] = get_test_settings
-
-
 # --- Fixtures ---
 
 from fastapi.testclient import TestClient
 
-@pytest.fixture
-def client():
-    """Provides a TestClient for the FastAPI app, now with overridden settings."""
-    with TestClient(app) as c:
-        yield c
+# The client fixture is now correctly sourced from conftest.py,
+# which handles the settings override globally.
 
 # --- API Tests ---
 

@@ -1,12 +1,12 @@
 # python_service/adapters/betfair_auth_mixin.py
 
 import asyncio
-from datetime import datetime
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Optional
 
 import httpx
 import structlog
+from ..credentials_manager import SecureCredentialsManager
 
 log = structlog.get_logger(__name__)
 
@@ -18,36 +18,40 @@ class BetfairAuthMixin:
     token_expiry: Optional[datetime] = None
     _auth_lock = asyncio.Lock()
 
-    async def _authenticate(self, http_client: httpx.AsyncClient):
+    async def _authenticate(self):
+        """
+        Authenticates with Betfair using credentials from the system's credential manager,
+        ensuring the session token is valid and refreshing it if necessary.
+        """
         async with self._auth_lock:
-            # Re-check token after acquiring lock
             if self.session_token and self.token_expiry and self.token_expiry > (
                 datetime.now() + timedelta(minutes=5)
             ):
                 return
 
-            if not all(
-                [self.app_key, self.config.BETFAIR_USERNAME, self.config.BETFAIR_PASSWORD]
-            ):
-                raise ValueError("Betfair credentials not fully configured.")
+            log.info("Attempting to authenticate with Betfair...")
+            username, password = SecureCredentialsManager.get_betfair_credentials()
+
+            if not all([self.config.BETFAIR_APP_KEY, username, password]):
+                raise ValueError("Betfair credentials not fully configured in credential manager.")
 
             auth_url = "https://identitysso.betfair.com/api/login"
             headers = {
-                "X-Application": self.app_key,
+                "X-Application": self.config.BETFAIR_APP_KEY,
                 "Content-Type": "application/x-www-form-urlencoded",
             }
-            payload = f"username={self.config.BETFAIR_USERNAME}&password={self.config.BETFAIR_PASSWORD}"
+            payload = f"username={username}&password={password}"
 
-            log.info(f"{self.__class__.__name__}: Authenticating...")
-            response = await http_client.post(
+            response = await self.http_client.post(
                 auth_url, headers=headers, content=payload, timeout=20
             )
             response.raise_for_status()
             data = response.json()
+
             if data.get("status") == "SUCCESS":
                 self.session_token = data.get("token")
                 self.token_expiry = datetime.now() + timedelta(hours=3)
+                log.info("Betfair authentication successful.")
             else:
-                raise ConnectionError(
-                    f"Betfair authentication failed: {data.get('error')}"
-                )
+                log.error("Betfair authentication failed", error=data.get('error'))
+                raise ConnectionError(f"Betfair authentication failed: {data.get('error')}")
