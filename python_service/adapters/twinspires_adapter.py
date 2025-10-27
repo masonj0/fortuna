@@ -2,17 +2,14 @@
 from datetime import datetime
 from typing import Any, List
 
-from bs4 import BeautifulSoup
-from dateutil.parser import parse
-
-from ..models import OddsData, Race, Runner
-from ..utils.odds import parse_odds_to_decimal
+from ..models import Race
 from .base_v3 import BaseAdapterV3
 
 
 class TwinSpiresAdapter(BaseAdapterV3):
     """
-    Adapter for twinspires.com, migrated to BaseAdapterV3.
+    Adapter for twinspires.com.
+    This is a placeholder for a full implementation using the discovered JSON API.
     """
     SOURCE_NAME = "TwinSpires"
     BASE_URL = "https://www.twinspires.com"
@@ -21,64 +18,64 @@ class TwinSpiresAdapter(BaseAdapterV3):
         super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
 
     async def _fetch_data(self, date: str) -> Any:
-        """Fetches the raw HTML from the TwinSpires race page."""
-        # Note: This adapter's URL structure might be more complex and require discovery.
-        # This is a simplified placeholder based on the original implementation.
-        url = f"/races/{date}"
-        response = await self.make_request(self.http_client, "GET", url)
-        return {"html": response.text, "date": date} if response else None
+        """
+        TODO: Implement the logic to fetch data from the Twinspires JSON API.
+
+        *** JB's Discoveries for the next agent to implement ***
+
+        The goal is to reverse-engineer the site's API to get a list of all tracks
+        for a given day, then get the race card for each track, and finally the
+        runner data for each race.
+
+        1.  **Main Page (potential source for a list of all tracks):**
+            - https://www.twinspires.com/bet/todays-races/
+
+        2.  **Example Track URLs (these seem to load the race card data):**
+            - Greyhound: https://www.twinspires.com/adw/todays-tracks/cp1/Greyhound/races?affid=0
+            - Thoroughbred: https://www.twinspires.com/adw/todays-tracks/fl/Thoroughbred/races?affid=0
+            - Harness: https://www.twinspires.com/adw/todays-tracks/mr/Harness/races?affid=0
+
+        3.  **Example Race Card JSON (for Central Park):**
+            This data is likely fetched by one of the track URLs above. Note that this
+            JSON does NOT contain the runner (horse/greyhound) data, so another API
+            call will be needed to get the entries for each race.
+
+            ```json
+            [
+                {"raceType":"","purse":"0","maxClaimPrice":"0","grade":"","raceNumber":1,"raceDate":"2025-10-27","postTime":"2025-10-27T10:36:17-04:00","postTimeStamp":1761575777000,"mtp":0,"status":"Closed","distance":"303 Y","distanceLong":"303 YARDS","ageRestrictions":"","sexRestrictions":"","wagers":"Win Place Exacta Quinella Trifecta Central Park","country":"ENG","carryover":[],"formattedPurse":"$0","hasSilks":false,"displayRaceName":"","displayRaceDescription":"","surfaceConditionMap":{},"hasBrisPick":false,"currentRace":false,"hasExpertPick":false},
+                {"raceType":"","purse":"0","maxClaimPrice":"0","grade":"","raceNumber":2,"raceDate":"2025-10-27","postTime":"2025-10-27T10:54:15-04:00","postTimeStamp":1761576855000,"mtp":0,"status":"Closed","distance":"537 Y","distanceLong":"537 YARDS","ageRestrictions":"","sexRestrictions":"","wagers":"Win Place Exacta Quinella Trifecta Central Park","country":"ENG","carryover":[],"formattedPurse":"$0","hasSilks":false,"displayRaceName":"","displayRaceDescription":"","surfaceConditionMap":{},"hasBrisPick":false,"currentRace":false,"hasExpertPick":false},
+                {"raceType":"","purse":"0","maxClaimPrice":"0","grade":"","raceNumber":3,"raceDate":"2025-10-27","postTime":"2025-10-27T11:13:16-04:00","postTimeStamp":1761577996000,"mtp":0,"status":"Closed","distance":"303 Y","distanceLong":"303 YARDS","ageRestrictions":"","sexRestrictions":"","wagers":"Win Place Exacta Quinella Trifecta Central Park","country":"ENG","carryover":[],"formattedPurse":"$0","hasSilks":false,"displayRaceName":"","displayRaceDescription":"","surfaceConditionMap":{},"hasBrisPick":false,"currentRace":false,"hasExpertPick":false},
+                {"raceType":"","purse":"0","maxClaimPrice":"0","grade":"","raceNumber":4,"raceDate":"2025-10-27","postTime":"2025-10-27T11:32:24-04:00","postTimeStamp":1761579144000,"mtp":0,"status":"Closed","distance":"303 Y","distanceLong":"303 YARDS","ageRestrictions":"","sexRestrictions":"","wagers":"Win Place Exacta Quinella Trifecta Central Park","country":"ENG","carryover":[],"formattedPurse":"$0","hasSilks":false,"displayRaceName":"","displayRaceDescription":"","surfaceConditionMap":{},"hasBrisPick":false,"currentRace":false,"hasExpertPick":false},
+                {"raceType":"","purse":"0","maxClaimPrice":"0","grade":"","raceNumber":5,"raceDate":"2025-10-27","postTime":"2025-10-27T11:51:15-04:00","postTimeStamp":1761580275000,"mtp":0,"status":"Closed","distance":"537 Y","distanceLong":"537 YARDS","ageRestrictions":"","sexRestrictions":"","wagers":"Win Place Exacta Quinella Trifecta Central Park","country":"ENG","carryover":[],"formattedPurse":"$0","hasSilks":false,"displayRaceName":"","displayRaceDescription":"","surfaceConditionMap":{},"hasBrisPick":false,"currentRace":false,"hasExpertPick":false},
+                {"raceType":"","purse":"0","maxClaimPrice":"0","grade":"","raceNumber":6,"raceDate":"2025-10-27","postTime":"2025-10-27T12:09:15-04:00","postTimeStamp":1761581355000,"mtp":0,"status":"Closed","distance":"303 Y","distanceLong":"303 YARDS","ageRestrictions":"","sexRestrictions":"","wagers":"Win Place Exacta Quinella Trifecta Central Park","country":"ENG","carryover":[],"formattedPurse":"$0","hasSilks":false,"displayRaceName":"","displayRaceDescription":"","surfaceConditionMap":{},"hasBrisPick":false,"currentRace":false,"hasExpertPick":false},
+                {"raceType":"","purse":"0","maxClaimPrice":"0","grade":"","raceNumber":7,"raceDate":"2025-10-27","postTime":"2025-10-27T12:28:16-04:00","postTimeStamp":1761582496000,"mtp":0,"status":"Closed","distance":"537 Y","distanceLong":"537 YARDS","ageRestrictions":"","sexRestrictions":"","wagers":"Win Place Exacta Quinella Trifecta Central Park","country":"ENG","carryover":[],"formattedPurse":"$0","hasSilks":false,"displayRaceName":"","displayRaceDescription":"","surfaceConditionMap":{},"hasBrisPick":false,"currentRace":false,"hasExpertPick":false},
+                {"raceType":"","purse":"0","maxClaimPrice":"0","grade":"","raceNumber":8,"raceDate":"2025-10-27","postTime":"2025-10-27T12:47:20-04:00","postTimeStamp":1761583640000,"mtp":0,"status":"Closed","distance":"303 Y","distanceLong":"303 YARDS","ageRestrictions":"","sexRestrictions":"","wagers":"Win Place Exacta Quinella Trifecta Central Park","country":"ENG","carryover":[],"formattedPurse":"$0","hasSilks":false,"displayRaceName":"","displayRaceDescription":"","surfaceConditionMap":{},"hasBrisPick":false,"currentRace":false,"hasExpertPick":false},
+                {"raceType":"","purse":"0","maxClaimPrice":"0","grade":"","raceNumber":9,"raceDate":"2025-10-27","postTime":"2025-10-27T13:06:22-04:00","postTimeStamp":1761584782000,"mtp":0,"status":"Closed","distance":"303 Y","distanceLong":"303 YARDS","ageRestrictions":"","sexRestrictions":"","wagers":"Win Place Exacta Quinella Trifecta Central Park","country":"ENG","carryover":[],"formattedPurse":"$0","hasSilks":false,"displayRaceName":"","displayRaceDescription":"","surfaceConditionMap":{},"hasBrisPick":false,"currentRace":false,"hasExpertPick":false},
+                {"raceType":"","purse":"0","maxClaimPrice":"0","grade":"","raceNumber":10,"raceDate":"2025-10-27","postTime":"2025-10-27T13:23:59-04:00","postTimeStamp":1761585839000,"mtp":3,"status":"Open","distance":"537 Y","distanceLong":"537 YARDS","ageRestrictions":"","sexRestrictions":"","wagers":"Win Place Exacta Quinella Trifecta Central Park","country":"ENG","carryover":[],"formattedPurse":"$0","hasSilks":false,"displayRaceName":"","displayRaceDescription":"","surfaceConditionMap":{},"hasBrisPick":false,"currentRace":true,"hasExpertPick":false},
+                {"raceType":"","purse":"0","maxClaimPrice":"0","grade":"","raceNumber":11,"raceDate":"2025-10-27","postTime":"2025-10-27T13:43:00-04:00","postTimeStamp":1761586980000,"mtp":99,"status":"Open","distance":"303 Y","distanceLong":"303 YARDS","ageRestrictions":"","sexRestrictions":"","wagers":"Win Place Exacta Quinella Trifecta Central Park","country":"ENG","carryover":[],"formattedPurse":"$0","hasSilks":false,"displayRaceName":"","displayRaceDescription":"","surfaceConditionMap":{},"hasBrisPick":false,"currentRace":false,"hasExpertPick":false}
+            ]
+            ```
+        """
+        self.logger.info("Fetching data for TwinSpires")
+        # Placeholder: returning None as the actual implementation is pending.
+        return None
 
     def _parse_races(self, raw_data: Any) -> List[Race]:
-        """Parses the raw HTML into a list of Race objects."""
-        if not raw_data or not raw_data.get("html"):
+        """
+        TODO: Implement the logic to parse the JSON data from the Twinspires API.
+        """
+        if not raw_data:
             return []
 
-        html = raw_data["html"]
-        race_date = raw_data["date"]
-        soup = BeautifulSoup(html, "html.parser")
+        # Placeholder: returning an empty list as the actual implementation is pending.
+        return []
 
-        all_races = []
-        # Assuming a page can have multiple race cards
-        for race_card in soup.select("#race-card"):
-            try:
-                race_title_parts = race_card.select_one("h1").text.split(" - ")
-                race_number = int(race_title_parts[0].split(" ")[1])
-                venue = race_title_parts[1]
-
-                # Use the date from fetch, not from parsed title
-                start_time = self._parse_start_time(race_card, race_date)
-
-                runners = []
-                for runner_item in race_card.select(".runners-list .runner"):
-                    if "scratched" in runner_item.get("class", []):
-                        continue
-
-                    number = int(runner_item.select_one(".runner-number").text)
-                    name = runner_item.select_one(".runner-name").text
-                    odds_str = runner_item.select_one(".runner-odds").text
-
-                    odds_decimal = parse_odds_to_decimal(odds_str)
-                    odds = {}
-                    if odds_decimal:
-                        odds[self.source_name] = OddsData(win=odds_decimal, source=self.source_name, last_updated=datetime.now())
-
-                    runners.append(Runner(number=number, name=name, odds=odds, scratched=False))
-
-                race = Race(
-                    id=f"ts_{venue.replace(' ', '').lower()}_{race_date}_{race_number}",
-                    venue=venue,
-                    race_number=race_number,
-                    start_time=start_time,
-                    runners=runners,
-                    source=self.source_name,
-                )
-                all_races.append(race)
-            except (AttributeError, ValueError, IndexError):
-                self.logger.warning("Failed to parse a race on TwinSpires, skipping.", exc_info=True)
-                continue
-        return all_races
-
-    def _parse_start_time(self, soup: "BeautifulSoup", race_date: str) -> datetime:
-        post_time_str = soup.select_one(".post-time").text.replace("Post Time: ", "").strip()
-        full_datetime_str = f"{race_date} {post_time_str}"
-        return parse(full_datetime_str)
+    def get_races(self, date: str) -> List[Race]:
+        """
+        Orchestrates the fetching and parsing of race data for a given date.
+        This method will be called by the FortunaEngine.
+        """
+        # This is a synchronous wrapper for the async orchestrator
+        # The actual implementation will use the async methods.
+        self.logger.info(f"Getting races for {date} from {self.SOURCE_NAME}")
+        return []
