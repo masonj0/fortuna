@@ -1,57 +1,60 @@
 # python_service/adapters/racingpost_adapter.py
 import asyncio
 from datetime import datetime
-from typing import Any, List, Optional
-import httpx
+from typing import Any, List
+
 from selectolax.parser import HTMLParser
 
-from ..core.exceptions import AdapterParsingError
 from ..models import OddsData, Race, Runner
 from ..utils.odds import parse_odds_to_decimal
 from ..utils.text import clean_text, normalize_venue_name
-from .base import BaseAdapter
+from .base_v3 import BaseAdapterV3
 
 
-class RacingPostAdapter(BaseAdapter):
+class RacingPostAdapter(BaseAdapterV3):
     """
-    A production-ready adapter for scraping Racing Post racecards.
-    This adapter now follows the modern fetch/parse pattern.
+    Adapter for scraping Racing Post racecards, migrated to BaseAdapterV3.
     """
+    SOURCE_NAME = "RacingPost"
+    BASE_URL = "https://www.racingpost.com"
 
     def __init__(self, config=None):
-        super().__init__(source_name="RacingPost", base_url="https://www.racingpost.com", config=config)
+        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
 
-    async def _fetch_data(self, http_client: httpx.AsyncClient, date: str) -> Any:
+    async def _fetch_data(self, date: str) -> Any:
         """
         Fetches the raw HTML content for all races on a given date.
-        This involves a two-step process: first get the index of race URLs,
-        then fetch the content of each URL concurrently.
         """
-        # Step 1: Get all individual race card URLs
         index_url = f"/racecards/{date}"
-        index_response = await self.make_request(http_client, "GET", index_url, headers=self._get_headers())
+        index_response = await self.make_request(self.http_client, "GET", index_url, headers=self._get_headers())
+        if not index_response:
+            self.logger.warning("Failed to fetch RacingPost index page", url=index_url)
+            return None
+
         index_parser = HTMLParser(index_response.text)
         links = index_parser.css('a[data-test-selector^="RC-meetingItem__link_race"]')
         race_card_urls = [link.attributes['href'] for link in links]
 
-        # Step 2: Fetch the HTML for each race card URL concurrently
         async def fetch_single_html(url: str):
-            response = await self.make_request(http_client, "GET", url, headers=self._get_headers())
-            return response.text
+            response = await self.make_request(self.http_client, "GET", url, headers=self._get_headers())
+            return response.text if response else ""
 
         tasks = [fetch_single_html(url) for url in race_card_urls]
         html_contents = await asyncio.gather(*tasks)
-
-        # Pass along the date, as it's needed for parsing the start_time
         return {"date": date, "html_contents": html_contents}
 
     def _parse_races(self, raw_data: Any) -> List[Race]:
         """Parses a list of raw HTML strings into Race objects."""
+        if not raw_data or not raw_data.get("html_contents"):
+            return []
+
         date = raw_data["date"]
         html_contents = raw_data["html_contents"]
         all_races: List[Race] = []
 
         for html in html_contents:
+            if not html:
+                continue
             try:
                 parser = HTMLParser(html)
                 venue_raw = parser.css_first('a[data-test-selector="RC-course__name"]').text(strip=True)
@@ -72,9 +75,8 @@ class RacingPostAdapter(BaseAdapter):
                         source=self.source_name,
                     )
                     all_races.append(race)
-            except (AttributeError, ValueError) as e:
-                self.logger.error("Failed to parse race from HTML content.", exc_info=True)
-                # Continue parsing other races
+            except (AttributeError, ValueError):
+                self.logger.error("Failed to parse RacingPost race from HTML content.", exc_info=True)
                 continue
         return all_races
 
@@ -85,7 +87,7 @@ class RacingPostAdapter(BaseAdapter):
         for i, link in enumerate(time_links):
             if link.text(strip=True) == time_str_to_find:
                 return i + 1
-        return 1  # Fallback
+        return 1
 
     def _parse_runners(self, parser: HTMLParser) -> list[Runner]:
         """Parses all runners from a single race card page."""
@@ -118,7 +120,7 @@ class RacingPostAdapter(BaseAdapter):
 
                 runners.append(Runner(number=number, name=name, odds=odds, scratched=scratched))
             except (ValueError, AttributeError):
-                self.logger.warning("Could not parse runner, skipping.", parser=parser)
+                self.logger.warning("Could not parse RacingPost runner, skipping.", parser=parser)
                 continue
         return runners
 

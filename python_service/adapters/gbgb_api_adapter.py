@@ -2,29 +2,26 @@
 
 from datetime import datetime
 from typing import Any, Dict, List, Optional
-import httpx
-import structlog
-from ..core.exceptions import AdapterParsingError
+
 from ..models import OddsData, Race, Runner
 from ..utils.odds import parse_odds_to_decimal
-from .base import BaseAdapter
-
-log = structlog.get_logger(__name__)
+from .base_v3 import BaseAdapterV3
 
 
-class GbgbApiAdapter(BaseAdapter):
+class GbgbApiAdapter(BaseAdapterV3):
     """
-    Adapter for the undocumented JSON API for the Greyhound Board of Great Britain.
-    This adapter now follows the modern fetch/parse pattern.
+    Adapter for the Greyhound Board of Great Britain API, migrated to BaseAdapterV3.
     """
+    SOURCE_NAME = "GBGB"
+    BASE_URL = "https://api.gbgb.org.uk/api/"
 
-    def __init__(self, config):
-        super().__init__(source_name="GBGB", base_url="https://api.gbgb.org.uk/api/", config=config)
+    def __init__(self, config=None):
+        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
 
-    async def _fetch_data(self, http_client: httpx.AsyncClient, date: str) -> Optional[List[Dict[str, Any]]]:
+    async def _fetch_data(self, date: str) -> Optional[List[Dict[str, Any]]]:
         """Fetches the raw meeting data from the GBGB API."""
         endpoint = f"results/meeting/{date}"
-        response = await self.make_request(http_client, "GET", endpoint)
+        response = await self.make_request(self.http_client, "GET", endpoint)
         return response.json() if response else None
 
     def _parse_races(self, meetings_data: List[Dict[str, Any]]) -> List[Race]:
@@ -38,21 +35,17 @@ class GbgbApiAdapter(BaseAdapter):
             for race_data in meeting.get("races", []):
                 try:
                     all_races.append(self._parse_race(race_data, track_name))
-                except (KeyError, TypeError) as e:
-                    log.error(
-                        f"{self.source_name}: Error parsing race",
+                except (KeyError, TypeError):
+                    self.logger.error(
+                        "Error parsing GBGB race",
                         race_id=race_data.get("raceId"),
-                        error=str(e),
                         exc_info=True,
                     )
-                    # Propagate the error to be handled by the base class orchestrator
-                    raise AdapterParsingError(
-                        self.source_name,
-                        f"Failed to parse race: {race_data.get('raceId')}",
-                    ) from e
+                    continue
         return all_races
 
     def _parse_race(self, race_data: Dict[str, Any], track_name: str) -> Race:
+        """Parses a single race object from the API response."""
         return Race(
             id=f"gbgb_{race_data['raceId']}",
             venue=track_name,
@@ -65,6 +58,7 @@ class GbgbApiAdapter(BaseAdapter):
         )
 
     def _parse_runners(self, runners_data: List[Dict[str, Any]]) -> List[Runner]:
+        """Parses a list of runner dictionaries into Runner objects."""
         runners = []
         for runner_data in runners_data:
             try:
@@ -84,7 +78,6 @@ class GbgbApiAdapter(BaseAdapter):
                     )
                 )
             except (KeyError, TypeError):
-                log.warning(f"{self.source_name}: Error parsing runner", runner_name=runner_data.get("dogName"))
-                # Skip runner, but don't fail the whole race
+                self.logger.warning("Error parsing GBGB runner, skipping.", runner_name=runner_data.get("dogName"))
                 continue
         return runners

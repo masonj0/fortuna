@@ -3,43 +3,33 @@ import re
 from datetime import datetime
 from typing import Any, List
 
-import httpx
-
-from ..core.exceptions import AdapterAuthError
-from ..core.exceptions import AdapterParsingError
-from ..models import Race
-from ..models import Runner
-from .base import BaseAdapter
+from ..models import Race, Runner
+from .base_v3 import BaseAdapterV3
 from .betfair_auth_mixin import BetfairAuthMixin
 
 
-class BetfairGreyhoundAdapter(BetfairAuthMixin, BaseAdapter):
-    """
-    Adapter for fetching greyhound racing data from the Betfair Exchange API.
-    This adapter now follows the modern fetch/parse pattern.
-    """
+class BetfairGreyhoundAdapter(BetfairAuthMixin, BaseAdapterV3):
+    """Adapter for fetching greyhound racing data from the Betfair Exchange API, using V3 architecture."""
 
-    def __init__(self, config: dict):
-        super().__init__(
-            source_name="BetfairGreyhound",
-            base_url="https://api.betfair.com/exchange/betting/rest/v1.0/",
-            config=config,
-        )
+    SOURCE_NAME = "BetfairGreyhounds"
+    BASE_URL = "https://api.betfair.com/exchange/betting/rest/v1.0/"
 
-    async def _fetch_data(self, http_client: httpx.AsyncClient, date: str) -> Any:
-        """Fetches the raw market catalogue for greyhound races from the Betfair API."""
-        await self._authenticate(http_client)
+    async def _fetch_data(self, date: str) -> Any:
+        """Fetches the raw market catalogue for greyhound races on a given date."""
+        await self._authenticate()
         if not self.session_token:
-            raise AdapterAuthError(self.source_name, "Authentication failed, cannot fetch data.")
+            self.logger.error("Authentication failed, cannot fetch data.")
+            return None
 
         start_time, end_time = self._get_datetime_range(date)
-        response = await self.make_request(
-            http_client=http_client,
+
+        return await self.make_request(
+            self.http_client,
             method="post",
-            url="listMarketCatalogue/",
+            url=f"{self.BASE_URL}listMarketCatalogue/",
             json={
                 "filter": {
-                    "eventTypeIds": ["4339"],
+                    "eventTypeIds": ["4339"],  # Greyhound Racing
                     "marketCountries": ["GB", "IE", "AU"],
                     "marketTypeCodes": ["WIN"],
                     "marketStartTime": {"from": start_time.isoformat(), "to": end_time.isoformat()},
@@ -48,7 +38,6 @@ class BetfairGreyhoundAdapter(BetfairAuthMixin, BaseAdapter):
                 "marketProjection": ["EVENT", "RUNNER_DESCRIPTION"],
             },
         )
-        return response.json()
 
     def _parse_races(self, raw_data: Any) -> List[Race]:
         """Parses the raw market catalogue into a list of Race objects."""
@@ -59,11 +48,9 @@ class BetfairGreyhoundAdapter(BetfairAuthMixin, BaseAdapter):
         for market in raw_data:
             try:
                 races.append(self._parse_race(market))
-            except (KeyError, TypeError) as e:
+            except (KeyError, TypeError):
                 self.logger.warning("Failed to parse a Betfair Greyhound market.", exc_info=True, market=market)
-                raise AdapterParsingError(
-                    self.source_name, f"Failed to parse market: {market.get('marketId')}"
-                ) from e
+                continue
         return races
 
     def _parse_race(self, market: dict) -> Race:

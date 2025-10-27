@@ -1,38 +1,29 @@
-#!/usr/bin/env python3
-# This file was generated from the canonical adapter template.
-from datetime import datetime
-from typing import Any
-from typing import Dict
-from typing import List
-
-import httpx
-import structlog
+# python_service/adapters/horseracingnation_adapter.py
+from typing import Any, List
 
 from ..models import Race
-from .base import BaseAdapter
-
-log = structlog.get_logger(__name__)
+from .base_v3 import BaseAdapterV3
 
 
-class HorseRacingNationAdapter(BaseAdapter):
-    """Adapter for horseracingnation.com."""
+class HorseRacingNationAdapter(BaseAdapterV3):
+    """
+    Adapter for horseracingnation.com.
+    This adapter is a non-functional stub and has not been implemented.
+    """
+    SOURCE_NAME = "HorseRacingNation"
+    BASE_URL = "https://www.horseracingnation.com"
 
-    def __init__(self, config):
-        super().__init__(source_name="HorseRacingNation", base_url="https://www.horseracingnation.com")
+    def __init__(self, config=None):
+        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
 
-    async def fetch_races(self, date: str, http_client: httpx.AsyncClient) -> Dict[str, Any]:
-        start_time = datetime.now()
-        log.warning("HorseRacingNationAdapter.fetch_races is a stub.")
-        return self._format_response([], start_time)
+    async def _fetch_data(self, date: str) -> Any:
+        """This is a stub and does not fetch any data."""
+        self.logger.warning(
+            f"{self.source_name} is a non-functional stub and has not been implemented. "
+            "It will not fetch any data."
+        )
+        return None
 
-    def _format_response(self, races: List[Race], start_time: datetime, **kwargs) -> Dict[str, Any]:
-        return {
-            "races": [],
-            "source_info": {
-                "name": self.source_name,
-                "status": "SUCCESS",
-                "races_fetched": 0,
-                "error_message": "Not Implemented",
-                "fetch_duration": (datetime.now() - start_time).total_seconds(),
-            },
-        }
+    def _parse_races(self, raw_data: Any) -> List[Race]:
+        """This is a stub and does not parse any data."""
+        return []
