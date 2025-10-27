@@ -1,50 +1,38 @@
-# python_service/adapters/theracingapi_adapter.py
+# python_service/adapters/the_racing_api_adapter.py
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Any
-from typing import Dict
-from typing import List
-
-import httpx
-import structlog
+from typing import Any, Dict, List
 
 from ..core.exceptions import AdapterConfigError
-from ..models import OddsData
-from ..models import Race
-from ..models import Runner
-from .base import BaseAdapter
-
-log = structlog.get_logger(__name__)
+from ..models import OddsData, Race, Runner
+from .base_v3 import BaseAdapterV3
 
 
-class TheRacingApiAdapter(BaseAdapter):
+class TheRacingApiAdapter(BaseAdapterV3):
     """
-    Adapter for the high-value JSON-based The Racing API.
-    This adapter now follows the modern fetch/parse pattern.
+    Adapter for The Racing API, migrated to BaseAdapterV3.
     """
+    SOURCE_NAME = "TheRacingAPI"
+    BASE_URL = "https://api.theracingapi.com/v1/"
 
-    def __init__(self, config):
-        super().__init__(
-            source_name="TheRacingAPI",
-            base_url="https://api.theracingapi.com/v1/",
-            config=config,
-        )
+    def __init__(self, config=None):
+        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
         if not hasattr(config, "THE_RACING_API_KEY") or not config.THE_RACING_API_KEY:
             raise AdapterConfigError(self.source_name, "THE_RACING_API_KEY is not configured.")
         self.api_key = config.THE_RACING_API_KEY
 
-    async def _fetch_data(self, http_client: httpx.AsyncClient, date: str) -> Dict[str, Any]:
+    async def _fetch_data(self, date: str) -> Dict[str, Any]:
         """Fetches the raw racecard data from The Racing API."""
         endpoint = f"racecards?date={date}&course=all&region=gb,ire"
         headers = {"Authorization": f"Bearer {self.api_key}"}
-        response = await self.make_request(http_client, "GET", endpoint, headers=headers)
-        return response.json()
+        response = await self.make_request(self.http_client, "GET", endpoint, headers=headers)
+        return response.json() if response else None
 
     def _parse_races(self, raw_data: Dict[str, Any]) -> List[Race]:
         """Parses the raw JSON response into a list of Race objects."""
         if not raw_data or "racecards" not in raw_data:
-            self.logger.warning("'racecards' key missing in API response.")
+            self.logger.warning("'racecards' key missing in TheRacingAPI response.")
             return []
 
         races = []
@@ -63,8 +51,12 @@ class TheRacingApiAdapter(BaseAdapter):
                     distance=race_data.get("distance_f"),
                 )
                 races.append(race)
-            except Exception as e:
-                self.logger.error("Error parsing race", race_id=race_data.get("race_id"), error=str(e), exc_info=True)
+            except Exception:
+                self.logger.error(
+                    "Error parsing TheRacingAPI race",
+                    race_id=race_data.get("race_id"),
+                    exc_info=True
+                )
         return races
 
     def _parse_runners(self, runners_data: List[Dict[str, Any]]) -> List[Runner]:
@@ -87,8 +79,10 @@ class TheRacingApiAdapter(BaseAdapter):
                         trainer=runner_data.get("trainer"),
                     )
                 )
-            except Exception as e:
+            except Exception:
                 self.logger.error(
-                    "Error parsing runner", runner_name=runner_data.get("horse"), error=str(e), exc_info=True
+                    "Error parsing TheRacingAPI runner",
+                    runner_name=runner_data.get("horse"),
+                    exc_info=True
                 )
         return runners

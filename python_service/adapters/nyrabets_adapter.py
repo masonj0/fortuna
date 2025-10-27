@@ -1,24 +1,29 @@
-#!/usr/bin/env python3
-# This file was generated from the canonical adapter template.
-from datetime import datetime
-from typing import Any
-from typing import Dict
+# python_service/adapters/nyrabets_adapter.py
+from typing import Any, List
 
-import httpx
-import structlog
-
-from .base import BaseAdapter
-
-log = structlog.get_logger(__name__)
+from ..models import Race
+from .base_v3 import BaseAdapterV3
 
 
-class NYRABetsAdapter(BaseAdapter):
-    """Adapter for nyrabets.com."""
+class NYRABetsAdapter(BaseAdapterV3):
+    """
+    Adapter for nyrabets.com.
+    This adapter is a non-functional stub and has not been implemented.
+    """
+    SOURCE_NAME = "NYRABets"
+    BASE_URL = "https://nyrabets.com"
 
-    def __init__(self, config):
-        super().__init__(source_name="NYRABets", base_url="https://nyrabets.com")
+    def __init__(self, config=None):
+        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
 
-    async def fetch_races(self, date: str, http_client: httpx.AsyncClient) -> Dict[str, Any]:
-        start_time = datetime.now()
-        log.warning("NYRABetsAdapter.fetch_races is a stub.")
-        return self._format_response([], start_time, is_success=True, error_message="Not Implemented")
+    async def _fetch_data(self, date: str) -> Any:
+        """This is a stub and does not fetch any data."""
+        self.logger.warning(
+            f"{self.source_name} is a non-functional stub and has not been implemented. "
+            "It will not fetch any data."
+        )
+        return None
+
+    def _parse_races(self, raw_data: Any) -> List[Race]:
+        """This is a stub and does not parse any data."""
+        return []

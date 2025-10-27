@@ -2,22 +2,17 @@
 
 from datetime import datetime
 from io import StringIO
-from typing import List
+from typing import Any, List
 
-import httpx
 import pandas as pd
-
-from ..core.exceptions import AdapterParsingError
-from ..models import Race
-from ..models import Runner
+from ..models import Race, Runner
 from ..utils.text import normalize_course_name
-from .base import BaseAdapter
+from .base_v3 import BaseAdapterV3
 
 
-class BetfairDataScientistAdapter(BaseAdapter):
+class BetfairDataScientistAdapter(BaseAdapterV3):
     """
-    Adapter for the Betfair Data Scientist CSV models.
-    This adapter is instantiated dynamically by the engine for each configured model.
+    Adapter for the Betfair Data Scientist CSV models, migrated to BaseAdapterV3.
     """
     ADAPTER_NAME = "BetfairDataScientist"
 
@@ -26,15 +21,18 @@ class BetfairDataScientistAdapter(BaseAdapter):
         super().__init__(source_name=source_name, base_url=url, config=config)
         self.model_name = model_name
 
-    async def fetch_races(self, date: str, http_client: httpx.AsyncClient) -> List[Race]:
-        """Fetches and parses CSV data from the Betfair Data Scientist model endpoint."""
-        endpoint = self._build_endpoint(date)
+    async def _fetch_data(self, date: str) -> Any:
+        """Fetches the raw CSV data from the Betfair Data Scientist model endpoint."""
+        endpoint = f"?date={date}&presenter=RatingsPresenter&csv=true"
         self.logger.info(f"Fetching data from {self.base_url}{endpoint}")
+        response = await self.make_request(self.http_client, "GET", endpoint)
+        return StringIO(response.text) if response else None
 
-        response = await self.make_request(http_client, "GET", endpoint)
-
+    def _parse_races(self, raw_data: Any) -> List[Race]:
+        """Parses the raw CSV data into a list of Race objects."""
+        if not raw_data:
+            return []
         try:
-            raw_data = StringIO(response.text)
             df = pd.read_csv(raw_data)
             df = df.rename(
                 columns={
@@ -63,18 +61,13 @@ class BetfairDataScientistAdapter(BaseAdapter):
                     id=str(market_id),
                     venue=normalize_course_name(str(race_info.get("meeting_name", ""))),
                     race_number=int(race_info.get("race_number", 0)),
-                    # Note: The CSV does not provide a start time, using current time as a placeholder.
-                    start_time=datetime.now(),
+                    start_time=datetime.now(), # Placeholder, not provided in source
                     runners=runners,
                     source=self.source_name,
                 )
                 races.append(race)
             self.logger.info(f"Normalized {len(races)} races from {self.model_name}.")
             return races
-        except (pd.errors.ParserError, KeyError) as e:
-            self.logger.error("Failed to parse Betfair Data Scientist CSV.", error=str(e))
-            raise AdapterParsingError(self.source_name, "Failed to parse CSV response.") from e
-
-    def _build_endpoint(self, date: str) -> str:
-        """Constructs the query parameters for the CSV endpoint."""
-        return f"?date={date}&presenter=RatingsPresenter&csv=true"
+        except (pd.errors.ParserError, KeyError):
+            self.logger.error("Failed to parse Betfair Data Scientist CSV.", exc_info=True)
+            return []

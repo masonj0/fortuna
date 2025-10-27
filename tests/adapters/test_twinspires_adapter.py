@@ -1,10 +1,8 @@
 # tests/adapters/test_twinspires_adapter.py
 import pytest
-import respx
-import httpx
 from datetime import datetime
 from decimal import Decimal
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 from python_service.adapters.twinspires_adapter import TwinSpiresAdapter
 
 @pytest.fixture
@@ -17,21 +15,16 @@ def read_fixture(file_path):
         return f.read()
 
 @pytest.mark.asyncio
-@respx.mock
-async def test_twinspires_adapter_fetch_races_successfully(twinspires_adapter):
-    """Verify adapter correctly fetches and parses data."""
+async def test_twinspires_adapter_get_races_successfully(twinspires_adapter):
+    """Verify adapter correctly fetches and parses data via get_races."""
     mock_html = read_fixture('tests/fixtures/twinspires_sample.html')
     race_date = "2025-10-26"
 
-    # Mock the HTTP request that the adapter will make
-    mock_route = respx.get(f"{twinspires_adapter.base_url}/races/{race_date}").mock(
-        return_value=httpx.Response(200, text=mock_html)
-    )
+    # Patch the internal _fetch_data method to return the mock HTML
+    twinspires_adapter._fetch_data = AsyncMock(return_value={"html": mock_html, "date": race_date})
 
-    async with httpx.AsyncClient() as client:
-        races = await twinspires_adapter.fetch_races(race_date, client)
+    races = [race async for race in twinspires_adapter.get_races(race_date)]
 
-    assert mock_route.called
     assert len(races) == 1
     race = races[0]
 
@@ -49,3 +42,13 @@ async def test_twinspires_adapter_fetch_races_successfully(twinspires_adapter):
 
     # Check that the start time was parsed correctly
     assert race.start_time == datetime(2025, 10, 26, 16, 30)
+
+@pytest.mark.asyncio
+async def test_get_races_handles_fetch_failure(twinspires_adapter):
+    """Tests that get_races returns an empty list when _fetch_data returns None."""
+    race_date = "2025-10-26"
+    twinspires_adapter._fetch_data = AsyncMock(return_value=None)
+
+    races = [race async for race in twinspires_adapter.get_races(race_date)]
+
+    assert races == []
