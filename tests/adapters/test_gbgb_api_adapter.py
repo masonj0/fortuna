@@ -1,10 +1,9 @@
 # tests/adapters/test_gbgb_api_adapter.py
 
 import pytest
-import respx
-import httpx
 from datetime import date
 from decimal import Decimal
+from unittest.mock import AsyncMock
 
 from python_service.config import get_settings
 from python_service.adapters.gbgb_api_adapter import GbgbApiAdapter
@@ -15,16 +14,13 @@ def gbgb_adapter():
     return GbgbApiAdapter(config=get_settings())
 
 @pytest.mark.asyncio
-@respx.mock
-async def test_fetch_gbgb_races_successfully(gbgb_adapter):
+async def test_get_gbgb_races_successfully(gbgb_adapter):
     """
     SPEC: The GbgbApiAdapter should correctly parse a standard API response,
     creating Race and Runner objects with the correct data, including fractional odds.
     """
     # ARRANGE
     mock_date = date.today().strftime('%Y-%m-%d')
-    mock_url = f"{gbgb_adapter.base_url}results/meeting/{mock_date}"
-
     mock_api_response = [
         {
             "trackName": "Towcester",
@@ -36,36 +32,21 @@ async def test_fetch_gbgb_races_successfully(gbgb_adapter):
                     "raceTitle": "The October Sprint",
                     "raceDistance": 500,
                     "traps": [
-                        {
-                            "trapNumber": 1,
-                            "dogName": "Rapid Rover",
-                            "sp": "5/2"
-                        },
-                        {
-                            "trapNumber": 2,
-                            "dogName": "Speedy Sue",
-                            "sp": "EVS" # Test even money
-                        },
-                        {
-                            "trapNumber": 3,
-                            "dogName": "Lazy Larry",
-                            "sp": "10/1"
-                        }
-                    ]
+                        {"trapNumber": 1, "dogName": "Rapid Rover", "sp": "5/2"},
+                        {"trapNumber": 2, "dogName": "Speedy Sue", "sp": "EVS"},
+                        {"trapNumber": 3, "dogName": "Lazy Larry", "sp": "10/1"},
+                    ],
                 }
-            ]
+            ],
         }
     ]
-
-    respx.get(mock_url).mock(return_value=httpx.Response(200, json=mock_api_response))
+    gbgb_adapter._fetch_data = AsyncMock(return_value=mock_api_response)
 
     # ACT
-    async with httpx.AsyncClient() as client:
-        races = await gbgb_adapter.fetch_races(mock_date, client)
+    races = [race async for race in gbgb_adapter.get_races(mock_date)]
 
     # ASSERT
     assert len(races) == 1
-
     race = races[0]
     assert race.venue == "Towcester"
     assert race.race_number == 1
@@ -84,3 +65,18 @@ async def test_fetch_gbgb_races_successfully(gbgb_adapter):
     runner3 = next(r for r in race.runners if r.number == 3)
     assert runner3.name == "Lazy Larry"
     assert runner3.odds['GBGB'].win == Decimal("11.0")
+
+@pytest.mark.asyncio
+async def test_get_races_handles_fetch_failure(gbgb_adapter):
+    """
+    Tests that get_races returns an empty list when _fetch_data returns None.
+    """
+    # ARRANGE
+    mock_date = date.today().strftime('%Y-%m-%d')
+    gbgb_adapter._fetch_data = AsyncMock(return_value=None)
+
+    # ACT
+    races = [race async for race in gbgb_adapter.get_races(mock_date)]
+
+    # ASSERT
+    assert races == []

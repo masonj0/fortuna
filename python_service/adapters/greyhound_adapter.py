@@ -1,47 +1,37 @@
 # python_service/adapters/greyhound_adapter.py
 from datetime import datetime
 from decimal import Decimal
-from typing import Any
-from typing import Dict
-from typing import List
+from typing import Any, Dict, List
 
-import httpx
-import structlog
 from pydantic import ValidationError
 
 from ..core.exceptions import AdapterConfigError
-from ..core.exceptions import AdapterParsingError
-from ..models import OddsData
-from ..models import Race
-from ..models import Runner
-from .base import BaseAdapter
-
-log = structlog.get_logger(__name__)
+from ..models import OddsData, Race, Runner
+from .base_v3 import BaseAdapterV3
 
 
-class GreyhoundAdapter(BaseAdapter):
+class GreyhoundAdapter(BaseAdapterV3):
     """
-    Adapter for fetching Greyhound racing data. Activated by setting GREYHOUND_API_URL in .env.
-    This adapter now follows the modern fetch/parse pattern.
+    Adapter for fetching Greyhound racing data, migrated to BaseAdapterV3.
+    Activated by setting GREYHOUND_API_URL in .env.
     """
+    SOURCE_NAME = "Greyhound Racing"
 
-    def __init__(self, config):
-        if not config.GREYHOUND_API_URL:
-            # The base class init will use the source_name, so we must set it before raising
-            self.source_name = "Greyhound Racing"
-            raise AdapterConfigError(self.source_name, "GREYHOUND_API_URL is not configured.")
-        super().__init__(source_name="Greyhound Racing", base_url=config.GREYHOUND_API_URL, config=config)
+    def __init__(self, config=None):
+        if not hasattr(config, 'GREYHOUND_API_URL') or not config.GREYHOUND_API_URL:
+            raise AdapterConfigError(self.SOURCE_NAME, "GREYHOUND_API_URL is not configured.")
+        super().__init__(source_name=self.SOURCE_NAME, base_url=config.GREYHOUND_API_URL, config=config)
 
-    async def _fetch_data(self, http_client: httpx.AsyncClient, date: str) -> Any:
+    async def _fetch_data(self, date: str) -> Any:
         """Fetches the raw card data from the greyhound API."""
         endpoint = f"v1/cards/{date}"
-        response = await self.make_request(http_client, "GET", endpoint)
-        return response.json()
+        response = await self.make_request(self.http_client, "GET", endpoint)
+        return response.json() if response else None
 
     def _parse_races(self, raw_data: Any) -> List[Race]:
         """Parses the raw card data into a list of Race objects."""
         if not raw_data or not raw_data.get("cards"):
-            self.logger.warning("No 'cards' in response or empty list.")
+            self.logger.warning("No 'cards' in greyhound response or empty list.")
             return []
 
         all_races = []
@@ -63,14 +53,11 @@ class GreyhoundAdapter(BaseAdapter):
                     all_races.append(race)
                 except (ValidationError, KeyError) as e:
                     self.logger.error(
-                        "Error parsing race",
+                        "Error parsing greyhound race",
                         race_id=race_data.get('race_id', 'N/A'),
                         error=str(e),
-                        race_data=race_data,
                     )
-                    raise AdapterParsingError(
-                        self.source_name, f"Failed to parse race: {race_data.get('race_id')}"
-                    ) from e
+                    continue
         return all_races
 
     def _parse_runners(self, runners_data: List[Dict[str, Any]]) -> List[Runner]:
@@ -97,6 +84,6 @@ class GreyhoundAdapter(BaseAdapter):
                     odds=odds_data,
                 ))
             except (KeyError, ValidationError):
-                log.warning("GreyhoundAdapter: Error parsing runner, skipping.", runner_data=runner_data)
+                self.logger.warning("Error parsing greyhound runner, skipping.", runner_data=runner_data)
                 continue
         return runners

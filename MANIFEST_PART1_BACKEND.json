@@ -2,7 +2,6 @@
     "python_service/__init__.py",
     "python_service/adapters/__init__.py",
     "python_service/adapters/at_the_races_adapter.py",
-    "python_service/adapters/base.py",
     "python_service/adapters/betfair_adapter.py",
     "python_service/adapters/betfair_auth_mixin.py",
     "python_service/adapters/betfair_datascientist_adapter.py",

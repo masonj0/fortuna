@@ -1,32 +1,29 @@
 # python_service/adapters/drf_adapter.py
 from datetime import datetime
-from typing import Any, Dict, List
-import httpx
-import structlog
+from typing import Any, List
 from bs4 import BeautifulSoup
 from dateutil.parser import parse
 
 from ..models import OddsData, Race, Runner
 from ..utils.odds import parse_odds_to_decimal
 from ..utils.text import normalize_venue_name
-from .base import BaseAdapter
-
-log = structlog.get_logger(__name__)
+from .base_v3 import BaseAdapterV3
 
 
-class DRFAdapter(BaseAdapter):
+class DRFAdapter(BaseAdapterV3):
     """
-    Adapter for drf.com.
-    This adapter now follows the modern fetch/parse pattern.
+    Adapter for drf.com, migrated to BaseAdapterV3.
     """
+    SOURCE_NAME = "DRF"
+    BASE_URL = "https://www.drf.com"
 
-    def __init__(self, config):
-        super().__init__(source_name="DRF", base_url="https://www.drf.com", config=config)
+    def __init__(self, config=None):
+        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
 
-    async def _fetch_data(self, http_client: httpx.AsyncClient, date: str) -> Any:
+    async def _fetch_data(self, date: str) -> Any:
         """Fetches the raw HTML from the DRF entries page."""
         url = f"/entries/{date}/USA"
-        response = await self.make_request(http_client, "GET", url)
+        response = await self.make_request(self.http_client, "GET", url)
         return {"html": response.text, "date": date} if response else None
 
     def _parse_races(self, raw_data: Any) -> List[Race]:
@@ -38,40 +35,51 @@ class DRFAdapter(BaseAdapter):
         race_date = raw_data["date"]
         soup = BeautifulSoup(html, "html.parser")
 
-        venue_text = soup.select_one("div.track-info h1").text
+        venue_node = soup.select_one("div.track-info h1")
+        if not venue_node:
+            self.logger.warning("Could not find venue name on DRF page.")
+            return []
+
+        venue_text = venue_node.text
         venue = normalize_venue_name(venue_text.split(" - ")[0].replace("Entries for ", ""))
 
         races = []
         for race_entry in soup.select("div.race-entries"):
-            race_number = int(race_entry["data-race-number"])
-            post_time_str = race_entry.select_one(".post-time").text.replace("Post Time: ", "").strip()
-            start_time = parse(f"{race_date} {post_time_str}")
-
-            runners = []
-            for entry in race_entry.select("li.entry"):
-                if "scratched" in entry.get("class", []):
+            try:
+                race_number = int(race_entry["data-race-number"])
+                post_time_node = race_entry.select_one(".post-time")
+                if not post_time_node:
                     continue
+                post_time_str = post_time_node.text.replace("Post Time: ", "").strip()
+                start_time = parse(f"{race_date} {post_time_str}")
 
-                number = int(entry.select_one(".program-number").text)
-                name = entry.select_one(".horse-name").text
-                odds_str = entry.select_one(".odds").text.replace('-', '/')
+                runners = []
+                for entry in race_entry.select("li.entry"):
+                    if "scratched" in entry.get("class", []):
+                        continue
 
-                win_odds = parse_odds_to_decimal(odds_str)
-                odds = {}
-                if win_odds:
-                    odds[self.source_name] = OddsData(win=win_odds, source=self.source_name, last_updated=datetime.now())
+                    number = int(entry.select_one(".program-number").text)
+                    name = entry.select_one(".horse-name").text
+                    odds_str = entry.select_one(".odds").text.replace('-', '/')
 
-                runners.append(Runner(number=number, name=name, odds=odds))
+                    win_odds = parse_odds_to_decimal(odds_str)
+                    odds = {}
+                    if win_odds:
+                        odds[self.source_name] = OddsData(win=win_odds, source=self.source_name, last_updated=datetime.now())
 
-            race = Race(
-                id=f"drf_{venue.replace(' ', '').lower()}_{race_date}_{race_number}",
-                venue=venue,
-                race_number=race_number,
-                start_time=start_time,
-                runners=runners,
-                source=self.source_name,
-                field_size=len(runners),
-            )
-            races.append(race)
+                    runners.append(Runner(number=number, name=name, odds=odds))
 
+                race = Race(
+                    id=f"drf_{venue.replace(' ', '').lower()}_{race_date}_{race_number}",
+                    venue=venue,
+                    race_number=race_number,
+                    start_time=start_time,
+                    runners=runners,
+                    source=self.source_name,
+                    field_size=len(runners),
+                )
+                races.append(race)
+            except (AttributeError, ValueError, KeyError):
+                self.logger.warning("Failed to parse a race on DRF, skipping.", exc_info=True)
+                continue
         return races

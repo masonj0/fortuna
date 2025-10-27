@@ -1,50 +1,40 @@
 # python_service/adapters/racing_and_sports_adapter.py
 
 from datetime import datetime
-from typing import Any
-from typing import Dict
-from typing import List
-from typing import Optional
-
-import httpx
-import structlog
+from typing import Any, Dict, List, Optional
 
 from ..core.exceptions import AdapterConfigError
-from ..core.exceptions import AdapterParsingError
-from ..models import Race
-from ..models import Runner
-from .base import BaseAdapter
-
-log = structlog.get_logger(__name__)
+from ..models import Race, Runner
+from .base_v3 import BaseAdapterV3
 
 
-class RacingAndSportsAdapter(BaseAdapter):
-    def __init__(self, config):
-        super().__init__(source_name="Racing and Sports", base_url="https://api.racingandsports.com.au/")
+class RacingAndSportsAdapter(BaseAdapterV3):
+    """Adapter for Racing and Sports API, migrated to BaseAdapterV3."""
+
+    SOURCE_NAME = "RacingAndSports"
+    BASE_URL = "https://api.racingandsports.com.au/"
+
+    def __init__(self, config=None):
+        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
         if not hasattr(config, "RACING_AND_SPORTS_TOKEN") or not config.RACING_AND_SPORTS_TOKEN:
             raise AdapterConfigError(self.source_name, "RACING_AND_SPORTS_TOKEN is not configured.")
         self.api_token = config.RACING_AND_SPORTS_TOKEN
 
-    async def fetch_races(self, date: str, http_client: httpx.AsyncClient) -> List[Race]:
+    async def _fetch_data(self, date: str) -> Optional[Dict[str, Any]]:
+        """Fetches the raw meetings data from the Racing and Sports API."""
         headers = {"Authorization": f"Bearer {self.api_token}", "Accept": "application/json"}
-        meetings_url = "v1/racing/meetings"
         params = {"date": date, "jurisdiction": "AUS"}
+        response = await self.make_request(self.http_client, "GET", "v1/racing/meetings", headers=headers, params=params)
+        return response.json() if response else None
 
-        meetings_response = await self.make_request(http_client, "GET", meetings_url, headers=headers, params=params)
-
-        try:
-            meetings_data = meetings_response.json()
-            return self._parse_races(meetings_data)
-        except (ValueError, TypeError) as e:
-            log.error("RacingAndSportsAdapter: Failed to parse response JSON", error=str(e))
-            raise AdapterParsingError(self.source_name, "Failed to parse API response JSON.") from e
-
-    def _parse_races(self, meetings_data: Dict[str, Any]) -> List[Race]:
+    def _parse_races(self, raw_data: Dict[str, Any]) -> List[Race]:
+        """Parses the raw meetings data into a list of Race objects."""
         all_races = []
-        if not meetings_data or not isinstance(meetings_data.get("meetings"), list):
+        if not raw_data or not isinstance(raw_data.get("meetings"), list):
+            self.logger.warning("No 'meetings' in RacingAndSports response or invalid format.")
             return all_races
 
-        for meeting in meetings_data["meetings"]:
+        for meeting in raw_data["meetings"]:
             if not isinstance(meeting, dict):
                 continue
             for race_summary in meeting.get("races", []):
@@ -53,16 +43,17 @@ class RacingAndSportsAdapter(BaseAdapter):
                 try:
                     if parsed_race := self._parse_ras_race(meeting, race_summary):
                         all_races.append(parsed_race)
-                except (KeyError, TypeError, ValueError) as e:
-                    log.warning(
-                        "RacingAndSportsAdapter: Failed to parse race, skipping",
+                except (KeyError, TypeError, ValueError):
+                    self.logger.warning(
+                        "Failed to parse RacingAndSports race, skipping",
                         meeting=meeting.get("venueName"),
                         race_id=race_summary.get("raceId"),
-                        error=str(e),
+                        exc_info=True
                     )
         return all_races
 
     def _parse_ras_race(self, meeting: Dict[str, Any], race: Dict[str, Any]) -> Optional[Race]:
+        """Parses a single race object from the API response."""
         race_id = race.get("raceId")
         start_time_str = race.get("startTime")
         if not race_id or not start_time_str:
