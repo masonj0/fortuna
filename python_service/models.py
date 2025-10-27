@@ -7,15 +7,16 @@ from typing import Dict
 from typing import List
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from pydantic import Field
 
 
 # --- Configuration for Aliases (BUG #4 Fix) ---
 class FortunaBaseModel(BaseModel):
-    class Config:
-        populate_by_name = True
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+    )
 
 
 # --- Core Data Models ---
