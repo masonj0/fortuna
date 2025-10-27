@@ -3,42 +3,54 @@ import pytest
 from unittest.mock import patch, Mock
 from fastapi.testclient import TestClient
 import httpx
-import os
 
 from python_service.config import Settings
-from python_service.api import app
+from python_service.api import app, get_settings
 
-@pytest.fixture(scope="session", autouse=True)
-def override_settings():
+def get_test_settings():
     """
-    This fixture is automatically used for the entire test session.
-    It patches the `get_settings` function to return a test-specific,
-    fully-populated Settings object. This prevents AdapterConfigErrors
-    during app startup and ensures tests run in a controlled environment.
+    Returns a comprehensive, test-specific Settings object that satisfies all
+    adapter configuration requirements. This prevents AdapterConfigErrors during
+    app startup in a test environment.
     """
-    def get_test_settings():
-        return Settings(
-            API_KEY="test_api_key",
-            THE_RACING_API_KEY="test_racing_api_key",
-            BETFAIR_APP_KEY="test_betfair_key",
-            BETFAIR_USERNAME="test_user",
-            BETFAIR_PASSWORD="test_password",
-            TVG_API_KEY="test_tvg_key",
-            RACING_AND_SPORTS_TOKEN="test_token",
-            GREYHOUND_API_URL="https://api.example.com" # Added for GreyhoundAdapter
-        )
-
-    # The engine gets its settings from the API module, so we only need to patch it there.
-    with patch("python_service.api.get_settings", new=get_test_settings):
-        yield
-
+    return Settings(
+        API_KEY="test_api_key",
+        # Required by TheRacingApiAdapter
+        THE_RACING_API_KEY="test_racing_api_key",
+        # Required by Betfair adapters
+        BETFAIR_APP_KEY="test_betfair_key",
+        # Required by TVGAdapter
+        TVG_API_KEY="test_tvg_key",
+        # Required by RacingAndSports adapters
+        RACING_AND_SPORTS_TOKEN="test_ras_token",
+        # Required by GreyhoundAdapter
+        GREYHOUND_API_URL="https://api.example.com/greyhound",
+        # Required by other misc adapters (provide dummy values)
+        BRISNET_USERNAME="test_user",
+        BRISNET_PASSWORD="test_password",
+        TAB_ACCOUNT_NUMBER="test_account",
+        TAB_PIN="test_pin"
+    )
 
 @pytest.fixture(scope="module")
 def client():
-    """A TestClient instance for testing the FastAPI app."""
-    # The override_settings fixture will have already patched the settings
-    with TestClient(app) as c:
-        yield c
+    """
+    A TestClient instance for testing the FastAPI app.
+    This fixture handles the setup and teardown of dependency overrides.
+    """
+    original_get_settings = app.dependency_overrides.get(get_settings)
+    app.dependency_overrides[get_settings] = get_test_settings
+
+    with patch("python_service.credentials_manager.keyring.get_password", side_effect=lambda s, u: f"test_{u}"):
+        with TestClient(app) as c:
+            yield c
+
+    # Clean up the override
+    if original_get_settings:
+        app.dependency_overrides[get_settings] = original_get_settings
+    else:
+        app.dependency_overrides.clear()
+
 
 @pytest.fixture
 def mock_httpx_client():

@@ -1,33 +1,34 @@
 # python_service/adapters/tvg_adapter.py
 import asyncio
 from datetime import datetime
-from typing import List
+from typing import Any, List
 
-import httpx
-
-from ..core.exceptions import AdapterConfigError
-from ..core.exceptions import AdapterParsingError
-from ..models import Race
-from ..models import Runner
+from ..core.exceptions import AdapterConfigError, AdapterParsingError
+from ..models import Race, Runner
 from ..utils.text import clean_text
-from .base import BaseAdapter
+from .base_v3 import BaseAdapterV3
 
 
-class TVGAdapter(BaseAdapter):
-    """Adapter for fetching US racing data from the TVG API."""
+class TVGAdapter(BaseAdapterV3):
+    """Adapter for fetching US racing data from the TVG API, migrated to BaseAdapterV3."""
 
-    def __init__(self, config):
-        super().__init__(source_name="TVG", base_url="https://api.tvg.com/v2/races/", config=config)
+    SOURCE_NAME = "TVG"
+    BASE_URL = "https://api.tvg.com/v2/races/"
+
+    def __init__(self, config=None):
+        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
         if not hasattr(config, "TVG_API_KEY") or not config.TVG_API_KEY:
             raise AdapterConfigError(self.source_name, "TVG_API_KEY is not configured.")
         self.tvg_api_key = config.TVG_API_KEY
 
-    async def fetch_races(self, date: str, http_client: httpx.AsyncClient) -> List[Race]:
+    async def _fetch_data(self, date: str) -> Any:
         """Fetches all race details for a given date by first getting tracks."""
         headers = {"X-Api-Key": self.tvg_api_key}
         summary_url = f"summary?date={date}&country=USA"
 
-        tracks_response = await self.make_request(http_client, "GET", summary_url, headers=headers)
+        tracks_response = await self.make_request(self.http_client, "GET", summary_url, headers=headers)
+        if not tracks_response:
+            return None
         tracks_data = tracks_response.json()
 
         race_detail_tasks = []
@@ -37,22 +38,26 @@ class TVGAdapter(BaseAdapter):
                 race_id = race.get('id')
                 if track_id and race_id:
                     details_url = f"{track_id}/{race_id}"
-                    race_detail_tasks.append(self.make_request(http_client, "GET", details_url, headers=headers))
+                    race_detail_tasks.append(self.make_request(self.http_client, "GET", details_url, headers=headers))
 
         race_detail_responses = await asyncio.gather(*race_detail_tasks, return_exceptions=True)
 
+        # Filter out exceptions and return only successful responses
+        return [resp.json() for resp in race_detail_responses if not isinstance(resp, Exception)]
+
+    def _parse_races(self, raw_data: Any) -> List[Race]:
+        """Parses a list of detailed race JSON objects into Race models."""
         races = []
-        for response in race_detail_responses:
-            if isinstance(response, Exception):
-                self.logger.error("Failed to fetch race detail", error=response)
-                continue
+        if not isinstance(raw_data, list):
+            self.logger.warning("raw_data is not a list, cannot parse TVG races.")
+            return races
+
+        for race_detail in raw_data:
             try:
-                races.append(self._parse_race(response.json()))
-            except AdapterParsingError as e:
-                self.logger.error("Failed to parse TVG race detail", error=e)
-
+                races.append(self._parse_race(race_detail))
+            except AdapterParsingError:
+                self.logger.warning("Failed to parse TVG race detail, skipping.", race_detail=race_detail, exc_info=True)
         return races
-
 
     def _parse_race(self, race_detail: dict) -> Race:
         """Parses a single detailed race JSON object into a Race model."""
@@ -80,7 +85,7 @@ class TVGAdapter(BaseAdapter):
             runners.append(Runner(
                 number=number,
                 name=clean_text(runner_data.get('name')),
-                odds=odds_str,
+                odds=odds_str, # Odds will be parsed later in the data pipeline
                 scratched=False
             ))
 

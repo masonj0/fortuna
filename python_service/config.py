@@ -50,8 +50,6 @@ class Settings(BaseSettings):
 
     # --- Optional Betfair Credentials ---
     BETFAIR_APP_KEY: Optional[str] = None
-    BETFAIR_USERNAME: Optional[str] = None
-    BETFAIR_PASSWORD: Optional[str] = None
 
     # --- Caching & Performance ---
     REDIS_URL: str = "redis://localhost:6379"
@@ -89,12 +87,10 @@ class Settings(BaseSettings):
         """
         # 1. Fallback for API_KEY
         if not self.API_KEY:
-            self.API_KEY = SecureCredentialsManager.get_api_key() or "MISSING"
+            self.API_KEY = SecureCredentialsManager.get_credential("api_key") or "MISSING"
 
         # 2. Decrypt sensitive fields
         self.BETFAIR_APP_KEY = decrypt_value(self.BETFAIR_APP_KEY)
-        self.BETFAIR_USERNAME = decrypt_value(self.BETFAIR_USERNAME)
-        self.BETFAIR_PASSWORD = decrypt_value(self.BETFAIR_PASSWORD)
 
         return self
 

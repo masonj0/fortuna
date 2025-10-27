@@ -1,81 +1,91 @@
-#!/usr/bin/env python3
-# ==============================================================================
-#  Fortuna Faucet: Oddschecker Adapter (Canonized)
-# ==============================================================================
-# This adapter was sourced from the 'Live Odds Anthology' and has been modernized
-# to conform to the project's current BaseAdapter framework.
-# ==============================================================================
+# python_service/adapters/oddschecker_adapter.py
 
 import asyncio
 from datetime import datetime
 from decimal import Decimal
-from typing import List
-from typing import Optional
+from typing import Any, List, Optional
 
-import httpx
-import structlog
-from bs4 import BeautifulSoup
-from bs4 import Tag
+from bs4 import BeautifulSoup, Tag
 
-from ..core.exceptions import AdapterParsingError
-from ..models import OddsData
-from ..models import Race
-from ..models import Runner
-from .base import BaseAdapter
-from .utils import parse_odds
-
-log = structlog.get_logger(__name__)
+from ..models import OddsData, Race, Runner
+from .base_v3 import BaseAdapterV3
+from ..utils.odds import parse_odds_to_decimal
 
 
-class OddscheckerAdapter(BaseAdapter):
-    """Adapter for scraping live horse racing odds from Oddschecker."""
+class OddscheckerAdapter(BaseAdapterV3):
+    """Adapter for scraping horse racing odds from Oddschecker, migrated to BaseAdapterV3."""
 
-    def __init__(self, config):
-        super().__init__(source_name="Oddschecker", base_url="https://www.oddschecker.com", config=config)
+    SOURCE_NAME = "Oddschecker"
+    BASE_URL = "https://www.oddschecker.com"
 
-    async def fetch_races(self, date: str, http_client: httpx.AsyncClient) -> List[Race]:
-        meeting_links = await self._get_all_meeting_links(http_client)
-        if not meeting_links:
-            return []
+    def __init__(self, config=None):
+        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
 
-        tasks = [self._fetch_single_meeting(link, http_client) for link in meeting_links]
-        races_from_all_meetings = await asyncio.gather(*tasks)
-
-        return [race for sublist in races_from_all_meetings for race in sublist if race]
-
-    async def _get_all_meeting_links(self, http_client: httpx.AsyncClient) -> List[str]:
-        response = await self.make_request(http_client, "GET", "/horse-racing")
-        soup = BeautifulSoup(response.text, "html.parser")
-        links = {self.base_url + a["href"] for a in soup.select("a.meeting-title[href]")}
-        return sorted(list(links))
-
-    async def _fetch_single_meeting(self, url: str, client: httpx.AsyncClient) -> List[Optional[Race]]:
-        response = await self.make_request(client, "GET", url.replace(self.base_url, ""))
-        soup = BeautifulSoup(response.text, "html.parser")
-        race_links = {self.base_url + a["href"] for a in soup.select("a.race-time-link[href]")}
-        tasks = [self._fetch_and_parse_race_card(link, client) for link in race_links]
-        return await asyncio.gather(*tasks)
-
-    async def _fetch_and_parse_race_card(self, url: str, client: httpx.AsyncClient) -> Optional[Race]:
-        try:
-            response = await self.make_request(client, "GET", url.replace(self.base_url, ""))
-            soup = BeautifulSoup(response.text, "html.parser")
-            return self._parse_race_page(soup, url)
-        except (AttributeError, IndexError, ValueError) as e:
-            log.error("Oddschecker failed to parse race card", url=url, error=e)
-            raise AdapterParsingError(self.source_name, f"Failed to parse race card at {url}") from e
-
-    def _parse_race_page(self, soup: BeautifulSoup, url: str) -> Optional[Race]:
-        track_name = soup.select_one("h1.meeting-name").get_text(strip=True)
-        race_time_str = soup.select_one("span.race-time").get_text(strip=True)
-        race_number = int(url.split("-")[-1]) if "race-" in url else 0
-
-        runners = [runner for row in soup.select("tr.race-card-row") if (runner := self._parse_runner_row(row))]
-        if not runners:
+    async def _fetch_data(self, date: str) -> Optional[dict]:
+        """
+        Fetches the raw HTML for all race pages for a given date. This involves a multi-level fetch.
+        """
+        # Note: Oddschecker doesn't seem to support historical dates well in its main nav,
+        # but we build the URL as if it does for future compatibility.
+        index_url = f"/horse-racing/{date}"
+        index_response = await self.make_request(self.http_client, "GET", index_url)
+        if not index_response:
+            self.logger.warning("Failed to fetch Oddschecker index page", url=index_url)
             return None
 
-        today_str = datetime.now().strftime("%Y-%m-%d")
-        start_time = datetime.strptime(f"{today_str} {race_time_str}", "%Y-%m-%d %H:%M")
+        index_soup = BeautifulSoup(index_response.text, "html.parser")
+        # Find all links to individual race pages
+        race_links = {a["href"] for a in index_soup.select("a.race-time-link[href]")}
+
+        async def fetch_single_html(url_path: str):
+            response = await self.make_request(self.http_client, "GET", url_path)
+            return response.text if response else ""
+
+        tasks = [fetch_single_html(link) for link in race_links]
+        html_pages = await asyncio.gather(*tasks)
+        return {"pages": html_pages, "date": date}
+
+    def _parse_races(self, raw_data: Any) -> List[Race]:
+        """Parses a list of raw HTML strings from different races into Race objects."""
+        if not raw_data or not raw_data.get("pages"):
+            return []
+
+        try:
+            race_date = datetime.strptime(raw_data["date"], "%Y-%m-%d").date()
+        except ValueError:
+            self.logger.error("Invalid date format provided to OddscheckerAdapter", date=raw_data.get("date"))
+            return []
+
+        all_races = []
+        for html in raw_data["pages"]:
+            if not html:
+                continue
+            try:
+                soup = BeautifulSoup(html, "html.parser")
+                race = self._parse_race_page(soup, race_date)
+                if race:
+                    all_races.append(race)
+            except (AttributeError, IndexError, ValueError):
+                self.logger.warning("Error parsing a race from Oddschecker, skipping race.", exc_info=True)
+                continue
+        return all_races
+
+    def _parse_race_page(self, soup: BeautifulSoup, race_date) -> Optional[Race]:
+        track_name = soup.select_one("h1.meeting-name").get_text(strip=True)
+        race_time_str = soup.select_one("span.race-time").get_text(strip=True)
+
+        # Heuristic to find race number from navigation
+        active_link = soup.select_one("a.race-time-link.active")
+        race_number = 1
+        if active_link:
+            all_links = soup.select("a.race-time-link")
+            race_number = all_links.index(active_link) + 1
+
+        start_time = datetime.combine(race_date, datetime.strptime(race_time_str, "%H:%M").time())
+        runners = [runner for row in soup.select("tr.race-card-row") if (runner := self._parse_runner_row(row))]
+
+        if not runners:
+            return None
 
         return Race(
             id=f"oc_{track_name.lower().replace(' ', '')}_{start_time.strftime('%Y%m%d')}_r{race_number}",
@@ -83,22 +93,26 @@ class OddscheckerAdapter(BaseAdapter):
             race_number=race_number,
             start_time=start_time,
             runners=runners,
-            source=self.source_name
+            source=self.source_name,
         )
 
     def _parse_runner_row(self, row: Tag) -> Optional[Runner]:
-        name = row.select_one("span.selection-name").get_text(strip=True)
-        odds_str = row.select_one("span.bet-button-odds-desktop, span.best-price").get_text(strip=True)
-        number = int(row.select_one("td.runner-number").get_text(strip=True))
+        try:
+            name = row.select_one("span.selection-name").get_text(strip=True)
+            odds_str = row.select_one("span.bet-button-odds-desktop, span.best-price").get_text(strip=True)
+            number = int(row.select_one("td.runner-number").get_text(strip=True))
 
-        if not name or not odds_str:
+            if not name or not odds_str:
+                return None
+
+            win_odds = parse_odds_to_decimal(odds_str)
+            odds_dict = {}
+            if win_odds and win_odds < 999:
+                odds_dict[self.source_name] = OddsData(
+                    win=win_odds, source=self.source_name, last_updated=datetime.now()
+                )
+
+            return Runner(number=number, name=name, odds=odds_dict)
+        except (AttributeError, ValueError):
+            self.logger.warning("Failed to parse a runner on Oddschecker, skipping runner.")
             return None
-
-        odds_val = parse_odds(odds_str)
-        odds_dict = {}
-        if odds_val:
-            odds_dict[self.source_name] = OddsData(
-                win=Decimal(str(odds_val)), source=self.source_name, last_updated=datetime.now()
-            )
-
-        return Runner(number=number, name=name, odds=odds_dict)
