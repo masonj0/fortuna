@@ -23,8 +23,7 @@
       "assets/**/*",
       "../web_platform/frontend/out/**/*",
       "../scripts/validate_installation.ps1",
-      "!../.venv/",
-      "!node_modules/**/*"
+      "!../.venv/"
     ],
     "extraResources": [
       {
