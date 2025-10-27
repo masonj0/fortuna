@@ -25,49 +25,61 @@ def _clean_text(text: Optional[str]) -> Optional[str]:
 
 
 class TimeformAdapter(BaseAdapter):
+    """
+    Adapter for timeform.com.
+    This adapter now follows the modern fetch/parse pattern.
+    """
+
     def __init__(self, config):
         super().__init__(source_name="Timeform", base_url="https://www.timeform.com", config=config)
 
-    async def fetch_races(self, date: str, http_client: httpx.AsyncClient) -> List[Race]:
-        race_links = await self._get_race_links(http_client)
-        tasks = [self._fetch_and_parse_race(link, http_client) for link in race_links]
-        return [race for race in await asyncio.gather(*tasks) if race]
+    async def _fetch_data(self, http_client: httpx.AsyncClient, date: str) -> Optional[List[str]]:
+        """
+        Fetches the raw HTML for all race pages. This involves first getting the
+        racecard index, then fetching each individual race page concurrently.
+        """
+        index_response = await self.make_request(http_client, "GET", "/horse-racing/racecards")
+        index_soup = BeautifulSoup(index_response.text, "html.parser")
+        links = {a["href"] for a in index_soup.select("a.rp-racecard-off-link[href]")}
 
-    async def _get_race_links(self, http_client: httpx.AsyncClient) -> List[str]:
-        response = await self.make_request(http_client, "GET", "/horse-racing/racecards")
-        soup = BeautifulSoup(response.text, "html.parser")
-        links = {a["href"] for a in soup.select("a.rp-racecard-off-link[href]")}
-        return [f"{self.base_url}{link}" for link in links]
+        async def fetch_single_html(url_path: str):
+            response = await self.make_request(http_client, "GET", url_path)
+            return response.text
 
-    async def _fetch_and_parse_race(self, url: str, http_client: httpx.AsyncClient) -> Optional[Race]:
-        try:
-            response = await self.make_request(http_client, "GET", url)
-            soup = BeautifulSoup(response.text, "html.parser")
+        tasks = [fetch_single_html(link) for link in links]
+        return await asyncio.gather(*tasks)
 
-            track_name = _clean_text(soup.select_one("h1.rp-raceTimeCourseName_name").get_text())
-            race_time_str = _clean_text(soup.select_one("span.rp-raceTimeCourseName_time").get_text())
+    def _parse_races(self, raw_data: List[str]) -> List[Race]:
+        """Parses a list of raw HTML strings into Race objects."""
+        if not raw_data:
+            return []
 
-            start_time = datetime.strptime(f"{datetime.now().date()} {race_time_str}", "%Y-%m-%d %H:%M")
-            all_times = [_clean_text(a.get_text()) for a in soup.select("a.rp-racecard-off-link")]
-            race_number = all_times.index(race_time_str) + 1 if race_time_str in all_times else 1
-
-            runner_rows = soup.select("div.rp-horseTable_mainRow")
-            if not runner_rows:
-                return None
-
-            runners = [self._parse_runner(row) for row in runner_rows]
-
-            return Race(
-                id=f"tf_{track_name.replace(' ', '')}_{start_time.strftime('%Y%m%d')}_R{race_number}",
-                venue=track_name,
-                race_number=race_number,
-                start_time=start_time,
-                runners=[r for r in runners if r],
-                source=self.source_name,
-            )
-        except (AttributeError, ValueError, TypeError) as e:
-            log.error("Error parsing race from Timeform", url=url, exc_info=e)
-            raise AdapterParsingError(self.source_name, f"Failed to parse race at {url}") from e
+        all_races = []
+        for html in raw_data:
+            try:
+                soup = BeautifulSoup(html, "html.parser")
+                track_name = _clean_text(soup.select_one("h1.rp-raceTimeCourseName_name").get_text())
+                race_time_str = _clean_text(soup.select_one("span.rp-raceTimeCourseName_time").get_text())
+                start_time = datetime.strptime(f"{datetime.now().date()} {race_time_str}", "%Y-%m-%d %H:%M")
+                all_times = [_clean_text(a.get_text()) for a in soup.select("a.rp-racecard-off-link")]
+                race_number = all_times.index(race_time_str) + 1 if race_time_str in all_times else 1
+                runner_rows = soup.select("div.rp-horseTable_mainRow")
+                if not runner_rows:
+                    continue
+                runners = [self._parse_runner(row) for row in runner_rows]
+                race = Race(
+                    id=f"tf_{track_name.replace(' ', '')}_{start_time.strftime('%Y%m%d')}_R{race_number}",
+                    venue=track_name,
+                    race_number=race_number,
+                    start_time=start_time,
+                    runners=[r for r in runners if r],
+                    source=self.source_name,
+                )
+                all_races.append(race)
+            except (AttributeError, ValueError, TypeError) as e:
+                self.logger.error("Error parsing race from Timeform", exc_info=True)
+                continue
+        return all_races
 
     def _parse_runner(self, row: Tag) -> Optional[Runner]:
         try:

@@ -20,34 +20,34 @@ log = structlog.get_logger(__name__)
 
 
 class GreyhoundAdapter(BaseAdapter):
-    """Adapter for fetching Greyhound racing data. Activated by setting GREYHOUND_API_URL in .env"""
+    """
+    Adapter for fetching Greyhound racing data. Activated by setting GREYHOUND_API_URL in .env.
+    This adapter now follows the modern fetch/parse pattern.
+    """
 
     def __init__(self, config):
         if not config.GREYHOUND_API_URL:
+            # The base class init will use the source_name, so we must set it before raising
+            self.source_name = "Greyhound Racing"
             raise AdapterConfigError(self.source_name, "GREYHOUND_API_URL is not configured.")
         super().__init__(source_name="Greyhound Racing", base_url=config.GREYHOUND_API_URL, config=config)
 
-    async def fetch_races(self, date: str, http_client: httpx.AsyncClient) -> List[Race]:
-        """Fetches upcoming greyhound races for the specified date."""
+    async def _fetch_data(self, http_client: httpx.AsyncClient, date: str) -> Any:
+        """Fetches the raw card data from the greyhound API."""
         endpoint = f"v1/cards/{date}"
         response = await self.make_request(http_client, "GET", endpoint)
+        return response.json()
 
-        response_json = response.json()
-        if not response_json or not response_json.get("cards"):
-            log.warning("GreyhoundAdapter: No 'cards' in response or empty list.")
+    def _parse_races(self, raw_data: Any) -> List[Race]:
+        """Parses the raw card data into a list of Race objects."""
+        if not raw_data or not raw_data.get("cards"):
+            self.logger.warning("No 'cards' in response or empty list.")
             return []
 
-        return self._parse_cards(response_json["cards"])
-
-    def _parse_cards(self, cards: List[Dict[str, Any]]) -> List[Race]:
-        """Parses a list of cards and their races into Race objects."""
         all_races = []
-        if cards is None:
-            return all_races
-        for card in cards:
+        for card in raw_data["cards"]:
             venue = card.get("track_name", "Unknown Venue")
-            races_data = card.get("races", [])
-            for race_data in races_data:
+            for race_data in card.get("races", []):
                 try:
                     if not race_data.get("runners"):
                         continue
@@ -62,14 +62,14 @@ class GreyhoundAdapter(BaseAdapter):
                     )
                     all_races.append(race)
                 except (ValidationError, KeyError) as e:
-                    log.error(
-                        f"GreyhoundAdapter: Error parsing race {race_data.get('race_id', 'N/A')}",
+                    self.logger.error(
+                        "Error parsing race",
+                        race_id=race_data.get('race_id', 'N/A'),
                         error=str(e),
                         race_data=race_data,
                     )
                     raise AdapterParsingError(
-                        self.source_name,
-                        f"Failed to parse race: {race_data.get('race_id')}",
+                        self.source_name, f"Failed to parse race: {race_data.get('race_id')}"
                     ) from e
         return all_races
 

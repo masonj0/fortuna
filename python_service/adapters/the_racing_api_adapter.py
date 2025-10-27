@@ -19,7 +19,10 @@ log = structlog.get_logger(__name__)
 
 
 class TheRacingApiAdapter(BaseAdapter):
-    """Adapter for the high-value JSON-based The Racing API."""
+    """
+    Adapter for the high-value JSON-based The Racing API.
+    This adapter now follows the modern fetch/parse pattern.
+    """
 
     def __init__(self, config):
         super().__init__(
@@ -31,30 +34,21 @@ class TheRacingApiAdapter(BaseAdapter):
             raise AdapterConfigError(self.source_name, "THE_RACING_API_KEY is not configured.")
         self.api_key = config.THE_RACING_API_KEY
 
-    async def fetch_races(self, date: str, http_client: httpx.AsyncClient) -> List[Race]:
-        """
-        Fetches race data from The Racing API and parses it into Race objects.
-
-        Raises:
-            AdapterError: If the request fails or the response is invalid.
-        """
+    async def _fetch_data(self, http_client: httpx.AsyncClient, date: str) -> Dict[str, Any]:
+        """Fetches the raw racecard data from The Racing API."""
         endpoint = f"racecards?date={date}&course=all&region=gb,ire"
         headers = {"Authorization": f"Bearer {self.api_key}"}
-
-        # make_request will now raise an exception on failure, which will be handled
-        # by the upstream service (e.g., the main engine).
         response = await self.make_request(http_client, "GET", endpoint, headers=headers)
+        return response.json()
 
-        response_json = response.json()
-        if not response_json or "racecards" not in response_json:
-            log.warning(f"{self.source_name}: 'racecards' key missing in API response.")
+    def _parse_races(self, raw_data: Dict[str, Any]) -> List[Race]:
+        """Parses the raw JSON response into a list of Race objects."""
+        if not raw_data or "racecards" not in raw_data:
+            self.logger.warning("'racecards' key missing in API response.")
             return []
 
-        return self._parse_races(response_json["racecards"])
-
-    def _parse_races(self, racecards: List[Dict[str, Any]]) -> List[Race]:
         races = []
-        for race_data in racecards:
+        for race_data in raw_data["racecards"]:
             try:
                 start_time = datetime.fromisoformat(race_data["off_time"].replace("Z", "+00:00"))
 
@@ -70,7 +64,7 @@ class TheRacingApiAdapter(BaseAdapter):
                 )
                 races.append(race)
             except Exception as e:
-                log.error(f"{self.source_name}: Error parsing race", race_id=race_data.get("race_id"), error=str(e))
+                self.logger.error("Error parsing race", race_id=race_data.get("race_id"), error=str(e), exc_info=True)
         return races
 
     def _parse_runners(self, runners_data: List[Dict[str, Any]]) -> List[Runner]:
@@ -94,21 +88,7 @@ class TheRacingApiAdapter(BaseAdapter):
                     )
                 )
             except Exception as e:
-                log.error(
-                    f"{self.source_name}: Error parsing runner", runner_name=runner_data.get("horse"), error=str(e)
+                self.logger.error(
+                    "Error parsing runner", runner_name=runner_data.get("horse"), error=str(e), exc_info=True
                 )
         return runners
-
-    def _format_response(
-        self, races: List[Race], start_time: datetime, is_success: bool = True, error_message: str = None
-    ) -> Dict[str, Any]:
-        return {
-            "races": races,
-            "source_info": {
-                "name": self.source_name,
-                "status": "SUCCESS" if is_success else "FAILED",
-                "races_fetched": len(races),
-                "error_message": error_message,
-                "fetch_duration": (datetime.now() - start_time).total_seconds(),
-            },
-        }
