@@ -24,12 +24,7 @@ def get_test_settings():
         # Required by RacingAndSports adapters
         RACING_AND_SPORTS_TOKEN="test_ras_token",
         # Required by GreyhoundAdapter
-        GREYHOUND_API_URL="https://api.example.com/greyhound",
-        # Required by other misc adapters (provide dummy values)
-        BRISNET_USERNAME="test_user",
-        BRISNET_PASSWORD="test_password",
-        TAB_ACCOUNT_NUMBER="test_account",
-        TAB_PIN="test_pin"
+        GREYHOUND_API_URL="https://api.example.com/greyhound"
     )
 
 @pytest.fixture(scope="module")
