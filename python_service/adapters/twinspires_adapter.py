@@ -30,7 +30,11 @@ class TwinSpiresAdapter(BaseAdapterV3):
         1.  **Main Page (potential source for a list of all tracks):**
             - https://www.twinspires.com/bet/todays-races/
 
-        2.  **Example Track URLs (these seem to load the race card data):**
+        2.  **API Endpoint for All Tracks (CRITICAL DISCOVERY):**
+            - This URL appears to provide the core data for all tracks for the day.
+            - https://www.twinspires.com/adw/todays-tracks?affid=0
+
+        3.  **Example Track URLs (these seem to load the race card data):**
             - Greyhound: https://www.twinspires.com/adw/todays-tracks/cp1/Greyhound/races?affid=0
             - Thoroughbred: https://www.twinspires.com/adw/todays-tracks/fl/Thoroughbred/races?affid=0
             - Harness: https://www.twinspires.com/adw/todays-tracks/mr/Harness/races?affid=0
