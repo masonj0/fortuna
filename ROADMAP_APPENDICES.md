@@ -48,3 +48,10 @@ This document tracks the strategic evolution of the Fortuna Faucet project.
   - **Operation: The Monolith:** Unify the disparate GUI tools (launcher, setup wizard) into a single, tabbed application for a seamless user experience.
   - **Operation: The Interpreter:** Implement a user-friendly error-handling system that translates technical errors into simple, actionable advice.
   - **Data Persistence & Caching:** Implement a local SQLite database to cache race data, improving performance and enabling offline access.
+  - **Operation: The Wiretap (Twinspires API Integration):**
+    - **Objective:** Implement a new, robust data adapter for Twinspires.com by reverse-engineering their internal JSON API.
+    - **Key Discoveries & Endpoints:**
+      - **Primary Track List API:** `https://www.twinspires.com/adw/todays-tracks?affid=0`
+      - **Example Race Card URL (Thoroughbred):** `https://www.twinspires.com/adw/todays-tracks/fl/Thoroughbred/races?affid=0`
+      - **Example Race Card URL (Greyhound):** `https://www.twinspires.com/adw/todays-tracks/cp1/Greyhound/races?affid=0`
+    - **Notes:** The race card endpoint provides race details but does not include runner information, which will require discovering and integrating a second API endpoint.
