@@ -50,5 +50,8 @@
       "perMachine": true,
       "createDesktopShortcut": true
     }
+  },
+  "dependencies": {
+    "node-notifier": "^10.0.1"
   }
 }

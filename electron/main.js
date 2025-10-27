@@ -3,6 +3,7 @@ const { app, BrowserWindow, Tray, Menu, nativeImage, dialog, ipcMain } = require
 const { spawn, execFile } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const notifier = require('node-notifier');
 const { validateInstallation } = require('./install-validator');
 
 /**
@@ -197,16 +198,31 @@ ${stderrBuffer.trim() || '(No standard error output)'}
         const errorMsg = data.toString();
         stderrBuffer += errorMsg;
         console.error(`[Backend STDERR] ${errorMsg}`);
+        notifier.notify({
+          title: 'Fortuna Faucet - Backend Error',
+          message: `Error: ${errorMsg.trim()}`,
+          icon: path.join(__dirname, 'assets', 'icon.ico')
+        });
       });
 
       this.backendProcess.on('error', (error) => {
         console.error(`[Backend ERROR] Spawning process failed: ${error}`);
+        notifier.notify({
+          title: 'Fortuna Faucet - Backend Error',
+          message: `Backend spawn failed: ${error.message}`,
+          icon: path.join(__dirname, 'assets', 'icon.ico')
+        });
         rejectWithDetails(error);
       });
 
       this.backendProcess.on('close', (code) => {
         console.log(`[Backend] Process exited with code ${code}`);
         if (!startupResolved) {
+          notifier.notify({
+            title: 'Fortuna Faucet - Backend Error',
+            message: `Backend process exited prematurely with code ${code}.`,
+            icon: path.join(__dirname, 'assets', 'icon.ico')
+          });
           rejectWithDetails(new Error(`Process exited prematurely with code ${code}.`));
         }
       });
