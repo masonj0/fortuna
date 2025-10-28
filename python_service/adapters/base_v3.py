@@ -1,5 +1,6 @@
 # python_service/adapters/base_v3.py
 import time
+import json
 from abc import ABC, abstractmethod
 from typing import AsyncGenerator, Any, List
 import httpx
@@ -29,6 +30,10 @@ class BaseAdapterV3(ABC):
         self.circuit_breaker_tripped = False
         self.circuit_breaker_failure_count = 0
         self.circuit_breaker_last_failure = 0
+
+        # New: Manual override support
+        self.manual_override_manager = None
+        self.supports_manual_override = False  # Override in subclasses
 
     @abstractmethod
     async def _fetch_data(self, date: str) -> Any:
@@ -96,3 +101,86 @@ class BaseAdapterV3(ABC):
             self.logger.info("Cooldown period passed. Resetting circuit breaker.")
         self.circuit_breaker_tripped = False
         self.circuit_breaker_failure_count = 0
+
+    def enable_manual_override(self, manager):
+        """Enable manual override for this adapter"""
+        self.manual_override_manager = manager
+        self.supports_manual_override = True
+
+    async def make_request_with_override(
+        self,
+        http_client,
+        method: str,
+        url: str,
+        date: str,
+        **kwargs
+    ):
+        """
+        Enhanced make_request that supports manual override fallback.
+
+        If the request fails with a 403 or similar bot-blocking error,
+        it registers a manual override request and returns None, allowing
+        the fetch to continue with other sources.
+        """
+        full_url = url if url.startswith('http') else f"{self.base_url}{url}"
+
+        try:
+            # Try normal automated fetch first
+            response = await self.make_request(http_client, method, url, **kwargs)
+            return response
+
+        except Exception as e:
+            # Check if this is a bot-blocking error
+            if self._is_bot_blocking_error(e):
+                if self.supports_manual_override and self.manual_override_manager:
+                    # Register for manual override
+                    request_id = self.manual_override_manager.register_failed_fetch(
+                        adapter_name=self.source_name,
+                        url=full_url,
+                        date=date,
+                        error=e
+                    )
+
+                    self.logger.warning(
+                        "Automated fetch failed - manual override registered",
+                        adapter=self.source_name,
+                        request_id=request_id,
+                        url=full_url
+                    )
+
+                    # Check if manual data already provided
+                    manual_data = self.manual_override_manager.get_completed_data(request_id)
+                    if manual_data:
+                        # Return a mock response with manual data
+                        return self._create_mock_response(manual_data)
+
+                return None
+            else:
+                # Not a bot-blocking error, re-raise
+                raise
+
+    def _is_bot_blocking_error(self, error: Exception) -> bool:
+        """Determine if an error is likely due to bot blocking"""
+        error_str = str(error).lower()
+        blocking_indicators = [
+            "403",
+            "forbidden",
+            "cloudflare",
+            "captcha",
+            "access denied",
+            "bot",
+            "automated"
+        ]
+        return any(indicator in error_str for indicator in blocking_indicators)
+
+    def _create_mock_response(self, content: str):
+        """Create a mock response object from manual content"""
+        class MockResponse:
+            def __init__(self, text_content):
+                self.text = text_content
+                self.status_code = 200
+
+            def json(self):
+                return json.loads(self.text)
+
+        return MockResponse(content)
