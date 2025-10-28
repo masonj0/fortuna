@@ -1,65 +1,57 @@
-# 🐴 Fortuna Faucet - Racing Analysis Engine
+# 🐴 Fortuna Faucet - Developer's Guide
 
-Welcome to Fortuna Faucet! This guide provides instructions for both end-users and developers.
-
-## Getting Started: The Official Installation
-
-The easiest way to get started is with our official MSI installer, which handles all setup and configuration automatically.
-
-1.  **Download the Installer:**
-    *   Go to the [latest release page](https://github.com/masonj0/fortuna/releases/latest) on GitHub.
-    *   Download the `Fortuna-Faucet-Setup-vX.X.X.msi` file.
-
-2.  **Run the Installer:**
-    *   Double-click the downloaded `.msi` file.
-    *   Follow the on-screen instructions in the setup wizard.
-
-Once installed, a "Fortuna Faucet" folder will be created in your Start Menu. The application's backend will run automatically as a background service, and you can access the dashboard via the Start Menu shortcut.
+This guide provides technical instructions for developers. **For end-user installation, please see the [User Guide (README_WINDOWS.md)](README_WINDOWS.md).**
 
 ---
 
-## For Developers
+## Core Architecture
 
-This section contains instructions for developers who wish to contribute to the project or manage the environment manually.
+The project has a distinct architecture for production and development environments. Understanding this separation is key to effective development.
 
-### Core Architecture
-
-The project has a distinct architecture for production and development environments.
-
-*   **Production Architecture (in the MSI):**
-    *   **Standalone Backend:** The Python backend is compiled into a single, self-contained executable (`fortuna-api`) using **PyInstaller**. This bundles the Python interpreter and all dependencies, requiring no Python installation on the user's machine.
-    *   **Static Frontend:** The Next.js frontend is exported as a set of static HTML, CSS, and JavaScript assets. These are served directly from the filesystem by the Electron application.
-    *   **Electron Wrapper:** The Electron app acts as a shell, launching the backend executable as a background process and loading the static frontend.
+*   **Production Architecture (MSI Installer):**
+    *   **Standalone Backend:** The Python backend is compiled into a single, self-contained executable (`fortuna-api.exe`) using **PyInstaller**. This bundles the Python interpreter and all dependencies, requiring no Python installation on the user's machine.
+    *   **Static Frontend:** The Next.js frontend is exported as a set of static HTML, CSS, and JavaScript assets.
+    *   **Electron Wrapper:** The Electron app acts as a lightweight shell, launching the backend executable as a background process and loading the static frontend directly from the filesystem.
 
 *   **Development Architecture:**
     *   **Backend (`python_service/`):** An asynchronous FastAPI application run from a local Python virtual environment.
     *   **Frontend (`web_platform/frontend/`):** A standard Next.js development server that enables hot-reloading for rapid UI development.
-    *   **Unified Launcher (`run_dev_environment.bat`):** The primary entry point for local development, managing both backend and frontend services.
 
-### Manual Development Setup
+## Development Environment
 
-1.  **Prerequisites:** Python 3.11+, Node.js (LTS), Git.
-2.  **Clone:** `git clone https://github.com/masonj0/fortuna.git`
-3.  **Run the Setup Script:** For a one-time setup of both the Python virtual environment and Node.js dependencies, simply run the `run_dev_environment.bat` script.
+### 1. Prerequisites
 
-### Quick Start (No Installation Required)
+*   Python 3.12+
+*   Node.js (LTS)
+*   Git
 
-For developers and advanced users who want to run the application directly from source without a formal installation, the `scripts/fortuna-quick-start.ps1` script provides a powerful alternative.
+### 2. Initial One-Time Setup
 
-*   **What it does:** This PowerShell script automates all pre-flight checks, dependency installations, and launches both the backend and frontend servers concurrently. It also includes robust process management and cleanup.
-*   **How to use:**
-    1.  Ensure your system meets the prerequisites (Python, Node.js).
-    2.  Run `run_dev_environment.bat` once to create the initial virtual environment.
-    3.  From a PowerShell terminal, execute `.\scripts\fortuna-quick-start.ps1`.
+For your first time setting up the project, run the main setup script. This will create the Python virtual environment and install all necessary dependencies for both the backend and frontend.
+
+```bash
+git clone https://github.com/masonj0/fortuna.git
+cd fortuna
+run_dev_environment.bat
+```
+
+### 3. Daily Execution
+
+Once the initial setup is complete, use the `fortuna-quick-start.ps1` script for your daily development workflow. This powerful script handles all pre-flight checks and launches both servers concurrently.
+
+```powershell
+# From a PowerShell terminal in the project root
+.\\scripts\\fortuna-quick-start.ps1
+```
+
 *   **Options:** The script includes parameters for skipping dependency checks (`-SkipChecks`) and running only the backend (`-NoFrontend`) for maximum flexibility.
 
-### Creating a Release Build (MSI Installer)
+---
 
-The project uses the WiX Toolset to create a professional, distributable MSI installer based on the production architecture.
+## Key Scripts & Tooling
 
-*   **Build Orchestrator:** The entire build process is automated and managed by the `scripts/build_msi.ps1` PowerShell script.
-*   **Key Build Steps:**
-    1.  The script first compiles the entire Python backend into a standalone executable using **PyInstaller**.
-    2.  Next, it builds the Next.js frontend into a static export.
-    3.  Finally, it uses the **WiX Toolset** (`heat.exe`, `candle.exe`, `light.exe`) to harvest these pre-built artifacts and package them into a clean, reliable MSI installer.
-*   **CI/CD:** The build is fully automated via GitHub Actions, as defined in `.github/workflows/build_msi.yml`. To create a release build locally, ensure the WiX Toolset is installed and run the `scripts/build_msi.ps1` script from a PowerShell terminal.
+*   **`run_dev_environment.bat`**: The master script for the **initial one-time setup** of the development environment.
+*   **`scripts/fortuna-quick-start.ps1`**: The recommended script for **daily execution**, providing robust process management for both backend and frontend servers.
+*   **`scripts/build_msi.ps1`**: The local build orchestrator. This script runs the entire production build pipeline: it compiles the backend with PyInstaller, builds the static frontend, and packages everything into an MSI installer using the WiX Toolset.
+*   **`ARCHIVE_PROJECT.py`**: The "True Scribe." This script programmatically scans the repository and generates the `FORTUNA_ALL_PART*.JSON` archive files, which are the authoritative source for project-wide code reviews.
+*   **`.github/workflows/build-msi.yml`**: The CI/CD pipeline definition for GitHub Actions, which automates the creation of the release MSI installer.
