@@ -1,6 +1,8 @@
 # 🐴 Fortuna Faucet - Developer's Guide
 
-This guide provides technical instructions for developers contributing to the Fortuna Faucet project. For end-user installation, please see `README_WINDOWS.md`.
+This guide provides technical instructions for developers. **For end-user installation, please see the [User Guide (README_WINDOWS.md)](README_WINDOWS.md).**
+
+---
 
 ## Core Architecture
 
