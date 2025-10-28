@@ -237,36 +237,37 @@ ${stderrBuffer.trim() || '(No standard error output)'}
   }
 
 
-  async initialize() {
-    try {
-        // Port conflict check from Claude4AI document
-        const isDev = process.env.NODE_ENV === 'development';
-        const rootPath = isDev ? path.join(__dirname, '..') : process.resourcesPath;
-        const pythonPath = isDev
-          ? path.join(rootPath, '.venv', 'Scripts', 'python.exe')
-          : path.join(rootPath, 'api.exe'); // In prod, the exe *is* the python path
+  initialize() {
+    // --- Create UI First ---
+    // This ensures the user always sees the application window, even if the
+    // backend fails to start.
+    this.createMainWindow();
+    this.createSystemTray();
 
-        if (isDev) { // Only run the script directly in dev mode
-            const healthCheckScriptPath = path.join(rootPath, 'python_service', 'health_check.py');
-            if (fs.existsSync(healthCheckScriptPath)) {
-                try {
-                    execFileSync(pythonPath, [healthCheckScriptPath], { stdio: 'pipe' });
-                } catch (e) {
-                    throw new Error('Port 8000 is already in use.');
-                }
-            }
+    // --- Start Backend Asynchronously ---
+    // We attempt to start the backend in a non-blocking way and handle its
+    // success or failure gracefully in the promise chain.
+    this.startBackend()
+      .then(() => {
+        console.log('[SUCCESS] Backend started successfully.');
+        // Optional: Notify the frontend that the backend is online.
+        if (this.mainWindow) {
+            this.mainWindow.webContents.send('backend-status', { status: 'online' });
         }
-
-        await this.startBackend();
-        this.createMainWindow();
-        this.createSystemTray();
-    } catch (error) {
+      })
+      .catch(error => {
+        // If the backend fails, show a detailed error box but DO NOT quit.
+        // The UI remains active, allowing the user to see the dashboard.
+        console.error(`[FATAL] Backend failed to start: ${error.message}`);
         dialog.showErrorBox(
-            'Application Error',
-            `Fortuna Faucet failed to start: ${error.message}`
+            'Backend Error',
+            `The backend process failed to start. The UI will remain active, but data services will be unavailable.\n\nDetails:\n${error.message}`
         );
-        app.quit();
-    }
+        // Optional: Notify the frontend of the failure.
+        if (this.mainWindow) {
+            this.mainWindow.webContents.send('backend-status', { status: 'offline', error: error.message });
+        }
+      });
   }
 
   cleanup() {
