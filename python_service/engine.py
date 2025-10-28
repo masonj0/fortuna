@@ -17,7 +17,7 @@ from .models import AggregatedResponse, Race, Runner
 log = structlog.get_logger(__name__)
 
 
-class FortunaEngine:
+class OddsEngine:
     def __init__(self, config=None):
         self.logger = structlog.get_logger(__name__)
         self.logger.info("Initializing FortunaEngine...")
@@ -41,8 +41,14 @@ class FortunaEngine:
             for adapter_cls in adapter_classes:
                 try:
                     self.adapters.append(adapter_cls(config=self.config))
+                except AdapterConfigError as e:
+                    self.logger.warning(
+                        "Skipping adapter due to configuration error",
+                        adapter=adapter_cls.__name__,
+                        error=str(e)
+                    )
                 except Exception:
-                    self.logger.warning(f"Failed to initialize adapter: {adapter_cls.__name__}", exc_info=True)
+                    self.logger.error(f"An unexpected error occurred while initializing {adapter_cls.__name__}", exc_info=True)
 
             # Special case for BetfairDataScientistAdapter with extra args
             try:
@@ -142,7 +148,7 @@ class FortunaEngine:
         return list(race_map.values())
 
     @cache_async_result(ttl_seconds=300, key_prefix="fortuna_engine_races")
-    async def get_races(self, date: str, source_filter: str = None) -> Dict[str, Any]:
+    async def fetch_all_odds(self, date: str, source_filter: str = None) -> Dict[str, Any]:
         """
         Fetches and aggregates race data from all configured adapters.
         The result of this method is cached.
