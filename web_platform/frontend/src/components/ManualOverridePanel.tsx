@@ -1,216 +1,201 @@
+// web_platform/frontend/src/components/ManualOverridePanel.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { saveAs } from 'file-saver';
+import * as XLSX from 'xlsx';
 
-interface PendingRequest {
-  request_id: string;
-  adapter_name: string;
-  url: string;
-  date: string;
-  timestamp: string;
-  error_message: string;
-  status: string;
-}
+// --- API Fetcher Functions ---
+const getFailedRequests = async () => {
+    const res = await fetch('/api/manual-override/failed-requests');
+    if (!res.ok) throw new Error('Network response was not ok');
+    return res.json();
+};
 
-export default function ManualOverridePanel() {
-  const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
-  const [selectedRequest, setSelectedRequest] = useState<PendingRequest | null>(null);
-  const [manualContent, setManualContent] = useState('');
-  const [contentType, setContentType] = useState('html');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
+const getRequestPayload = async (adapterName: string) => {
+    const res = await fetch(`/api/manual-override/payload/${adapterName}`);
+    if (!res.ok) throw new Error('Network response was not ok');
+    return res.json();
+};
 
-  useEffect(() => {
-    fetchPendingRequests();
-    // Poll every 30 seconds
-    const interval = setInterval(fetchPendingRequests, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const fetchPendingRequests = async () => {
-    try {
-      const apiKey = process.env.NEXT_PUBLIC_API_KEY;
-      const response = await fetch('/api/manual-overrides/pending', {
-        headers: { 'X-API-Key': apiKey || '' }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setPendingRequests(data.pending_requests);
-      }
-    } catch (error) {
-      console.error('Failed to fetch pending requests:', error);
-    }
-  };
-
-  const handleSubmit = async () => {
-    if (!selectedRequest || !manualContent.trim()) return;
-
-    setIsSubmitting(true);
-    setMessage(null);
-
-    try {
-      const apiKey = process.env.NEXT_PUBLIC_API_KEY;
-      const response = await fetch('/api/manual-overrides/submit', {
+const postOverrideData = async ({ adapterName, htmlContent }: { adapterName: string; htmlContent: string }) => {
+    const res = await fetch(`/api/manual-override/execute/${adapterName}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': apiKey || ''
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ html_content: htmlContent }),
+    });
+    if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.detail || 'Failed to execute override');
+    }
+    return res.json();
+};
+
+const clearFailedRequest = async (adapterName: string) => {
+    const res = await fetch(`/api/manual-override/clear/${adapterName}`, {
+        method: 'POST',
+    });
+    if (!res.ok) throw new Error('Network response was not ok');
+    return res.json();
+};
+
+// --- Main Component ---
+const ManualOverridePanel: React.FC = () => {
+    const queryClient = useQueryClient();
+    const [selectedAdapter, setSelectedAdapter] = useState<string | null>(null);
+    const [htmlContent, setHtmlContent] = useState('');
+    const [isPanelVisible, setIsPanelVisible] = useState(false);
+
+    const { data: failedRequests, isLoading, error } = useQuery({
+        queryKey: ['failedRequests'],
+        queryFn: getFailedRequests,
+        refetchInterval: 5000, // Poll every 5 seconds
+    });
+
+    const { data: payloadData, isLoading: isPayloadLoading, refetch: refetchPayload } = useQuery({
+        queryKey: ['requestPayload', selectedAdapter],
+        queryFn: () => {
+            if (!selectedAdapter) return Promise.resolve(null);
+            return getRequestPayload(selectedAdapter);
         },
-        body: JSON.stringify({
-          request_id: selectedRequest.request_id,
-          content: manualContent,
-          content_type: contentType
-        })
-      });
+        enabled: !!selectedAdapter,
+        refetchOnWindowFocus: false,
+    });
 
-      if (response.ok) {
-        setMessage({ type: 'success', text: 'Data submitted successfully!' });
-        setManualContent('');
-        setSelectedRequest(null);
-        await fetchPendingRequests();
-      } else {
-        setMessage({ type: 'error', text: 'Failed to submit data' });
-      }
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Network error occurred' });
-    } finally {
-      setIsSubmitting(false);
+    const executeMutation = useMutation({
+        mutationFn: postOverrideData,
+        onSuccess: () => {
+            alert('Override executed successfully!');
+            queryClient.invalidateQueries({ queryKey: ['failedRequests'] });
+            queryClient.invalidateQueries({ queryKey: ['races'] }); // To refresh the main dashboard
+            setSelectedAdapter(null);
+            setHtmlContent('');
+        },
+        onError: (error: Error) => {
+            alert(`Error executing override: ${error.message}`);
+        },
+    });
+
+    const clearMutation = useMutation({
+        mutationFn: clearFailedRequest,
+        onSuccess: () => {
+            alert('Failed request cleared.');
+            queryClient.invalidateQueries({ queryKey: ['failedRequests'] });
+            setSelectedAdapter(null);
+        },
+    });
+
+    useEffect(() => {
+        if (failedRequests && failedRequests.failed_requests.length > 0) {
+            setIsPanelVisible(true);
+        } else {
+            setIsPanelVisible(false);
+            setSelectedAdapter(null); // Clear selection when panel hides
+        }
+    }, [failedRequests]);
+
+    const handleAdapterSelect = (adapterName: string) => {
+        setSelectedAdapter(adapterName);
+        setHtmlContent(''); // Clear previous content
+    };
+
+    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                setHtmlContent(e.target?.result as string);
+            };
+            reader.readAsText(file);
+        }
+    };
+
+    const handleExportPayload = () => {
+        if (!payloadData || !selectedAdapter) return;
+        const data = JSON.stringify(payloadData.payload, null, 2);
+        const blob = new Blob([data], { type: "application/json;charset=utf-8" });
+        saveAs(blob, `${selectedAdapter}_payload.json`);
+    };
+
+    if (!isPanelVisible || isLoading) {
+        return null;
     }
-  };
 
-  const handleSkip = async (requestId: string) => {
-    try {
-      const apiKey = process.env.NEXT_PUBLIC_API_KEY;
-      await fetch(`/api/manual-overrides/skip/${requestId}`, {
-        method: 'POST',
-        headers: { 'X-API-Key': apiKey || '' }
-      });
-      await fetchPendingRequests();
-    } catch (error) {
-      console.error('Failed to skip request:', error);
-    }
-  };
-
-  if (pendingRequests.length === 0) {
-    return (
-      <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-        <p className="text-green-800">✓ No manual overrides needed - all fetches successful!</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="bg-white rounded-lg shadow-lg p-6 space-y-6">
-      <div className="border-b pb-4">
-        <h2 className="text-2xl font-bold text-gray-900">Manual Data Override</h2>
-        <p className="text-gray-600 mt-1">
-          Some data sources are blocking automated access. Please provide the data manually.
-        </p>
-      </div>
-
-      {message && (
-        <div className={`p-4 rounded ${message.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-          {message.text}
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Pending Requests List */}
-        <div className="lg:col-span-1 space-y-2">
-          <h3 className="font-semibold text-gray-900">Pending Requests ({pendingRequests.length})</h3>
-          <div className="space-y-2 max-h-96 overflow-y-auto">
-            {pendingRequests.map((request) => (
-              <div
-                key={request.request_id}
-                className={`p-3 border rounded cursor-pointer hover:bg-gray-50 transition ${
-                  selectedRequest?.request_id === request.request_id ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
-                }`}
-                onClick={() => setSelectedRequest(request)}
-              >
-                <div className="font-medium text-sm">{request.adapter_name}</div>
-                <div className="text-xs text-gray-600 truncate">{request.url}</div>
-                <div className="text-xs text-gray-500 mt-1">{request.date}</div>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleSkip(request.request_id);
-                  }}
-                  className="text-xs text-red-600 hover:text-red-800 mt-2"
-                >
-                  Skip
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Data Entry Panel */}
-        <div className="lg:col-span-2 space-y-4">
-          {selectedRequest ? (
-            <>
-              <div className="bg-gray-50 p-4 rounded border border-gray-200">
-                <h4 className="font-semibold mb-2">Request Details</h4>
-                <div className="text-sm space-y-1">
-                  <p><strong>Adapter:</strong> {selectedRequest.adapter_name}</p>
-                  <p><strong>URL:</strong> <a href={selectedRequest.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{selectedRequest.url}</a></p>
-                  <p><strong>Date:</strong> {selectedRequest.date}</p>
-                  <p><strong>Error:</strong> {selectedRequest.error_message}</p>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="block">
-                  <span className="text-sm font-medium text-gray-700">Content Type</span>
-                  <select
-                    value={contentType}
-                    onChange={(e) => setContentType(e.target.value)}
-                    className="mt-1 block w-full rounded border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  >
-                    <option value="html">HTML</option>
-                    <option value="json">JSON</option>
-                    <option value="text">Plain Text</option>
-                  </select>
-                </label>
-
-                <label className="block">
-                  <span className="text-sm font-medium text-gray-700">Page Content</span>
-                  <textarea
-                    value={manualContent}
-                    onChange={(e) => setManualContent(e.target.value)}
-                    placeholder="Paste the page source code here (View Page Source in your browser)"
-                    rows={15}
-                    className="mt-1 block w-full rounded border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 font-mono text-sm"
-                  />
-                </label>
-
-                <div className="bg-blue-50 border border-blue-200 rounded p-3 text-sm text-blue-800">
-                  <strong>How to get the content:</strong>
-                  <ol className="list-decimal ml-4 mt-2 space-y-1">
-                    <li>Click the URL link above to open the page in your browser</li>
-                    <li>Right-click anywhere on the page and select "View Page Source" (or press Ctrl+U / Cmd+Option+U)</li>
-                    <li>Select all the source code (Ctrl+A / Cmd+A) and copy it</li>
-                    <li>Paste it into the text box above</li>
-                    <li>Click Submit below</li>
-                  </ol>
-                </div>
-
-                <button
-                  onClick={handleSubmit}
-                  disabled={isSubmitting || !manualContent.trim()}
-                  className="w-full bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition"
-                >
-                  {isSubmitting ? 'Submitting...' : 'Submit Data'}
-                </button>
-              </div>
-            </>
-          ) : (
-            <div className="flex items-center justify-center h-64 text-gray-500">
-              Select a pending request from the list to provide data
+    if (error) {
+        return (
+            <div className="bg-red-900 border border-red-700 text-red-100 px-4 py-3 rounded-lg mb-6">
+                <strong>Error:</strong> Could not load failed requests. Manual override panel is unavailable.
             </div>
-          )}
+        );
+    }
+
+    return (
+        <div className="bg-yellow-900/50 border border-yellow-700 rounded-lg p-4 mb-6 text-yellow-100">
+            <h3 className="text-lg font-bold mb-2">Manual Override Required</h3>
+            <p className="text-sm mb-4">The following data adapters have failed. You can manually provide the required data to proceed.</p>
+
+            <div className="flex gap-2 mb-4">
+                {failedRequests.failed_requests.map((name: string) => (
+                    <button
+                        key={name}
+                        onClick={() => handleAdapterSelect(name)}
+                        className={`px-3 py-1 rounded-md text-sm transition ${selectedAdapter === name ? 'bg-yellow-600 text-white font-bold' : 'bg-yellow-800 hover:bg-yellow-700'}`}
+                    >
+                        {name}
+                    </button>
+                ))}
+            </div>
+
+            {selectedAdapter && (
+                <div className="bg-slate-800/50 p-4 rounded-md">
+                    <h4 className="font-semibold text-white">Override for: {selectedAdapter}</h4>
+
+                    {isPayloadLoading && <p>Loading payload info...</p>}
+
+                    {payloadData && (
+                        <div className="my-2 text-xs text-slate-400">
+                            <p>Target URL: <a href={payloadData.url} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">{payloadData.url}</a></p>
+                            <button onClick={handleExportPayload} className="text-cyan-400 hover:underline mt-1">Export Request Payload</button>
+                        </div>
+                    )}
+
+                    <div className="mt-4">
+                        <label className="block text-sm font-medium mb-1">Upload HTML file or paste content:</label>
+                        <input
+                            type="file"
+                            accept=".html,.txt"
+                            onChange={handleFileChange}
+                            className="text-sm mb-2 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-yellow-100 file:text-yellow-800 hover:file:bg-yellow-200"
+                        />
+                        <textarea
+                            value={htmlContent}
+                            onChange={(e) => setHtmlContent(e.target.value)}
+                            placeholder="Paste HTML source here"
+                            className="w-full h-32 p-2 bg-slate-900 border border-slate-600 rounded-md text-sm text-slate-200 focus:ring-yellow-500 focus:border-yellow-500"
+                        />
+                    </div>
+
+                    <div className="flex gap-4 mt-4">
+                        <button
+                            onClick={() => executeMutation.mutate({ adapterName: selectedAdapter, htmlContent })}
+                            disabled={!htmlContent || executeMutation.isPending}
+                            className="px-4 py-2 bg-green-600 hover:bg-green-500 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {executeMutation.isPending ? 'Executing...' : 'Execute Override'}
+                        </button>
+                        <button
+                            onClick={() => clearMutation.mutate(selectedAdapter)}
+                            disabled={clearMutation.isPending}
+                            className="px-4 py-2 bg-red-700 hover:bg-red-600 rounded-md disabled:opacity-50"
+                        >
+                            {clearMutation.isPending ? 'Clearing...' : 'Clear Failed Request'}
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
-      </div>
-    </div>
-  );
-}
+    );
+};
+
+export default ManualOverridePanel;
