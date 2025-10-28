@@ -239,7 +239,7 @@ async def get_pending_overrides(
 ):
     """Get all pending manual override requests"""
     pending = manager.get_pending_requests()
-    return {"pending_requests": [req.dict() for req in pending]}
+    return {"pending_requests": [req.model_dump() for req in pending]}
 
 @app.post("/api/manual-overrides/submit")
 async def submit_manual_data(

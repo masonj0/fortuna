@@ -143,8 +143,8 @@ class ManualOverrideManager:
     def _save_state(self):
         """Persist state to disk"""
         state = {
-            "pending": {k: v.dict() for k, v in self.pending_requests.items()},
-            "completed": {k: v.dict() for k, v in self.completed_responses.items()}
+            "pending": {k: v.model_dump() for k, v in self.pending_requests.items()},
+            "completed": {k: v.model_dump() for k, v in self.completed_responses.items()}
         }
 
         with open(self.storage_path / "state.json", "w") as f:
