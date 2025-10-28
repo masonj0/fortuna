@@ -8,6 +8,7 @@ import { RaceCardSkeleton } from './RaceCardSkeleton';
 import { EmptyState } from './EmptyState';
 import { Race } from '../types/racing';
 import { StatusDetailModal } from './StatusDetailModal';
+import ManualOverridePanel from './ManualOverridePanel';
 
 type ConnectionStatus = 'connecting' | 'online' | 'offline';
 
@@ -160,6 +161,8 @@ export function LiveRaceDashboard() {
         </div>
 
         <RaceFilters onParamsChange={handleParamsChange} isLoading={connectionStatus === 'connecting'} />
+
+        <ManualOverridePanel />
 
         {renderContent()}
       </div>

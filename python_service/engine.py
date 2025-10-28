@@ -10,6 +10,7 @@ import structlog
 
 from .adapters.base_v3 import BaseAdapterV3 # Import V3 base class
 from .adapters import * # Import all adapter classes
+from .core.exceptions import AdapterConfigError
 from .cache_manager import cache_async_result
 from .config import get_settings
 from .models import AggregatedResponse, Race, Runner
