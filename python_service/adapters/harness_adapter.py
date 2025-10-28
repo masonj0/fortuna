@@ -9,18 +9,29 @@ from .base_v3 import BaseAdapterV3
 
 
 class HarnessAdapter(BaseAdapterV3):
-    """Adapter for fetching US harness racing data from data.ustrotting.com."""
+    """Adapter for fetching US harness racing data with manual override support."""
 
     SOURCE_NAME = "USTrotting"
     BASE_URL = "https://data.ustrotting.com/api/racenet/racing/"
 
     def __init__(self, config=None):
         super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
+        self.supports_manual_override = True  # Enable manual override
 
     async def _fetch_data(self, date: str) -> Any:
-        """Fetches the raw card data from the USTA API."""
-        card_data = await self.make_request(self.http_client, "GET", f"card/{date}")
-        return {"data": card_data, "date": date} if card_data else None
+        """Fetches all harness races with manual override fallback."""
+        card_response = await self.make_request_with_override(
+            self.http_client,
+            method="get",
+            url=f"card/{date}",
+            date=date
+        )
+
+        if not card_response:
+            return None
+
+        card_data = card_response.json()
+        return {"data": card_data, "date": date}
 
     def _parse_races(self, raw_data: Any) -> List[Race]:
         """Parses the raw card data into a list of Race objects."""
