@@ -1,20 +1,24 @@
-# 🐴 Fortuna Faucet - Windows Installation Guide (for End Users)
+# 🐴 Fortuna Faucet - User Guide for Windows
 
-Welcome to Fortuna Faucet! Installing the application is now a simple, one-step process.
+Welcome to Fortuna Faucet! This guide provides simple, step-by-step instructions to get you up and running.
 
-## The Official Installation Method
+## Installation
 
-1.  **Go to the Latest Release Page:**
-    *   Navigate to our official GitHub Releases page: [https://github.com/masonj0/fortuna/releases/latest](https://github.com/masonj0/fortuna/releases/latest)
+Installing the application is a straightforward process using our official installer.
 
-2.  **Download the Installer:**
-    *   Look for the file named `Fortuna-Faucet-Setup-vX.X.X.msi` (the version number will change).
-    *   Download this file to your computer.
+1.  **Download the Installer:**
+    *   Go to the [**Latest Release Page**](https://github.com/masonj0/fortuna/releases/latest) on GitHub.
+    *   Download the file ending in `.msi` (e.g., `JBMason's 1st App-X.X.X.msi`).
 
-3.  **Run the Installer:**
-    *   Double-click the downloaded `.msi` file.
-    *   Follow the on-screen instructions in the setup wizard.
+2.  **Run the Installer:**
+    *   Double-click the downloaded `.msi` file to launch the setup wizard.
+    *   Follow the on-screen instructions to complete the installation.
 
-Once the installation is complete, you will find a "Fortuna Faucet" folder in your Start Menu. This folder contains a shortcut to launch the **Fortuna Faucet Dashboard**. The application's backend will run automatically as a background service whenever the application is open.
+## What to Expect After Installation
 
-That's it! All previous methods involving Python scripts or batch files are now obsolete.
+Once the setup is complete, you will find a new folder in your Start Menu named **"JBMason's 1st App"**.
+
+*   **Launching the App:** Inside this folder, click on the **"JBMason's 1st App"** shortcut to start the application.
+*   **How it Works:** The shortcut launches the main application window (the dashboard). The backend data engine starts automatically in the background and will close when you exit the application.
+
+That's it! All previous installation methods are now obsolete. Enjoy using the application!

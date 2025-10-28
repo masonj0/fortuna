@@ -16,6 +16,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
 from starlette.middleware.base import BaseHTTPMiddleware
 from typing import Callable
+from pydantic import BaseModel
 
 from .analyzer import AnalyzerEngine
 from .config import get_settings
@@ -25,6 +26,7 @@ from .logging_config import configure_logging
 from .middleware.error_handler import validation_exception_handler
 from .models import AggregatedResponse, QualifiedRacesResponse, Race, TipsheetRace
 from .security import verify_api_key
+from .manual_override_manager import ManualOverrideManager
 
 # --- PyInstaller Explicit Imports ---
 from .adapters import *
@@ -39,8 +41,20 @@ async def lifespan(app: FastAPI):
     log.info("Server startup sequence initiated.")
     try:
         settings = get_settings()
-        app.state.engine = FortunaEngine(config=settings)
+
+        # Initialize manual override manager
+        manual_override_manager = ManualOverrideManager()
+
+        # Initialize engine with manual override support
+        engine = FortunaEngine(config=settings)
+        for adapter in engine.adapters:
+            if hasattr(adapter, 'supports_manual_override') and adapter.supports_manual_override:
+                adapter.enable_manual_override(manual_override_manager)
+
+        app.state.engine = engine
         app.state.analyzer_engine = AnalyzerEngine()
+        app.state.manual_override_manager = manual_override_manager
+
         log.info("Server startup: Configuration validated and FortunaEngine initialized successfully.")
     except Exception as e:
         log.critical("FATAL: Failed to initialize FortunaEngine during server startup.", exc_info=True)
@@ -210,3 +224,61 @@ async def check_legacy_files():
     if present_files:
         return {"status": "WARNING", "message": "Legacy files detected.", "detected_files": present_files}
     return {"status": "CLEAN", "message": "No known legacy files detected."}
+
+# API Models
+class ManualDataSubmission(BaseModel):
+    request_id: str
+    content: str
+    content_type: str = "html"
+
+# New endpoints
+@app.get("/api/manual-overrides/pending")
+async def get_pending_overrides(
+    api_key: str = Depends(verify_api_key),
+    manager: ManualOverrideManager = Depends(lambda: app.state.manual_override_manager)
+):
+    """Get all pending manual override requests"""
+    pending = manager.get_pending_requests()
+    return {"pending_requests": [req.model_dump() for req in pending]}
+
+@app.post("/api/manual-overrides/submit")
+async def submit_manual_data(
+    submission: ManualDataSubmission,
+    api_key: str = Depends(verify_api_key),
+    manager: ManualOverrideManager = Depends(lambda: app.state.manual_override_manager)
+):
+    """Submit manually-provided data for a failed fetch"""
+    success = manager.submit_manual_data(
+        request_id=submission.request_id,
+        raw_content=submission.content,
+        content_type=submission.content_type
+    )
+
+    if success:
+        return {"status": "success", "message": "Manual data submitted"}
+    else:
+        raise HTTPException(status_code=404, detail="Request not found")
+
+@app.post("/api/manual-overrides/skip/{request_id}")
+async def skip_manual_override(
+    request_id: str,
+    api_key: str = Depends(verify_api_key),
+    manager: ManualOverrideManager = Depends(lambda: app.state.manual_override_manager)
+):
+    """Skip a manual override request"""
+    success = manager.skip_request(request_id)
+
+    if success:
+        return {"status": "success", "message": "Request skipped"}
+    else:
+        raise HTTPException(status_code=404, detail="Request not found")
+
+@app.post("/api/manual-overrides/cleanup")
+async def cleanup_old_overrides(
+    max_age_hours: int = 24,
+    api_key: str = Depends(verify_api_key),
+    manager: ManualOverrideManager = Depends(lambda: app.state.manual_override_manager)
+):
+    """Clean up old manual override requests"""
+    manager.clear_old_requests(max_age_hours)
+    return {"status": "success", "message": "Old requests cleaned"}
