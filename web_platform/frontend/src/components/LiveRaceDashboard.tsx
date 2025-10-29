@@ -6,7 +6,7 @@ import { RaceFilters } from './RaceFilters';
 import { RaceCard } from './RaceCard';
 import { RaceCardSkeleton } from './RaceCardSkeleton';
 import { EmptyState } from './EmptyState';
-import { Race } from '../types/racing';
+import { Race, SourceInfo } from '../types/racing';
 import { StatusDetailModal } from './StatusDetailModal';
 import ManualOverridePanel from './ManualOverridePanel';
 
@@ -20,6 +20,7 @@ interface RaceFilterParams {
 
 export function LiveRaceDashboard() {
   const [races, setRaces] = useState<Race[]>([]);
+  const [failedSources, setFailedSources] = useState<SourceInfo[]>([]);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting');
   const [errorDetails, setErrorDetails] = useState<string | null>(null);
@@ -36,6 +37,7 @@ export function LiveRaceDashboard() {
       setConnectionStatus('connecting');
     }
     setErrorDetails(null);
+    setFailedSources([]); // Clear previous failures on each fetch
 
     try {
       const apiKey = process.env.NEXT_PUBLIC_API_KEY;
@@ -57,6 +59,11 @@ export function LiveRaceDashboard() {
 
       const data = await response.json();
       setRaces(data.races || []);
+
+      // Filter out and store the sources that have failed
+      const failed = data.source_info?.filter((source: SourceInfo) => source.status === 'FAILED' && source.attemptedUrl) || [];
+      setFailedSources(failed);
+
       setLastUpdate(new Date());
       setConnectionStatus('online');
     } catch (err) {
@@ -162,7 +169,13 @@ export function LiveRaceDashboard() {
 
         <RaceFilters onParamsChange={handleParamsChange} isLoading={connectionStatus === 'connecting'} />
 
-        <ManualOverridePanel />
+        {failedSources.map(source => (
+          <ManualOverridePanel
+            key={source.name}
+            adapterName={source.name}
+            attemptedUrl={source.attemptedUrl || 'URL not available'}
+          />
+        ))}
 
         {renderContent()}
       </div>
