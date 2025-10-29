@@ -125,39 +125,52 @@ class FortunaDesktopApp {
   }
 
   async startBackend() {
+    const isDev = process.env.NODE_ENV === 'development';
+    const rootPath = isDev ? path.join(__dirname, '..') : process.resourcesPath;
+    const pythonExecutable = isDev ? path.join(rootPath, '.venv', 'Scripts', 'python.exe') : path.join(rootPath, 'api.exe');
+
+    if (!fs.existsSync(pythonExecutable)) {
+      const errorMsg = `Backend executable not found at: ${pythonExecutable}`;
+      console.error(`[ERROR] ${errorMsg}`);
+      throw new Error(errorMsg);
+    }
+
+    // Step 1: Initialize the database (only in dev mode)
+    if (isDev) {
+      await new Promise((resolve, reject) => {
+        const dbInitProcess = spawn(pythonExecutable, ['initialize_db.py'], { cwd: path.join(rootPath, 'python_service') });
+        dbInitProcess.stdout.on('data', (data) => console.log(`[DB Init] ${data}`));
+        dbInitProcess.stderr.on('data', (data) => console.error(`[DB Init ERR] ${data}`));
+        dbInitProcess.on('close', (code) => {
+          if (code === 0) {
+            console.log('[SUCCESS] Database initialization complete.');
+            resolve();
+          } else {
+            reject(new Error(`Database initialization failed with code ${code}.`));
+          }
+        });
+      });
+    }
+
+    // Step 2: Start the Uvicorn server
     return new Promise((resolve, reject) => {
-      const isDev = process.env.NODE_ENV === 'development';
-      const rootPath = isDev ? path.join(__dirname, '..') : process.resourcesPath;
-
-      let executablePath;
       let spawnOptions;
-
       if (isDev) {
-        executablePath = path.join(rootPath, '.venv', 'Scripts', 'python.exe');
-        spawnOptions = {
-          cwd: path.join(rootPath, 'python_service'),
-          stdio: ['ignore', 'pipe', 'pipe'],
-          detached: false,
-          args: ['run_server.py']
-        };
+          spawnOptions = {
+              cwd: rootPath, // Run from the root to make `python_service` a package
+              stdio: ['ignore', 'pipe', 'pipe'],
+              detached: false,
+              args: ['-m', 'uvicorn', 'python_service.api:app', '--host', '127.0.0.1', '--port', '8000']
+          };
       } else {
-        // In production, the executable is the server runner itself.
-        executablePath = path.join(rootPath, 'api.exe');
-        spawnOptions = {
-          stdio: ['ignore', 'pipe', 'pipe'],
-          detached: false,
-          args: []
-        };
+          spawnOptions = {
+              stdio: ['ignore', 'pipe', 'pipe'],
+              detached: false,
+              args: []
+          };
       }
 
-      if (!fs.existsSync(executablePath)) {
-        const errorMsg = `Backend executable not found at: ${executablePath}`;
-        console.error(`[ERROR] ${errorMsg}`);
-        // Immediately reject if the file doesn't exist. No need for detailed logs.
-        return reject(new Error(errorMsg));
-      }
-
-      this.backendProcess = spawn(executablePath, spawnOptions.args, spawnOptions);
+      this.backendProcess = spawn(pythonExecutable, spawnOptions.args, spawnOptions);
 
       let stdoutBuffer = '';
       let stderrBuffer = '';

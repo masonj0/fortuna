@@ -35,16 +35,22 @@ cd fortuna
 run_dev_environment.bat
 ```
 
-### 3. Daily Execution
+### 3. Daily Execution (Backend)
 
-Once the initial setup is complete, use the `fortuna-quick-start.ps1` script for your daily development workflow. This powerful script handles all pre-flight checks and launches both servers concurrently.
+To start the backend server, use the new official launcher script. This script ensures the server starts correctly and avoids common import errors.
 
-```powershell
-# From a PowerShell terminal in the project root
-.\\scripts\\fortuna-quick-start.ps1
+```bash
+# From the project root, with your virtual environment activated
+python run_backend.py
 ```
 
-*   **Options:** The script includes parameters for skipping dependency checks (`-SkipChecks`) and running only the backend (`-NoFrontend`) for maximum flexibility.
+This script will check for dependencies, ensure the environment is correct, and launch the Uvicorn server.
+
+**(Frontend)** To start the frontend server for UI development, run the following command in a separate terminal:
+
+```bash
+npm run dev --prefix web_platform/frontend
+```
 
 ---
 
