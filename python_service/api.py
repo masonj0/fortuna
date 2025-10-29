@@ -47,9 +47,11 @@ async def lifespan(app: FastAPI):
 
         # Initialize engine with manual override support
         engine = OddsEngine(config=settings)
-        # for adapter in engine.adapters:
-        #     if hasattr(adapter, 'supports_manual_override') and adapter.supports_manual_override:
-        #         adapter.enable_manual_override(manual_override_manager)
+        for adapter in engine.adapters:
+            if (hasattr(adapter, 'supports_manual_override') and
+                    adapter.supports_manual_override and
+                    hasattr(adapter, 'enable_manual_override')):
+                adapter.enable_manual_override(manual_override_manager)
 
         app.state.engine = engine
         app.state.analyzer_engine = AnalyzerEngine()
@@ -112,10 +114,9 @@ async def get_all_adapter_statuses(
 async def get_qualified_races(
     analyzer_name: str,
     request: Request,
-    race_date: Optional[str] = Query(
+    race_date: Optional[date] = Query(
         default=None,
         description="Date of the races in YYYY-MM-DD format. Defaults to today.",
-        pattern="^\\d{4}-\\d{2}-\\d{2}$",
     ),
     engine: OddsEngine = Depends(get_engine),
     _=Depends(verify_api_key),
@@ -124,7 +125,8 @@ async def get_qualified_races(
     min_second_favorite_odds: float = Query(4.0, ge=1.0, le=100.0),
 ):
     try:
-        date_str = race_date or datetime.now().date().strftime("%Y-%m-%d")
+        date_obj = race_date or datetime.now().date()
+        date_str = date_obj.strftime("%Y-%m-%d")
         aggregated_data = await engine.fetch_all_odds(date_str)
         races = [Race(**r) for r in aggregated_data.get("races", [])]
         analyzer_engine = request.app.state.analyzer_engine
@@ -181,17 +183,17 @@ async def get_filter_suggestions(engine: OddsEngine = Depends(get_engine)):
 @limiter.limit("30/minute")
 async def get_races(
     request: Request,
-    race_date: Optional[str] = Query(
+    race_date: Optional[date] = Query(
         default=None,
         description="Date of the races in YYYY-MM-DD format. Defaults to today.",
-        pattern="^\\d{4}-\\d{2}-\\d{2}$",
     ),
     source: Optional[str] = None,
     engine: OddsEngine = Depends(get_engine),
     _=Depends(verify_api_key),
 ):
     try:
-        date_str = race_date or datetime.now().date().strftime("%Y-%m-%d")
+        date_obj = race_date or datetime.now().date()
+        date_str = date_obj.strftime("%Y-%m-%d")
         return await engine.fetch_all_odds(date_str, source)
     except Exception:
         log.error("Error in /api/races", exc_info=True)
