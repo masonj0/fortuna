@@ -31,6 +31,7 @@
     "web_platform/frontend/src/components/EmptyState.tsx",
     "web_platform/frontend/src/components/LiveRaceDashboard.tsx",
     "web_platform/frontend/src/components/LiveRaceDashboardNoSSR.tsx",
+    "web_platform/frontend/src/components/ManualOverridePanel.tsx",
     "web_platform/frontend/src/components/RaceCard.tsx",
     "web_platform/frontend/src/components/RaceCardSkeleton.tsx",
     "web_platform/frontend/src/components/RaceFilters.tsx",
