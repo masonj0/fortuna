@@ -304,6 +304,23 @@ app.whenReady().then(() => {
     }
   });
 
+  ipcMain.handle('generate-api-key', async () => {
+    const { tokenUrlsafe } = require('crypto');
+    const apiKey = tokenUrlsafe(32);
+    const envPath = path.join(app.getAppPath(), '..', '.env');
+    const content = `API_KEY="${apiKey}"\n`;
+
+    return new Promise((resolve, reject) => {
+      fs.writeFile(envPath, content, (err) => {
+        if (err) {
+          reject(err.message);
+        } else {
+          resolve(apiKey);
+        }
+      });
+    });
+  });
+
   fortunaApp = new FortunaDesktopApp();
   fortunaApp.initialize();
 });
