@@ -75,6 +75,10 @@ class OddsEngine:
             for adapter in self.adapters:
                 adapter.http_client = self.http_client
 
+            # Initialize semaphore for concurrency limiting
+            self.semaphore = asyncio.Semaphore(self.config.MAX_CONCURRENT_REQUESTS)
+            self.logger.info("Concurrency semaphore initialized", limit=self.config.MAX_CONCURRENT_REQUESTS)
+
             self.logger.info("FortunaEngine initialization complete.")
 
         except Exception:
@@ -86,6 +90,11 @@ class OddsEngine:
 
     def get_all_adapter_statuses(self) -> List[Dict[str, Any]]:
         return [adapter.get_status() for adapter in self.adapters]
+
+    async def _fetch_with_semaphore(self, adapter: BaseAdapterV3, date: str):
+        """Acquires the semaphore before fetching data from an adapter."""
+        async with self.semaphore:
+            return await self._time_adapter_fetch(adapter, date)
 
     async def _time_adapter_fetch(
         self, adapter: BaseAdapterV3, date: str
@@ -171,7 +180,7 @@ class OddsEngine:
             log.info("Applying source filter", source=source_filter)
             target_adapters = [a for a in self.adapters if a.source_name.lower() == source_filter.lower()]
 
-        tasks = [self._time_adapter_fetch(adapter, date) for adapter in target_adapters]
+        tasks = [self._fetch_with_semaphore(adapter, date) for adapter in target_adapters]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         source_infos = []
