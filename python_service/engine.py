@@ -30,7 +30,7 @@ class OddsEngine:
             self.logger.info("Initializing adapters...")
             self.adapters: List[BaseAdapterV3] = []
             adapter_classes = [
-                AtTheRacesAdapter, BetfairAdapter, BetfairGreyhoundAdapter, BrisnetAdapter,
+                AtTheRacesAdapter, AtTheRacesGreyhoundAdapter, BetfairAdapter, BetfairGreyhoundAdapter, BrisnetAdapter,
                 DRFAdapter, EquibaseAdapter, FanDuelAdapter, GbgbApiAdapter, GreyhoundAdapter,
                 HarnessAdapter, HorseRacingNationAdapter, NYRABetsAdapter, OddscheckerAdapter,
                 PuntersAdapter, RacingAndSportsAdapter, RacingAndSportsGreyhoundAdapter,
