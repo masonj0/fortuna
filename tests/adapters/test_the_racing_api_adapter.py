@@ -47,8 +47,7 @@ async def test_get_races_parses_correctly(mock_config):
     adapter._fetch_data = AsyncMock(return_value=mock_api_response)
 
     # ACT
-    result = await adapter.get_races(today)
-    races = result.get("races", [])
+    races = [race async for race in adapter.get_races(today)]
 
     # ASSERT
     assert len(races) == 1
@@ -71,8 +70,7 @@ async def test_get_races_handles_empty_response(mock_config):
     adapter._fetch_data = AsyncMock(return_value={"racecards": []})
 
     # ACT
-    result = await adapter.get_races(today)
-    races = result.get("races", [])
+    races = [race async for race in adapter.get_races(today)]
 
     # ASSERT
     assert races == []
@@ -90,4 +88,4 @@ async def test_get_races_raises_exception_on_api_failure(mock_config):
 
     # ACT & ASSERT
     with pytest.raises(Exception, match="API is down"):
-        _ = await adapter.get_races(today)
+        _ = [race async for race in adapter.get_races(today)]
