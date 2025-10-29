@@ -46,29 +46,21 @@ class BaseAdapterV3(ABC):
         """
         from ..manual_override_manager import override_manager
 
-        try:
-            # Check for manual override data first
-            override_content = override_manager.get_override(self.source_name)
-            if override_content:
-                self.logger.info("Using manual override data for fetch.", date=date)
-                raw_data = override_content
-            else:
-                # If no override, proceed with the normal fetch
-                raw_data = await self._fetch_data(date)
+        # Check for manual override data first
+        override_content = override_manager.get_override(self.source_name)
+        if override_content:
+            self.logger.info("Using manual override data for fetch.", date=date)
+            raw_data = override_content
+        else:
+            # If no override, proceed with the normal fetch.
+            # Any exception here (including AdapterHttpError) will propagate
+            # up to the OddsEngine to be handled.
+            raw_data = await self._fetch_data(date)
 
-            if raw_data is not None:
-                parsed_races = self._parse_races(raw_data)
-                for race in parsed_races:
-                    yield race
-        except Exception:
-            self.logger.error(
-                "get_races pipeline failed for adapter.",
-                date=date,
-                exc_info=True
-            )
-            # The pipeline is designed to fail silently for a single adapter
-            # without crashing the entire engine. The error is logged for observability.
-            return
+        if raw_data is not None:
+            parsed_races = self._parse_races(raw_data)
+            for race in parsed_races:
+                yield race
 
     @retry(
         wait=wait_exponential(multiplier=1, min=2, max=10),

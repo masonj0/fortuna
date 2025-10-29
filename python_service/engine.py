@@ -10,7 +10,7 @@ import structlog
 
 from .adapters.base_v3 import BaseAdapterV3 # Import V3 base class
 from .adapters import * # Import all adapter classes
-from .core.exceptions import AdapterConfigError
+from .core.exceptions import AdapterConfigError, AdapterHttpError
 from .cache_manager import cache_async_result
 from .config import get_settings
 from .models import AggregatedResponse, Race, Runner
@@ -75,6 +75,10 @@ class OddsEngine:
             for adapter in self.adapters:
                 adapter.http_client = self.http_client
 
+            # Initialize semaphore for concurrency limiting
+            self.semaphore = asyncio.Semaphore(self.config.MAX_CONCURRENT_REQUESTS)
+            self.logger.info("Concurrency semaphore initialized", limit=self.config.MAX_CONCURRENT_REQUESTS)
+
             self.logger.info("FortunaEngine initialization complete.")
 
         except Exception:
@@ -87,6 +91,11 @@ class OddsEngine:
     def get_all_adapter_statuses(self) -> List[Dict[str, Any]]:
         return [adapter.get_status() for adapter in self.adapters]
 
+    async def _fetch_with_semaphore(self, adapter: BaseAdapterV3, date: str):
+        """Acquires the semaphore before fetching data from an adapter."""
+        async with self.semaphore:
+            return await self._time_adapter_fetch(adapter, date)
+
     async def _time_adapter_fetch(
         self, adapter: BaseAdapterV3, date: str
     ) -> Tuple[str, Dict[str, Any], float]:
@@ -98,10 +107,21 @@ class OddsEngine:
         races: List[Race] = []
         error_message = None
         is_success = False
+        attempted_url = None
 
         try:
             races = [race async for race in adapter.get_races(date)]
             is_success = True
+        except AdapterHttpError as e:
+            self.logger.error(
+                "HTTP failure during fetch from adapter.",
+                adapter=adapter.source_name,
+                status_code=e.status_code,
+                url=e.url,
+                exc_info=False
+            )
+            error_message = f"HTTP Error {e.status_code} for {e.url}"
+            attempted_url = e.url
         except Exception as e:
             self.logger.error(
                 "Critical failure during fetch from adapter.",
@@ -121,6 +141,7 @@ class OddsEngine:
                 "races_fetched": len(races),
                 "error_message": error_message,
                 "fetch_duration": duration,
+                "attempted_url": attempted_url,
             },
         }
         return (adapter.source_name, payload, duration)
@@ -159,7 +180,7 @@ class OddsEngine:
             log.info("Applying source filter", source=source_filter)
             target_adapters = [a for a in self.adapters if a.source_name.lower() == source_filter.lower()]
 
-        tasks = [self._time_adapter_fetch(adapter, date) for adapter in target_adapters]
+        tasks = [self._fetch_with_semaphore(adapter, date) for adapter in target_adapters]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         source_infos = []
@@ -181,7 +202,7 @@ class OddsEngine:
         response_obj = AggregatedResponse(
             date=datetime.strptime(date, "%Y-%m-%d").date(),
             races=deduped_races,
-            sources=source_infos,
+            source_info=source_infos,
             metadata={
                 "fetch_time": datetime.now(),
                 "sources_queried": [a.source_name for a in target_adapters],
@@ -189,4 +210,4 @@ class OddsEngine:
                 "total_races": len(deduped_races),
             },
         )
-        return response_obj.model_dump()
+        return response_obj.model_dump(by_alias=True)

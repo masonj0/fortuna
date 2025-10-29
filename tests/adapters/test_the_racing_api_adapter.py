@@ -76,17 +76,16 @@ async def test_get_races_handles_empty_response(mock_config):
     assert races == []
 
 @pytest.mark.asyncio
-async def test_get_races_returns_empty_list_on_api_failure(mock_config):
+async def test_get_races_raises_exception_on_api_failure(mock_config):
     """
-    Tests that get_races returns an empty list when _fetch_data fails.
+    Tests that get_races propagates the exception when _fetch_data fails.
+    This is the desired behavior for the OddsEngine to handle it.
     """
     # ARRANGE
     adapter = TheRacingApiAdapter(config=mock_config)
     today = date.today().strftime('%Y-%m-%d')
     adapter._fetch_data = AsyncMock(side_effect=Exception("API is down"))
 
-    # ACT
-    result = [race async for race in adapter.get_races(today)]
-
-    # ASSERT
-    assert result == []
+    # ACT & ASSERT
+    with pytest.raises(Exception, match="API is down"):
+        _ = [race async for race in adapter.get_races(today)]
