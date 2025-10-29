@@ -108,11 +108,9 @@ class OddsEngine:
         error_message = None
         is_success = False
         attempted_url = None
-        payload = {}
 
         try:
-            payload = await adapter.get_races(date)
-            races = payload.get("races", [])
+            races = [race async for race in adapter.get_races(date)]
             is_success = True
         except AdapterHttpError as e:
             self.logger.error(
@@ -135,7 +133,7 @@ class OddsEngine:
 
         duration = (datetime.now() - start_time).total_seconds()
 
-        final_payload = {
+        payload = {
             "races": races,
             "source_info": {
                 "name": adapter.source_name,
@@ -146,7 +144,7 @@ class OddsEngine:
                 "attempted_url": attempted_url,
             },
         }
-        return (adapter.source_name, final_payload, duration)
+        return (adapter.source_name, payload, duration)
 
     def _race_key(self, race: Race) -> str:
         return f"{race.venue.lower().strip()}|{race.race_number}|{race.start_time.strftime('%H:%M')}"

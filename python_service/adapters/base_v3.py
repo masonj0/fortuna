@@ -1,5 +1,4 @@
 # python_service/adapters/base_v3.py
-import time
 from abc import ABC, abstractmethod
 from typing import AsyncGenerator, Any, List
 import httpx
@@ -23,13 +22,6 @@ class BaseAdapterV3(ABC):
         self.logger = structlog.get_logger(adapter_name=self.source_name)
         self.http_client: httpx.AsyncClient = None  # Injected by the engine
 
-        # Circuit Breaker State
-        self.circuit_breaker_tripped = False
-        self.circuit_breaker_failure_count = 0
-        self.circuit_breaker_last_failure = 0
-        self.FAILURE_THRESHOLD = 3
-        self.COOLDOWN_PERIOD_SECONDS = 300  # 5 minutes
-
     @abstractmethod
     async def _fetch_data(self, date: str) -> Any:
         """
@@ -46,7 +38,7 @@ class BaseAdapterV3(ABC):
         """
         raise NotImplementedError
 
-    async def get_races(self, date: str) -> dict:
+    async def get_races(self, date: str) -> AsyncGenerator[Race, None]:
         """
         Orchestrates the fetch-then-parse pipeline for the adapter.
         This public method should not be overridden by subclasses.
@@ -65,20 +57,10 @@ class BaseAdapterV3(ABC):
             # up to the OddsEngine to be handled.
             raw_data = await self._fetch_data(date)
 
-        races = []
         if raw_data is not None:
-            races = self._parse_races(raw_data)
-
-        return {
-            "races": races,
-            "source_info": {
-                "name": self.source_name,
-                "status": "SUCCESS",
-                "races_fetched": len(races),
-                "error_message": None,
-                "fetch_duration": 0,  # This will be calculated in the engine
-            },
-        }
+            parsed_races = self._parse_races(raw_data)
+            for race in parsed_races:
+                yield race
 
     @retry(
         wait=wait_exponential(multiplier=1, min=2, max=10),
@@ -89,37 +71,28 @@ class BaseAdapterV3(ABC):
         self, http_client: httpx.AsyncClient, method: str, url: str, **kwargs
     ) -> httpx.Response:
         """
-        Makes a resilient HTTP request with built-in retry logic and a circuit breaker.
+        Makes a resilient HTTP request with built-in retry logic using tenacity.
         """
-        if self.circuit_breaker_tripped:
-            if time.time() - self.circuit_breaker_last_failure < self.COOLDOWN_PERIOD_SECONDS:
-                self.logger.warning("Circuit breaker is tripped. Skipping request.")
-                raise AdapterHttpError(
-                    adapter_name=self.source_name,
-                    status_code=503,
-                    url=url,
-                    detail="Circuit breaker is tripped"
-                )
-            else:
-                self.logger.info("Circuit breaker cooldown expired. Attempting to reset.")
-                self.circuit_breaker_tripped = False
-                self.circuit_breaker_failure_count = 0
-
+        # Ensure the URL is correctly formed, whether it's relative or absolute
         full_url = url if url.startswith('http') else f"{self.base_url.rstrip('/')}/{url.lstrip('/')}"
 
         try:
-            self.logger.info("Making request", method=method.upper(), url=full_url)
+            self.logger.info(f"Making request", method=method.upper(), url=full_url)
             response = await http_client.request(method, full_url, timeout=self.timeout, **kwargs)
-            response.raise_for_status()
-            self.circuit_breaker_failure_count = 0  # Reset on success
+            response.raise_for_status()  # Raise an exception for 4xx/5xx responses
             return response
+        except httpx.HTTPStatusError as e:
+            self.logger.error(
+                "HTTP Status Error during request",
+                status_code=e.response.status_code,
+                url=str(e.request.url)
+            )
+            raise AdapterHttpError(
+                adapter_name=self.source_name,
+                status_code=e.response.status_code,
+                url=str(e.request.url)
+            ) from e
         except (httpx.RequestError, RetryError) as e:
-            self.circuit_breaker_failure_count += 1
-            self.circuit_breaker_last_failure = time.time()
-            if self.circuit_breaker_failure_count >= self.FAILURE_THRESHOLD:
-                self.circuit_breaker_tripped = True
-                self.logger.error("Circuit breaker tripped due to repeated failures.")
-
             self.logger.error("Request Error or Retry Error", error=str(e))
             raise AdapterHttpError(
                 adapter_name=self.source_name,

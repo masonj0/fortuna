@@ -7,7 +7,7 @@ import fakeredis.aioredis
 from python_service.models import Race, Runner, OddsData, SourceInfo, AggregatedResponse
 from python_service.engine import OddsEngine
 from python_service.config import get_settings
-from python_service.adapters.base_v3 import BaseAdapterV3 as BaseAdapter
+from python_service.adapters.base_v3 import BaseAdapterV3
 
 def create_mock_race(source: str, venue: str, race_number: int, start_time: datetime, runners_data: list) -> Race:
     """Helper function to create a Race object for testing."""
@@ -24,12 +24,6 @@ def create_mock_race(source: str, venue: str, race_number: int, start_time: date
         runners=runners,
         source=source
     )
-
-@pytest.fixture(autouse=True)
-def clear_cache_before_each_test():
-    """Fixture to clear the cache before each test run."""
-    from python_service.cache_manager import cache_manager
-    cache_manager.clear()
 
 @pytest.fixture
 def mock_engine() -> OddsEngine:
@@ -93,14 +87,16 @@ async def test_engine_deduplicates_races_and_merges_odds(mock_time_adapter_fetch
 
 
 @pytest.mark.asyncio
-@patch('redis.from_url', fakeredis.aioredis.FakeRedis.from_url)
-async def test_engine_caching_logic():
+@patch('python_service.cache_manager.cache_manager.set', new_callable=AsyncMock)
+@patch('python_service.cache_manager.cache_manager.get', new_callable=AsyncMock)
+async def test_engine_caching_logic(mock_cache_get, mock_cache_set):
     """
     SPEC: The OddsEngine should cache results in Redis.
     1. On a cache miss, it should fetch from adapters and set the cache.
     2. On a cache hit, it should return data from the cache without fetching from adapters.
     """
     # ARRANGE
+    mock_cache_get.return_value = None  # Cache miss on first call
     engine = OddsEngine(config=get_settings())
 
     today_str = date.today().strftime('%Y-%m-%d')
@@ -111,7 +107,7 @@ async def test_engine_caching_logic():
     ])
 
     # Replace the engine's adapters with a single mock to isolate the test
-    mock_adapter = AsyncMock(spec=BaseAdapter)
+    mock_adapter = AsyncMock(spec=BaseAdapterV3)
     mock_adapter.source_name = "TestSource"
     mock_adapter.get_races = AsyncMock()
     mock_adapter.get_races.return_value = [mock_race]
@@ -126,16 +122,20 @@ async def test_engine_caching_logic():
 
         # --- ASSERT 1: Cache Miss ---
         mock_fetch.assert_called_once()
+        mock_cache_set.assert_called_once()
         assert len(result_miss['races']) == 1
         assert result_miss['races'][0]['venue'] == "Cache Park"
 
         # --- ACT 2: Cache Hit ---
         mock_fetch.reset_mock()
+        mock_cache_set.reset_mock()
+        mock_cache_get.return_value = result_miss # Simulate cache hit
 
         result_hit = await engine.fetch_all_odds(today_str)
 
         # --- ASSERT 2: Cache Hit ---
         mock_fetch.assert_not_called()
+        mock_cache_set.assert_not_called()
         assert len(result_hit['races']) == 1
         assert result_hit['races'][0]['venue'] == "Cache Park"
         assert result_hit == result_miss

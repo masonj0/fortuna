@@ -59,14 +59,6 @@ class CacheManager:
 
         self.memory_cache[key] = {"value": value, "expires_at": datetime.now() + timedelta(seconds=ttl_seconds)}
 
-    def clear(self):
-        if self.redis_client:
-            try:
-                self.redis_client.flushdb()
-            except Exception as e:
-                log.warning(f"Redis FLUSHDB failed: {e}")
-        self.memory_cache.clear()
-
 
 # --- Singleton Instance & Decorator ---
 cache_manager = CacheManager(redis_url=os.getenv("REDIS_URL"))

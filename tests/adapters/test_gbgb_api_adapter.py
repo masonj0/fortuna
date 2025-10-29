@@ -43,8 +43,7 @@ async def test_get_gbgb_races_successfully(gbgb_adapter):
     gbgb_adapter._fetch_data = AsyncMock(return_value=mock_api_response)
 
     # ACT
-    result = await gbgb_adapter.get_races(mock_date)
-    races = result.get("races", [])
+    races = [race async for race in gbgb_adapter.get_races(mock_date)]
 
     # ASSERT
     assert len(races) == 1
@@ -77,8 +76,7 @@ async def test_get_races_handles_fetch_failure(gbgb_adapter):
     gbgb_adapter._fetch_data = AsyncMock(return_value=None)
 
     # ACT
-    result = await gbgb_adapter.get_races(mock_date)
-    races = result.get("races", [])
+    races = [race async for race in gbgb_adapter.get_races(mock_date)]
 
     # ASSERT
     assert races == []

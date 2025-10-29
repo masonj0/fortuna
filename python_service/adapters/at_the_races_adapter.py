@@ -27,9 +27,11 @@ class AtTheRacesAdapter(BaseAdapterV3):
         Fetches the raw HTML for all race pages for a given date.
         Returns a dictionary containing the HTML content and the date.
         """
-        # SIMULATED FAILURE FOR VERIFICATION
-        from ..core.exceptions import AdapterHttpError
-        raise AdapterHttpError(adapter_name=self.source_name, status_code=403, url=f"{self.base_url}/racecards/{date}")
+        index_url = f"/racecards/{date}"
+        index_response = await self.make_request(self.http_client, "GET", index_url)
+        if not index_response:
+            self.logger.warning("Failed to fetch AtTheRaces index page", url=index_url)
+            return None
 
         index_soup = BeautifulSoup(index_response.text, "html.parser")
         links = {a["href"] for a in index_soup.select("a.race-time-link[href]")}

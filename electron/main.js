@@ -238,34 +238,29 @@ ${stderrBuffer.trim() || '(No standard error output)'}
 
 
   initialize() {
-    // --- Create UI First ---
-    // This ensures the user always sees the application window, even if the
-    // backend fails to start.
+    // --- Create and Show UI Immediately ---
     this.createMainWindow();
     this.createSystemTray();
+    this.mainWindow.once('ready-to-show', () => {
+      this.mainWindow.show();
+      this.mainWindow.focus();
+    });
 
-    // --- Start Backend Asynchronously ---
-    // We attempt to start the backend in a non-blocking way and handle its
-    // success or failure gracefully in the promise chain.
+    // --- Start Backend Asynchronously (Non-Blocking) ---
+    // Do NOT await or block on this. Let it run in the background.
     this.startBackend()
       .then(() => {
         console.log('[SUCCESS] Backend started successfully.');
-        // Optional: Notify the frontend that the backend is online.
-        if (this.mainWindow) {
-            this.mainWindow.webContents.send('backend-status', { status: 'online' });
+        // Notify frontend of online status
+        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+          this.mainWindow.webContents.send('backend-status', { status: 'online' });
         }
       })
       .catch(error => {
-        // If the backend fails, show a detailed error box but DO NOT quit.
-        // The UI remains active, allowing the user to see the dashboard.
-        console.error(`[FATAL] Backend failed to start: ${error.message}`);
-        dialog.showErrorBox(
-            'Backend Error',
-            `The backend process failed to start. The UI will remain active, but data services will be unavailable.\n\nDetails:\n${error.message}`
-        );
-        // Optional: Notify the frontend of the failure.
-        if (this.mainWindow) {
-            this.mainWindow.webContents.send('backend-status', { status: 'offline', error: error.message });
+        console.error(`[BACKEND FAILURE] Backend failed to start: ${error.message}`);
+        // Do NOT show blocking error dialog. Log it and notify frontend of offline status.
+        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+          this.mainWindow.webContents.send('backend-status', { status: 'offline', error: error.message });
         }
       });
   }
