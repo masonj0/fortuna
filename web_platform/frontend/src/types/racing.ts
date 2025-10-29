@@ -33,6 +33,16 @@ export interface Race {
   favorite?: Runner;
 }
 
+// --- API Response Interfaces ---
+export interface SourceInfo {
+  name: string;
+  status: 'SUCCESS' | 'FAILED';
+  racesFetched: number;
+  fetchDuration: number;
+  errorMessage?: string;
+  attemptedUrl?: string;
+}
+
 // --- Adapter Status Interface ---
 export interface AdapterStatus {
   adapter_name: string;
