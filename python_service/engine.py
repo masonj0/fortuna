@@ -10,7 +10,7 @@ import structlog
 
 from .adapters.base_v3 import BaseAdapterV3 # Import V3 base class
 from .adapters import * # Import all adapter classes
-from .core.exceptions import AdapterConfigError
+from .core.exceptions import AdapterConfigError, AdapterHttpError
 from .cache_manager import cache_async_result
 from .config import get_settings
 from .models import AggregatedResponse, Race, Runner
@@ -98,10 +98,21 @@ class OddsEngine:
         races: List[Race] = []
         error_message = None
         is_success = False
+        attempted_url = None
 
         try:
             races = [race async for race in adapter.get_races(date)]
             is_success = True
+        except AdapterHttpError as e:
+            self.logger.error(
+                "HTTP failure during fetch from adapter.",
+                adapter=adapter.source_name,
+                status_code=e.status_code,
+                url=e.url,
+                exc_info=False
+            )
+            error_message = f"HTTP Error {e.status_code} for {e.url}"
+            attempted_url = e.url
         except Exception as e:
             self.logger.error(
                 "Critical failure during fetch from adapter.",
@@ -121,6 +132,7 @@ class OddsEngine:
                 "races_fetched": len(races),
                 "error_message": error_message,
                 "fetch_duration": duration,
+                "attempted_url": attempted_url,
             },
         }
         return (adapter.source_name, payload, duration)
@@ -181,7 +193,7 @@ class OddsEngine:
         response_obj = AggregatedResponse(
             date=datetime.strptime(date, "%Y-%m-%d").date(),
             races=deduped_races,
-            sources=source_infos,
+            source_info=source_infos,
             metadata={
                 "fetch_time": datetime.now(),
                 "sources_queried": [a.source_name for a in target_adapters],
@@ -189,4 +201,4 @@ class OddsEngine:
                 "total_races": len(deduped_races),
             },
         )
-        return response_obj.model_dump()
+        return response_obj.model_dump(by_alias=True)

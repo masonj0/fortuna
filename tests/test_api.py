@@ -19,8 +19,8 @@ from fastapi.testclient import TestClient
 # --- API Tests ---
 
 @pytest.mark.asyncio
-@patch('python_service.engine.FortunaEngine.get_races', new_callable=AsyncMock)
-async def test_get_races_endpoint_success(mock_get_races, client):
+@patch('python_service.engine.OddsEngine.fetch_all_odds', new_callable=AsyncMock)
+async def test_get_races_endpoint_success(mock_fetch_all_odds, client):
     """
     SPEC: The /api/races endpoint should return data with a valid API key.
     """
@@ -34,7 +34,7 @@ async def test_get_races_endpoint_success(mock_get_races, client):
         # This was the missing field causing the validation error
         source_info=[]
     )
-    mock_get_races.return_value = mock_response.model_dump()
+    mock_fetch_all_odds.return_value = mock_response.model_dump()
     headers = {"X-API-Key": "test_api_key"}
 
     # ACT
@@ -42,7 +42,7 @@ async def test_get_races_endpoint_success(mock_get_races, client):
 
     # ASSERT
     assert response.status_code == 200
-    mock_get_races.assert_awaited_once()
+    mock_fetch_all_odds.assert_awaited_once()
 
 @pytest.mark.asyncio
 async def test_get_tipsheet_endpoint_success(tmp_path, client):

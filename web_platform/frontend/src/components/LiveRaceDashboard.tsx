@@ -6,9 +6,8 @@ import { RaceFilters } from './RaceFilters';
 import { RaceCard } from './RaceCard';
 import { RaceCardSkeleton } from './RaceCardSkeleton';
 import { EmptyState } from './EmptyState';
-import { Race } from '../types/racing';
+import { Race, SourceInfo } from '../types/racing';
 import { StatusDetailModal } from './StatusDetailModal';
-import ManualOverridePanel from './ManualOverridePanel';
 
 type ConnectionStatus = 'connecting' | 'online' | 'offline';
 
@@ -57,6 +56,7 @@ export function LiveRaceDashboard() {
 
       const data = await response.json();
       setRaces(data.races || []);
+
       setLastUpdate(new Date());
       setConnectionStatus('online');
     } catch (err) {
@@ -161,8 +161,6 @@ export function LiveRaceDashboard() {
         </div>
 
         <RaceFilters onParamsChange={handleParamsChange} isLoading={connectionStatus === 'connecting'} />
-
-        <ManualOverridePanel />
 
         {renderContent()}
       </div>

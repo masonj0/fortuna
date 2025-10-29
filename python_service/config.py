@@ -6,7 +6,7 @@ from typing import List
 from typing import Optional
 
 import structlog
-from pydantic import model_validator
+from pydantic import Field, model_validator, validator
 from pydantic_settings import BaseSettings
 
 from .credentials_manager import SecureCredentialsManager
@@ -37,7 +37,13 @@ def decrypt_value(value: Optional[str]) -> Optional[str]:
 
 
 class Settings(BaseSettings):
-    API_KEY: str = ""
+    API_KEY: str = Field(..., min_length=16)
+
+    @validator('API_KEY')
+    def validate_api_key(cls, v):
+        if v in ['dev_test_key_123', 'test', 'changeme', 'MISSING']:
+            raise ValueError('Insecure or missing API key provided.')
+        return v
 
     # --- API Gateway Configuration ---
     UVICORN_HOST: str = "127.0.0.1"
@@ -82,14 +88,9 @@ class Settings(BaseSettings):
         """
         This validator runs after the initial settings are loaded from .env and
         performs two key functions:
-        1. If API_KEY is missing, it falls back to the SecureCredentialsManager.
-        2. It decrypts any fields that were loaded from the .env file.
+        1. It decrypts any fields that were loaded from the .env file.
         """
-        # 1. Fallback for API_KEY
-        if not self.API_KEY:
-            self.API_KEY = SecureCredentialsManager.get_credential("api_key") or "MISSING"
-
-        # 2. Decrypt sensitive fields
+        # 1. Decrypt sensitive fields
         self.BETFAIR_APP_KEY = decrypt_value(self.BETFAIR_APP_KEY)
 
         return self
