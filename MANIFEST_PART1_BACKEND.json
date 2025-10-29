@@ -58,7 +58,6 @@
     "python_service/requirements.txt",
     "python_service/requirements_minimal.txt",
     "python_service/run_api.py",
-    "python_service/run_server.py",
     "python_service/security.py",
     "python_service/setup_wizard_gui.py",
     "python_service/utils/__init__.py",

@@ -15,6 +15,12 @@ declare global {
        * @returns {Promise<string|null>} A promise that resolves with the API key or null if not found.
        */
       getApiKey: () => Promise<string | null>;
+      /**
+       * Registers a callback to be invoked when the backend status changes.
+       * @param {Function} callback - The function to call with the status object.
+       *                              It receives an object like { status: 'online' | 'offline', error?: string }.
+       */
+      onBackendStatus: (callback: (status: { status: 'online' | 'offline'; error?: string }) => void) => void;
     };
   }
 }

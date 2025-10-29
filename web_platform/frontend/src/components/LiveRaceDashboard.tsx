@@ -77,15 +77,29 @@ export function LiveRaceDashboard() {
   }, [params, connectionStatus]);
 
   useEffect(() => {
-    fetchQualifiedRaces();
-    // This interval is for auto-refresh when online.
+    // This effect runs once on mount to set up the backend status listener.
+    if (window.electronAPI && typeof window.electronAPI.onBackendStatus === 'function') {
+      window.electronAPI.onBackendStatus((statusUpdate) => {
+        console.log('Received backend status update:', statusUpdate);
+        setConnectionStatus(statusUpdate.status);
+        if (statusUpdate.status === 'offline') {
+          setErrorDetails(statusUpdate.error || 'The backend failed to start.');
+        } else {
+          // If the backend comes online, trigger an immediate fetch.
+          fetchQualifiedRaces();
+        }
+      });
+    }
+
+    // Initial fetch is now triggered by the backend status becoming 'online'.
+    // A periodic refresh interval is still useful for when the app is online.
     const interval = setInterval(() => {
         if(connectionStatus === 'online') {
             fetchQualifiedRaces();
         }
-    }, 30000);
+    }, 30000); // 30-second refresh
     return () => clearInterval(interval);
-  }, [params]); // Re-fetch when params change
+  }, [fetchQualifiedRaces, connectionStatus]); // Rerun if fetchQualifiedRaces changes
 
   const handleParamsChange = useCallback((newParams: RaceFilterParams) => {
     setParams(newParams);

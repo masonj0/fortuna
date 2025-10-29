@@ -7,7 +7,7 @@ import fakeredis.aioredis
 from python_service.models import Race, Runner, OddsData, SourceInfo, AggregatedResponse
 from python_service.engine import OddsEngine
 from python_service.config import get_settings
-from python_service.adapters.base_v3 import BaseAdapterV3 as BaseAdapter
+from python_service.adapters.base_v3 import BaseAdapterV3
 
 def create_mock_race(source: str, venue: str, race_number: int, start_time: datetime, runners_data: list) -> Race:
     """Helper function to create a Race object for testing."""
@@ -107,7 +107,7 @@ async def test_engine_caching_logic(mock_cache_get, mock_cache_set):
     ])
 
     # Replace the engine's adapters with a single mock to isolate the test
-    mock_adapter = AsyncMock(spec=BaseAdapter)
+    mock_adapter = AsyncMock(spec=BaseAdapterV3)
     mock_adapter.source_name = "TestSource"
     mock_adapter.get_races = AsyncMock()
     mock_adapter.get_races.return_value = [mock_race]

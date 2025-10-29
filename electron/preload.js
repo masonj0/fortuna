@@ -11,6 +11,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
    * @returns {Promise<string|null>} A promise that resolves with the API key or null if not found.
    */
   getApiKey: () => ipcRenderer.invoke('get-api-key'),
+
+  /**
+   * Registers a callback to be invoked when the backend status changes.
+   * @param {Function} callback - The function to call with the status object.
+   *                              It receives an object like { status: 'online' | 'offline', error?: string }.
+   */
+  onBackendStatus: (callback) => ipcRenderer.on('backend-status', (_event, value) => callback(value)),
 });
 
 console.log('Preload script loaded and electronAPI is exposed.');
