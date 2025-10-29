@@ -58,6 +58,7 @@ class SourceInfo(FortunaBaseModel):
     races_fetched: int = Field(..., alias="racesFetched")
     fetch_duration: float = Field(..., alias="fetchDuration")
     error_message: Optional[str] = Field(None, alias="errorMessage")
+    attempted_url: Optional[str] = Field(None, alias="attemptedUrl")
 
 
 class AggregatedResponse(FortunaBaseModel):

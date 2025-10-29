@@ -4,10 +4,10 @@ from datetime import datetime, date
 from decimal import Decimal
 import fakeredis.aioredis
 
-from python_service.models import Race, Runner, OddsData
+from python_service.models import Race, Runner, OddsData, SourceInfo, AggregatedResponse
 from python_service.engine import OddsEngine
 from python_service.config import get_settings
-from python_service.adapters.base import BaseAdapter
+from python_service.adapters.base_v3 import BaseAdapterV3 as BaseAdapter
 
 def create_mock_race(source: str, venue: str, race_number: int, start_time: datetime, runners_data: list) -> Race:
     """Helper function to create a Race object for testing."""
@@ -53,9 +53,9 @@ async def test_engine_deduplicates_races_and_merges_odds(mock_time_adapter_fetch
     ])
 
     mock_time_adapter_fetch.side_effect = [
-        ("SourceA", {'races': [source_a_race], 'source_info': {'name': 'SourceA', 'status': 'SUCCESS', 'races_fetched': 1}}, 1.0),
-        ("SourceB", {'races': [source_b_race], 'source_info': {'name': 'SourceB', 'status': 'SUCCESS', 'races_fetched': 1}}, 1.0),
-        ("SourceC", {'races': [other_race], 'source_info': {'name': 'SourceC', 'status': 'SUCCESS', 'races_fetched': 1}}, 1.0),
+        ("SourceA", {'races': [source_a_race], 'source_info': {'name': 'SourceA', 'status': 'SUCCESS', 'races_fetched': 1, 'fetch_duration': 1.0, 'attempted_url': None, 'error_message': None}}, 1.0),
+        ("SourceB", {'races': [source_b_race], 'source_info': {'name': 'SourceB', 'status': 'SUCCESS', 'races_fetched': 1, 'fetch_duration': 1.0, 'attempted_url': None, 'error_message': None}}, 1.0),
+        ("SourceC", {'races': [other_race], 'source_info': {'name': 'SourceC', 'status': 'SUCCESS', 'races_fetched': 1, 'fetch_duration': 1.0, 'attempted_url': None, 'error_message': None}}, 1.0),
     ]
 
     # ACT
@@ -64,44 +64,42 @@ async def test_engine_deduplicates_races_and_merges_odds(mock_time_adapter_fetch
 
     # ASSERT
     assert len(result['races']) == 2, "Engine should have de-duplicated the races."
+    assert result['sourceInfo'] is not None
 
     merged_race = next((r for r in result['races'] if r['venue'] == "Test Park"), None)
     assert merged_race is not None, "Merged race should be present in the results."
     assert len(merged_race['runners']) == 3, "Merged race should contain all unique runners."
 
-    runner1 = next((r for r in merged_race['runners'] if r['number'] == 1), None)
+    runner1 = next((r for r in merged_race['runners'] if r['saddleClothNumber'] == 1), None)
     assert runner1 is not None
     assert "SourceA" in runner1['odds']
     assert "SourceB" in runner1['odds']
     assert runner1['odds']['SourceA']['win'] == Decimal("5.0")
     assert runner1['odds']['SourceB']['win'] == Decimal("5.5")
 
-    runner2 = next((r for r in merged_race['runners'] if r['number'] == 2), None)
+    runner2 = next((r for r in merged_race['runners'] if r['saddleClothNumber'] == 2), None)
     assert runner2 is not None
     assert "SourceA" in runner2['odds'] and "SourceB" not in runner2['odds']
 
-    runner3 = next((r for r in merged_race['runners'] if r['number'] == 3), None)
+    runner3 = next((r for r in merged_race['runners'] if r['saddleClothNumber'] == 3), None)
     assert runner3 is not None
     assert "SourceB" in runner3['odds'] and "SourceA" not in runner3['odds']
 
 
 @pytest.mark.asyncio
-@patch('python_service.engine.redis.from_url')
-async def test_engine_caching_logic(mock_redis_from_url):
+@patch('python_service.cache_manager.cache_manager.set', new_callable=AsyncMock)
+@patch('python_service.cache_manager.cache_manager.get', new_callable=AsyncMock)
+async def test_engine_caching_logic(mock_cache_get, mock_cache_set):
     """
     SPEC: The OddsEngine should cache results in Redis.
     1. On a cache miss, it should fetch from adapters and set the cache.
     2. On a cache hit, it should return data from the cache without fetching from adapters.
     """
     # ARRANGE
-    mock_redis_client = fakeredis.aioredis.FakeRedis(decode_responses=True)
-    mock_redis_from_url.return_value = mock_redis_client
-    await mock_redis_client.flushall()
-
+    mock_cache_get.return_value = None  # Cache miss on first call
     engine = OddsEngine(config=get_settings())
 
     today_str = date.today().strftime('%Y-%m-%d')
-    cache_key = f"fortuna:races:{today_str}"
     test_time = datetime(2025, 10, 9, 15, 0)
 
     mock_race = create_mock_race("TestSource", "Cache Park", 1, test_time, [
@@ -111,34 +109,35 @@ async def test_engine_caching_logic(mock_redis_from_url):
     # Replace the engine's adapters with a single mock to isolate the test
     mock_adapter = AsyncMock(spec=BaseAdapter)
     mock_adapter.source_name = "TestSource"
-    mock_adapter.fetch_races.return_value = {
-        'races': [mock_race],
-        'source_info': {'name': 'TestSource', 'status': 'SUCCESS', 'races_fetched': 1}
-    }
+    mock_adapter.get_races = AsyncMock()
+    mock_adapter.get_races.return_value = [mock_race]
     engine.adapters = [mock_adapter]
 
+    # Mock the internal fetch method to avoid dealing with source_info format
+    with patch.object(engine, '_time_adapter_fetch', new_callable=AsyncMock) as mock_fetch:
+        mock_fetch.return_value = ("TestSource", {'races': [mock_race], 'source_info': {'name': 'TestSource', 'status': 'SUCCESS', 'races_fetched': 1, 'fetch_duration': 0.1, 'error_message': None, 'attempted_url': None}}, 0.1)
 
-    # --- ACT 1: Cache Miss ---
-    result_miss = await engine.fetch_all_odds(today_str)
+        # --- ACT 1: Cache Miss ---
+        result_miss = await engine.fetch_all_odds(today_str)
 
-    # --- ASSERT 1: Cache Miss ---
-    mock_adapter.fetch_races.assert_called_once()
-    cached_value = await mock_redis_client.get(cache_key)
-    assert cached_value is not None
-    assert len(result_miss['races']) == 1
-    assert result_miss['races'][0]['venue'] == "Cache Park"
+        # --- ASSERT 1: Cache Miss ---
+        mock_fetch.assert_called_once()
+        mock_cache_set.assert_called_once()
+        assert len(result_miss['races']) == 1
+        assert result_miss['races'][0]['venue'] == "Cache Park"
 
+        # --- ACT 2: Cache Hit ---
+        mock_fetch.reset_mock()
+        mock_cache_set.reset_mock()
+        mock_cache_get.return_value = result_miss # Simulate cache hit
 
-    # --- ACT 2: Cache Hit ---
-    mock_adapter.fetch_races.reset_mock()
-    result_hit = await engine.fetch_all_odds(today_str)
+        result_hit = await engine.fetch_all_odds(today_str)
 
-    # --- ASSERT 2: Cache Hit ---
-    mock_adapter.fetch_races.assert_not_called()
-    assert len(result_hit['races']) == 1
-    assert result_hit['races'][0]['venue'] == "Cache Park"
-
-    assert result_hit['races'] == result_miss['races']
-    assert result_hit['sources'] == result_miss['sources']
+        # --- ASSERT 2: Cache Hit ---
+        mock_fetch.assert_not_called()
+        mock_cache_set.assert_not_called()
+        assert len(result_hit['races']) == 1
+        assert result_hit['races'][0]['venue'] == "Cache Park"
+        assert result_hit == result_miss
 
     await engine.close()
