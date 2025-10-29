@@ -129,9 +129,15 @@ export function LiveRaceDashboard() {
 
     // Priority 3: Handle empty state when online but no races match criteria
     if (races.length === 0) {
+      if (failedSources.length > 0) {
+        return <EmptyState
+          title="Incomplete Results"
+          message="Some data sources could not be reached. For the sources that responded, no races matched your filters."
+        />;
+      }
       return <EmptyState
         title="No Races Found"
-        message="No races matched the current filter criteria. Try adjusting the filters."
+        message="All available data sources responded successfully, but no races matched your current filter criteria."
       />;
     }
 
