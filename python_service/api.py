@@ -20,10 +20,11 @@ from pydantic import BaseModel
 
 from .analyzer import AnalyzerEngine
 from .config import get_settings
+from .core.exceptions import AdapterHttpError, AdapterConfigError
 from .engine import OddsEngine
 from .health import router as health_router
 from .logging_config import configure_logging
-from .middleware.error_handler import validation_exception_handler
+from .middleware.error_handler import validation_exception_handler, user_friendly_exception_handler, UserFriendlyException
 from .models import AggregatedResponse, QualifiedRacesResponse, Race, TipsheetRace
 from .security import verify_api_key
 from .manual_override_manager import ManualOverrideManager
@@ -81,6 +82,7 @@ app.add_middleware(SlowAPIMiddleware)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(UserFriendlyException, user_friendly_exception_handler)
 settings = get_settings()
 app.include_router(health_router)
 app.add_middleware(
@@ -141,9 +143,11 @@ async def get_qualified_races(
     except ValueError as e:
         log.warning("Requested analyzer not found", analyzer_name=analyzer_name)
         raise HTTPException(status_code=404, detail=str(e))
+    except (AdapterHttpError, AdapterConfigError) as e:
+        raise UserFriendlyException(error_key=e.__class__.__name__, details=str(e))
     except Exception:
         log.error("Error in /api/races/qualified", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal Server Error")
+        raise UserFriendlyException(error_key="default")
 
 @app.get("/api/races/filter-suggestions")
 async def get_filter_suggestions(engine: OddsEngine = Depends(get_engine)):
@@ -195,9 +199,11 @@ async def get_races(
         date_obj = race_date or datetime.now().date()
         date_str = date_obj.strftime("%Y-%m-%d")
         return await engine.fetch_all_odds(date_str, source)
+    except (AdapterHttpError, AdapterConfigError) as e:
+        raise UserFriendlyException(error_key=e.__class__.__name__, details=str(e))
     except Exception:
         log.error("Error in /api/races", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal Server Error")
+        raise UserFriendlyException(error_key="default")
 
 DB_PATH = "fortuna.db"
 

@@ -54,7 +54,8 @@ export function LiveRaceDashboard() {
       });
 
       if (!response.ok) {
-        throw new Error(`The backend service is currently unavailable (HTTP ${response.status}). Please try again shortly.`);
+        const errorData = await response.json();
+        throw errorData.error || new Error(`The backend service is currently unavailable (HTTP ${response.status}). Please try again shortly.`);
       }
 
       const data = await response.json();
@@ -66,9 +67,10 @@ export function LiveRaceDashboard() {
 
       setLastUpdate(new Date());
       setConnectionStatus('online');
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-      setErrorDetails(errorMessage);
+    } catch (err: any) {
+      const errorMessage = err.message || 'An unknown error occurred.';
+      const errorSuggestion = err.suggestion || 'Please try again shortly.';
+      setErrorDetails(`${errorMessage} ${errorSuggestion}`);
       setConnectionStatus('offline');
       console.error('Failed to fetch qualified races:', err);
     } finally {
