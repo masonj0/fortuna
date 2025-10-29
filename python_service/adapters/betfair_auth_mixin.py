@@ -18,7 +18,7 @@ class BetfairAuthMixin:
     token_expiry: Optional[datetime] = None
     _auth_lock = asyncio.Lock()
 
-    async def _authenticate(self):
+    async def _authenticate(self, http_client: httpx.AsyncClient):
         """
         Authenticates with Betfair using credentials from the system's credential manager,
         ensuring the session token is valid and refreshing it if necessary.
@@ -42,7 +42,7 @@ class BetfairAuthMixin:
             }
             payload = f"username={username}&password={password}"
 
-            response = await self.http_client.post(
+            response = await http_client.post(
                 auth_url, headers=headers, content=payload, timeout=20
             )
             response.raise_for_status()

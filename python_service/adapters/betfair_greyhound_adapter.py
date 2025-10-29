@@ -19,7 +19,7 @@ class BetfairGreyhoundAdapter(BetfairAuthMixin, BaseAdapterV3):
 
     async def _fetch_data(self, date: str) -> Any:
         """Fetches the raw market catalogue for greyhound races on a given date."""
-        await self._authenticate()
+        await self._authenticate(self.http_client)
         if not self.session_token:
             self.logger.error("Authentication failed, cannot fetch data.")
             return None
