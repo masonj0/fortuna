@@ -31,8 +31,8 @@ def decrypt_value(value: Optional[str]) -> Optional[str]:
         try:
             return CIPHER.decrypt(value[10:].encode()).decode()
         except Exception:
-            # Return the corrupted value for debugging, but it will likely fail later
-            return value
+            structlog.get_logger(__name__).error("Decryption failed on field.")
+            return None
     return value
 
 

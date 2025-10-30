@@ -5,13 +5,13 @@ from datetime import date
 from decimal import Decimal
 from unittest.mock import AsyncMock
 
-from python_service.config import get_settings
+from tests.conftest import get_test_settings
 from python_service.adapters.gbgb_api_adapter import GbgbApiAdapter
 
 @pytest.fixture
 def gbgb_adapter():
     """Returns a GbgbApiAdapter instance for testing."""
-    return GbgbApiAdapter(config=get_settings())
+    return GbgbApiAdapter(config=get_test_settings())
 
 @pytest.mark.asyncio
 async def test_get_gbgb_races_successfully(gbgb_adapter):

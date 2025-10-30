@@ -7,31 +7,30 @@ from python_service.adapters.the_racing_api_adapter import TheRacingApiAdapter
 from python_service.core.exceptions import AdapterConfigError
 from python_service.config import Settings
 
-@pytest.fixture
-def mock_config():
-    """Provides a mock config object with the necessary API key."""
-    return Settings(THE_RACING_API_KEY="test_racing_api_key")
+from tests.conftest import get_test_settings
 
 @pytest.fixture
-def mock_config_no_key():
-    """Provides a mock config with the API key explicitly set to None."""
-    return Settings(THE_RACING_API_KEY=None)
+def test_settings():
+    """Provides a valid Settings object for testing."""
+    return get_test_settings()
 
-def test_init_raises_config_error_if_no_key(mock_config_no_key):
+def test_init_raises_config_error_if_no_key():
     """
     Tests that the adapter raises an AdapterConfigError if the API key is not set.
     """
+    settings_no_key = get_test_settings()
+    settings_no_key.THE_RACING_API_KEY = None
     with pytest.raises(AdapterConfigError) as excinfo:
-        TheRacingApiAdapter(config=mock_config_no_key)
+        TheRacingApiAdapter(config=settings_no_key)
     assert "THE_RACING_API_KEY is not configured" in str(excinfo.value)
 
 @pytest.mark.asyncio
-async def test_get_races_parses_correctly(mock_config):
+async def test_get_races_parses_correctly(test_settings):
     """
     Tests that TheRacingApiAdapter correctly parses a valid API response via get_races.
     """
     # ARRANGE
-    adapter = TheRacingApiAdapter(config=mock_config)
+    adapter = TheRacingApiAdapter(config=test_settings)
     today = date.today().strftime('%Y-%m-%d')
     off_time = datetime.now(timezone.utc)
 
@@ -60,12 +59,12 @@ async def test_get_races_parses_correctly(mock_config):
     assert runner1.odds[adapter.source_name].win == Decimal("5.50")
 
 @pytest.mark.asyncio
-async def test_get_races_handles_empty_response(mock_config):
+async def test_get_races_handles_empty_response(test_settings):
     """
     Tests that the adapter returns an empty list for an API response with no racecards.
     """
     # ARRANGE
-    adapter = TheRacingApiAdapter(config=mock_config)
+    adapter = TheRacingApiAdapter(config=test_settings)
     today = date.today().strftime('%Y-%m-%d')
     adapter._fetch_data = AsyncMock(return_value={"racecards": []})
 
@@ -76,13 +75,13 @@ async def test_get_races_handles_empty_response(mock_config):
     assert races == []
 
 @pytest.mark.asyncio
-async def test_get_races_raises_exception_on_api_failure(mock_config):
+async def test_get_races_raises_exception_on_api_failure(test_settings):
     """
     Tests that get_races propagates the exception when _fetch_data fails.
     This is the desired behavior for the OddsEngine to handle it.
     """
     # ARRANGE
-    adapter = TheRacingApiAdapter(config=mock_config)
+    adapter = TheRacingApiAdapter(config=test_settings)
     today = date.today().strftime('%Y-%m-%d')
     adapter._fetch_data = AsyncMock(side_effect=Exception("API is down"))
 

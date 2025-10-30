@@ -6,7 +6,7 @@ import fakeredis.aioredis
 
 from python_service.models import Race, Runner, OddsData, SourceInfo, AggregatedResponse
 from python_service.engine import OddsEngine
-from python_service.config import get_settings
+from tests.conftest import get_test_settings
 from python_service.adapters.base_v3 import BaseAdapterV3
 
 def create_mock_race(source: str, venue: str, race_number: int, start_time: datetime, runners_data: list) -> Race:
@@ -28,7 +28,7 @@ def create_mock_race(source: str, venue: str, race_number: int, start_time: date
 @pytest.fixture
 def mock_engine() -> OddsEngine:
     """Provides an OddsEngine instance with a mock config."""
-    return OddsEngine(config=get_settings())
+    return OddsEngine(config=get_test_settings())
 
 @pytest.mark.asyncio
 @patch('python_service.engine.OddsEngine._time_adapter_fetch', new_callable=AsyncMock)
@@ -102,7 +102,7 @@ async def test_engine_caching_logic():
         cache_manager.redis_client = redis.from_url("redis://fake", decode_responses=True)
         assert cache_manager.redis_client is not None, "Failed to patch redis_client"
 
-        engine = OddsEngine(config=get_settings())
+        engine = OddsEngine(config=get_test_settings())
 
         today_str = date.today().strftime('%Y-%m-%d')
         test_time = datetime(2025, 10, 9, 15, 0)
@@ -136,6 +136,10 @@ async def test_engine_caching_logic():
             # --- ASSERT 2: Cache Hit ---
             mock_fetch.assert_called_once() # Should NOT be called again
             assert result_hit is not None
-            assert result_hit == result_miss
+
+            # Compare model dumps to avoid Decimal vs. float issues after serialization
+            miss_obj = AggregatedResponse(**result_miss)
+            hit_obj = AggregatedResponse(**result_hit)
+            assert hit_obj.model_dump() == miss_obj.model_dump()
 
     await engine.close()

@@ -42,20 +42,11 @@ class BaseAdapterV3(ABC):
         """
         Orchestrates the fetch-then-parse pipeline for the adapter.
         This public method should not be overridden by subclasses.
-        It now includes a check for manual override data.
         """
-        from ..manual_override_manager import override_manager
-
-        # Check for manual override data first
-        override_content = override_manager.get_override(self.source_name)
-        if override_content:
-            self.logger.info("Using manual override data for fetch.", date=date)
-            raw_data = override_content
-        else:
-            # If no override, proceed with the normal fetch.
-            # Any exception here (including AdapterHttpError) will propagate
-            # up to the OddsEngine to be handled.
-            raw_data = await self._fetch_data(date)
+        # If no override, proceed with the normal fetch.
+        # Any exception here (including AdapterHttpError) will propagate
+        # up to the OddsEngine to be handled.
+        raw_data = await self._fetch_data(date)
 
         if raw_data is not None:
             parsed_races = self._parse_races(raw_data)

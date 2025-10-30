@@ -3,21 +3,20 @@ from unittest.mock import AsyncMock
 from datetime import date, datetime
 from python_service.adapters.greyhound_adapter import GreyhoundAdapter
 from python_service.config import Settings
+from tests.conftest import get_test_settings
 
 @pytest.fixture
-def mock_config():
-    """
-    Provides a mock config object for the adapter.
-    """
-    return Settings(GREYHOUND_API_URL="https://api.example.com")
+def test_settings():
+    """Provides a valid Settings object for testing."""
+    return get_test_settings()
 
 @pytest.mark.asyncio
-async def test_get_races_parses_correctly(mock_config):
+async def test_get_races_parses_correctly(test_settings):
     """
     Tests that the GreyhoundAdapter correctly parses a valid API response via get_races.
     """
     # ARRANGE
-    adapter = GreyhoundAdapter(config=mock_config)
+    adapter = GreyhoundAdapter(config=test_settings)
     today = date.today().strftime('%Y-%m-%d')
 
     mock_api_response = {
@@ -57,12 +56,12 @@ async def test_get_races_parses_correctly(mock_config):
     assert runner1.odds['Greyhound Racing'].win == 2.5
 
 @pytest.mark.asyncio
-async def test_get_races_handles_empty_response(mock_config):
+async def test_get_races_handles_empty_response(test_settings):
     """
     Tests that the GreyhoundAdapter handles an empty API response gracefully.
     """
     # ARRANGE
-    adapter = GreyhoundAdapter(config=mock_config)
+    adapter = GreyhoundAdapter(config=test_settings)
     today = date.today().strftime('%Y-%m-%d')
     adapter._fetch_data = AsyncMock(return_value={"cards": []})
 
@@ -73,12 +72,12 @@ async def test_get_races_handles_empty_response(mock_config):
     assert races == []
 
 @pytest.mark.asyncio
-async def test_get_races_handles_fetch_failure(mock_config):
+async def test_get_races_handles_fetch_failure(test_settings):
     """
     Tests that get_races returns an empty list when _fetch_data returns None.
     """
     # ARRANGE
-    adapter = GreyhoundAdapter(config=mock_config)
+    adapter = GreyhoundAdapter(config=test_settings)
     today = date.today().strftime('%Y-%m-%d')
     adapter._fetch_data = AsyncMock(return_value=None)
 

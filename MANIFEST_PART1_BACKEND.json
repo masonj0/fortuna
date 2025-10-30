@@ -49,6 +49,7 @@
     "python_service/health.py",
     "python_service/health_check.py",
     "python_service/logging_config.py",
+    "python_service/manual_override_manager.py",
     "python_service/middleware/__init__.py",
     "python_service/middleware/error_handler.py",
     "python_service/minimal_service.py",
