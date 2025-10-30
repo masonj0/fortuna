@@ -76,13 +76,14 @@ class TrifectaAnalyzer(BaseAnalyzer):
 
     def qualify_races(self, races: List[Race]) -> Dict[str, Any]:
         """Scores all races and returns a dictionary with criteria and a sorted list."""
-        scored_races = []
+        qualified_races = []
         for race in races:
-            # The _evaluate_race method now always returns a float score.
-            race.qualification_score = self._evaluate_race(race)
-            scored_races.append(race)
+            score = self._evaluate_race(race)
+            if score > 0:
+                race.qualification_score = score
+                qualified_races.append(race)
 
-        scored_races.sort(key=lambda r: r.qualification_score, reverse=True)
+        qualified_races.sort(key=lambda r: r.qualification_score, reverse=True)
 
         criteria = {
             "max_field_size": self.max_field_size,
@@ -90,13 +91,13 @@ class TrifectaAnalyzer(BaseAnalyzer):
             "min_second_favorite_odds": float(self.min_second_favorite_odds),
         }
 
-        log.info("Universal scoring complete", total_races_scored=len(scored_races), criteria=criteria)
+        log.info("Universal scoring complete", total_races_scored=len(qualified_races), criteria=criteria)
 
-        for race in scored_races:
+        for race in qualified_races:
             if race.qualification_score and race.qualification_score >= 85:
                 self.notifier.notify_qualified_race(race)
 
-        return {"criteria": criteria, "races": scored_races}
+        return {"criteria": criteria, "races": qualified_races}
 
     def _evaluate_race(self, race: Race) -> float:
         """Evaluates a single race and returns a qualification score."""

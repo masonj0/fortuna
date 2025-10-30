@@ -14,7 +14,7 @@ def get_test_settings():
     app startup in a test environment.
     """
     return Settings(
-        API_KEY="test_api_key",
+        API_KEY="a_secure_test_api_key_that_is_long_enough",
         # Required by TheRacingApiAdapter
         THE_RACING_API_KEY="test_racing_api_key",
         # Required by Betfair adapters
@@ -33,18 +33,10 @@ def client():
     A TestClient instance for testing the FastAPI app.
     This fixture handles the setup and teardown of dependency overrides.
     """
-    original_get_settings = app.dependency_overrides.get(get_settings)
     app.dependency_overrides[get_settings] = get_test_settings
-
-    with patch("python_service.credentials_manager.keyring.get_password", side_effect=lambda s, u: f"test_{u}"):
-        with TestClient(app) as c:
-            yield c
-
-    # Clean up the override
-    if original_get_settings:
-        app.dependency_overrides[get_settings] = original_get_settings
-    else:
-        app.dependency_overrides.clear()
+    with TestClient(app) as c:
+        yield c
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture

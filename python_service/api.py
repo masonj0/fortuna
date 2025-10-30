@@ -83,11 +83,10 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(UserFriendlyException, user_friendly_exception_handler)
-settings = get_settings()
 app.include_router(health_router)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_origins=["http://localhost:3000", "http://localhost:3001"],
     allow_credentials=True,
     allow_methods=["GET"],
     allow_headers=["*"],
@@ -241,7 +240,9 @@ class ManualDataSubmission(BaseModel):
 
 # New endpoints
 @app.get("/api/manual-overrides/pending")
+@limiter.limit("60/minute")
 async def get_pending_overrides(
+    request: Request,
     api_key: str = Depends(verify_api_key),
     manager: ManualOverrideManager = Depends(lambda: app.state.manual_override_manager)
 ):
@@ -250,7 +251,9 @@ async def get_pending_overrides(
     return {"pending_requests": [req.model_dump() for req in pending]}
 
 @app.post("/api/manual-overrides/submit")
+@limiter.limit("30/minute")
 async def submit_manual_data(
+    request: Request,
     submission: ManualDataSubmission,
     api_key: str = Depends(verify_api_key),
     manager: ManualOverrideManager = Depends(lambda: app.state.manual_override_manager)
@@ -268,7 +271,9 @@ async def submit_manual_data(
         raise HTTPException(status_code=404, detail="Request not found")
 
 @app.post("/api/manual-overrides/skip/{request_id}")
+@limiter.limit("60/minute")
 async def skip_manual_override(
+    request: Request,
     request_id: str,
     api_key: str = Depends(verify_api_key),
     manager: ManualOverrideManager = Depends(lambda: app.state.manual_override_manager)
@@ -282,7 +287,9 @@ async def skip_manual_override(
         raise HTTPException(status_code=404, detail="Request not found")
 
 @app.post("/api/manual-overrides/cleanup")
+@limiter.limit("60/minute")
 async def cleanup_old_overrides(
+    request: Request,
     max_age_hours: int = 24,
     api_key: str = Depends(verify_api_key),
     manager: ManualOverrideManager = Depends(lambda: app.state.manual_override_manager)
