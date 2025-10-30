@@ -157,10 +157,10 @@ class FortunaDesktopApp {
       let spawnOptions;
       if (isDev) {
           spawnOptions = {
-              cwd: rootPath, // Run from the root to make `python_service` a package
+              cwd: rootPath,
               stdio: ['ignore', 'pipe', 'pipe'],
               detached: false,
-              args: ['-m', 'uvicorn', 'python_service.api:app', '--host', '127.0.0.1', '--port', '8000']
+              args: ['run_backend.py']
           };
       } else {
           spawnOptions = {
