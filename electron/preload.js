@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
    *                              It receives an object like { status: 'online' | 'offline', error?: string }.
    */
   onBackendStatus: (callback) => ipcRenderer.on('backend-status', (_event, value) => callback(value)),
+  generateApiKey: () => ipcRenderer.invoke('generate-api-key'),
 });
 
 console.log('Preload script loaded and electronAPI is exposed.');

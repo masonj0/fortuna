@@ -21,6 +21,7 @@ declare global {
        *                              It receives an object like { status: 'online' | 'offline', error?: string }.
        */
       onBackendStatus: (callback: (status: { status: 'online' | 'offline'; error?: string }) => void) => void;
+      generateApiKey: () => Promise<string>;
     };
   }
 }

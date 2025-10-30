@@ -157,10 +157,10 @@ class FortunaDesktopApp {
       let spawnOptions;
       if (isDev) {
           spawnOptions = {
-              cwd: rootPath, // Run from the root to make `python_service` a package
+              cwd: rootPath,
               stdio: ['ignore', 'pipe', 'pipe'],
               detached: false,
-              args: ['-m', 'uvicorn', 'python_service.api:app', '--host', '127.0.0.1', '--port', '8000']
+              args: ['run_backend.py']
           };
       } else {
           spawnOptions = {
@@ -302,6 +302,23 @@ app.whenReady().then(() => {
       // The frontend should handle this gracefully.
       return null;
     }
+  });
+
+  ipcMain.handle('generate-api-key', async () => {
+    const { tokenUrlsafe } = require('crypto');
+    const apiKey = tokenUrlsafe(32);
+    const envPath = path.join(app.getAppPath(), '..', '.env');
+    const content = `API_KEY="${apiKey}"\n`;
+
+    return new Promise((resolve, reject) => {
+      fs.writeFile(envPath, content, (err) => {
+        if (err) {
+          reject(err.message);
+        } else {
+          resolve(apiKey);
+        }
+      });
+    });
   });
 
   fortunaApp = new FortunaDesktopApp();
