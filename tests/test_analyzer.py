@@ -118,8 +118,11 @@ def test_get_best_win_odds_helper():
     assert _get_best_win_odds(runner_no_win) is None
 
 # Test case added by Operation: Resurrect and Modernize
-from python_service.models import Race, Runner
-import datetime
+@pytest.fixture
+def trifecta_analyzer():
+    """Provides a default TrifectaAnalyzer instance for tests."""
+    return TrifectaAnalyzer()
+
 
 def test_trifecta_analyzer_rejects_races_with_too_few_runners(trifecta_analyzer):
     """Ensure analyzer rejects races with < 3 runners for a trifecta."""
@@ -127,13 +130,13 @@ def test_trifecta_analyzer_rejects_races_with_too_few_runners(trifecta_analyzer)
         id='test_race_123',
         venue='TEST',
         race_number=1,
-        start_time=datetime.datetime.now(),
+        start_time=datetime.now(),
         runners=[
-            Runner(number=1, name='Horse A', odds='2/1', scratched=False),
-            Runner(number=2, name='Horse B', odds='3/1', scratched=False)
+            create_runner(1, 2.0),
+            create_runner(2, 3.0)
         ],
         source='test'
     )
 
-    is_qualified = trifecta_analyzer.is_race_qualified(race_with_two_runners)
-    assert not is_qualified, 'Trifecta analyzer should not qualify a race with only two runners.'
+    qualified = trifecta_analyzer.is_race_qualified(race_with_two_runners)
+    assert not qualified, 'Trifecta analyzer should not qualify a race with only two runners.'
