@@ -136,6 +136,10 @@ async def test_engine_caching_logic():
             # --- ASSERT 2: Cache Hit ---
             mock_fetch.assert_called_once() # Should NOT be called again
             assert result_hit is not None
-            assert result_hit == result_miss
+
+            # Compare model dumps to avoid Decimal vs. float issues after serialization
+            miss_obj = AggregatedResponse(**result_miss)
+            hit_obj = AggregatedResponse(**result_hit)
+            assert hit_obj.model_dump() == miss_obj.model_dump()
 
     await engine.close()
