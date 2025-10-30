@@ -224,7 +224,7 @@ class RaceNotifier:
     """Handles sending native Windows notifications and audio alerts for high-value races."""
 
     def __init__(self):
-        self.toaster = ToastNotifier() if ToastNotifier else None
+        self.toaster = None
         self.audio_system = AudioAlertSystem()
         self.notified_races = set()
 
