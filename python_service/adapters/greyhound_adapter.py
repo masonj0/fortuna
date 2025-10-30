@@ -88,7 +88,7 @@ class GreyhoundAdapter(BaseAdapterV3):
 
                 runners.append(
                     Runner(
-                        number=runner_data["trap_number"],
+                        number=runner_data["saddleClothNumber"],
                         name=runner_data["dog_name"],
                         scratched=runner_data.get("scratched", False),
                         odds=odds_data,

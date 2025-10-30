@@ -21,7 +21,7 @@
       "preload.js",
       "install-validator.js",
       "assets/**/*",
-      "../web_platform/frontend/out/**/*",
+      "out/**/*",
       "../scripts/validate_installation.ps1",
       "!../.venv/"
     ],
@@ -30,6 +30,7 @@
         "from": "../python_service/dist/",
         "to": "./",
         "filter": [
+          "**/api",
           "**/api.exe"
         ]
       }

@@ -52,11 +52,11 @@ class RacingPostAdapter(BaseAdapterV3):
 
     def _parse_races(self, raw_data: Any) -> List[Race]:
         """Parses a list of raw HTML strings into Race objects."""
-        if not raw_data or not raw_data.get("html_contents"):
+        if not raw_data or not hasattr(raw_data, "html_contents"):
             return []
 
-        date = raw_data["date"]
-        html_contents = raw_data["html_contents"]
+        date = raw_data.date
+        html_contents = raw_data.html_contents
         all_races: List[Race] = []
 
         for html in html_contents:
@@ -86,7 +86,7 @@ class RacingPostAdapter(BaseAdapterV3):
                         source=self.source_name,
                     )
                     all_races.append(race)
-            except (AttributeError, ValueError):
+            except (AttributeError, ValueError, TypeError):
                 self.logger.error(
                     "Failed to parse RacingPost race from HTML content.", exc_info=True
                 )

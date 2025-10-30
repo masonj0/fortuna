@@ -20,7 +20,7 @@ class BetfairAdapter(BetfairAuthMixin, BaseAdapterV3):
 
     async def _fetch_data(self, date: str) -> Any:
         """Fetches the raw market catalogue for a given date."""
-        await self._authenticate(self.http_client)
+        await self._authenticate()
         if not self.session_token:
             self.logger.error("Authentication failed, cannot fetch data.")
             return None
@@ -52,7 +52,9 @@ class BetfairAdapter(BetfairAuthMixin, BaseAdapterV3):
             return []
 
         races = []
-        for market in raw_data:
+        # CRITICAL BUG #4 FIX: raw_data is a Pydantic model, not a list.
+        # Access the runners via its attribute, not by iterating over the model.
+        for market in raw_data.runners:
             try:
                 races.append(self._parse_race(market))
             except (KeyError, TypeError):

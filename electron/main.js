@@ -127,7 +127,8 @@ class FortunaDesktopApp {
   async startBackend() {
     const isDev = process.env.NODE_ENV === 'development';
     const rootPath = isDev ? path.join(__dirname, '..') : process.resourcesPath;
-    const pythonExecutable = isDev ? path.join(rootPath, '.venv', 'Scripts', 'python.exe') : path.join(rootPath, 'api.exe');
+    const backendExecutableName = process.platform === 'win32' ? 'api.exe' : 'api';
+    const pythonExecutable = isDev ? path.join(rootPath, '.venv', 'Scripts', 'python.exe') : path.join(rootPath, backendExecutableName);
 
     if (!fs.existsSync(pythonExecutable)) {
       const errorMsg = `Backend executable not found at: ${pythonExecutable}`;

@@ -48,20 +48,20 @@ class TimeformAdapter(BaseAdapterV3):
 
     def _parse_races(self, raw_data: Any) -> List[Race]:
         """Parses a list of raw HTML strings into Race objects."""
-        if not raw_data or not raw_data.get("pages"):
+        if not raw_data or not hasattr(raw_data, "pages"):
             return []
 
         try:
-            race_date = datetime.strptime(raw_data["date"], "%Y-%m-%d").date()
+            race_date = datetime.strptime(raw_data.date, "%Y-%m-%d").date()
         except ValueError:
             self.logger.error(
                 "Invalid date format provided to TimeformAdapter",
-                date=raw_data.get("date"),
+                date=raw_data.date,
             )
             return []
 
         all_races = []
-        for html in raw_data["pages"]:
+        for html in raw_data.pages:
             if not html:
                 continue
             try:
