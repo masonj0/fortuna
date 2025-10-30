@@ -24,16 +24,22 @@ from .core.exceptions import AdapterHttpError, AdapterConfigError
 from .engine import OddsEngine
 from .health import router as health_router
 from .logging_config import configure_logging
-from .middleware.error_handler import validation_exception_handler, user_friendly_exception_handler, UserFriendlyException
+from .middleware.error_handler import (
+    validation_exception_handler,
+    user_friendly_exception_handler,
+    UserFriendlyException,
+)
 from .models import AggregatedResponse, QualifiedRacesResponse, Race, TipsheetRace
 from .security import verify_api_key
 from .manual_override_manager import ManualOverrideManager
 
 # --- PyInstaller Explicit Imports ---
 from .adapters import *
+
 # ------------------------------------
 
 log = structlog.get_logger()
+
 
 # Lifespan context manager
 @asynccontextmanager
@@ -49,24 +55,32 @@ async def lifespan(app: FastAPI):
         # Initialize engine with manual override support
         engine = OddsEngine(config=settings)
         for adapter in engine.adapters:
-            if (hasattr(adapter, 'supports_manual_override') and
-                    adapter.supports_manual_override and
-                    hasattr(adapter, 'enable_manual_override')):
+            if (
+                hasattr(adapter, "supports_manual_override")
+                and adapter.supports_manual_override
+                and hasattr(adapter, "enable_manual_override")
+            ):
                 adapter.enable_manual_override(manual_override_manager)
 
         app.state.engine = engine
         app.state.analyzer_engine = AnalyzerEngine()
         app.state.manual_override_manager = manual_override_manager
 
-        log.info("Server startup: Configuration validated and OddsEngine initialized successfully.")
+        log.info(
+            "Server startup: Configuration validated and OddsEngine initialized successfully."
+        )
     except Exception as e:
-        log.critical("FATAL: Failed to initialize OddsEngine during server startup.", exc_info=True)
+        log.critical(
+            "FATAL: Failed to initialize OddsEngine during server startup.",
+            exc_info=True,
+        )
         raise e
     yield
-    if hasattr(app.state, 'engine') and app.state.engine:
+    if hasattr(app.state, "engine") and app.state.engine:
         log.info("Server shutdown: Closing HTTP client resources.")
         await app.state.engine.close()
     log.info("Server shutdown sequence complete.")
+
 
 limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(
@@ -75,7 +89,7 @@ app = FastAPI(
     lifespan=lifespan,
     docs_url="/api/docs",
     redoc_url="/api/redoc",
-    openapi_url="/api/openapi.json"
+    openapi_url="/api/openapi.json",
 )
 
 app.add_middleware(SlowAPIMiddleware)
@@ -92,23 +106,29 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 def get_engine(request: Request) -> OddsEngine:
     return request.app.state.engine
+
 
 @app.get("/health")
 async def health_check():
     return {"status": "ok", "timestamp": datetime.now().isoformat()}
 
+
 @app.get("/api/adapters/status")
 @limiter.limit("60/minute")
 async def get_all_adapter_statuses(
-    request: Request, engine: OddsEngine = Depends(get_engine), _=Depends(verify_api_key)
+    request: Request,
+    engine: OddsEngine = Depends(get_engine),
+    _=Depends(verify_api_key),
 ):
     try:
         return engine.get_all_adapter_statuses()
     except Exception:
         log.error("Error in /api/adapters/status", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal Server Error")
+
 
 @app.get("/api/races/qualified/{analyzer_name}", response_model=QualifiedRacesResponse)
 @limiter.limit("120/minute")
@@ -148,6 +168,7 @@ async def get_qualified_races(
         log.error("Error in /api/races/qualified", exc_info=True)
         raise UserFriendlyException(error_key="default")
 
+
 @app.get("/api/races/filter-suggestions")
 async def get_filter_suggestions(engine: OddsEngine = Depends(get_engine)):
     try:
@@ -164,7 +185,10 @@ async def get_filter_suggestions(engine: OddsEngine = Depends(get_engine)):
                 odds_list = []
                 for runner in runners:
                     if not runner.scratched and runner.odds:
-                        best_odd = min((o.win for o in runner.odds.values() if o.win is not None), default=None)
+                        best_odd = min(
+                            (o.win for o in runner.odds.values() if o.win is not None),
+                            default=None,
+                        )
                         if best_odd is not None:
                             odds_list.append(float(best_odd))
                 if len(odds_list) >= 2:
@@ -173,7 +197,11 @@ async def get_filter_suggestions(engine: OddsEngine = Depends(get_engine)):
                     second_favorite_odds.append(odds_list[1])
         return {
             "suggestions": {
-                "max_field_size": {"recommended": int(sum(field_sizes) / len(field_sizes)) if field_sizes else 10},
+                "max_field_size": {
+                    "recommended": (
+                        int(sum(field_sizes) / len(field_sizes)) if field_sizes else 10
+                    )
+                },
                 "min_favorite_odds": {"recommended": 2.5},
                 "min_second_favorite_odds": {"recommended": 4.0},
             }
@@ -181,6 +209,7 @@ async def get_filter_suggestions(engine: OddsEngine = Depends(get_engine)):
     except Exception:
         log.error("Error generating filter suggestions", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to generate suggestions")
+
 
 @app.get("/api/races", response_model=AggregatedResponse)
 @limiter.limit("30/minute")
@@ -204,14 +233,19 @@ async def get_races(
         log.error("Error in /api/races", exc_info=True)
         raise UserFriendlyException(error_key="default")
 
+
 DB_PATH = "fortuna.db"
+
 
 def get_current_date() -> date:
     return datetime.now().date()
 
+
 @app.get("/api/tipsheet", response_model=List[TipsheetRace])
 @limiter.limit("30/minute")
-async def get_tipsheet_endpoint(request: Request, date: date = Depends(get_current_date)):
+async def get_tipsheet_endpoint(
+    request: Request, date: date = Depends(get_current_date)
+):
     results = []
     try:
         async with aiosqlite.connect(DB_PATH) as db:
@@ -224,13 +258,21 @@ async def get_tipsheet_endpoint(request: Request, date: date = Depends(get_curre
         raise HTTPException(status_code=500, detail=str(e))
     return results
 
-@app.get("/health/legacy", tags=["Health"], summary="Check for Deprecated Legacy Components")
+
+@app.get(
+    "/health/legacy", tags=["Health"], summary="Check for Deprecated Legacy Components"
+)
 async def check_legacy_files():
     legacy_files = ["checkmate_service.py", "checkmate_web/main.py"]
     present_files = [f for f in legacy_files if os.path.exists(f)]
     if present_files:
-        return {"status": "WARNING", "message": "Legacy files detected.", "detected_files": present_files}
+        return {
+            "status": "WARNING",
+            "message": "Legacy files detected.",
+            "detected_files": present_files,
+        }
     return {"status": "CLEAN", "message": "No known legacy files detected."}
+
 
 # API Models
 class ManualDataSubmission(BaseModel):
@@ -238,17 +280,19 @@ class ManualDataSubmission(BaseModel):
     content: str
     content_type: str = "html"
 
+
 # New endpoints
 @app.get("/api/manual-overrides/pending")
 @limiter.limit("60/minute")
 async def get_pending_overrides(
     request: Request,
     api_key: str = Depends(verify_api_key),
-    manager: ManualOverrideManager = Depends(lambda: app.state.manual_override_manager)
+    manager: ManualOverrideManager = Depends(lambda: app.state.manual_override_manager),
 ):
     """Get all pending manual override requests"""
     pending = manager.get_pending_requests()
     return {"pending_requests": [req.model_dump() for req in pending]}
+
 
 @app.post("/api/manual-overrides/submit")
 @limiter.limit("30/minute")
@@ -256,13 +300,13 @@ async def submit_manual_data(
     request: Request,
     submission: ManualDataSubmission,
     api_key: str = Depends(verify_api_key),
-    manager: ManualOverrideManager = Depends(lambda: app.state.manual_override_manager)
+    manager: ManualOverrideManager = Depends(lambda: app.state.manual_override_manager),
 ):
     """Submit manually-provided data for a failed fetch"""
     success = manager.submit_manual_data(
         request_id=submission.request_id,
         raw_content=submission.content,
-        content_type=submission.content_type
+        content_type=submission.content_type,
     )
 
     if success:
@@ -270,13 +314,14 @@ async def submit_manual_data(
     else:
         raise HTTPException(status_code=404, detail="Request not found")
 
+
 @app.post("/api/manual-overrides/skip/{request_id}")
 @limiter.limit("60/minute")
 async def skip_manual_override(
     request: Request,
     request_id: str,
     api_key: str = Depends(verify_api_key),
-    manager: ManualOverrideManager = Depends(lambda: app.state.manual_override_manager)
+    manager: ManualOverrideManager = Depends(lambda: app.state.manual_override_manager),
 ):
     """Skip a manual override request"""
     success = manager.skip_request(request_id)
@@ -286,13 +331,14 @@ async def skip_manual_override(
     else:
         raise HTTPException(status_code=404, detail="Request not found")
 
+
 @app.post("/api/manual-overrides/cleanup")
 @limiter.limit("60/minute")
 async def cleanup_old_overrides(
     request: Request,
     max_age_hours: int = 24,
     api_key: str = Depends(verify_api_key),
-    manager: ManualOverrideManager = Depends(lambda: app.state.manual_override_manager)
+    manager: ManualOverrideManager = Depends(lambda: app.state.manual_override_manager),
 ):
     """Clean up old manual override requests"""
     manager.clear_old_requests(max_age_hours)

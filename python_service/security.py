@@ -15,7 +15,9 @@ API_KEY_NAME = "X-API-Key"
 api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=True)
 
 
-async def verify_api_key(key: str = Security(api_key_header), settings: Settings = Depends(get_settings)):
+async def verify_api_key(
+    key: str = Security(api_key_header), settings: Settings = Depends(get_settings)
+):
     """
     Verifies the provided API key against the one in settings using a
     timing-attack resistant comparison.
@@ -23,4 +25,6 @@ async def verify_api_key(key: str = Security(api_key_header), settings: Settings
     if secrets.compare_digest(key, settings.API_KEY):
         return True
     else:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid or missing API Key")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Invalid or missing API Key"
+        )

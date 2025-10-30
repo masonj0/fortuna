@@ -27,16 +27,23 @@ class UniversalAdapter(BaseAdapterV3):
     async def _fetch_data(self, date: str) -> Any:
         """Executes the fetch steps defined in the JSON definition."""
         self.logger.info(f"Executing Universal Adapter PoC for {self.source_name}")
-        response = await self.make_request(self.http_client, "GET", self.definition["start_url"])
+        response = await self.make_request(
+            self.http_client, "GET", self.definition["start_url"]
+        )
         if not response:
             return None
 
         soup = BeautifulSoup(response.text, "html.parser")
-        track_links = [self.base_url + a["href"] for a in soup.select(self.definition["steps"][0]["selector"])]
+        track_links = [
+            self.base_url + a["href"]
+            for a in soup.select(self.definition["steps"][0]["selector"])
+        ]
 
         # In a full implementation, we would fetch and return each track page's content.
         # For this PoC, we are not fetching the individual track links.
-        self.logger.warning("UniversalAdapter is a proof-of-concept and does not fully fetch all data.")
+        self.logger.warning(
+            "UniversalAdapter is a proof-of-concept and does not fully fetch all data."
+        )
         return track_links
 
     def _parse_races(self, raw_data: Any) -> List[Race]:

@@ -14,11 +14,14 @@ class BrisnetAdapter(BaseAdapterV3):
     """
     Adapter for brisnet.com, migrated to BaseAdapterV3.
     """
+
     SOURCE_NAME = "Brisnet"
     BASE_URL = "https://www.brisnet.com"
 
     def __init__(self, config=None):
-        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
+        super().__init__(
+            source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
+        )
 
     async def _fetch_data(self, date: str) -> Any:
         """Fetches the raw HTML from the Brisnet race page."""
@@ -50,7 +53,11 @@ class BrisnetAdapter(BaseAdapterV3):
         for race_section in soup.select("section.race"):
             try:
                 race_number = int(race_section["data-racenumber"])
-                post_time_str = race_section.select_one(".race-title span").text.replace("Post Time: ", "").strip()
+                post_time_str = (
+                    race_section.select_one(".race-title span")
+                    .text.replace("Post Time: ", "")
+                    .strip()
+                )
                 start_time = parse(f"{race_date} {post_time_str}")
 
                 runners = []
@@ -66,7 +73,11 @@ class BrisnetAdapter(BaseAdapterV3):
                     win_odds = parse_odds_to_decimal(odds_str)
                     odds = {}
                     if win_odds:
-                        odds[self.source_name] = OddsData(win=win_odds, source=self.source_name, last_updated=datetime.now())
+                        odds[self.source_name] = OddsData(
+                            win=win_odds,
+                            source=self.source_name,
+                            last_updated=datetime.now(),
+                        )
 
                     runners.append(Runner(number=number, name=name, odds=odds))
 
@@ -81,7 +92,9 @@ class BrisnetAdapter(BaseAdapterV3):
                 )
                 races.append(race)
             except (AttributeError, ValueError, IndexError):
-                self.logger.warning("Failed to parse a race on Brisnet, skipping.", exc_info=True)
+                self.logger.warning(
+                    "Failed to parse a race on Brisnet, skipping.", exc_info=True
+                )
                 continue
 
         return races

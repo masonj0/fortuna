@@ -3,17 +3,18 @@ import sqlite3
 import os
 from ..config import get_settings
 
+
 def initialize_database():
     """
     Initializes the database based on the configuration.
     Currently supports a simple SQLite fallback for local testing.
     """
     settings = get_settings()
-    db_type = getattr(settings, 'DATABASE_TYPE', 'sqlite').lower()
+    db_type = getattr(settings, "DATABASE_TYPE", "sqlite").lower()
 
-    if db_type == 'sqlite':
+    if db_type == "sqlite":
         # DATABASE_URL for sqlite will be like 'sqlite:///./fortuna.db'
-        db_path = settings.DATABASE_URL.split('///')[1]
+        db_path = settings.DATABASE_URL.split("///")[1]
 
         # Ensure the directory for the database exists
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
@@ -24,7 +25,8 @@ def initialize_database():
 
             # The schema is based on the provided pg_schemas, adapted for SQLite
             # This is a simplified version for demonstration.
-            cursor.execute("""
+            cursor.execute(
+                """
             CREATE TABLE IF NOT EXISTS races (
                 id TEXT PRIMARY KEY,
                 venue TEXT NOT NULL,
@@ -33,9 +35,11 @@ def initialize_database():
                 source TEXT,
                 field_size INTEGER
             )
-            """)
+            """
+            )
 
-            cursor.execute("""
+            cursor.execute(
+                """
             CREATE TABLE IF NOT EXISTS runners (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 race_id TEXT,
@@ -44,7 +48,8 @@ def initialize_database():
                 odds REAL,
                 FOREIGN KEY (race_id) REFERENCES races (id)
             )
-            """)
+            """
+            )
 
             conn.commit()
             conn.close()

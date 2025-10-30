@@ -11,11 +11,14 @@ class TwinSpiresAdapter(BaseAdapterV3):
     Adapter for twinspires.com.
     This is a placeholder for a full implementation using the discovered JSON API.
     """
+
     SOURCE_NAME = "TwinSpires"
     BASE_URL = "https://www.twinspires.com"
 
     def __init__(self, config=None):
-        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
+        super().__init__(
+            source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
+        )
 
     async def _fetch_data(self, date: str) -> Any:
         """

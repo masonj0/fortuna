@@ -14,11 +14,13 @@ class BetfairAdapter(BetfairAuthMixin, BaseAdapterV3):
     BASE_URL = "https://api.betfair.com/exchange/betting/rest/v1.0/"
 
     def __init__(self, config=None):
-        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
+        super().__init__(
+            source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
+        )
 
     async def _fetch_data(self, date: str) -> Any:
         """Fetches the raw market catalogue for a given date."""
-        await self._authenticate()
+        await self._authenticate(self.http_client)
         if not self.session_token:
             self.logger.error("Authentication failed, cannot fetch data.")
             return None
@@ -34,7 +36,10 @@ class BetfairAdapter(BetfairAuthMixin, BaseAdapterV3):
                     "eventTypeIds": ["7"],  # Horse Racing
                     "marketCountries": ["GB", "IE", "AU", "US", "FR", "ZA"],
                     "marketTypeCodes": ["WIN"],
-                    "marketStartTime": {"from": start_time.isoformat(), "to": end_time.isoformat()},
+                    "marketStartTime": {
+                        "from": start_time.isoformat(),
+                        "to": end_time.isoformat(),
+                    },
                 },
                 "maxResults": 1000,
                 "marketProjection": ["EVENT", "RUNNER_DESCRIPTION"],
@@ -51,39 +56,44 @@ class BetfairAdapter(BetfairAuthMixin, BaseAdapterV3):
             try:
                 races.append(self._parse_race(market))
             except (KeyError, TypeError):
-                self.logger.warning("Failed to parse a Betfair market.", exc_info=True, market=market)
+                self.logger.warning(
+                    "Failed to parse a Betfair market.", exc_info=True, market=market
+                )
                 continue
         return races
 
     def _parse_race(self, market: dict) -> Race:
         """Parses a single market from the Betfair API into a Race object."""
-        market_id = market['marketId']
-        event = market['event']
-        start_time = datetime.fromisoformat(market['marketStartTime'].replace('Z', '+00:00'))
+        market_id = market["marketId"]
+        event = market["event"]
+        start_time = datetime.fromisoformat(
+            market["marketStartTime"].replace("Z", "+00:00")
+        )
 
         runners = [
             Runner(
-                number=runner.get('sortPriority', i + 1),
-                name=runner['runnerName'],
-                scratched=runner['status'] != 'ACTIVE',
-                selection_id=runner['selectionId']
+                number=runner.get("sortPriority", i + 1),
+                name=runner["runnerName"],
+                scratched=runner["status"] != "ACTIVE",
+                selection_id=runner["selectionId"],
             )
-            for i, runner in enumerate(market.get('runners', []))
+            for i, runner in enumerate(market.get("runners", []))
         ]
 
         return Race(
             id=f"bf_{market_id}",
-            venue=event.get('venue', 'Unknown Venue'),
-            race_number=self._extract_race_number(market.get('marketName', '')),
+            venue=event.get("venue", "Unknown Venue"),
+            race_number=self._extract_race_number(market.get("marketName", "")),
             start_time=start_time,
             runners=runners,
-            source=self.source_name
+            source=self.source_name,
         )
 
     def _extract_race_number(self, name: str) -> int:
         """Extracts the race number from a market name (e.g., 'R1 1m Mdn Stks')."""
         import re
-        match = re.search(r'\bR(\d{1,2})\b', name)
+
+        match = re.search(r"\bR(\d{1,2})\b", name)
         return int(match.group(1)) if match else 0
 
     def _get_datetime_range(self, date_str: str):

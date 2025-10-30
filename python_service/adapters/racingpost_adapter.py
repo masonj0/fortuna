@@ -15,28 +15,35 @@ class RacingPostAdapter(BaseAdapterV3):
     """
     Adapter for scraping Racing Post racecards, migrated to BaseAdapterV3.
     """
+
     SOURCE_NAME = "RacingPost"
     BASE_URL = "https://www.racingpost.com"
 
     def __init__(self, config=None):
-        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
+        super().__init__(
+            source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
+        )
 
     async def _fetch_data(self, date: str) -> Any:
         """
         Fetches the raw HTML content for all races on a given date.
         """
         index_url = f"/racecards/{date}"
-        index_response = await self.make_request(self.http_client, "GET", index_url, headers=self._get_headers())
+        index_response = await self.make_request(
+            self.http_client, "GET", index_url, headers=self._get_headers()
+        )
         if not index_response:
             self.logger.warning("Failed to fetch RacingPost index page", url=index_url)
             return None
 
         index_parser = HTMLParser(index_response.text)
         links = index_parser.css('a[data-test-selector^="RC-meetingItem__link_race"]')
-        race_card_urls = [link.attributes['href'] for link in links]
+        race_card_urls = [link.attributes["href"] for link in links]
 
         async def fetch_single_html(url: str):
-            response = await self.make_request(self.http_client, "GET", url, headers=self._get_headers())
+            response = await self.make_request(
+                self.http_client, "GET", url, headers=self._get_headers()
+            )
             return response.text if response else ""
 
         tasks = [fetch_single_html(url) for url in race_card_urls]
@@ -57,9 +64,13 @@ class RacingPostAdapter(BaseAdapterV3):
                 continue
             try:
                 parser = HTMLParser(html)
-                venue_raw = parser.css_first('a[data-test-selector="RC-course__name"]').text(strip=True)
+                venue_raw = parser.css_first(
+                    'a[data-test-selector="RC-course__name"]'
+                ).text(strip=True)
                 venue = normalize_venue_name(venue_raw)
-                race_time_str = parser.css_first('span[data-test-selector="RC-course__time"]').text(strip=True)
+                race_time_str = parser.css_first(
+                    'span[data-test-selector="RC-course__time"]'
+                ).text(strip=True)
                 race_datetime_str = f"{date} {race_time_str}"
                 start_time = datetime.strptime(race_datetime_str, "%Y-%m-%d %H:%M")
                 runners = self._parse_runners(parser)
@@ -76,7 +87,9 @@ class RacingPostAdapter(BaseAdapterV3):
                     )
                     all_races.append(race)
             except (AttributeError, ValueError):
-                self.logger.error("Failed to parse RacingPost race from HTML content.", exc_info=True)
+                self.logger.error(
+                    "Failed to parse RacingPost race from HTML content.", exc_info=True
+                )
                 continue
         return all_races
 
@@ -95,7 +108,9 @@ class RacingPostAdapter(BaseAdapterV3):
         runner_nodes = parser.css('div[data-test-selector="RC-runnerCard"]')
         for node in runner_nodes:
             try:
-                number_node = node.css_first('span[data-test-selector="RC-runnerNumber"]')
+                number_node = node.css_first(
+                    'span[data-test-selector="RC-runnerNumber"]'
+                )
                 name_node = node.css_first('a[data-test-selector="RC-runnerName"]')
                 odds_node = node.css_first('span[data-test-selector="RC-runnerPrice"]')
 
@@ -114,13 +129,19 @@ class RacingPostAdapter(BaseAdapterV3):
                     if win_odds and win_odds < 999:
                         odds = {
                             self.source_name: OddsData(
-                                win=win_odds, source=self.source_name, last_updated=datetime.now()
+                                win=win_odds,
+                                source=self.source_name,
+                                last_updated=datetime.now(),
                             )
                         }
 
-                runners.append(Runner(number=number, name=name, odds=odds, scratched=scratched))
+                runners.append(
+                    Runner(number=number, name=name, odds=odds, scratched=scratched)
+                )
             except (ValueError, AttributeError):
-                self.logger.warning("Could not parse RacingPost runner, skipping.", parser=parser)
+                self.logger.warning(
+                    "Could not parse RacingPost runner, skipping.", parser=parser
+                )
                 continue
         return runners
 
