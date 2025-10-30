@@ -14,20 +14,22 @@ from .credentials_manager import SecureCredentialsManager
 # --- Encryption Setup ---
 try:
     from cryptography.fernet import Fernet
+
     ENCRYPTION_ENABLED = True
 except ImportError:
     ENCRYPTION_ENABLED = False
 
-KEY_FILE = Path('.key')
+KEY_FILE = Path(".key")
 CIPHER = None
 if ENCRYPTION_ENABLED and KEY_FILE.exists():
-    with open(KEY_FILE, 'rb') as f:
+    with open(KEY_FILE, "rb") as f:
         key = f.read()
     CIPHER = Fernet(key)
 
+
 def decrypt_value(value: Optional[str]) -> Optional[str]:
     """If a value is encrypted, decrypts it. Otherwise, returns it as is."""
-    if value and value.startswith('encrypted:') and CIPHER:
+    if value and value.startswith("encrypted:") and CIPHER:
         try:
             return CIPHER.decrypt(value[10:].encode()).decode()
         except Exception:
@@ -65,7 +67,9 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
 
     # --- Optional Adapter Keys ---
-    NEXT_PUBLIC_API_KEY: Optional[str] = None # Allow frontend key to be present in .env
+    NEXT_PUBLIC_API_KEY: Optional[str] = (
+        None  # Allow frontend key to be present in .env
+    )
     TVG_API_KEY: Optional[str] = None
     RACING_AND_SPORTS_TOKEN: Optional[str] = None
     POINTSBET_API_KEY: Optional[str] = None
@@ -77,8 +81,8 @@ class Settings(BaseSettings):
 
     model_config = {"env_file": ".env", "case_sensitive": True}
 
-    @model_validator(mode='after')
-    def process_settings(self) -> 'Settings':
+    @model_validator(mode="after")
+    def process_settings(self) -> "Settings":
         """
         This validator runs after the initial settings are loaded from .env and
         performs two key functions:
@@ -87,7 +91,9 @@ class Settings(BaseSettings):
         """
         # 1. Fallback for API_KEY
         if not self.API_KEY:
-            self.API_KEY = SecureCredentialsManager.get_credential("api_key") or "MISSING"
+            self.API_KEY = (
+                SecureCredentialsManager.get_credential("api_key") or "MISSING"
+            )
 
         # 2. Security validation for API_KEY
         insecure_keys = {"test", "changeme", "default", "secret", "password", "admin"}
@@ -122,7 +128,7 @@ def get_settings() -> Settings:
             log.warning(
                 "legacy_path_detected",
                 path=path,
-                recommendation="This directory is obsolete and should be removed for optimal performance and security."
+                recommendation="This directory is obsolete and should be removed for optimal performance and security.",
             )
 
     return settings

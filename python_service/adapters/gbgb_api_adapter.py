@@ -12,11 +12,14 @@ class GbgbApiAdapter(BaseAdapterV3):
     """
     Adapter for the Greyhound Board of Great Britain API, migrated to BaseAdapterV3.
     """
+
     SOURCE_NAME = "GBGB"
     BASE_URL = "https://api.gbgb.org.uk/api/"
 
     def __init__(self, config=None):
-        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
+        super().__init__(
+            source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
+        )
 
     async def _fetch_data(self, date: str) -> Optional[List[Dict[str, Any]]]:
         """Fetches the raw meeting data from the GBGB API."""
@@ -50,7 +53,9 @@ class GbgbApiAdapter(BaseAdapterV3):
             id=f"gbgb_{race_data['raceId']}",
             venue=track_name,
             race_number=race_data["raceNumber"],
-            start_time=datetime.fromisoformat(race_data["raceTime"].replace("Z", "+00:00")),
+            start_time=datetime.fromisoformat(
+                race_data["raceTime"].replace("Z", "+00:00")
+            ),
             runners=self._parse_runners(race_data.get("traps", [])),
             source=self.source_name,
             race_name=race_data.get("raceTitle"),
@@ -67,7 +72,9 @@ class GbgbApiAdapter(BaseAdapterV3):
                 win_odds = parse_odds_to_decimal(sp)
                 if win_odds and win_odds < 999:
                     odds_data[self.source_name] = OddsData(
-                        win=win_odds, source=self.source_name, last_updated=datetime.now()
+                        win=win_odds,
+                        source=self.source_name,
+                        last_updated=datetime.now(),
                     )
 
                 runners.append(
@@ -78,6 +85,9 @@ class GbgbApiAdapter(BaseAdapterV3):
                     )
                 )
             except (KeyError, TypeError):
-                self.logger.warning("Error parsing GBGB runner, skipping.", runner_name=runner_data.get("dogName"))
+                self.logger.warning(
+                    "Error parsing GBGB runner, skipping.",
+                    runner_name=runner_data.get("dogName"),
+                )
                 continue
         return runners

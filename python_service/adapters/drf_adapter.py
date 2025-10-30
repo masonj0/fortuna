@@ -14,11 +14,14 @@ class DRFAdapter(BaseAdapterV3):
     """
     Adapter for drf.com, migrated to BaseAdapterV3.
     """
+
     SOURCE_NAME = "DRF"
     BASE_URL = "https://www.drf.com"
 
     def __init__(self, config=None):
-        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
+        super().__init__(
+            source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
+        )
 
     async def _fetch_data(self, date: str) -> Any:
         """Fetches the raw HTML from the DRF entries page."""
@@ -41,7 +44,9 @@ class DRFAdapter(BaseAdapterV3):
             return []
 
         venue_text = venue_node.text
-        venue = normalize_venue_name(venue_text.split(" - ")[0].replace("Entries for ", ""))
+        venue = normalize_venue_name(
+            venue_text.split(" - ")[0].replace("Entries for ", "")
+        )
 
         races = []
         for race_entry in soup.select("div.race-entries"):
@@ -60,12 +65,16 @@ class DRFAdapter(BaseAdapterV3):
 
                     number = int(entry.select_one(".program-number").text)
                     name = entry.select_one(".horse-name").text
-                    odds_str = entry.select_one(".odds").text.replace('-', '/')
+                    odds_str = entry.select_one(".odds").text.replace("-", "/")
 
                     win_odds = parse_odds_to_decimal(odds_str)
                     odds = {}
                     if win_odds:
-                        odds[self.source_name] = OddsData(win=win_odds, source=self.source_name, last_updated=datetime.now())
+                        odds[self.source_name] = OddsData(
+                            win=win_odds,
+                            source=self.source_name,
+                            last_updated=datetime.now(),
+                        )
 
                     runners.append(Runner(number=number, name=name, odds=odds))
 
@@ -80,6 +89,8 @@ class DRFAdapter(BaseAdapterV3):
                 )
                 races.append(race)
             except (AttributeError, ValueError, KeyError):
-                self.logger.warning("Failed to parse a race on DRF, skipping.", exc_info=True)
+                self.logger.warning(
+                    "Failed to parse a race on DRF, skipping.", exc_info=True
+                )
                 continue
         return races

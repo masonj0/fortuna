@@ -16,7 +16,9 @@ class TVGAdapter(BaseAdapterV3):
     BASE_URL = "https://api.tvg.com/v2/races/"
 
     def __init__(self, config=None):
-        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
+        super().__init__(
+            source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
+        )
         if not hasattr(config, "TVG_API_KEY") or not config.TVG_API_KEY:
             raise AdapterConfigError(self.source_name, "TVG_API_KEY is not configured.")
         self.tvg_api_key = config.TVG_API_KEY
@@ -26,24 +28,36 @@ class TVGAdapter(BaseAdapterV3):
         headers = {"X-Api-Key": self.tvg_api_key}
         summary_url = f"summary?date={date}&country=USA"
 
-        tracks_response = await self.make_request(self.http_client, "GET", summary_url, headers=headers)
+        tracks_response = await self.make_request(
+            self.http_client, "GET", summary_url, headers=headers
+        )
         if not tracks_response:
             return None
         tracks_data = tracks_response.json()
 
         race_detail_tasks = []
-        for track in tracks_data.get('tracks', []):
-            track_id = track.get('id')
-            for race in track.get('races', []):
-                race_id = race.get('id')
+        for track in tracks_data.get("tracks", []):
+            track_id = track.get("id")
+            for race in track.get("races", []):
+                race_id = race.get("id")
                 if track_id and race_id:
                     details_url = f"{track_id}/{race_id}"
-                    race_detail_tasks.append(self.make_request(self.http_client, "GET", details_url, headers=headers))
+                    race_detail_tasks.append(
+                        self.make_request(
+                            self.http_client, "GET", details_url, headers=headers
+                        )
+                    )
 
-        race_detail_responses = await asyncio.gather(*race_detail_tasks, return_exceptions=True)
+        race_detail_responses = await asyncio.gather(
+            *race_detail_tasks, return_exceptions=True
+        )
 
         # Filter out exceptions and return only successful responses
-        return [resp.json() for resp in race_detail_responses if not isinstance(resp, Exception)]
+        return [
+            resp.json()
+            for resp in race_detail_responses
+            if not isinstance(resp, Exception)
+        ]
 
     def _parse_races(self, raw_data: Any) -> List[Race]:
         """Parses a list of detailed race JSON objects into Race models."""
@@ -56,41 +70,55 @@ class TVGAdapter(BaseAdapterV3):
             try:
                 races.append(self._parse_race(race_detail))
             except AdapterParsingError:
-                self.logger.warning("Failed to parse TVG race detail, skipping.", race_detail=race_detail, exc_info=True)
+                self.logger.warning(
+                    "Failed to parse TVG race detail, skipping.",
+                    race_detail=race_detail,
+                    exc_info=True,
+                )
         return races
 
     def _parse_race(self, race_detail: dict) -> Race:
         """Parses a single detailed race JSON object into a Race model."""
-        track = race_detail.get('track')
-        race_info = race_detail.get('race')
+        track = race_detail.get("track")
+        race_info = race_detail.get("race")
 
         if not track or not race_info:
-            raise AdapterParsingError(self.source_name, "Missing track or race info in race detail.")
+            raise AdapterParsingError(
+                self.source_name, "Missing track or race info in race detail."
+            )
 
         runners = []
-        for runner_data in race_detail.get('runners', []):
-            if runner_data.get('scratched'):
+        for runner_data in race_detail.get("runners", []):
+            if runner_data.get("scratched"):
                 continue
 
-            odds = runner_data.get('odds', {})
-            current_odds = odds.get('currentPrice', {})
-            odds_str = current_odds.get('fractional') or odds.get('morningLinePrice', {}).get('fractional')
+            odds = runner_data.get("odds", {})
+            current_odds = odds.get("currentPrice", {})
+            odds_str = current_odds.get("fractional") or odds.get(
+                "morningLinePrice", {}
+            ).get("fractional")
 
             try:
-                number = int(runner_data.get('programNumber', '0').replace('A', ''))
+                number = int(runner_data.get("programNumber", "0").replace("A", ""))
             except (ValueError, TypeError):
-                self.logger.warning(f"Could not parse program number: {runner_data.get('programNumber')}")
+                self.logger.warning(
+                    f"Could not parse program number: {runner_data.get('programNumber')}"
+                )
                 continue
 
-            runners.append(Runner(
-                number=number,
-                name=clean_text(runner_data.get('name')),
-                odds=odds_str, # Odds will be parsed later in the data pipeline
-                scratched=False
-            ))
+            runners.append(
+                Runner(
+                    number=number,
+                    name=clean_text(runner_data.get("name")),
+                    odds=odds_str,  # Odds will be parsed later in the data pipeline
+                    scratched=False,
+                )
+            )
 
         if not runners:
-            raise AdapterParsingError(self.source_name, "No non-scratched runners found.")
+            raise AdapterParsingError(
+                self.source_name, "No non-scratched runners found."
+            )
 
         try:
             start_time = datetime.fromisoformat(
@@ -98,14 +126,15 @@ class TVGAdapter(BaseAdapterV3):
             )
         except (ValueError, TypeError, AttributeError) as e:
             raise AdapterParsingError(
-                self.source_name, f"Could not parse post time: {race_info.get('postTime')}"
+                self.source_name,
+                f"Could not parse post time: {race_info.get('postTime')}",
             ) from e
 
         return Race(
             id=f"tvg_{track.get('code', 'UNK')}_{race_info.get('date', 'NODATE')}_{race_info.get('number', 0)}",
-            venue=track.get('name'),
-            race_number=race_info.get('number'),
+            venue=track.get("name"),
+            race_number=race_info.get("number"),
             start_time=start_time,
             runners=runners,
-            source=self.source_name
+            source=self.source_name,
         )
