@@ -10,18 +10,20 @@ class TemplateAdapter(BaseAdapterV3):
     A template for creating new adapters, based on the BaseAdapterV3 pattern.
     This adapter is a non-functional stub.
     """
+
     SOURCE_NAME = "[IMPLEMENT ME] Example Source"
     BASE_URL = "https://api.example.com"
 
     def __init__(self, config=None):
-        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
+        super().__init__(
+            source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
+        )
         # self.api_key = config.EXAMPLE_API_KEY # Uncomment if needed
 
     async def _fetch_data(self, date: str) -> Any:
         """This is a stub and does not fetch any data."""
         self.logger.warning(
-            f"{self.source_name} is a non-functional stub and has not been implemented. "
-            "It will not fetch any data."
+            f"{self.source_name} is a non-functional stub and has not been implemented. It will not fetch any data."
         )
         return None
 

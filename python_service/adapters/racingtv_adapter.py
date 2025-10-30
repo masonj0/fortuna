@@ -10,17 +10,19 @@ class RacingTVAdapter(BaseAdapterV3):
     Adapter for scraping data from racingtv.com.
     This adapter is a non-functional stub and has not been implemented.
     """
+
     SOURCE_NAME = "RacingTV"
     BASE_URL = "https://www.racingtv.com"
 
     def __init__(self, config=None):
-        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
+        super().__init__(
+            source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
+        )
 
     async def _fetch_data(self, date: str) -> Any:
         """This is a stub and does not fetch any data."""
         self.logger.warning(
-            f"{self.source_name} is a non-functional stub and has not been implemented. "
-            "It will not fetch any data."
+            f"{self.source_name} is a non-functional stub and has not been implemented. It will not fetch any data."
         )
         return None
 

@@ -29,7 +29,9 @@ class CacheManager:
                 self.redis_client = redis.from_url(redis_url, decode_responses=True)
                 log.info("Redis cache connected successfully.")
             except Exception as e:
-                log.warning(f"Failed to connect to Redis: {e}. Falling back to in-memory cache.")
+                log.warning(
+                    f"Failed to connect to Redis: {e}. Falling back to in-memory cache."
+                )
 
     def _generate_key(self, prefix: str, *args, **kwargs) -> str:
         key_data = f"{prefix}:{args}:{sorted(kwargs.items())}"
@@ -57,7 +59,10 @@ class CacheManager:
             except Exception as e:
                 log.warning(f"Redis SET failed: {e}")
 
-        self.memory_cache[key] = {"value": value, "expires_at": datetime.now() + timedelta(seconds=ttl_seconds)}
+        self.memory_cache[key] = {
+            "value": value,
+            "expires_at": datetime.now() + timedelta(seconds=ttl_seconds),
+        }
 
 
 # --- Singleton Instance & Decorator ---
@@ -68,8 +73,12 @@ def cache_async_result(ttl_seconds: int = 300, key_prefix: str = "cache"):
     def decorator(func: Callable):
         @wraps(func)
         async def wrapper(*args, **kwargs):
-            instance_args = args[1:] if args and hasattr(args[0], func.__name__) else args
-            cache_key = cache_manager._generate_key(f"{key_prefix}:{func.__name__}", *instance_args, **kwargs)
+            instance_args = (
+                args[1:] if args and hasattr(args[0], func.__name__) else args
+            )
+            cache_key = cache_manager._generate_key(
+                f"{key_prefix}:{func.__name__}", *instance_args, **kwargs
+            )
 
             cached_result = cache_manager.get(cache_key)
             if cached_result is not None:

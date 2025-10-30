@@ -7,7 +7,7 @@ class FortunaSetupWizard(tk.Tk):
         super().__init__()
         self.title("🐴 Fortuna Faucet - First Time Setup")
         self.geometry("700x500")
-        self.configure(bg='#1a1a2e')
+        self.configure(bg="#1a1a2e")
 
         # Step tracking
         self.current_step = 0
@@ -22,8 +22,8 @@ class FortunaSetupWizard(tk.Tk):
             self,
             text="Welcome to Fortuna Faucet",
             font=("Segoe UI", 18, "bold"),
-            bg='#1a1a2e',
-            fg='#00ff88'
+            bg="#1a1a2e",
+            fg="#00ff88",
         )
         header.pack(pady=20)
 
@@ -32,17 +32,17 @@ class FortunaSetupWizard(tk.Tk):
             self,
             text="Step 1 of 4: Generate API Key",
             font=("Segoe UI", 11),
-            bg='#1a1a2e',
-            fg='#ffffff'
+            bg="#1a1a2e",
+            fg="#ffffff",
         )
         self.step_label.pack(pady=10)
 
         # Content frame (will be updated for each step)
-        self.content_frame = tk.Frame(self, bg='#1a1a2e')
+        self.content_frame = tk.Frame(self, bg="#1a1a2e")
         self.content_frame.pack(fill=tk.BOTH, expand=True, padx=30, pady=20)
 
         # Buttons
-        button_frame = tk.Frame(self, bg='#1a1a2e')
+        button_frame = tk.Frame(self, bg="#1a1a2e")
         button_frame.pack(fill=tk.X, padx=30, pady=20)
 
         self.prev_btn = tk.Button(
@@ -50,9 +50,9 @@ class FortunaSetupWizard(tk.Tk):
             text="< Back",
             command=self.previous_step,
             state=tk.DISABLED,
-            bg='#404060',
-            fg='#ffffff',
-            padx=20
+            bg="#404060",
+            fg="#ffffff",
+            padx=20,
         )
         self.prev_btn.pack(side=tk.LEFT)
 
@@ -60,10 +60,10 @@ class FortunaSetupWizard(tk.Tk):
             button_frame,
             text="Next >",
             command=self.next_step,
-            bg='#00ff88',
-            fg='#000000',
+            bg="#00ff88",
+            fg="#000000",
             font=("Segoe UI", 11, "bold"),
-            padx=20
+            padx=20,
         )
         self.next_btn.pack(side=tk.RIGHT)
 
@@ -78,8 +78,8 @@ class FortunaSetupWizard(tk.Tk):
             self.content_frame,
             text="🔐 Secure API Key",
             font=("Segoe UI", 12, "bold"),
-            bg='#1a1a2e',
-            fg='#ffffff'
+            bg="#1a1a2e",
+            fg="#ffffff",
         ).pack(anchor="w", pady=(0, 10))
 
         tk.Label(
@@ -90,15 +90,12 @@ class FortunaSetupWizard(tk.Tk):
             ),
             wraplength=600,
             justify=tk.LEFT,
-            bg='#1a1a2e',
-            fg='#cccccc'
+            bg="#1a1a2e",
+            fg="#cccccc",
         ).pack(anchor="w", pady=10)
 
         self.api_key_display = tk.Entry(
-            self.content_frame,
-            font=("Courier", 10),
-            width=60,
-            state=tk.DISABLED
+            self.content_frame, font=("Courier", 10), width=60, state=tk.DISABLED
         )
         self.api_key_display.pack(pady=10, fill=tk.X)
 
@@ -106,8 +103,8 @@ class FortunaSetupWizard(tk.Tk):
             self.content_frame,
             text="🔄 Generate New Key",
             command=self.generate_api_key,
-            bg='#0f6cbd',
-            fg='#ffffff'
+            bg="#0f6cbd",
+            fg="#ffffff",
         )
         gen_btn.pack(pady=10)
 
@@ -122,27 +119,33 @@ class FortunaSetupWizard(tk.Tk):
             self.content_frame,
             text="🏇 Betfair Exchange (Optional)",
             font=("Segoe UI", 12, "bold"),
-            bg='#1a1a2e',
-            fg='#ffffff'
+            bg="#1a1a2e",
+            fg="#ffffff",
         ).pack(anchor="w", pady=(0, 10))
 
         tk.Label(
             self.content_frame,
             text="Optional: Add Betfair credentials for live odds monitoring.\nLeave blank to skip.",
-            bg='#1a1a2e',
-            fg='#cccccc'
+            bg="#1a1a2e",
+            fg="#cccccc",
         ).pack(anchor="w", pady=10)
 
         # Betfair form
-        tk.Label(self.content_frame, text="App Key:", bg='#1a1a2e', fg='#ffffff').pack(anchor="w")
+        tk.Label(self.content_frame, text="App Key:", bg="#1a1a2e", fg="#ffffff").pack(
+            anchor="w"
+        )
         self.betfair_appkey = tk.Entry(self.content_frame, width=60, show="*")
         self.betfair_appkey.pack(fill=tk.X, pady=(0, 10))
 
-        tk.Label(self.content_frame, text="Username:", bg='#1a1a2e', fg='#ffffff').pack(anchor="w")
+        tk.Label(self.content_frame, text="Username:", bg="#1a1a2e", fg="#ffffff").pack(
+            anchor="w"
+        )
         self.betfair_user = tk.Entry(self.content_frame, width=60)
         self.betfair_user.pack(fill=tk.X, pady=(0, 10))
 
-        tk.Label(self.content_frame, text="Password:", bg='#1a1a2e', fg='#ffffff').pack(anchor="w")
+        tk.Label(self.content_frame, text="Password:", bg="#1a1a2e", fg="#ffffff").pack(
+            anchor="w"
+        )
         self.betfair_pass = tk.Entry(self.content_frame, width=60, show="*")
         self.betfair_pass.pack(fill=tk.X, pady=(0, 10))
 
@@ -151,8 +154,8 @@ class FortunaSetupWizard(tk.Tk):
             self.content_frame,
             text="🧪 Test Connection",
             command=self.test_betfair_connection,
-            bg='#0f6cbd',
-            fg='#ffffff'
+            bg="#0f6cbd",
+            fg="#ffffff",
         )
         test_btn.pack(pady=10)
 
@@ -167,8 +170,8 @@ class FortunaSetupWizard(tk.Tk):
             self.content_frame,
             text="✓ Verifying Setup",
             font=("Segoe UI", 12, "bold"),
-            bg='#1a1a2e',
-            fg='#00ff88'
+            bg="#1a1a2e",
+            fg="#00ff88",
         ).pack(anchor="w", pady=(0, 20))
 
         checks = [
@@ -186,8 +189,8 @@ class FortunaSetupWizard(tk.Tk):
             label = tk.Label(
                 self.content_frame,
                 text=f"{status} {check_name}",
-                bg='#1a1a2e',
-                fg=color
+                bg="#1a1a2e",
+                fg=color,
             )
             label.pack(anchor="w", pady=5)
 
@@ -202,16 +205,16 @@ class FortunaSetupWizard(tk.Tk):
             self.content_frame,
             text="🎉 Setup Complete!",
             font=("Segoe UI", 14, "bold"),
-            bg='#1a1a2e',
-            fg='#00ff88'
+            bg="#1a1a2e",
+            fg="#00ff88",
         ).pack(pady=20)
 
         tk.Label(
             self.content_frame,
             text="Fortuna Faucet is ready to launch.\n\nClick 'Finish' to start the application.",
             wraplength=600,
-            bg='#1a1a2e',
-            fg='#ffffff'
+            bg="#1a1a2e",
+            fg="#ffffff",
         ).pack(pady=20)
 
         self.current_step = 3
@@ -249,8 +252,9 @@ class FortunaSetupWizard(tk.Tk):
 
     def generate_api_key(self):
         import secrets
+
         key = secrets.token_urlsafe(32)
-        self.settings['api_key'] = key
+        self.settings["api_key"] = key
         self.api_key_display.config(state=tk.NORMAL)
         self.api_key_display.delete(0, tk.END)
         self.api_key_display.insert(0, key)
@@ -282,6 +286,7 @@ class FortunaSetupWizard(tk.Tk):
         # Save credentials to Windows Credential Manager
         # Launch Fortuna
         self.destroy()
+
 
 if __name__ == "__main__":
     app = FortunaSetupWizard()

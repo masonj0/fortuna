@@ -33,7 +33,11 @@ def _get_best_win_odds(runner: Runner) -> Optional[Decimal]:
         return None
 
     # Filter out invalid or placeholder odds (e.g., > 999)
-    valid_odds = [o.win for o in runner.odds.values() if o.win is not None and o.win > 0 and o.win < 999]
+    valid_odds = [
+        o.win
+        for o in runner.odds.values()
+        if o.win is not None and o.win > 0 and o.win < 999
+    ]
 
     if not valid_odds:
         return None
@@ -60,7 +64,12 @@ class TrifectaAnalyzer(BaseAnalyzer):
     def name(self) -> str:
         return "trifecta_analyzer"
 
-    def __init__(self, max_field_size: int = 10, min_favorite_odds: float = 2.5, min_second_favorite_odds: float = 4.0):
+    def __init__(
+        self,
+        max_field_size: int = 10,
+        min_favorite_odds: float = 2.5,
+        min_second_favorite_odds: float = 4.0,
+    ):
         self.max_field_size = max_field_size
         self.min_favorite_odds = Decimal(str(min_favorite_odds))
         self.min_second_favorite_odds = Decimal(str(min_second_favorite_odds))
@@ -91,7 +100,11 @@ class TrifectaAnalyzer(BaseAnalyzer):
             "min_second_favorite_odds": float(self.min_second_favorite_odds),
         }
 
-        log.info("Universal scoring complete", total_races_scored=len(qualified_races), criteria=criteria)
+        log.info(
+            "Universal scoring complete",
+            total_races_scored=len(qualified_races),
+            criteria=criteria,
+        )
 
         for race in qualified_races:
             if race.qualification_score and race.qualification_score >= 85:
@@ -129,11 +142,17 @@ class TrifectaAnalyzer(BaseAnalyzer):
 
         # Normalize odds scores - cap influence of extremely high odds
         fav_odds_score = min(float(favorite_odds) / FAV_ODDS_NORMALIZATION, 1.0)
-        sec_fav_odds_score = min(float(second_favorite_odds) / SEC_FAV_ODDS_NORMALIZATION, 1.0)
+        sec_fav_odds_score = min(
+            float(second_favorite_odds) / SEC_FAV_ODDS_NORMALIZATION, 1.0
+        )
 
         # Weighted average
-        odds_score = (fav_odds_score * FAV_ODDS_WEIGHT) + (sec_fav_odds_score * SEC_FAV_ODDS_WEIGHT)
-        final_score = (field_score * FIELD_SIZE_SCORE_WEIGHT) + (odds_score * ODDS_SCORE_WEIGHT)
+        odds_score = (fav_odds_score * FAV_ODDS_WEIGHT) + (
+            sec_fav_odds_score * SEC_FAV_ODDS_WEIGHT
+        )
+        final_score = (field_score * FIELD_SIZE_SCORE_WEIGHT) + (
+            odds_score * ODDS_SCORE_WEIGHT
+        )
 
         # --- Apply a penalty if hard filters are not met, instead of returning None ---
         if (
@@ -160,7 +179,10 @@ class AnalyzerEngine:
         # In a real plugin system, this would inspect a folder.
         # For now, we register them manually.
         self.register_analyzer("trifecta", TrifectaAnalyzer)
-        log.info("AnalyzerEngine discovered plugins", available_analyzers=list(self.analyzers.keys()))
+        log.info(
+            "AnalyzerEngine discovered plugins",
+            available_analyzers=list(self.analyzers.keys()),
+        )
 
     def register_analyzer(self, name: str, analyzer_class: Type[BaseAnalyzer]):
         self.analyzers[name] = analyzer_class
@@ -178,7 +200,10 @@ class AudioAlertSystem:
 
     def __init__(self):
         self.sounds = {
-            "high_value": Path(__file__).parent.parent.parent / "assets" / "sounds" / "alert_premium.wav",
+            "high_value": Path(__file__).parent.parent.parent
+            / "assets"
+            / "sounds"
+            / "alert_premium.wav",
         }
 
     def play(self, sound_type: str):
@@ -188,7 +213,9 @@ class AudioAlertSystem:
         sound_file = self.sounds.get(sound_type)
         if sound_file and sound_file.exists():
             try:
-                winsound.PlaySound(str(sound_file), winsound.SND_FILENAME | winsound.SND_ASYNC)
+                winsound.PlaySound(
+                    str(sound_file), winsound.SND_FILENAME | winsound.SND_ASYNC
+                )
             except Exception as e:
                 log.warning("Could not play sound", file=sound_file, error=e)
 
@@ -197,7 +224,7 @@ class RaceNotifier:
     """Handles sending native Windows notifications and audio alerts for high-value races."""
 
     def __init__(self):
-        self.toaster = ToastNotifier() if ToastNotifier else None
+        self.toaster = None
         self.audio_system = AudioAlertSystem()
         self.notified_races = set()
 
@@ -215,7 +242,9 @@ Post Time: {race.start_time.strftime("%I:%M %p")}"""
             self.toaster.show_toast(title, message, duration=10, threaded=True)
             self.notified_races.add(race.id)
             self.audio_system.play("high_value")
-            log.info("Notification and audio alert sent for high-value race", race_id=race.id)
+            log.info(
+                "Notification and audio alert sent for high-value race", race_id=race.id
+            )
         except Exception as e:
             # Catch potential exceptions from the notification library itself
             log.error("Failed to send notification", error=str(e), exc_info=True)

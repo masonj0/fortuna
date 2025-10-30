@@ -65,7 +65,9 @@ def generate_mock_race(race_id: int):
         "id": race_id,
         "track": random.choice(tracks),
         "race_number": random.randint(1, 10),
-        "post_time": (datetime.now() + timedelta(minutes=random.randint(5, 120))).isoformat(),
+        "post_time": (
+            datetime.now() + timedelta(minutes=random.randint(5, 120))
+        ).isoformat(),
         "horses": race_horses,
     }
 

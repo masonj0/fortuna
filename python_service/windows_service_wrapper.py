@@ -25,7 +25,9 @@ class CheckmateWindowsService(win32serviceutil.ServiceFramework):
         self.checkmate_service = CheckmateBackgroundService()
         # Configure logging to use the Windows Event Log
         logging.basicConfig(
-            level=logging.INFO, format="%(name)s - %(levelname)s - %(message)s", handlers=[servicemanager.LogHandler()]
+            level=logging.INFO,
+            format="%(name)s - %(levelname)s - %(message)s",
+            handlers=[servicemanager.LogHandler()],
         )
 
     def SvcStop(self):
@@ -36,7 +38,9 @@ class CheckmateWindowsService(win32serviceutil.ServiceFramework):
 
     def SvcDoRun(self):
         servicemanager.LogMsg(
-            servicemanager.EVENTLOG_INFORMATION_TYPE, servicemanager.PYS_SERVICE_STARTED, (self._svc_name_, "")
+            servicemanager.EVENTLOG_INFORMATION_TYPE,
+            servicemanager.PYS_SERVICE_STARTED,
+            (self._svc_name_, ""),
         )
         self.main()
 

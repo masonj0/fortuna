@@ -10,6 +10,8 @@
     "tests/adapters/test_twinspires_adapter.py",
     "tests/analyzers/test_trifecta_analyzer.py",
     "tests/conftest.py",
+    "tests/fixtures/at_the_races_greyhound_sample.html",
+    "tests/fixtures/at_the_races_greyhounds.html",
     "tests/fixtures/timeform_legacy_sample.html",
     "tests/fixtures/timeform_modern_sample.html",
     "tests/fixtures/twinspires_sample.html",
