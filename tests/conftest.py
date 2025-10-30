@@ -14,7 +14,7 @@ def get_test_settings():
     app startup in a test environment.
     """
     return Settings(
-        API_KEY="test_api_key",
+        API_KEY="a_secure_test_api_key_that_is_long_enough",
         # Required by TheRacingApiAdapter
         THE_RACING_API_KEY="test_racing_api_key",
         # Required by Betfair adapters

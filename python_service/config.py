@@ -6,7 +6,7 @@ from typing import List
 from typing import Optional
 
 import structlog
-from pydantic import model_validator
+from pydantic import Field, model_validator, ValidationError
 from pydantic_settings import BaseSettings
 
 from .credentials_manager import SecureCredentialsManager
@@ -37,7 +37,7 @@ def decrypt_value(value: Optional[str]) -> Optional[str]:
 
 
 class Settings(BaseSettings):
-    API_KEY: str = ""
+    API_KEY: str = Field("", min_length=16)
 
     # --- API Gateway Configuration ---
     UVICORN_HOST: str = "127.0.0.1"
@@ -89,7 +89,14 @@ class Settings(BaseSettings):
         if not self.API_KEY:
             self.API_KEY = SecureCredentialsManager.get_credential("api_key") or "MISSING"
 
-        # 2. Decrypt sensitive fields
+        # 2. Security validation for API_KEY
+        insecure_keys = {"test", "changeme", "default", "secret", "password", "admin"}
+        if self.API_KEY in insecure_keys:
+            raise ValueError(
+                f"The provided API_KEY '{self.API_KEY}' is on the list of insecure default values and is not allowed."
+            )
+
+        # 3. Decrypt sensitive fields
         self.BETFAIR_APP_KEY = decrypt_value(self.BETFAIR_APP_KEY)
 
         return self
