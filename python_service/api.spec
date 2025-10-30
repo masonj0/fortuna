@@ -2,10 +2,10 @@
 
 
 a = Analysis(
-    ['python_service/api.py'],
+    ['api.py'],
     pathex=[],
     binaries=[],
-    datas=[('python_service/adapters', 'adapters')],
+    datas=[('adapters', 'adapters')],
     hiddenimports=['uvicorn'],
     hookspath=[],
     hooksconfig={},

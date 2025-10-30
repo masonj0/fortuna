@@ -50,10 +50,6 @@ jobs:
           pyinstaller --onefile --hidden-import=uvicorn --add-data "adapters;adapters" api.py
         shell: bash
 
-      - name: Copy Frontend Assets to Electron Directory
-        run: |
-          cp -r web_platform/frontend/out electron/
-
       - name: Build MSI Installer using electron-builder
         run: |
           cd electron

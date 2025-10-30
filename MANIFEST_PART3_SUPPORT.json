@@ -2,6 +2,7 @@
     "pg_schemas/historical_races.sql",
     "pg_schemas/quarantine_races.sql",
     "pg_schemas/quarantined_races.sql",
+    "tests/adapters/test_at_the_races_greyhound_adapter.py",
     "tests/adapters/test_gbgb_api_adapter.py",
     "tests/adapters/test_greyhound_adapter.py",
     "tests/adapters/test_racingtv_adapter.py",
