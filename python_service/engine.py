@@ -8,9 +8,8 @@ from typing import Any, Dict, List, Tuple
 import httpx
 import structlog
 
-from .adapters.base_v3 import BaseAdapterV3 # Import V3 base class
-from .adapters import * # Import all adapter classes
-from .adapters.at_the_races_greyhound_adapter import AtTheRacesGreyhoundAdapter
+from .adapters.base_v3 import BaseAdapterV3  # Import V3 base class
+from .adapters import *  # Import all adapter classes
 from .core.exceptions import AdapterConfigError, AdapterHttpError
 from .cache_manager import cache_async_result
 from .config import get_settings
@@ -30,22 +29,46 @@ class OddsEngine:
                 self.config = config or get_settings()
                 self.logger.info("Configuration loaded.")
             except ValidationError as e:
-                self.logger.warning("Could not load settings, possibly in test environment.", error=str(e))
+                self.logger.warning(
+                    "Could not load settings, possibly in test environment.",
+                    error=str(e),
+                )
                 # Create a default/mock config or re-raise if not in a test context
                 from .config import Settings
-                self.config = Settings(API_KEY="a_secure_test_api_key_that_is_long_enough")
 
+                self.config = Settings(
+                    API_KEY="a_secure_test_api_key_that_is_long_enough"
+                )
 
             self.logger.info("Initializing adapters...")
             self.adapters: List[BaseAdapterV3] = []
             adapter_classes = [
-                AtTheRacesAdapter, AtTheRacesGreyhoundAdapter, BetfairAdapter, BetfairGreyhoundAdapter, BrisnetAdapter,
-                DRFAdapter, EquibaseAdapter, FanDuelAdapter, GbgbApiAdapter, GreyhoundAdapter,
-                HarnessAdapter, HorseRacingNationAdapter, NYRABetsAdapter, OddscheckerAdapter,
-                PuntersAdapter, RacingAndSportsAdapter, RacingAndSportsGreyhoundAdapter,
-                RacingPostAdapter, RacingTVAdapter, SportingLifeAdapter, TabAdapter,
-                TheRacingApiAdapter, TimeformAdapter, TwinSpiresAdapter, TVGAdapter,
-                XpressbetAdapter, PointsBetGreyhoundAdapter
+                AtTheRacesAdapter,
+                BetfairAdapter,
+                BetfairGreyhoundAdapter,
+                BrisnetAdapter,
+                DRFAdapter,
+                EquibaseAdapter,
+                FanDuelAdapter,
+                GbgbApiAdapter,
+                GreyhoundAdapter,
+                HarnessAdapter,
+                HorseRacingNationAdapter,
+                NYRABetsAdapter,
+                OddscheckerAdapter,
+                PuntersAdapter,
+                RacingAndSportsAdapter,
+                RacingAndSportsGreyhoundAdapter,
+                RacingPostAdapter,
+                RacingTVAdapter,
+                SportingLifeAdapter,
+                TabAdapter,
+                TheRacingApiAdapter,
+                TimeformAdapter,
+                TwinSpiresAdapter,
+                TVGAdapter,
+                XpressbetAdapter,
+                PointsBetGreyhoundAdapter,
             ]
 
             for adapter_cls in adapter_classes:
@@ -55,20 +78,28 @@ class OddsEngine:
                     self.logger.warning(
                         "Skipping adapter due to configuration error",
                         adapter=adapter_cls.__name__,
-                        error=str(e)
+                        error=str(e),
                     )
                 except Exception:
-                    self.logger.error(f"An unexpected error occurred while initializing {adapter_cls.__name__}", exc_info=True)
+                    self.logger.error(
+                        f"An unexpected error occurred while initializing {adapter_cls.__name__}",
+                        exc_info=True,
+                    )
 
             # Special case for BetfairDataScientistAdapter with extra args
             try:
-                self.adapters.append(BetfairDataScientistAdapter(
-                    model_name="ThoroughbredModel",
-                    url="https://betfair-data-supplier-prod.herokuapp.com/api/widgets/kvs-ratings/datasets",
-                    config=self.config
-                ))
+                self.adapters.append(
+                    BetfairDataScientistAdapter(
+                        model_name="ThoroughbredModel",
+                        url="https://betfair-data-supplier-prod.herokuapp.com/api/widgets/kvs-ratings/datasets",
+                        config=self.config,
+                    )
+                )
             except Exception:
-                self.logger.warning("Failed to initialize adapter: BetfairDataScientistAdapter", exc_info=True)
+                self.logger.warning(
+                    "Failed to initialize adapter: BetfairDataScientistAdapter",
+                    exc_info=True,
+                )
 
             self.logger.info(f"{len(self.adapters)} adapters initialized successfully.")
 
@@ -86,12 +117,17 @@ class OddsEngine:
 
             # Initialize semaphore for concurrency limiting
             self.semaphore = asyncio.Semaphore(self.config.MAX_CONCURRENT_REQUESTS)
-            self.logger.info("Concurrency semaphore initialized", limit=self.config.MAX_CONCURRENT_REQUESTS)
+            self.logger.info(
+                "Concurrency semaphore initialized",
+                limit=self.config.MAX_CONCURRENT_REQUESTS,
+            )
 
             self.logger.info("FortunaEngine initialization complete.")
 
         except Exception:
-            self.logger.critical("CRITICAL FAILURE during FortunaEngine initialization.", exc_info=True)
+            self.logger.critical(
+                "CRITICAL FAILURE during FortunaEngine initialization.", exc_info=True
+            )
             raise
 
     async def close(self):
@@ -127,7 +163,7 @@ class OddsEngine:
                 adapter=adapter.source_name,
                 status_code=e.status_code,
                 url=e.url,
-                exc_info=False
+                exc_info=False,
             )
             error_message = f"HTTP Error {e.status_code} for {e.url}"
             attempted_url = e.url
@@ -136,7 +172,7 @@ class OddsEngine:
                 "Critical failure during fetch from adapter.",
                 adapter=adapter.source_name,
                 error=str(e),
-                exc_info=True
+                exc_info=True,
             )
             error_message = str(e)
 
@@ -179,7 +215,9 @@ class OddsEngine:
         return list(race_map.values())
 
     @cache_async_result(ttl_seconds=300, key_prefix="fortuna_engine_races")
-    async def fetch_all_odds(self, date: str, source_filter: str = None) -> Dict[str, Any]:
+    async def fetch_all_odds(
+        self, date: str, source_filter: str = None
+    ) -> Dict[str, Any]:
         """
         Fetches and aggregates race data from all configured adapters.
         The result of this method is cached.
@@ -187,9 +225,15 @@ class OddsEngine:
         target_adapters = self.adapters
         if source_filter:
             log.info("Applying source filter", source=source_filter)
-            target_adapters = [a for a in self.adapters if a.source_name.lower() == source_filter.lower()]
+            target_adapters = [
+                a
+                for a in self.adapters
+                if a.source_name.lower() == source_filter.lower()
+            ]
 
-        tasks = [self._fetch_with_semaphore(adapter, date) for adapter in target_adapters]
+        tasks = [
+            self._fetch_with_semaphore(adapter, date) for adapter in target_adapters
+        ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         source_infos = []
@@ -215,7 +259,9 @@ class OddsEngine:
             metadata={
                 "fetch_time": datetime.now(),
                 "sources_queried": [a.source_name for a in target_adapters],
-                "sources_successful": len([s for s in source_infos if s["status"] == "SUCCESS"]),
+                "sources_successful": len(
+                    [s for s in source_infos if s["status"] == "SUCCESS"]
+                ),
                 "total_races": len(deduped_races),
             },
         )

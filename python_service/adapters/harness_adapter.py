@@ -15,27 +15,27 @@ class HarnessAdapter(BaseAdapterV3):
     BASE_URL = "https://data.ustrotting.com/api/racenet/racing/"
 
     def __init__(self, config=None):
-        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
-        self.supports_manual_override = True  # Enable manual override
-
-    async def _fetch_data(self, date: str) -> Any:
-        """Fetches all harness races with manual override fallback."""
-        card_response = await self.make_request_with_override(
-            self.http_client,
-            method="get",
-            url=f"card/{date}",
-            date=date
+        super().__init__(
+            source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
         )
 
-        if not card_response:
+    async def _fetch_data(self, date: str) -> Any:
+        """Fetches all harness races for a given date."""
+        response = await self.make_request(self.http_client, "GET", f"card/{date}")
+
+        if not response:
             return None
 
-        card_data = card_response.json()
+        card_data = response.json()
         return {"data": card_data, "date": date}
 
     def _parse_races(self, raw_data: Any) -> List[Race]:
         """Parses the raw card data into a list of Race objects."""
-        if not raw_data or not raw_data.get("data") or not raw_data["data"].get("meetings"):
+        if (
+            not raw_data
+            or not raw_data.get("data")
+            or not raw_data["data"].get("meetings")
+        ):
             self.logger.warning("No meetings found in harness data response.")
             return []
 
@@ -50,7 +50,7 @@ class HarnessAdapter(BaseAdapterV3):
                     self.logger.warning(
                         "Failed to parse harness race, skipping.",
                         race_data=race_data,
-                        exc_info=True
+                        exc_info=True,
                     )
                     continue
         return all_races
@@ -73,7 +73,13 @@ class HarnessAdapter(BaseAdapterV3):
             odds = {}
             win_odds = parse_odds_to_decimal(odds_str)
             if win_odds and win_odds < 999:
-                odds = {self.SOURCE_NAME: OddsData(win=win_odds, source=self.SOURCE_NAME, last_updated=datetime.now())}
+                odds = {
+                    self.SOURCE_NAME: OddsData(
+                        win=win_odds,
+                        source=self.SOURCE_NAME,
+                        last_updated=datetime.now(),
+                    )
+                }
 
             runners.append(
                 Runner(

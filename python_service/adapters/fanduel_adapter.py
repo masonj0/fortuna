@@ -12,11 +12,14 @@ class FanDuelAdapter(BaseAdapterV3):
     """
     Adapter for FanDuel's private API, migrated to BaseAdapterV3.
     """
+
     SOURCE_NAME = "FanDuel"
     BASE_URL = "https://sb-api.nj.sportsbook.fanduel.com/api/"
 
     def __init__(self, config=None):
-        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
+        super().__init__(
+            source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
+        )
 
     async def _fetch_data(self, date: str) -> Any:
         """Fetches the raw market data from the FanDuel API."""
@@ -42,7 +45,11 @@ class FanDuelAdapter(BaseAdapterV3):
                         if race := self._parse_single_race(market):
                             races.append(race)
                     except Exception:
-                        self.logger.error("Failed to parse a FanDuel market", market=market, exc_info=True)
+                        self.logger.error(
+                            "Failed to parse a FanDuel market",
+                            market=market,
+                            exc_info=True,
+                        )
         return races
 
     def _parse_single_race(self, market: Dict[str, Any]) -> Optional[Race]:
@@ -53,7 +60,9 @@ class FanDuelAdapter(BaseAdapterV3):
 
         parts = market_name.split(" - ")
         if len(parts) < 2:
-            self.logger.warning(f"Could not parse race and track from FanDuel market name: {market_name}")
+            self.logger.warning(
+                f"Could not parse race and track from FanDuel market name: {market_name}"
+            )
             return None
 
         race_number_str = parts[0].replace("Race ", "")
@@ -73,16 +82,30 @@ class FanDuelAdapter(BaseAdapterV3):
                 numerator, denominator = map(int, win_odds.split("/"))
                 decimal_odds = Decimal(numerator) / Decimal(denominator) + 1
 
-                odds = OddsData(win=decimal_odds, source=self.source_name, last_updated=datetime.now(timezone.utc))
+                odds = OddsData(
+                    win=decimal_odds,
+                    source=self.source_name,
+                    last_updated=datetime.now(timezone.utc),
+                )
                 program_number_str = runner_name.split(".")[0].strip()
 
-                runners.append(Runner(
-                    name=runner_name.split(".")[1].strip(),
-                    number=int(program_number_str) if program_number_str.isdigit() else 0,
-                    odds={self.source_name: odds},
-                ))
+                runners.append(
+                    Runner(
+                        name=runner_name.split(".")[1].strip(),
+                        number=(
+                            int(program_number_str)
+                            if program_number_str.isdigit()
+                            else 0
+                        ),
+                        odds={self.source_name: odds},
+                    )
+                )
             except (ValueError, ZeroDivisionError, IndexError):
-                self.logger.warning("Could not parse FanDuel runner", runner_data=runner_data, exc_info=True)
+                self.logger.warning(
+                    "Could not parse FanDuel runner",
+                    runner_data=runner_data,
+                    exc_info=True,
+                )
                 continue
 
         if not runners:

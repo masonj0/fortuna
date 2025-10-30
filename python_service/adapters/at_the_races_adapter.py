@@ -16,11 +16,14 @@ class AtTheRacesAdapter(BaseAdapterV3):
     """
     Adapter for attheraces.com, migrated to BaseAdapterV3.
     """
+
     SOURCE_NAME = "AtTheRaces"
     BASE_URL = "https://www.attheraces.com"
 
     def __init__(self, config=None):
-        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
+        super().__init__(
+            source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
+        )
 
     async def _fetch_data(self, date: str) -> Optional[dict]:
         """
@@ -53,7 +56,10 @@ class AtTheRacesAdapter(BaseAdapterV3):
         try:
             race_date = datetime.strptime(raw_data["date"], "%Y-%m-%d").date()
         except ValueError:
-            self.logger.error("Invalid date format provided to AtTheRacesAdapter", date=raw_data.get("date"))
+            self.logger.error(
+                "Invalid date format provided to AtTheRacesAdapter",
+                date=raw_data.get("date"),
+            )
             return []
 
         for html in raw_data["pages"]:
@@ -66,11 +72,18 @@ class AtTheRacesAdapter(BaseAdapterV3):
                 track_name = normalize_venue_name(track_name_raw)
                 active_link = soup.select_one("a.race-time-link.active")
                 race_number = (
-                    active_link.find_parent("div", "races").select("a.race-time-link").index(active_link) + 1
+                    active_link.find_parent("div", "races")
+                    .select("a.race-time-link")
+                    .index(active_link)
+                    + 1
                 )
-                start_time = datetime.combine(race_date, datetime.strptime(race_time, "%H:%M").time())
+                start_time = datetime.combine(
+                    race_date, datetime.strptime(race_time, "%H:%M").time()
+                )
 
-                runners = [self._parse_runner(row) for row in soup.select("div.card-horse")]
+                runners = [
+                    self._parse_runner(row) for row in soup.select("div.card-horse")
+                ]
                 race = Race(
                     id=f"atr_{track_name.replace(' ', '')}_{start_time.strftime('%Y%m%d')}_R{race_number}",
                     venue=track_name,
@@ -81,7 +94,10 @@ class AtTheRacesAdapter(BaseAdapterV3):
                 )
                 all_races.append(race)
             except (AttributeError, IndexError, ValueError):
-                self.logger.warning("Error parsing a race from AtTheRaces, skipping race.", exc_info=True)
+                self.logger.warning(
+                    "Error parsing a race from AtTheRaces, skipping race.",
+                    exc_info=True,
+                )
                 continue
         return all_races
 
@@ -93,11 +109,19 @@ class AtTheRacesAdapter(BaseAdapterV3):
             odds_str = clean_text(row.select_one("button.best-odds").get_text())
             win_odds = parse_odds_to_decimal(odds_str)
             odds_data = (
-                {self.source_name: OddsData(win=win_odds, source=self.source_name, last_updated=datetime.now())}
+                {
+                    self.source_name: OddsData(
+                        win=win_odds,
+                        source=self.source_name,
+                        last_updated=datetime.now(),
+                    )
+                }
                 if win_odds and win_odds < 999
                 else {}
             )
             return Runner(number=number, name=name, odds=odds_data)
         except (AttributeError, ValueError):
-            self.logger.warning("Failed to parse a runner on AtTheRaces, skipping runner.")
+            self.logger.warning(
+                "Failed to parse a runner on AtTheRaces, skipping runner."
+            )
             return None

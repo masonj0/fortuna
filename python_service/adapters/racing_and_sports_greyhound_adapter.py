@@ -15,23 +15,41 @@ class RacingAndSportsGreyhoundAdapter(BaseAdapterV3):
     BASE_URL = "https://api.racingandsports.com.au/"
 
     def __init__(self, config=None):
-        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
-        if not hasattr(config, "RACING_AND_SPORTS_TOKEN") or not config.RACING_AND_SPORTS_TOKEN:
-            raise AdapterConfigError(self.source_name, "RACING_AND_SPORTS_TOKEN is not configured.")
+        super().__init__(
+            source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
+        )
+        if (
+            not hasattr(config, "RACING_AND_SPORTS_TOKEN")
+            or not config.RACING_AND_SPORTS_TOKEN
+        ):
+            raise AdapterConfigError(
+                self.source_name, "RACING_AND_SPORTS_TOKEN is not configured."
+            )
         self.api_token = config.RACING_AND_SPORTS_TOKEN
 
     async def _fetch_data(self, date: str) -> Optional[Dict[str, Any]]:
         """Fetches the raw greyhound meetings data from the Racing and Sports API."""
-        headers = {"Authorization": f"Bearer {self.api_token}", "Accept": "application/json"}
+        headers = {
+            "Authorization": f"Bearer {self.api_token}",
+            "Accept": "application/json",
+        }
         params = {"date": date, "jurisdiction": "AUS"}
-        response = await self.make_request(self.http_client, "GET", "v1/greyhound/meetings", headers=headers, params=params)
+        response = await self.make_request(
+            self.http_client,
+            "GET",
+            "v1/greyhound/meetings",
+            headers=headers,
+            params=params,
+        )
         return response.json() if response else None
 
     def _parse_races(self, raw_data: Dict[str, Any]) -> List[Race]:
         """Parses the raw meetings data into a list of Race objects."""
         all_races = []
         if not raw_data or not isinstance(raw_data.get("meetings"), list):
-            self.logger.warning("No 'meetings' in RacingAndSportsGreyhound response or invalid format.")
+            self.logger.warning(
+                "No 'meetings' in RacingAndSportsGreyhound response or invalid format."
+            )
             return all_races
 
         for meeting in raw_data["meetings"]:
@@ -48,11 +66,13 @@ class RacingAndSportsGreyhoundAdapter(BaseAdapterV3):
                         "Failed to parse RacingAndSportsGreyhound race, skipping",
                         meeting=meeting.get("venueName"),
                         race_id=race_summary.get("raceId"),
-                        exc_info=True
+                        exc_info=True,
                     )
         return all_races
 
-    def _parse_ras_race(self, meeting: Dict[str, Any], race: Dict[str, Any]) -> Optional[Race]:
+    def _parse_ras_race(
+        self, meeting: Dict[str, Any], race: Dict[str, Any]
+    ) -> Optional[Race]:
         """Parses a single race object from the API response."""
         race_id = race.get("raceId")
         start_time_str = race.get("startTime")
@@ -65,7 +85,8 @@ class RacingAndSportsGreyhoundAdapter(BaseAdapterV3):
                 name=rd.get("horseName", "Unknown"),
                 scratched=rd.get("isScratched", False),
             )
-            for rd in race.get("runners", []) if isinstance(rd, dict)
+            for rd in race.get("runners", [])
+            if isinstance(rd, dict)
         ]
 
         return Race(

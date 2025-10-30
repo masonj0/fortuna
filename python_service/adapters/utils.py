@@ -3,4 +3,4 @@
 
 from ..utils.odds import parse_odds
 
-__all__ = ['parse_odds']
+__all__ = ["parse_odds"]

@@ -15,12 +15,19 @@ class GreyhoundAdapter(BaseAdapterV3):
     Adapter for fetching Greyhound racing data, migrated to BaseAdapterV3.
     Activated by setting GREYHOUND_API_URL in .env.
     """
+
     SOURCE_NAME = "Greyhound Racing"
 
     def __init__(self, config=None):
-        if not hasattr(config, 'GREYHOUND_API_URL') or not config.GREYHOUND_API_URL:
-            raise AdapterConfigError(self.SOURCE_NAME, "GREYHOUND_API_URL is not configured.")
-        super().__init__(source_name=self.SOURCE_NAME, base_url=config.GREYHOUND_API_URL, config=config)
+        if not hasattr(config, "GREYHOUND_API_URL") or not config.GREYHOUND_API_URL:
+            raise AdapterConfigError(
+                self.SOURCE_NAME, "GREYHOUND_API_URL is not configured."
+            )
+        super().__init__(
+            source_name=self.SOURCE_NAME,
+            base_url=config.GREYHOUND_API_URL,
+            config=config,
+        )
 
     async def _fetch_data(self, date: str) -> Any:
         """Fetches the raw card data from the greyhound API."""
@@ -54,7 +61,7 @@ class GreyhoundAdapter(BaseAdapterV3):
                 except (ValidationError, KeyError) as e:
                     self.logger.error(
                         "Error parsing greyhound race",
-                        race_id=race_data.get('race_id', 'N/A'),
+                        race_id=race_data.get("race_id", "N/A"),
                         error=str(e),
                     )
                     continue
@@ -74,16 +81,22 @@ class GreyhoundAdapter(BaseAdapterV3):
                     win_odds = Decimal(str(win_odds_val))
                     if win_odds > 1:
                         odds_data[self.source_name] = OddsData(
-                            win=win_odds, source=self.source_name, last_updated=datetime.now()
+                            win=win_odds,
+                            source=self.source_name,
+                            last_updated=datetime.now(),
                         )
 
-                runners.append(Runner(
-                    number=runner_data["trap_number"],
-                    name=runner_data["dog_name"],
-                    scratched=runner_data.get("scratched", False),
-                    odds=odds_data,
-                ))
+                runners.append(
+                    Runner(
+                        number=runner_data["trap_number"],
+                        name=runner_data["dog_name"],
+                        scratched=runner_data.get("scratched", False),
+                        odds=odds_data,
+                    )
+                )
             except (KeyError, ValidationError):
-                self.logger.warning("Error parsing greyhound runner, skipping.", runner_data=runner_data)
+                self.logger.warning(
+                    "Error parsing greyhound runner, skipping.", runner_data=runner_data
+                )
                 continue
         return runners

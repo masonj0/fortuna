@@ -8,6 +8,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential, RetryError
 from ..core.exceptions import AdapterHttpError
 from ..models import Race
 
+
 class BaseAdapterV3(ABC):
     """
     Abstract base class for all V3 data adapters.
@@ -56,7 +57,7 @@ class BaseAdapterV3(ABC):
     @retry(
         wait=wait_exponential(multiplier=1, min=2, max=10),
         stop=stop_after_attempt(3),
-        reraise=True  # Reraise the final exception to be caught by get_races
+        reraise=True,  # Reraise the final exception to be caught by get_races
     )
     async def make_request(
         self, http_client: httpx.AsyncClient, method: str, url: str, **kwargs
@@ -65,23 +66,29 @@ class BaseAdapterV3(ABC):
         Makes a resilient HTTP request with built-in retry logic using tenacity.
         """
         # Ensure the URL is correctly formed, whether it's relative or absolute
-        full_url = url if url.startswith('http') else f"{self.base_url.rstrip('/')}/{url.lstrip('/')}"
+        full_url = (
+            url
+            if url.startswith("http")
+            else f"{self.base_url.rstrip('/')}/{url.lstrip('/')}"
+        )
 
         try:
             self.logger.info(f"Making request", method=method.upper(), url=full_url)
-            response = await http_client.request(method, full_url, timeout=self.timeout, **kwargs)
+            response = await http_client.request(
+                method, full_url, timeout=self.timeout, **kwargs
+            )
             response.raise_for_status()  # Raise an exception for 4xx/5xx responses
             return response
         except httpx.HTTPStatusError as e:
             self.logger.error(
                 "HTTP Status Error during request",
                 status_code=e.response.status_code,
-                url=str(e.request.url)
+                url=str(e.request.url),
             )
             raise AdapterHttpError(
                 adapter_name=self.source_name,
                 status_code=e.response.status_code,
-                url=str(e.request.url)
+                url=str(e.request.url),
             ) from e
         except (httpx.RequestError, RetryError) as e:
             self.logger.error("Request Error or Retry Error", error=str(e))
@@ -89,7 +96,7 @@ class BaseAdapterV3(ABC):
                 adapter_name=self.source_name,
                 status_code=503,  # Service Unavailable
                 url=full_url,
-                detail=str(e)
+                detail=str(e),
             ) from e
 
     def get_status(self) -> dict:
@@ -99,5 +106,5 @@ class BaseAdapterV3(ABC):
         """
         return {
             "adapter_name": self.source_name,
-            "status": "OK"  # Basic status; can be enhanced in subclasses
+            "status": "OK",  # Basic status; can be enhanced in subclasses
         }

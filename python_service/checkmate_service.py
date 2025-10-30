@@ -31,7 +31,9 @@ class DatabaseHandler:
             # Correctly resolve paths from the service's location
             base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
             schema_path = os.path.join(base_dir, "shared_database", "schema.sql")
-            web_schema_path = os.path.join(base_dir, "shared_database", "web_schema.sql")
+            web_schema_path = os.path.join(
+                base_dir, "shared_database", "web_schema.sql"
+            )
 
             # Read both schema files
             with open(schema_path, "r") as f:
@@ -45,9 +47,14 @@ class DatabaseHandler:
                 cursor.executescript(schema)
                 cursor.executescript(web_schema)
                 conn.commit()
-            self.logger.info("CRITICAL SUCCESS: All database schemas (base + web) applied successfully.")
+            self.logger.info(
+                "CRITICAL SUCCESS: All database schemas (base + web) applied successfully."
+            )
         except Exception as e:
-            self.logger.critical(f"FATAL: Database setup failed. Other platforms will fail. Error: {e}", exc_info=True)
+            self.logger.critical(
+                f"FATAL: Database setup failed. Other platforms will fail. Error: {e}",
+                exc_info=True,
+            )
             raise
 
     def update_races_and_status(self, races: List[Race], statuses: List[dict]):
@@ -100,7 +107,9 @@ class DatabaseHandler:
                 )
 
             conn.commit()
-        self.logger.info(f"Database updated with {len(races)} races and {len(statuses)} adapter statuses.")
+        self.logger.info(
+            f"Database updated with {len(races)} races and {len(statuses)} adapter statuses."
+        )
 
 
 class CheckmateBackgroundService:
@@ -113,7 +122,9 @@ class CheckmateBackgroundService:
 
         db_path = os.getenv("CHECKMATE_DB_PATH")
         if not db_path:
-            self.logger.critical("FATAL: CHECKMATE_DB_PATH environment variable not set. Service cannot start.")
+            self.logger.critical(
+                "FATAL: CHECKMATE_DB_PATH environment variable not set. Service cannot start."
+            )
             raise ValueError("CHECKMATE_DB_PATH is not configured.")
 
         self.logger.info(f"Database path loaded from environment: {db_path}")
@@ -124,7 +135,12 @@ class CheckmateBackgroundService:
         self.python_analyzer = EnhancedTrifectaAnalyzer(self.settings)
         self.stop_event = threading.Event()
         self.rust_engine_path = os.path.join(
-            os.path.dirname(__file__), "..", "rust_engine", "target", "release", "checkmate_engine.exe"
+            os.path.dirname(__file__),
+            "..",
+            "rust_engine",
+            "target",
+            "release",
+            "checkmate_engine.exe",
         )
 
     def _analyze_with_rust(self, races: List[Race]) -> Optional[List[Race]]:
@@ -132,7 +148,12 @@ class CheckmateBackgroundService:
         try:
             race_data_json = json.dumps([r.model_dump() for r in races])
             result = subprocess.run(
-                [self.rust_engine_path], input=race_data_json, capture_output=True, text=True, check=True, timeout=30
+                [self.rust_engine_path],
+                input=race_data_json,
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=30,
             )
             results_data = json.loads(result.stdout)
             results_map = {res["race_id"]: res for res in results_data}
@@ -145,10 +166,18 @@ class CheckmateBackgroundService:
                     race.trifecta_factors_json = json.dumps(res.get("trifecta_factors"))
             return races
         except FileNotFoundError:
-            self.logger.warning("Rust engine not found. Falling back to Python analyzer.")
+            self.logger.warning(
+                "Rust engine not found. Falling back to Python analyzer."
+            )
             return None
-        except (subprocess.CalledProcessError, json.JSONDecodeError, subprocess.TimeoutExpired) as e:
-            self.logger.error(f"Rust engine execution failed: {e}. Falling back to Python analyzer.")
+        except (
+            subprocess.CalledProcessError,
+            json.JSONDecodeError,
+            subprocess.TimeoutExpired,
+        ) as e:
+            self.logger.error(
+                f"Rust engine execution failed: {e}. Falling back to Python analyzer."
+            )
             return None
 
     def _analyze_with_python(self, races: List[Race]) -> List[Race]:
@@ -174,9 +203,13 @@ class CheckmateBackgroundService:
                     self.db_handler.update_races_and_status(analyzed_races, statuses)
 
             except Exception as e:
-                self.logger.critical(f"Unhandled exception in service loop: {e}", exc_info=True)
+                self.logger.critical(
+                    f"Unhandled exception in service loop: {e}", exc_info=True
+                )
 
-            self.logger.info(f"Cycle complete. Sleeping for {interval_seconds} seconds.")
+            self.logger.info(
+                f"Cycle complete. Sleeping for {interval_seconds} seconds."
+            )
             self.stop_event.wait(interval_seconds)
         self.logger.info("Background service run loop has terminated.")
 

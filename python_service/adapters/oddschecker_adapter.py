@@ -19,7 +19,9 @@ class OddscheckerAdapter(BaseAdapterV3):
     BASE_URL = "https://www.oddschecker.com"
 
     def __init__(self, config=None):
-        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
+        super().__init__(
+            source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
+        )
 
     async def _fetch_data(self, date: str) -> Optional[dict]:
         """
@@ -53,7 +55,10 @@ class OddscheckerAdapter(BaseAdapterV3):
         try:
             race_date = datetime.strptime(raw_data["date"], "%Y-%m-%d").date()
         except ValueError:
-            self.logger.error("Invalid date format provided to OddscheckerAdapter", date=raw_data.get("date"))
+            self.logger.error(
+                "Invalid date format provided to OddscheckerAdapter",
+                date=raw_data.get("date"),
+            )
             return []
 
         all_races = []
@@ -66,7 +71,10 @@ class OddscheckerAdapter(BaseAdapterV3):
                 if race:
                     all_races.append(race)
             except (AttributeError, IndexError, ValueError):
-                self.logger.warning("Error parsing a race from Oddschecker, skipping race.", exc_info=True)
+                self.logger.warning(
+                    "Error parsing a race from Oddschecker, skipping race.",
+                    exc_info=True,
+                )
                 continue
         return all_races
 
@@ -81,8 +89,14 @@ class OddscheckerAdapter(BaseAdapterV3):
             all_links = soup.select("a.race-time-link")
             race_number = all_links.index(active_link) + 1
 
-        start_time = datetime.combine(race_date, datetime.strptime(race_time_str, "%H:%M").time())
-        runners = [runner for row in soup.select("tr.race-card-row") if (runner := self._parse_runner_row(row))]
+        start_time = datetime.combine(
+            race_date, datetime.strptime(race_time_str, "%H:%M").time()
+        )
+        runners = [
+            runner
+            for row in soup.select("tr.race-card-row")
+            if (runner := self._parse_runner_row(row))
+        ]
 
         if not runners:
             return None
@@ -99,7 +113,9 @@ class OddscheckerAdapter(BaseAdapterV3):
     def _parse_runner_row(self, row: Tag) -> Optional[Runner]:
         try:
             name = row.select_one("span.selection-name").get_text(strip=True)
-            odds_str = row.select_one("span.bet-button-odds-desktop, span.best-price").get_text(strip=True)
+            odds_str = row.select_one(
+                "span.bet-button-odds-desktop, span.best-price"
+            ).get_text(strip=True)
             number = int(row.select_one("td.runner-number").get_text(strip=True))
 
             if not name or not odds_str:
@@ -114,5 +130,7 @@ class OddscheckerAdapter(BaseAdapterV3):
 
             return Runner(number=number, name=name, odds=odds_dict)
         except (AttributeError, ValueError):
-            self.logger.warning("Failed to parse a runner on Oddschecker, skipping runner.")
+            self.logger.warning(
+                "Failed to parse a runner on Oddschecker, skipping runner."
+            )
             return None

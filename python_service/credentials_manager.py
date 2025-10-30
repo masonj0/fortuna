@@ -4,9 +4,11 @@ import keyring
 try:
     # This check is crucial for cross-platform compatibility
     import keyring.backends.windows
+
     IS_WINDOWS = True
 except ImportError:
     IS_WINDOWS = False
+
 
 class SecureCredentialsManager:
     """Manages secrets in the system's native credential store."""

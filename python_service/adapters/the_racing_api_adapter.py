@@ -13,20 +13,27 @@ class TheRacingApiAdapter(BaseAdapterV3):
     """
     Adapter for The Racing API, migrated to BaseAdapterV3.
     """
+
     SOURCE_NAME = "TheRacingAPI"
     BASE_URL = "https://api.theracingapi.com/v1/"
 
     def __init__(self, config=None):
-        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
+        super().__init__(
+            source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
+        )
         if not hasattr(config, "THE_RACING_API_KEY") or not config.THE_RACING_API_KEY:
-            raise AdapterConfigError(self.source_name, "THE_RACING_API_KEY is not configured.")
+            raise AdapterConfigError(
+                self.source_name, "THE_RACING_API_KEY is not configured."
+            )
         self.api_key = config.THE_RACING_API_KEY
 
     async def _fetch_data(self, date: str) -> Dict[str, Any]:
         """Fetches the raw racecard data from The Racing API."""
         endpoint = f"racecards?date={date}&course=all&region=gb,ire"
         headers = {"Authorization": f"Bearer {self.api_key}"}
-        response = await self.make_request(self.http_client, "GET", endpoint, headers=headers)
+        response = await self.make_request(
+            self.http_client, "GET", endpoint, headers=headers
+        )
         return response.json() if response else None
 
     def _parse_races(self, raw_data: Dict[str, Any]) -> List[Race]:
@@ -38,7 +45,9 @@ class TheRacingApiAdapter(BaseAdapterV3):
         races = []
         for race_data in raw_data["racecards"]:
             try:
-                start_time = datetime.fromisoformat(race_data["off_time"].replace("Z", "+00:00"))
+                start_time = datetime.fromisoformat(
+                    race_data["off_time"].replace("Z", "+00:00")
+                )
 
                 race = Race(
                     id=f"tra_{race_data['race_id']}",
@@ -55,7 +64,7 @@ class TheRacingApiAdapter(BaseAdapterV3):
                 self.logger.error(
                     "Error parsing TheRacingAPI race",
                     race_id=race_data.get("race_id"),
-                    exc_info=True
+                    exc_info=True,
                 )
         return races
 
@@ -67,7 +76,9 @@ class TheRacingApiAdapter(BaseAdapterV3):
                 if runner_data.get("odds"):
                     win_odds = Decimal(str(runner_data["odds"][0]["odds_decimal"]))
                     odds_data[self.source_name] = OddsData(
-                        win=win_odds, source=self.source_name, last_updated=datetime.now()
+                        win=win_odds,
+                        source=self.source_name,
+                        last_updated=datetime.now(),
                     )
 
                 runners.append(
@@ -83,6 +94,6 @@ class TheRacingApiAdapter(BaseAdapterV3):
                 self.logger.error(
                     "Error parsing TheRacingAPI runner",
                     runner_name=runner_data.get("horse"),
-                    exc_info=True
+                    exc_info=True,
                 )
         return runners
