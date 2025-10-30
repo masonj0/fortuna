@@ -87,57 +87,55 @@ async def test_engine_deduplicates_races_and_merges_odds(mock_time_adapter_fetch
 
 
 @pytest.mark.asyncio
-@patch('python_service.cache_manager.cache_manager.set', new_callable=AsyncMock)
-@patch('python_service.cache_manager.cache_manager.get', new_callable=AsyncMock)
-async def test_engine_caching_logic(mock_cache_get, mock_cache_set):
+async def test_engine_caching_logic():
     """
     SPEC: The OddsEngine should cache results in Redis.
     1. On a cache miss, it should fetch from adapters and set the cache.
     2. On a cache hit, it should return data from the cache without fetching from adapters.
     """
     # ARRANGE
-    mock_cache_get.return_value = None  # Cache miss on first call
-    engine = OddsEngine(config=get_settings())
+    # Use the synchronous FakeRedis for the synchronous CacheManager
+    with patch('redis.from_url', fakeredis.FakeRedis.from_url):
+        from python_service.cache_manager import cache_manager
+        import redis
+        # Re-initialize the client on the singleton to use the patched sync version
+        cache_manager.redis_client = redis.from_url("redis://fake", decode_responses=True)
+        assert cache_manager.redis_client is not None, "Failed to patch redis_client"
 
-    today_str = date.today().strftime('%Y-%m-%d')
-    test_time = datetime(2025, 10, 9, 15, 0)
+        engine = OddsEngine(config=get_settings())
 
-    mock_race = create_mock_race("TestSource", "Cache Park", 1, test_time, [
-        {"number": 1, "name": "Cachedy", "odds": "4.0"}
-    ])
+        today_str = date.today().strftime('%Y-%m-%d')
+        test_time = datetime(2025, 10, 9, 15, 0)
+        mock_race = create_mock_race("TestSource", "Cache Park", 1, test_time, [{"number": 1, "name": "Cachedy", "odds": "4.0"}])
 
-    # Replace the engine's adapters with a single mock to isolate the test
-    mock_adapter = AsyncMock(spec=BaseAdapterV3)
-    mock_adapter.source_name = "TestSource"
-    mock_adapter.get_races = AsyncMock()
-    mock_adapter.get_races.return_value = [mock_race]
-    engine.adapters = [mock_adapter]
+        mock_adapter = AsyncMock(spec=BaseAdapterV3)
+        mock_adapter.source_name = "TestSource"
+        engine.adapters = [mock_adapter] # Isolate to one mock adapter
 
-    # Mock the internal fetch method to avoid dealing with source_info format
-    with patch.object(engine, '_time_adapter_fetch', new_callable=AsyncMock) as mock_fetch:
-        mock_fetch.return_value = ("TestSource", {'races': [mock_race], 'source_info': {'name': 'TestSource', 'status': 'SUCCESS', 'races_fetched': 1, 'fetch_duration': 0.1, 'error_message': None, 'attempted_url': None}}, 0.1)
+        cache_manager.redis_client.flushdb()
 
-        # --- ACT 1: Cache Miss ---
-        result_miss = await engine.fetch_all_odds(today_str)
+        with patch.object(engine, '_time_adapter_fetch', new_callable=AsyncMock) as mock_fetch:
+            source_info_payload = {
+                "name": "TestSource", "status": "SUCCESS", "races_fetched": 1,
+                "error_message": None, "fetch_duration": 0.1, "attempted_url": None
+            }
+            adapter_result_payload = {"races": [mock_race], "source_info": source_info_payload}
+            mock_fetch.return_value = ("TestSource", adapter_result_payload, 0.1)
 
-        # --- ASSERT 1: Cache Miss ---
-        mock_fetch.assert_called_once()
-        mock_cache_set.assert_called_once()
-        assert len(result_miss['races']) == 1
-        assert result_miss['races'][0]['venue'] == "Cache Park"
+            # --- ACT 1: Cache Miss ---
+            result_miss = await engine.fetch_all_odds(today_str)
 
-        # --- ACT 2: Cache Hit ---
-        mock_fetch.reset_mock()
-        mock_cache_set.reset_mock()
-        mock_cache_get.return_value = result_miss # Simulate cache hit
+            # --- ASSERT 1: Cache Miss ---
+            mock_fetch.assert_called_once()
+            assert result_miss is not None
+            assert result_miss['races'][0]['venue'] == "Cache Park"
 
-        result_hit = await engine.fetch_all_odds(today_str)
+            # --- ACT 2: Cache Hit ---
+            result_hit = await engine.fetch_all_odds(today_str)
 
-        # --- ASSERT 2: Cache Hit ---
-        mock_fetch.assert_not_called()
-        mock_cache_set.assert_not_called()
-        assert len(result_hit['races']) == 1
-        assert result_hit['races'][0]['venue'] == "Cache Park"
-        assert result_hit == result_miss
+            # --- ASSERT 2: Cache Hit ---
+            mock_fetch.assert_called_once() # Should NOT be called again
+            assert result_hit is not None
+            assert result_hit == result_miss
 
     await engine.close()

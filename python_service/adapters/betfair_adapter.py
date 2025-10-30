@@ -1,5 +1,5 @@
 # python_service/adapters/betfair_adapter.py
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, List
 
 from ..models import Race, Runner
