@@ -1,6 +1,6 @@
 # python_service/adapters/harness_adapter.py
 from datetime import datetime
-from typing import Any, List
+from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
 from ..models import OddsData, Race, Runner
@@ -19,7 +19,7 @@ class HarnessAdapter(BaseAdapterV3):
             source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
         )
 
-    async def _fetch_data(self, date: str) -> Any:
+    async def _fetch_data(self, date: str) -> Optional[Dict[str, Any]]:
         """Fetches all harness races for a given date."""
         response = await self.make_request(self.http_client, "GET", f"card/{date}")
 
@@ -29,23 +29,24 @@ class HarnessAdapter(BaseAdapterV3):
         card_data = response.json()
         return {"data": card_data, "date": date}
 
-    def _parse_races(self, raw_data: Any) -> List[Race]:
+    def _parse_races(self, raw_data: Optional[Dict[str, Any]]) -> List[Race]:
         """Parses the raw card data into a list of Race objects."""
         if (
             not raw_data
             or not raw_data.get("data")
-            or not raw_data["data"].get("meetings")
+            or not raw_data.get("data", {}).get("meetings")
         ):
             self.logger.warning("No meetings found in harness data response.")
             return []
 
         all_races = []
-        date = raw_data["date"]
-        for meeting in raw_data["data"]["meetings"]:
+        date = raw_data.get("date")
+        for meeting in raw_data.get("data", {}).get("meetings", []):
             track_name = meeting.get("track", {}).get("name")
             for race_data in meeting.get("races", []):
                 try:
-                    all_races.append(self._parse_race(race_data, track_name, date))
+                    if race := self._parse_race(race_data, track_name, date):
+                        all_races.append(race)
                 except Exception:
                     self.logger.warning(
                         "Failed to parse harness race, skipping.",
@@ -55,10 +56,13 @@ class HarnessAdapter(BaseAdapterV3):
                     continue
         return all_races
 
-    def _parse_race(self, race_data: dict, track_name: str, date: str) -> Race:
+    def _parse_race(self, race_data: dict, track_name: str, date: str) -> Optional[Race]:
         """Parses a single race from the USTA API into a Race object."""
-        race_number = race_data.get("raceNumber", 0)
-        post_time_str = race_data.get("postTime", "00:00 AM")
+        race_number = race_data.get("raceNumber")
+        post_time_str = race_data.get("postTime")
+        if not all([race_number, post_time_str]):
+            return None
+
         start_time = self._parse_post_time(date, post_time_str)
 
         runners = []
@@ -89,6 +93,9 @@ class HarnessAdapter(BaseAdapterV3):
                     scratched=False,
                 )
             )
+
+        if not runners:
+            return None
 
         return Race(
             id=f"ust_{track_name.lower().replace(' ', '')}_{date}_{race_number}",
