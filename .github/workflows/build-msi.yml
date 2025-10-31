@@ -33,6 +33,15 @@ jobs:
           npm ci
           npm run build
 
+      - name: Stage Frontend Assets for Packaging
+        shell: cmd
+        run: |
+          cd electron
+          if exist web-ui-build (rmdir /s /q web-ui-build)
+          mkdir web-ui-build
+          robocopy ../web_platform/frontend/out web-ui-build/out /E
+          if %ERRORLEVEL% LEQ 7 (exit /b 0) else (exit /b %ERRORLEVEL%)
+
       - name: Install Electron Dependencies
         run: |
           cd electron

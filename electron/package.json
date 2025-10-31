@@ -19,9 +19,9 @@
     "appId": "com.fortuna.faucet",
     "productName": "JBMason's 1st App",
     "files": [
-      "**/*",
-      "!web-ui-build/src/**/*",
-      "web-ui-build/**/*"
+      "main.js",
+      "preload.js",
+      "web-ui-build/out/**/*"
     ],
     "extraResources": [
       {
