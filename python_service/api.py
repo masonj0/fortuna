@@ -259,21 +259,6 @@ async def get_tipsheet_endpoint(
     return results
 
 
-@app.get(
-    "/health/legacy", tags=["Health"], summary="Check for Deprecated Legacy Components"
-)
-async def check_legacy_files():
-    legacy_files = ["checkmate_service.py", "checkmate_web/main.py"]
-    present_files = [f for f in legacy_files if os.path.exists(f)]
-    if present_files:
-        return {
-            "status": "WARNING",
-            "message": "Legacy files detected.",
-            "detected_files": present_files,
-        }
-    return {"status": "CLEAN", "message": "No known legacy files detected."}
-
-
 # API Models
 class ManualDataSubmission(BaseModel):
     request_id: str
