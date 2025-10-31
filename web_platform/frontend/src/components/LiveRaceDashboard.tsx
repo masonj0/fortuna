@@ -1,7 +1,7 @@
 // web_platform/frontend/src/components/LiveRaceDashboard.tsx
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { RaceFilters } from './RaceFilters';
 import { RaceCard } from './RaceCard';
 import { RaceCardSkeleton } from './RaceCardSkeleton';
@@ -18,7 +18,7 @@ interface RaceFilterParams {
   minSecondFavoriteOdds: number;
 }
 
-export function LiveRaceDashboard() {
+export const LiveRaceDashboard = React.memo(() => {
   const [races, setRaces] = useState<Race[]>([]);
   const [failedSources, setFailedSources] = useState<SourceInfo[]>([]);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
@@ -209,4 +209,4 @@ export function LiveRaceDashboard() {
       />
     </>
   );
-}
+});

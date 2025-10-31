@@ -66,12 +66,17 @@ class TimeformAdapter(BaseAdapterV3):
                 continue
             try:
                 soup = BeautifulSoup(html, "html.parser")
-                track_name = clean_text(
-                    soup.select_one("h1.rp-raceTimeCourseName_name").get_text()
-                )
-                race_time_str = clean_text(
-                    soup.select_one("span.rp-raceTimeCourseName_time").get_text()
-                )
+
+                track_name_node = soup.select_one("h1.rp-raceTimeCourseName_name")
+                if not track_name_node:
+                    continue
+                track_name = clean_text(track_name_node.get_text())
+
+                race_time_node = soup.select_one("span.rp-raceTimeCourseName_time")
+                if not race_time_node:
+                    continue
+                race_time_str = clean_text(race_time_node.get_text())
+
                 start_time = datetime.combine(
                     race_date, datetime.strptime(race_time_str, "%H:%M").time()
                 )
@@ -109,10 +114,15 @@ class TimeformAdapter(BaseAdapterV3):
 
     def _parse_runner(self, row: Tag) -> Optional[Runner]:
         try:
-            name = clean_text(row.select_one("a.rp-horseTable_horse-name").get_text())
-            num_str = clean_text(
-                row.select_one("span.rp-horseTable_horse-number").get_text()
-            )
+            name_node = row.select_one("a.rp-horseTable_horse-name")
+            if not name_node:
+                return None
+            name = clean_text(name_node.get_text())
+
+            num_node = row.select_one("span.rp-horseTable_horse-number")
+            if not num_node:
+                return None
+            num_str = clean_text(num_node.get_text())
             number_part = "".join(filter(str.isdigit, num_str.strip("()")))
             number = int(number_part)
 

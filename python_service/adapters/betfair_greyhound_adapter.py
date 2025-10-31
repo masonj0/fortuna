@@ -1,7 +1,7 @@
 # python_service/adapters/betfair_greyhound_adapter.py
 import re
 from datetime import datetime, timedelta
-from typing import Any, List
+from typing import Any, List, Optional
 
 from ..models import Race, Runner
 from .base_v3 import BaseAdapterV3
@@ -28,7 +28,7 @@ class BetfairGreyhoundAdapter(BetfairAuthMixin, BaseAdapterV3):
 
         start_time, end_time = self._get_datetime_range(date)
 
-        return await self.make_request(
+        response = await self.make_request(
             self.http_client,
             method="post",
             url=f"{self.BASE_URL}listMarketCatalogue/",
@@ -46,6 +46,7 @@ class BetfairGreyhoundAdapter(BetfairAuthMixin, BaseAdapterV3):
                 "marketProjection": ["EVENT", "RUNNER_DESCRIPTION"],
             },
         )
+        return response.json() if response else None
 
     def _parse_races(self, raw_data: Any) -> List[Race]:
         """Parses the raw market catalogue into a list of Race objects."""
@@ -55,7 +56,8 @@ class BetfairGreyhoundAdapter(BetfairAuthMixin, BaseAdapterV3):
         races = []
         for market in raw_data:
             try:
-                races.append(self._parse_race(market))
+                if race := self._parse_race(market):
+                    races.append(race)
             except (KeyError, TypeError):
                 self.logger.warning(
                     "Failed to parse a Betfair Greyhound market.",
@@ -65,22 +67,26 @@ class BetfairGreyhoundAdapter(BetfairAuthMixin, BaseAdapterV3):
                 continue
         return races
 
-    def _parse_race(self, market: dict) -> Race:
+    def _parse_race(self, market: dict) -> Optional[Race]:
         """Parses a single market from the Betfair API into a Race object."""
-        market_id = market["marketId"]
-        event = market["event"]
-        start_time = datetime.fromisoformat(
-            market["marketStartTime"].replace("Z", "+00:00")
-        )
+        market_id = market.get("marketId")
+        event = market.get("event", {})
+        market_start_time = market.get("marketStartTime")
+
+        if not all([market_id, market_start_time]):
+            return None
+
+        start_time = datetime.fromisoformat(market_start_time.replace("Z", "+00:00"))
 
         runners = [
             Runner(
                 number=runner.get("sortPriority", i + 1),
-                name=runner["runnerName"],
-                scratched=runner["status"] != "ACTIVE",
-                selection_id=runner["selectionId"],
+                name=runner.get("runnerName"),
+                scratched=runner.get("status") != "ACTIVE",
+                selection_id=runner.get("selectionId"),
             )
             for i, runner in enumerate(market.get("runners", []))
+            if runner.get("runnerName")
         ]
 
         return Race(

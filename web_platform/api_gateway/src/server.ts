@@ -36,7 +36,7 @@ class DatabaseService {
   private dbPath: string;
 
   constructor() {
-    this.dbPath = process.env.CHECKMATE_DB_PATH || path.join(__dirname, '..', '..', '..', 'shared_database', 'races.db');
+    this.dbPath = process.env.FORTUNA_DB_PATH || path.join(process.cwd(), '..', '..', 'shared_database', 'races.db');
   }
 
   async connect(): Promise<void> {
@@ -125,7 +125,7 @@ class DatabaseService {
 const app = express();
 const httpServer = createServer(app);
 const io = new SocketServer(httpServer, {
-  cors: { origin: "*" }
+  cors: { origin: process.env.ALLOWED_ORIGINS || 'http://localhost:3000' }
 });
 
 app.use(cors());

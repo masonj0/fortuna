@@ -231,12 +231,14 @@ ${stderrBuffer.trim() || '(No standard error output)'}
       this.backendProcess.on('close', (code) => {
         console.log(`[Backend] Process exited with code ${code}`);
         if (!startupResolved) {
+          const errorMsg = `Backend process exited prematurely with code ${code}.`;
+          console.error(`[ERROR] ${errorMsg}`);
           notifier.notify({
             title: 'Fortuna Faucet - Backend Error',
-            message: `Backend process exited prematurely with code ${code}.`,
+            message: errorMsg,
             icon: path.join(__dirname, 'assets', 'icon.ico')
           });
-          rejectWithDetails(new Error(`Process exited prematurely with code ${code}.`));
+          rejectWithDetails(new Error(errorMsg));
         }
       });
 
