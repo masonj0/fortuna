@@ -11,11 +11,12 @@ from datetime import datetime
 from datetime import timezone
 from typing import List
 
+import httpx
 import structlog
 
 from python_service.analyzer import AnalyzerEngine
 from python_service.config import get_settings
-from python_service.engine import FortunaEngine
+from python_service.engine import OddsEngine
 from python_service.etl import run_etl_for_yesterday
 from python_service.models import Race
 
