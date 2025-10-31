@@ -1,4 +1,4 @@
-# windows_service_wrapper.py
+# fortuna_windows_service.py
 
 import logging
 import os
@@ -11,18 +11,18 @@ import win32serviceutil
 
 # Add the service's directory to the Python path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from checkmate_service import CheckmateBackgroundService
+from fortuna_service import FortunaBackgroundService
 
 
-class CheckmateWindowsService(win32serviceutil.ServiceFramework):
-    _svc_name_ = "CheckmateV8Service"
-    _svc_display_name_ = "Checkmate V8 Racing Analysis Service"
+class FortunaWindowsService(win32serviceutil.ServiceFramework):
+    _svc_name_ = "FortunaV8Service"
+    _svc_display_name_ = "Fortuna V8 Racing Analysis Service"
     _svc_description_ = "Continuously fetches and analyzes horse racing data."
 
     def __init__(self, args):
         win32serviceutil.ServiceFramework.__init__(self, args)
         self.hWaitStop = win32event.CreateEvent(None, 0, 0, None)
-        self.checkmate_service = CheckmateBackgroundService()
+        self.fortuna_service = FortunaBackgroundService()
         # Configure logging to use the Windows Event Log
         logging.basicConfig(
             level=logging.INFO,
@@ -32,7 +32,7 @@ class CheckmateWindowsService(win32serviceutil.ServiceFramework):
 
     def SvcStop(self):
         self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
-        self.checkmate_service.stop()
+        self.fortuna_service.stop()
         win32event.SetEvent(self.hWaitStop)
         self.ReportServiceStatus(win32service.SERVICE_STOPPED)
 
@@ -45,14 +45,14 @@ class CheckmateWindowsService(win32serviceutil.ServiceFramework):
         self.main()
 
     def main(self):
-        self.checkmate_service.start()
+        self.fortuna_service.start()
         win32event.WaitForSingleObject(self.hWaitStop, win32event.INFINITE)
 
 
 if __name__ == "__main__":
     if len(sys.argv) == 1:
         servicemanager.Initialize()
-        servicemanager.PrepareToHostSingle(CheckmateWindowsService)
+        servicemanager.PrepareToHostSingle(FortunaWindowsService)
         servicemanager.StartServiceCtrlDispatcher()
     else:
-        win32serviceutil.HandleCommandLine(CheckmateWindowsService)
+        win32serviceutil.HandleCommandLine(FortunaWindowsService)
