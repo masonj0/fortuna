@@ -36,7 +36,6 @@
     "python_service/analyzer.py",
     "python_service/api.py",
     "python_service/cache_manager.py",
-    "python_service/checkmate_service.py",
     "python_service/config.py",
     "python_service/core/__init__.py",
     "python_service/core/errors.py",
@@ -45,7 +44,9 @@
     "python_service/db/init.py",
     "python_service/engine.py",
     "python_service/etl.py",
+    "python_service/fortuna_service.py",
     "python_service/fortuna_watchman.py",
+    "python_service/fortuna_windows_service.py",
     "python_service/health.py",
     "python_service/health_check.py",
     "python_service/initialize_db.py",
@@ -53,7 +54,6 @@
     "python_service/manual_override_manager.py",
     "python_service/middleware/__init__.py",
     "python_service/middleware/error_handler.py",
-    "python_service/minimal_service.py",
     "python_service/models.py",
     "python_service/models_v3.py",
     "python_service/notifications.py",
@@ -66,6 +66,5 @@
     "python_service/user_friendly_errors.py",
     "python_service/utils/__init__.py",
     "python_service/utils/odds.py",
-    "python_service/utils/text.py",
-    "python_service/windows_service_wrapper.py"
+    "python_service/utils/text.py"
 ]

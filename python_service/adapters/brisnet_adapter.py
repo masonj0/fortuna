@@ -1,7 +1,7 @@
 # python_service/adapters/brisnet_adapter.py
 from datetime import datetime
-from typing import Any, List
-from bs4 import BeautifulSoup
+from typing import Any, List, Optional
+from bs4 import BeautifulSoup, Tag
 from dateutil.parser import parse
 
 from ..models import OddsData, Race, Runner
@@ -23,16 +23,16 @@ class BrisnetAdapter(BaseAdapterV3):
             source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
         )
 
-    async def _fetch_data(self, date: str) -> Any:
+    async def _fetch_data(self, date: str) -> Optional[dict]:
         """Fetches the raw HTML from the Brisnet race page."""
         # Note: Brisnet URL structure seems to require a track code, e.g., 'CD' for Churchill Downs.
         # This implementation will need to be improved to dynamically handle different tracks.
         # For now, it is hardcoded to Churchill Downs as a placeholder.
         url = f"/race/{date}/CD"
         response = await self.make_request(self.http_client, "GET", url)
-        return {"html": response.text, "date": date} if response else None
+        return {"html": response.text, "date": date} if response and response.text else None
 
-    def _parse_races(self, raw_data: Any) -> List[Race]:
+    def _parse_races(self, raw_data: Optional[dict]) -> List[Race]:
         """Parses the raw HTML into a list of Race objects."""
         if not raw_data or not raw_data.get("html"):
             return []
@@ -52,12 +52,15 @@ class BrisnetAdapter(BaseAdapterV3):
         races = []
         for race_section in soup.select("section.race"):
             try:
-                race_number = int(race_section["data-racenumber"])
-                post_time_str = (
-                    race_section.select_one(".race-title span")
-                    .text.replace("Post Time: ", "")
-                    .strip()
-                )
+                race_number_str = race_section.get("data-racenumber")
+                if not race_number_str or not race_number_str.isdigit():
+                    continue
+                race_number = int(race_number_str)
+
+                post_time_node = race_section.select_one(".race-title span")
+                if not post_time_node:
+                    continue
+                post_time_str = post_time_node.text.replace("Post Time: ", "").strip()
                 start_time = parse(f"{race_date} {post_time_str}")
 
                 runners = []
@@ -66,7 +69,14 @@ class BrisnetAdapter(BaseAdapterV3):
                         continue
 
                     cells = row.find_all("td")
-                    number = int(cells[0].text)
+                    if len(cells) < 3:
+                        continue
+
+                    number_text = cells[0].text.strip()
+                    if not number_text.isdigit():
+                        continue
+                    number = int(number_text)
+
                     name = cells[1].text.strip()
                     odds_str = cells[2].text.strip()
 
@@ -81,6 +91,9 @@ class BrisnetAdapter(BaseAdapterV3):
 
                     runners.append(Runner(number=number, name=name, odds=odds))
 
+                if not runners:
+                    continue
+
                 race = Race(
                     id=f"brisnet_{venue.replace(' ', '').lower()}_{race_date}_{race_number}",
                     venue=venue,
@@ -91,7 +104,7 @@ class BrisnetAdapter(BaseAdapterV3):
                     field_size=len(runners),
                 )
                 races.append(race)
-            except (AttributeError, ValueError, IndexError):
+            except (ValueError, IndexError, TypeError):
                 self.logger.warning(
                     "Failed to parse a race on Brisnet, skipping.", exc_info=True
                 )

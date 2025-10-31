@@ -11,6 +11,7 @@ const withPWA = nextPWA({
 
 const nextConfig = {
   output: 'export',
+  trailingSlash: true,
   async rewrites() {
     if (process.env.NODE_ENV !== 'development') {
       return [];

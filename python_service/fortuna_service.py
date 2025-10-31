@@ -1,4 +1,4 @@
-# checkmate_service.py
+# fortuna_service.py
 # The main service runner, upgraded to the final Endgame architecture.
 
 import json
@@ -65,7 +65,7 @@ class DatabaseHandler:
                     """
                     INSERT OR REPLACE INTO live_races (
                         race_id, track_name, race_number, post_time, raw_data_json,
-                        checkmate_score, qualified, trifecta_factors_json, updated_at
+                        fortuna_score, qualified, trifecta_factors_json, updated_at
                     )
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
@@ -75,7 +75,7 @@ class DatabaseHandler:
                         race.race_number,
                         race.post_time,
                         race.model_dump_json(),
-                        race.checkmate_score,
+                        race.fortuna_score,
                         race.is_qualified,
                         race.trifecta_factors_json,
                         datetime.now(),
@@ -112,7 +112,7 @@ class DatabaseHandler:
         )
 
 
-class CheckmateBackgroundService:
+class FortunaBackgroundService:
     def __init__(self):
         self.logger = logging.getLogger(self.__class__.__name__)
         from dotenv import load_dotenv
@@ -120,12 +120,12 @@ class CheckmateBackgroundService:
         dotenv_path = os.path.join(os.path.dirname(__file__), "..", ".env")
         load_dotenv(dotenv_path=dotenv_path)
 
-        db_path = os.getenv("CHECKMATE_DB_PATH")
+        db_path = os.getenv("FORTUNA_DB_PATH")
         if not db_path:
             self.logger.critical(
-                "FATAL: CHECKMATE_DB_PATH environment variable not set. Service cannot start."
+                "FATAL: FORTUNA_DB_PATH environment variable not set. Service cannot start."
             )
-            raise ValueError("CHECKMATE_DB_PATH is not configured.")
+            raise ValueError("FORTUNA_DB_PATH is not configured.")
 
         self.logger.info(f"Database path loaded from environment: {db_path}")
 
@@ -140,7 +140,7 @@ class CheckmateBackgroundService:
             "rust_engine",
             "target",
             "release",
-            "checkmate_engine.exe",
+            "fortuna_engine.exe",
         )
 
     def _analyze_with_rust(self, races: List[Race]) -> Optional[List[Race]]:
@@ -161,7 +161,7 @@ class CheckmateBackgroundService:
             for race in races:
                 if race.race_id in results_map:
                     res = results_map[race.race_id]
-                    race.checkmate_score = res.get("checkmate_score")
+                    race.fortuna_score = res.get("fortuna_score")
                     race.is_qualified = res.get("qualified")
                     race.trifecta_factors_json = json.dumps(res.get("trifecta_factors"))
             return races
@@ -218,10 +218,10 @@ class CheckmateBackgroundService:
         self.thread = threading.Thread(target=self.run_continuously)
         self.thread.daemon = True
         self.thread.start()
-        self.logger.info("CheckmateBackgroundService started.")
+        self.logger.info("FortunaBackgroundService started.")
 
     def stop(self):
         self.stop_event.set()
         if hasattr(self, "thread") and self.thread.is_alive():
             self.thread.join(timeout=10)
-        self.logger.info("CheckmateBackgroundService stopped.")
+        self.logger.info("FortunaBackgroundService stopped.")
