@@ -27,7 +27,7 @@ class GbgbApiAdapter(BaseAdapterV3):
         response = await self.make_request(self.http_client, "GET", endpoint)
         return response.json() if response else None
 
-    def _parse_races(self, meetings_data: List[Dict[str, Any]]) -> List[Race]:
+    def _parse_races(self, meetings_data: Optional[List[Dict[str, Any]]]) -> List[Race]:
         """Parses the raw meeting data into a list of Race objects."""
         if not meetings_data:
             return []
@@ -37,7 +37,8 @@ class GbgbApiAdapter(BaseAdapterV3):
             track_name = meeting.get("trackName")
             for race_data in meeting.get("races", []):
                 try:
-                    all_races.append(self._parse_race(race_data, track_name))
+                    if race := self._parse_race(race_data, track_name):
+                        all_races.append(race)
                 except (KeyError, TypeError):
                     self.logger.error(
                         "Error parsing GBGB race",
@@ -47,15 +48,20 @@ class GbgbApiAdapter(BaseAdapterV3):
                     continue
         return all_races
 
-    def _parse_race(self, race_data: Dict[str, Any], track_name: str) -> Race:
+    def _parse_race(self, race_data: Dict[str, Any], track_name: str) -> Optional[Race]:
         """Parses a single race object from the API response."""
+        race_id = race_data.get("raceId")
+        race_number = race_data.get("raceNumber")
+        race_time = race_data.get("raceTime")
+
+        if not all([race_id, race_number, race_time]):
+            return None
+
         return Race(
-            id=f"gbgb_{race_data['raceId']}",
+            id=f"gbgb_{race_id}",
             venue=track_name,
-            race_number=race_data["raceNumber"],
-            start_time=datetime.fromisoformat(
-                race_data["raceTime"].replace("Z", "+00:00")
-            ),
+            race_number=race_number,
+            start_time=datetime.fromisoformat(race_time.replace("Z", "+00:00")),
             runners=self._parse_runners(race_data.get("traps", [])),
             source=self.source_name,
             race_name=race_data.get("raceTitle"),
@@ -67,20 +73,26 @@ class GbgbApiAdapter(BaseAdapterV3):
         runners = []
         for runner_data in runners_data:
             try:
+                trap_number = runner_data.get("trapNumber")
+                dog_name = runner_data.get("dogName")
+                if not all([trap_number, dog_name]):
+                    continue
+
                 odds_data = {}
                 sp = runner_data.get("sp")
-                win_odds = parse_odds_to_decimal(sp)
-                if win_odds and win_odds < 999:
-                    odds_data[self.source_name] = OddsData(
-                        win=win_odds,
-                        source=self.source_name,
-                        last_updated=datetime.now(),
-                    )
+                if sp:
+                    win_odds = parse_odds_to_decimal(sp)
+                    if win_odds and win_odds < 999:
+                        odds_data[self.source_name] = OddsData(
+                            win=win_odds,
+                            source=self.source_name,
+                            last_updated=datetime.now(),
+                        )
 
                 runners.append(
                     Runner(
-                        number=runner_data["trapNumber"],
-                        name=runner_data["dogName"],
+                        number=trap_number,
+                        name=dog_name,
                         odds=odds_data,
                     )
                 )

@@ -43,7 +43,7 @@ class RacingAndSportsAdapter(BaseAdapterV3):
         )
         return response.json() if response else None
 
-    def _parse_races(self, raw_data: Dict[str, Any]) -> List[Race]:
+    def _parse_races(self, raw_data: Optional[Dict[str, Any]]) -> List[Race]:
         """Parses the raw meetings data into a list of Race objects."""
         all_races = []
         if not raw_data or not isinstance(raw_data.get("meetings"), list):
@@ -52,7 +52,7 @@ class RacingAndSportsAdapter(BaseAdapterV3):
             )
             return all_races
 
-        for meeting in raw_data["meetings"]:
+        for meeting in raw_data.get("meetings", []):
             if not isinstance(meeting, dict):
                 continue
             for race_summary in meeting.get("races", []):
@@ -76,23 +76,28 @@ class RacingAndSportsAdapter(BaseAdapterV3):
         """Parses a single race object from the API response."""
         race_id = race.get("raceId")
         start_time_str = race.get("startTime")
-        if not race_id or not start_time_str:
+        race_number = race.get("raceNumber")
+
+        if not all([race_id, start_time_str, race_number]):
             return None
 
         runners = [
             Runner(
-                number=rd.get("runnerNumber"),
+                number=rd.get("runnerNumber", 0),
                 name=rd.get("horseName", "Unknown"),
                 scratched=rd.get("isScratched", False),
             )
             for rd in race.get("runners", [])
-            if isinstance(rd, dict)
+            if isinstance(rd, dict) and rd.get("runnerNumber")
         ]
+
+        if not runners:
+            return None
 
         return Race(
             id=f"ras_{race_id}",
             venue=meeting.get("venueName", "Unknown Venue"),
-            race_number=race.get("raceNumber"),
+            race_number=race_number,
             start_time=datetime.fromisoformat(start_time_str),
             runners=runners,
             source=self.source_name,

@@ -79,15 +79,25 @@ class OddscheckerAdapter(BaseAdapterV3):
         return all_races
 
     def _parse_race_page(self, soup: BeautifulSoup, race_date) -> Optional[Race]:
-        track_name = soup.select_one("h1.meeting-name").get_text(strip=True)
-        race_time_str = soup.select_one("span.race-time").get_text(strip=True)
+        track_name_node = soup.select_one("h1.meeting-name")
+        if not track_name_node:
+            return None
+        track_name = track_name_node.get_text(strip=True)
+
+        race_time_node = soup.select_one("span.race-time")
+        if not race_time_node:
+            return None
+        race_time_str = race_time_node.get_text(strip=True)
 
         # Heuristic to find race number from navigation
         active_link = soup.select_one("a.race-time-link.active")
         race_number = 1
         if active_link:
             all_links = soup.select("a.race-time-link")
-            race_number = all_links.index(active_link) + 1
+            try:
+                race_number = all_links.index(active_link) + 1
+            except ValueError:
+                pass  # Keep default race number if active link not in all links
 
         start_time = datetime.combine(
             race_date, datetime.strptime(race_time_str, "%H:%M").time()
@@ -112,11 +122,20 @@ class OddscheckerAdapter(BaseAdapterV3):
 
     def _parse_runner_row(self, row: Tag) -> Optional[Runner]:
         try:
-            name = row.select_one("span.selection-name").get_text(strip=True)
-            odds_str = row.select_one(
-                "span.bet-button-odds-desktop, span.best-price"
-            ).get_text(strip=True)
-            number = int(row.select_one("td.runner-number").get_text(strip=True))
+            name_node = row.select_one("span.selection-name")
+            if not name_node:
+                return None
+            name = name_node.get_text(strip=True)
+
+            odds_node = row.select_one("span.bet-button-odds-desktop, span.best-price")
+            if not odds_node:
+                return None
+            odds_str = odds_node.get_text(strip=True)
+
+            number_node = row.select_one("td.runner-number")
+            if not number_node or not number_node.get_text(strip=True).isdigit():
+                return None
+            number = int(number_node.get_text(strip=True))
 
             if not name or not odds_str:
                 return None
