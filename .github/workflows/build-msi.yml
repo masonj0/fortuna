@@ -60,11 +60,12 @@ jobs:
       - name: Build MSI Installer using electron-builder
         run: |
           cd electron
-          npm run dist -- --debug --log
+          npm run dist
           echo "--- Verifying contents of electron/dist ---"
           ls -R dist
         env:
           FORTUNA_BUILD_TYPE: 'full' # For now, we only build the full version
+          DEBUG: 'electron-builder'
 
       - name: Generate sanitized artifact name
         id: sanitize
