@@ -1,0 +1,54 @@
+{
+  "name": "fortuna-faucet",
+  "version": "1.0.0",
+  "description": "Fortuna Faucet Data Management Console",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "npm run prebuild-ui && electron-builder",
+    "prebuild-ui": "npm install --prefix ../web_platform/frontend && npm run build --prefix ../web_platform/frontend && rmdir /s /q web-ui-build || true && mkdir web-ui-build && xcopy /E /I ../web_platform/frontend/out web-ui-build/out",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "JBMason",
+  "devDependencies": {
+    "cross-env": "^7.0.3",
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1"
+  },
+  "build": {
+    "appId": "com.fortuna.faucet",
+    "productName": "JBMason's 1st App",
+    "files": [
+      "**/*",
+      "!web-ui-build/src/**/*",
+      "web-ui-build/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../python_service/dist/",
+        "to": "./",
+        "filter": [
+          "**/api.exe"
+        ]
+      }
+    ],
+    "win": {
+      "target": "msi",
+      "icon": "assets/icon.ico"
+    },
+    "msi": {
+      "oneClick": false,
+      "perMachine": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "JBMason's 1st App"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "createDesktopShortcut": true
+    }
+  },
+  "dependencies": {
+    "node-notifier": "^10.0.1"
+  }
+}
