@@ -1,7 +1,7 @@
 # python_service/adapters/greyhound_adapter.py
 from datetime import datetime
 from decimal import Decimal
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from pydantic import ValidationError
 
@@ -42,19 +42,25 @@ class GreyhoundAdapter(BaseAdapterV3):
             return []
 
         all_races = []
-        for card in raw_data["cards"]:
+        for card in raw_data.get("cards", []):
             venue = card.get("track_name", "Unknown Venue")
             for race_data in card.get("races", []):
                 try:
                     if not race_data.get("runners"):
                         continue
 
+                    race_id = race_data.get("race_id")
+                    race_number = race_data.get("race_number")
+                    start_timestamp = race_data.get("start_time")
+                    if not all([race_id, race_number, start_timestamp]):
+                        continue
+
                     race = Race(
-                        id=f"greyhound_{race_data['race_id']}",
+                        id=f"greyhound_{race_id}",
                         venue=venue,
-                        race_number=race_data["race_number"],
-                        start_time=datetime.fromtimestamp(race_data["start_time"]),
-                        runners=self._parse_runners(race_data["runners"]),
+                        race_number=race_number,
+                        start_time=datetime.fromtimestamp(start_timestamp),
+                        runners=self._parse_runners(race_data.get("runners", [])),
                         source=self.source_name,
                     )
                     all_races.append(race)
@@ -75,6 +81,11 @@ class GreyhoundAdapter(BaseAdapterV3):
                 if runner_data.get("scratched", False):
                     continue
 
+                trap_number = runner_data.get("trap_number")
+                dog_name = runner_data.get("dog_name")
+                if not all([trap_number, dog_name]):
+                    continue
+
                 odds_data = {}
                 win_odds_val = runner_data.get("odds", {}).get("win")
                 if win_odds_val is not None:
@@ -88,8 +99,8 @@ class GreyhoundAdapter(BaseAdapterV3):
 
                 runners.append(
                     Runner(
-                        number=runner_data["trap_number"],
-                        name=runner_data["dog_name"],
+                        number=trap_number,
+                        name=dog_name,
                         scratched=runner_data.get("scratched", False),
                         odds=odds_data,
                     )

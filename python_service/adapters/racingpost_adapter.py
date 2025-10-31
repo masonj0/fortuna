@@ -1,9 +1,9 @@
 # python_service/adapters/racingpost_adapter.py
 import asyncio
 from datetime import datetime
-from typing import Any, List
+from typing import Any, List, Optional
 
-from selectolax.parser import HTMLParser
+from selectolax.parser import HTMLParser, Node
 
 from ..models import OddsData, Race, Runner
 from ..utils.odds import parse_odds_to_decimal
@@ -64,15 +64,21 @@ class RacingPostAdapter(BaseAdapterV3):
                 continue
             try:
                 parser = HTMLParser(html)
-                venue_raw = parser.css_first(
-                    'a[data-test-selector="RC-course__name"]'
-                ).text(strip=True)
+
+                venue_node = parser.css_first('a[data-test-selector="RC-course__name"]')
+                if not venue_node:
+                    continue
+                venue_raw = venue_node.text(strip=True)
                 venue = normalize_venue_name(venue_raw)
-                race_time_str = parser.css_first(
-                    'span[data-test-selector="RC-course__time"]'
-                ).text(strip=True)
+
+                race_time_node = parser.css_first('span[data-test-selector="RC-course__time"]')
+                if not race_time_node:
+                    continue
+                race_time_str = race_time_node.text(strip=True)
+
                 race_datetime_str = f"{date} {race_time_str}"
                 start_time = datetime.strptime(race_datetime_str, "%Y-%m-%d %H:%M")
+
                 runners = self._parse_runners(parser)
 
                 if venue and runners:
@@ -107,43 +113,41 @@ class RacingPostAdapter(BaseAdapterV3):
         runners = []
         runner_nodes = parser.css('div[data-test-selector="RC-runnerCard"]')
         for node in runner_nodes:
-            try:
-                number_node = node.css_first(
-                    'span[data-test-selector="RC-runnerNumber"]'
-                )
-                name_node = node.css_first('a[data-test-selector="RC-runnerName"]')
-                odds_node = node.css_first('span[data-test-selector="RC-runnerPrice"]')
-
-                if not all([number_node, name_node, odds_node]):
-                    continue
-
-                number_str = clean_text(number_node.text())
-                number = int(number_str) if number_str and number_str.isdigit() else 0
-                name = clean_text(name_node.text())
-                odds_str = clean_text(odds_node.text())
-                scratched = "NR" in odds_str.upper() or not odds_str
-
-                odds = {}
-                if not scratched:
-                    win_odds = parse_odds_to_decimal(odds_str)
-                    if win_odds and win_odds < 999:
-                        odds = {
-                            self.source_name: OddsData(
-                                win=win_odds,
-                                source=self.source_name,
-                                last_updated=datetime.now(),
-                            )
-                        }
-
-                runners.append(
-                    Runner(number=number, name=name, odds=odds, scratched=scratched)
-                )
-            except (ValueError, AttributeError):
-                self.logger.warning(
-                    "Could not parse RacingPost runner, skipping.", parser=parser
-                )
-                continue
+            if runner := self._parse_runner(node):
+                runners.append(runner)
         return runners
+
+    def _parse_runner(self, node: Node) -> Optional[Runner]:
+        try:
+            number_node = node.css_first('span[data-test-selector="RC-runnerNumber"]')
+            name_node = node.css_first('a[data-test-selector="RC-runnerName"]')
+            odds_node = node.css_first('span[data-test-selector="RC-runnerPrice"]')
+
+            if not all([number_node, name_node, odds_node]):
+                return None
+
+            number_str = clean_text(number_node.text())
+            number = int(number_str) if number_str and number_str.isdigit() else 0
+            name = clean_text(name_node.text())
+            odds_str = clean_text(odds_node.text())
+            scratched = "NR" in odds_str.upper() or not odds_str
+
+            odds = {}
+            if not scratched:
+                win_odds = parse_odds_to_decimal(odds_str)
+                if win_odds and win_odds < 999:
+                    odds = {
+                        self.source_name: OddsData(
+                            win=win_odds,
+                            source=self.source_name,
+                            last_updated=datetime.now(),
+                        )
+                    }
+
+            return Runner(number=number, name=name, odds=odds, scratched=scratched)
+        except (ValueError, AttributeError):
+            self.logger.warning("Could not parse RacingPost runner, skipping.", exc_info=True)
+            return None
 
     def _get_headers(self) -> dict:
         return {
