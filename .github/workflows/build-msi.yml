@@ -50,10 +50,19 @@ jobs:
           pyinstaller --onefile --hidden-import=uvicorn --add-data "adapters;adapters" api.py
         shell: bash
 
+      - name: Verify Build Inputs
+        run: |
+          echo "--- Verifying contents of electron/web-ui-build ---"
+          ls -R electron/web-ui-build
+          echo "--- Verifying contents of python_service/dist ---"
+          ls -R python_service/dist
+
       - name: Build MSI Installer using electron-builder
         run: |
           cd electron
-          npm run dist
+          npm run dist -- --debug --log
+          echo "--- Verifying contents of electron/dist ---"
+          ls -R dist
         env:
           FORTUNA_BUILD_TYPE: 'full' # For now, we only build the full version
 
