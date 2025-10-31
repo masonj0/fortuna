@@ -6,7 +6,7 @@
   "scripts": {
     "start": "electron .",
     "dist": "npm run prebuild-ui && electron-builder",
-    "prebuild-ui": "npm install --prefix ../web_platform/frontend && npm run build --prefix ../web_platform/frontend && rmdir /s /q web-ui-build || true && mkdir web-ui-build && xcopy /E /I ../web_platform/frontend/out web-ui-build/out",
+    "prebuild-ui": "npm install --prefix ../web_platform/frontend && npm run build --prefix ../web_platform/frontend && (if exist web-ui-build rmdir /s /q web-ui-build) && mkdir web-ui-build && robocopy ../web_platform/frontend/out web-ui-build/out /E",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "JBMason",
