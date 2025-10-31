@@ -88,7 +88,7 @@ class FortunaDesktopApp {
     if (isDev) {
       this.mainWindow.loadURL('http://localhost:3000');
     } else {
-      this.mainWindow.loadFile(path.join(app.getAppPath(), '..', 'app.asar.unpacked', 'web_platform', 'frontend', 'out', 'index.html'));
+      this.mainWindow.loadFile(path.join(__dirname, 'web-ui-build', 'out', 'index.html'));
     }
 
     this.mainWindow.once('ready-to-show', () => {
