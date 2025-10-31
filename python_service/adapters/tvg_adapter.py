@@ -1,11 +1,12 @@
 # python_service/adapters/tvg_adapter.py
 import asyncio
 from datetime import datetime
-from typing import Any, List
+from typing import Any, List, Optional, Dict
 
 from ..core.exceptions import AdapterConfigError, AdapterParsingError
-from ..models import Race, Runner
+from ..models import Race, Runner, OddsData
 from ..utils.text import clean_text
+from ..utils.odds import parse_odds_to_decimal
 from .base_v3 import BaseAdapterV3
 
 
@@ -56,7 +57,7 @@ class TVGAdapter(BaseAdapterV3):
         return [
             resp.json()
             for resp in race_detail_responses
-            if not isinstance(resp, Exception)
+            if resp and not isinstance(resp, Exception)
         ]
 
     def _parse_races(self, raw_data: Any) -> List[Race]:
@@ -68,7 +69,8 @@ class TVGAdapter(BaseAdapterV3):
 
         for race_detail in raw_data:
             try:
-                races.append(self._parse_race(race_detail))
+                if race := self._parse_race(race_detail):
+                    races.append(race)
             except AdapterParsingError:
                 self.logger.warning(
                     "Failed to parse TVG race detail, skipping.",
@@ -77,7 +79,7 @@ class TVGAdapter(BaseAdapterV3):
                 )
         return races
 
-    def _parse_race(self, race_detail: dict) -> Race:
+    def _parse_race(self, race_detail: dict) -> Optional[Race]:
         """Parses a single detailed race JSON object into a Race model."""
         track = race_detail.get("track")
         race_info = race_detail.get("race")
@@ -106,11 +108,21 @@ class TVGAdapter(BaseAdapterV3):
                 )
                 continue
 
+            odds_data = {}
+            if odds_str:
+                win_odds = parse_odds_to_decimal(odds_str)
+                if win_odds and win_odds < 999:
+                    odds_data[self.source_name] = OddsData(
+                        win=win_odds,
+                        source=self.source_name,
+                        last_updated=datetime.now(),
+                    )
+
             runners.append(
                 Runner(
                     number=number,
                     name=clean_text(runner_data.get("name")),
-                    odds=odds_str,  # Odds will be parsed later in the data pipeline
+                    odds=odds_data,
                     scratched=False,
                 )
             )
@@ -120,14 +132,16 @@ class TVGAdapter(BaseAdapterV3):
                 self.source_name, "No non-scratched runners found."
             )
 
+        post_time = race_info.get("postTime")
+        if not post_time:
+            raise AdapterParsingError(self.source_name, "Missing post time.")
+
         try:
-            start_time = datetime.fromisoformat(
-                race_info.get("postTime").replace("Z", "+00:00")
-            )
+            start_time = datetime.fromisoformat(post_time.replace("Z", "+00:00"))
         except (ValueError, TypeError, AttributeError) as e:
             raise AdapterParsingError(
                 self.source_name,
-                f"Could not parse post time: {race_info.get('postTime')}",
+                f"Could not parse post time: {post_time}",
             ) from e
 
         return Race(

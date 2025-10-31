@@ -1,7 +1,7 @@
 # python_service/adapters/drf_adapter.py
 from datetime import datetime
-from typing import Any, List
-from bs4 import BeautifulSoup
+from typing import Any, List, Optional
+from bs4 import BeautifulSoup, Tag
 from dateutil.parser import parse
 
 from ..models import OddsData, Race, Runner
@@ -23,13 +23,13 @@ class DRFAdapter(BaseAdapterV3):
             source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
         )
 
-    async def _fetch_data(self, date: str) -> Any:
+    async def _fetch_data(self, date: str) -> Optional[dict]:
         """Fetches the raw HTML from the DRF entries page."""
         url = f"/entries/{date}/USA"
         response = await self.make_request(self.http_client, "GET", url)
-        return {"html": response.text, "date": date} if response else None
+        return {"html": response.text, "date": date} if response and response.text else None
 
-    def _parse_races(self, raw_data: Any) -> List[Race]:
+    def _parse_races(self, raw_data: Optional[dict]) -> List[Race]:
         """Parses the raw HTML into a list of Race objects."""
         if not raw_data or not raw_data.get("html"):
             return []
@@ -51,7 +51,11 @@ class DRFAdapter(BaseAdapterV3):
         races = []
         for race_entry in soup.select("div.race-entries"):
             try:
-                race_number = int(race_entry["data-race-number"])
+                race_number_str = race_entry.get("data-race-number")
+                if not race_number_str or not race_number_str.isdigit():
+                    continue
+                race_number = int(race_number_str)
+
                 post_time_node = race_entry.select_one(".post-time")
                 if not post_time_node:
                     continue
@@ -63,9 +67,18 @@ class DRFAdapter(BaseAdapterV3):
                     if "scratched" in entry.get("class", []):
                         continue
 
-                    number = int(entry.select_one(".program-number").text)
-                    name = entry.select_one(".horse-name").text
-                    odds_str = entry.select_one(".odds").text.replace("-", "/")
+                    number_node = entry.select_one(".program-number")
+                    if not number_node or not number_node.text.isdigit():
+                        continue
+                    number = int(number_node.text)
+
+                    name_node = entry.select_one(".horse-name")
+                    if not name_node:
+                        continue
+                    name = name_node.text
+
+                    odds_node = entry.select_one(".odds")
+                    odds_str = odds_node.text.replace("-", "/") if odds_node else ""
 
                     win_odds = parse_odds_to_decimal(odds_str)
                     odds = {}
@@ -78,6 +91,9 @@ class DRFAdapter(BaseAdapterV3):
 
                     runners.append(Runner(number=number, name=name, odds=odds))
 
+                if not runners:
+                    continue
+
                 race = Race(
                     id=f"drf_{venue.replace(' ', '').lower()}_{race_date}_{race_number}",
                     venue=venue,
@@ -88,7 +104,7 @@ class DRFAdapter(BaseAdapterV3):
                     field_size=len(runners),
                 )
                 races.append(race)
-            except (AttributeError, ValueError, KeyError):
+            except (ValueError, KeyError, TypeError):
                 self.logger.warning(
                     "Failed to parse a race on DRF, skipping.", exc_info=True
                 )

@@ -21,7 +21,7 @@ class FanDuelAdapter(BaseAdapterV3):
             source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
         )
 
-    async def _fetch_data(self, date: str) -> Any:
+    async def _fetch_data(self, date: str) -> Optional[Dict[str, Any]]:
         """Fetches the raw market data from the FanDuel API."""
         # Note: FanDuel's API is not date-centric. Event discovery would be needed for a robust implementation.
         # This uses a hardcoded eventId as a placeholder.
@@ -31,14 +31,14 @@ class FanDuelAdapter(BaseAdapterV3):
         response = await self.make_request(self.http_client, "GET", endpoint)
         return response.json() if response else None
 
-    def _parse_races(self, raw_data: Dict[str, Any]) -> List[Race]:
+    def _parse_races(self, raw_data: Optional[Dict[str, Any]]) -> List[Race]:
         """Parses the raw API response into a list of Race objects."""
         if not raw_data or "marketGroups" not in raw_data:
             self.logger.warning("FanDuel response missing 'marketGroups' key")
             return []
 
         races = []
-        for group in raw_data["marketGroups"]:
+        for group in raw_data.get("marketGroups", []):
             if group.get("marketGroupName") == "Win":
                 for market in group.get("markets", []):
                     try:
@@ -65,21 +65,27 @@ class FanDuelAdapter(BaseAdapterV3):
             )
             return None
 
-        race_number_str = parts[0].replace("Race ", "")
+        race_number_str = parts[0].replace("Race ", "").strip()
+        if not race_number_str.isdigit():
+            return None
+        race_number = int(race_number_str)
+
         track_name = parts[1]
 
         # Placeholder for start_time - FanDuel's market API doesn't provide it directly
-        start_time = datetime.now(timezone.utc) + timedelta(hours=int(race_number_str))
+        start_time = datetime.now(timezone.utc) + timedelta(hours=race_number)
 
         runners = []
         for runner_data in market.get("runners", []):
             try:
                 runner_name = runner_data.get("runnerName")
-                win_odds = runner_data.get("winRunnerOdds", {}).get("currentPrice")
-                if not runner_name or not win_odds:
+                win_runner_odds = runner_data.get("winRunnerOdds", {})
+                current_price = win_runner_odds.get("currentPrice")
+
+                if not runner_name or not current_price:
                     continue
 
-                numerator, denominator = map(int, win_odds.split("/"))
+                numerator, denominator = map(int, current_price.split("/"))
                 decimal_odds = Decimal(numerator) / Decimal(denominator) + 1
 
                 odds = OddsData(
@@ -87,11 +93,16 @@ class FanDuelAdapter(BaseAdapterV3):
                     source=self.source_name,
                     last_updated=datetime.now(timezone.utc),
                 )
-                program_number_str = runner_name.split(".")[0].strip()
+
+                name_parts = runner_name.split(".", 1)
+                if len(name_parts) < 2:
+                    continue
+                program_number_str = name_parts[0].strip()
+                horse_name = name_parts[1].strip()
 
                 runners.append(
                     Runner(
-                        name=runner_name.split(".")[1].strip(),
+                        name=horse_name,
                         number=(
                             int(program_number_str)
                             if program_number_str.isdigit()
@@ -100,7 +111,7 @@ class FanDuelAdapter(BaseAdapterV3):
                         odds={self.source_name: odds},
                     )
                 )
-            except (ValueError, ZeroDivisionError, IndexError):
+            except (ValueError, ZeroDivisionError, IndexError, TypeError):
                 self.logger.warning(
                     "Could not parse FanDuel runner",
                     runner_data=runner_data,
@@ -111,12 +122,12 @@ class FanDuelAdapter(BaseAdapterV3):
         if not runners:
             return None
 
-        race_id = f"FD-{track_name.replace(' ', '')[:5].upper()}-{start_time.strftime('%Y%m%d')}-R{race_number_str}"
+        race_id = f"FD-{track_name.replace(' ', '')[:5].upper()}-{start_time.strftime('%Y%m%d')}-R{race_number}"
 
         return Race(
             id=race_id,
             venue=track_name,
-            race_number=int(race_number_str),
+            race_number=race_number,
             start_time=start_time,
             runners=runners,
             source=self.source_name,
