@@ -7,8 +7,7 @@ export class DatabaseService {
 
   private async getDb(): Promise<Database> {
     if (!this.db) {
-      // This path assumes the service is run from the project root.
-      const dbPath = process.env.CHECKMATE_DB_PATH || path.join(__dirname, '../../../../shared_database/races.db');
+      const dbPath = process.env.FORTUNA_DB_PATH || path.join(process.cwd(), '../../../../shared_database/races.db');
       this.db = await open({
         filename: dbPath,
         driver: sqlite3.Database

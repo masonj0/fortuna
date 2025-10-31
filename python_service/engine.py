@@ -1,6 +1,7 @@
 # python_service/engine.py
 
 import asyncio
+from copy import deepcopy
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, Dict, List, Tuple
@@ -196,8 +197,9 @@ class OddsEngine:
 
     def _dedupe_races(self, races: List[Race]) -> List[Race]:
         """Deduplicates races and reconciles odds from different sources."""
+        races_copy = deepcopy(races)
         race_map: Dict[str, Race] = {}
-        for race in races:
+        for race in races_copy:
             key = self._race_key(race)
             if key not in race_map:
                 race_map[key] = race
