@@ -46,8 +46,7 @@ jobs:
       - name: Build Backend Executable with PyInstaller
         run: |
           pip install -r requirements-dev.txt
-          cd python_service
-          pyinstaller --onefile --hidden-import=uvicorn --add-data "adapters;adapters" api.py
+          pyinstaller --onefile --hidden-import=uvicorn --add-data "python_service/adapters;adapters" python_service/api.py
         shell: bash
 
       - name: Verify Build Inputs
