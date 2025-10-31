@@ -5,7 +5,9 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder"
+    "dist": "npm run prebuild-ui && electron-builder",
+    "prebuild-ui": "npm install --prefix ../web_platform/frontend && npm run build --prefix ../web_platform/frontend && rmdir /s /q web-ui-build || true && mkdir web-ui-build && xcopy /E /I ../web_platform/frontend/out web-ui-build/out",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "JBMason",
   "devDependencies": {
@@ -17,13 +19,9 @@
     "appId": "com.fortuna.faucet",
     "productName": "JBMason's 1st App",
     "files": [
-      "main.js",
-      "preload.js",
-      "install-validator.js",
-      "assets/**/*",
-      "../web_platform/frontend/out/**/*",
-      "../scripts/validate_installation.ps1",
-      "!../.venv/"
+      "**/*",
+      "!web-ui-build/src/**/*",
+      "web-ui-build/**/*"
     ],
     "extraResources": [
       {
