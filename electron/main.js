@@ -88,7 +88,8 @@ class FortunaDesktopApp {
     if (isDev) {
       this.mainWindow.loadURL('http://localhost:3000');
     } else {
-      this.mainWindow.loadFile(path.join(__dirname, 'web-ui-build', 'out', 'index.html'));
+      // Production: Correctly load the static frontend from the unpacked asar directory
+      this.mainWindow.loadFile(path.join(app.getAppPath(), 'web-ui-build', 'out', 'index.html'));
     }
 
     this.mainWindow.once('ready-to-show', () => {
@@ -126,8 +127,17 @@ class FortunaDesktopApp {
 
   async startBackend() {
     const isDev = process.env.NODE_ENV === 'development';
-    const rootPath = isDev ? path.join(__dirname, '..') : process.resourcesPath;
-    const pythonExecutable = isDev ? path.join(rootPath, '.venv', 'Scripts', 'python.exe') : path.join(rootPath, 'api.exe');
+
+    // Define platform-specific executable name
+    const backendExe = process.platform === 'win32' ? 'fortuna-backend.exe' : 'fortuna-backend';
+
+    // In production, the executable is unpacked into 'app.asar.unpacked'
+    // which is at the same level as 'app.asar'. app.getAppPath() points inside 'app.asar'.
+    const backendPath = isDev
+      ? path.join(app.getAppPath(), '..', 'python_service', 'dist', backendExe) // Path for local testing if needed
+      : path.join(app.getAppPath(), '..', 'resources', backendExe); // Correct path for packaged app
+
+    const pythonExecutable = isDev ? path.join(process.cwd(), '.venv', 'Scripts', 'python.exe') : backendPath;
 
     if (!fs.existsSync(pythonExecutable)) {
       const errorMsg = `Backend executable not found at: ${pythonExecutable}`;
