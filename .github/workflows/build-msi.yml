@@ -129,6 +129,40 @@ jobs:
           }
           Write-Host "All critical artifacts verified successfully."
 
+      - name: Verify electron/package.json Has Build Config
+        shell: pwsh
+        run: |
+          # This is CRITICAL - verify the build configuration exists
+          # before electron-builder runs.
+          $packageJson = Get-Content electron/package.json | ConvertFrom-Json
+
+          if (-not $packageJson.build) {
+            Write-Error "CRITICAL: electron/package.json missing 'build' section!"
+            exit 1
+          }
+
+          if (-not $packageJson.build.files) {
+            Write-Error "CRITICAL: electron/package.json build section missing 'files' array!"
+            exit 1
+          }
+
+          $hasResources = $packageJson.build.files -contains "resources/**/*"
+          $hasWebUI = $packageJson.build.files -match "web-ui-build"
+
+          if (-not $hasResources) {
+            Write-Error "CRITICAL: 'files' does not include resources/**/*"
+            exit 1
+          }
+
+          if (-not $hasWebUI) {
+            Write-Error "CRITICAL: 'files' does not include web-ui-build"
+            exit 1
+          }
+
+          Write-Host "✅ electron/package.json build configuration is valid"
+          Write-Host "Files to include:"
+          $packageJson.build.files | ForEach-Object { Write-Host "  - $_" }
+
       - name: Build MSI Installer using electron-builder
         shell: pwsh
         run: |
@@ -172,6 +206,46 @@ jobs:
           $msiPath = $msiFiles[0].FullName
           Write-Host "MSI Path: $msiPath"
           "msi_path=$msiPath" | Add-Content -Path $env:GITHUB_OUTPUT
+
+      - name: Verify MSI Contents (Extract & Inspect)
+        shell: pwsh
+        run: |
+          # Extract the MSI to inspect its actual contents
+          $msiPath = "${{ steps.locate_msi.outputs.msi_path }}"
+          $extractPath = ".\msi-extract"
+
+          if (-not $msiPath) {
+            Write-Error "No MSI found to verify"
+            exit 1
+          }
+
+          Write-Host "Extracting MSI from: $msiPath"
+
+          # Use 7z to extract the MSI contents
+          $null = New-Item -ItemType Directory -Path $extractPath -Force
+          & 7z x "$msiPath" -o"$extractPath" -y
+
+          Write-Host ""
+          Write-Host "=== MSI Contents ==="
+          Get-ChildItem -Path $extractPath -Recurse | Select-Object -Property FullName | ForEach-Object { Write-Host $_.FullName }
+
+          # Specifically look for critical files
+          $backendExe = Get-ChildItem -Path $extractPath -Recurse -Filter "fortuna-backend.exe" -ErrorAction SilentlyContinue
+          $indexHtml = Get-ChildItem -Path $extractPath -Recurse -Filter "index.html" -ErrorAction SilentlyContinue
+
+          if ($backendExe) {
+            Write-Host "✅ Backend executable found: $($backendExe.FullName)"
+          } else {
+            Write-Error "❌ CRITICAL: Backend executable NOT found in MSI"
+            exit 1
+          }
+
+          if ($indexHtml) {
+            Write-Host "✅ Frontend index.html found: $($indexHtml.FullName)"
+          } else {
+            Write-Error "❌ CRITICAL: Frontend index.html NOT found in MSI"
+            exit 1
+          }
 
       - name: Generate sanitized artifact name
         id: sanitize
