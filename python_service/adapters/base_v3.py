@@ -6,6 +6,7 @@ import structlog
 from tenacity import retry, stop_after_attempt, wait_exponential, RetryError
 
 from ..core.exceptions import AdapterHttpError
+from ..manual_override_manager import ManualOverrideManager
 from ..models import Race
 
 
@@ -22,6 +23,12 @@ class BaseAdapterV3(ABC):
         self.timeout = timeout
         self.logger = structlog.get_logger(adapter_name=self.source_name)
         self.http_client: httpx.AsyncClient = None  # Injected by the engine
+        self.manual_override_manager: ManualOverrideManager = None
+        self.supports_manual_override = True  # Can be overridden by subclasses
+
+    def enable_manual_override(self, manager: ManualOverrideManager):
+        """Injects the manual override manager into the adapter."""
+        self.manual_override_manager = manager
 
     @abstractmethod
     async def _fetch_data(self, date: str) -> Any:
@@ -44,10 +51,26 @@ class BaseAdapterV3(ABC):
         Orchestrates the fetch-then-parse pipeline for the adapter.
         This public method should not be overridden by subclasses.
         """
-        # If no override, proceed with the normal fetch.
-        # Any exception here (including AdapterHttpError) will propagate
-        # up to the OddsEngine to be handled.
-        raw_data = await self._fetch_data(date)
+        raw_data = None
+
+        if self.manual_override_manager:
+            # This is not a full URL, but a representative key for the fetch operation
+            # Subclasses might need to override get_races to provide a more specific URL if needed
+            lookup_key = f"{self.base_url}/racecards/{date}"
+            manual_data = self.manual_override_manager.get_manual_data(self.source_name, lookup_key)
+            if manual_data:
+                self.logger.info("Using manually submitted data for request", url=lookup_key)
+                # Reconstruct a dictionary similar to what _fetch_data would return
+                # This may need adjustment based on adapter specifics
+                raw_data = {"pages": [manual_data[0]], "date": date}
+
+        if raw_data is None:
+            try:
+                raw_data = await self._fetch_data(date)
+            except AdapterHttpError as e:
+                if self.manual_override_manager and self.supports_manual_override:
+                    self.manual_override_manager.register_failure(self.source_name, e.url)
+                raise  # Reraise the exception to be handled by the OddsEngine
 
         if raw_data is not None:
             parsed_races = self._parse_races(raw_data)
