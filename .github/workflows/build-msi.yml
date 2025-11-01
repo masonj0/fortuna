@@ -28,7 +28,7 @@ jobs:
             electron/package-lock.json
             web_platform/frontend/package-lock.json
         env:
-          SETUP_NODE_CACHE_KEY: 'v1.1-CLEAN-UP-20251101'
+          SETUP_NODE_CACHE_KEY: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}-20251101
 
       - name: Install Frontend Dependencies & Build
         shell: pwsh
@@ -70,7 +70,7 @@ jobs:
           cache: 'pip'
           cache-dependency-path: python_service/requirements.txt
         env:
-          SETUP_PYTHON_CACHE_KEY: 'v1.1-CLEAN-UP-20251101'
+          SETUP_PYTHON_CACHE_KEY: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}-20251101
 
       - name: Build Backend Executable with PyInstaller
         shell: pwsh
