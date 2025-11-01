@@ -129,6 +129,13 @@ jobs:
         shell: pwsh
         run: |
           cd electron
+          # CRITICAL: electron/package.json MUST have "files" and "asarUnpack"
+          # configured to point to:
+          #   - resources/ (backend executable)
+          #   - web-ui-build/out/ (frontend static build)
+          #
+          # Without this, electron-builder won't know WHERE to find
+          # the backend and frontend assets, resulting in a sparse MSI.
           npm run dist
           if ($LASTEXITCODE -ne 0) {
             Write-Error "electron-builder failed with exit code $LASTEXITCODE"

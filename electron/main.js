@@ -88,7 +88,8 @@ class FortunaDesktopApp {
     if (isDev) {
       this.mainWindow.loadURL('http://localhost:3000');
     } else {
-      this.mainWindow.loadFile(path.join(__dirname, 'web-ui-build', 'out', 'index.html'));
+      // Production: Correctly load the static frontend from the unpacked asar directory
+      this.mainWindow.loadFile(path.join(app.getAppPath(), 'web-ui-build', 'out', 'index.html'));
     }
 
     this.mainWindow.once('ready-to-show', () => {
@@ -125,52 +126,54 @@ class FortunaDesktopApp {
   }
 
   async startBackend() {
-    const isDev = process.env.NODE_ENV === 'development';
-    const rootPath = isDev ? path.join(__dirname, '..') : process.resourcesPath;
-    const pythonExecutable = isDev ? path.join(rootPath, '.venv', 'Scripts', 'python.exe') : path.join(rootPath, 'api.exe');
+    const isDev = !app.isPackaged;
+    const platform = process.platform;
+    const backendExe = platform === 'win32' ? 'fortuna-backend.exe' : 'fortuna-backend';
 
-    if (!fs.existsSync(pythonExecutable)) {
-      const errorMsg = `Backend executable not found at: ${pythonExecutable}`;
-      console.error(`[ERROR] ${errorMsg}`);
+    let executablePath;
+    let spawnOptions;
+
+    if (isDev) {
+      // DEVELOPMENT: Launch via Python script
+      executablePath = path.join(process.cwd(), '.venv', 'Scripts', 'python.exe');
+      spawnOptions = {
+        args: ['run_backend.py'],
+        cwd: process.cwd(),
+        stdio: ['ignore', 'pipe', 'pipe'],
+        detached: false
+      };
+    } else {
+      // PRODUCTION: Launch the packaged executable
+      // Correctly navigate from 'app.asar' to the unpacked 'resources' directory
+      const unpackedResourcesPath = path.join(app.getAppPath(), '..', 'app.asar.unpacked', 'resources');
+      executablePath = path.join(unpackedResourcesPath, backendExe);
+      spawnOptions = {
+        args: [],
+        // CRITICAL: Set CWD to the executable's directory to find bundled resources
+        cwd: path.dirname(executablePath),
+        stdio: ['ignore', 'pipe', 'pipe'],
+        detached: false
+      };
+    }
+
+    console.log(`[Backend Starter] Executable path: ${executablePath}`);
+    console.log(`[Backend Starter] Spawn options: ${JSON.stringify(spawnOptions, null, 2)}`);
+
+    if (!fs.existsSync(executablePath)) {
+      const errorMsg = `Backend executable not found at the specified path: ${executablePath}`;
+      console.error(`[FATAL] ${errorMsg}`);
+      // Use notifier for better visibility in production
+      notifier.notify({
+        title: 'Fortuna Faucet - CRITICAL ERROR',
+        message: errorMsg,
+        icon: path.join(__dirname, 'assets', 'icon.ico')
+      });
       throw new Error(errorMsg);
     }
 
-    // Step 1: Initialize the database (only in dev mode)
-    if (isDev) {
-      await new Promise((resolve, reject) => {
-        const dbInitProcess = spawn(pythonExecutable, ['initialize_db.py'], { cwd: path.join(rootPath, 'python_service') });
-        dbInitProcess.stdout.on('data', (data) => console.log(`[DB Init] ${data}`));
-        dbInitProcess.stderr.on('data', (data) => console.error(`[DB Init ERR] ${data}`));
-        dbInitProcess.on('close', (code) => {
-          if (code === 0) {
-            console.log('[SUCCESS] Database initialization complete.');
-            resolve();
-          } else {
-            reject(new Error(`Database initialization failed with code ${code}.`));
-          }
-        });
-      });
-    }
-
-    // Step 2: Start the Uvicorn server
+    // Start the backend process
     return new Promise((resolve, reject) => {
-      let spawnOptions;
-      if (isDev) {
-          spawnOptions = {
-              cwd: rootPath,
-              stdio: ['ignore', 'pipe', 'pipe'],
-              detached: false,
-              args: ['run_backend.py']
-          };
-      } else {
-          spawnOptions = {
-              stdio: ['ignore', 'pipe', 'pipe'],
-              detached: false,
-              args: []
-          };
-      }
-
-      this.backendProcess = spawn(pythonExecutable, spawnOptions.args, spawnOptions);
+      this.backendProcess = spawn(executablePath, spawnOptions.args, spawnOptions);
 
       let stdoutBuffer = '';
       let stderrBuffer = '';
