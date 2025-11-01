@@ -22,7 +22,7 @@ const Countdown: React.FC<{ startTime: string }> = ({ startTime }) => {
     const postTime = new Date(startTimeStr);
     const diff = postTime.getTime() - currentTime.getTime();
 
-    if (diff <= 0) return { text: "RACE CLOSED", color: "text-gray-500" };
+    if (diff <= 0) return { text: "RACE COMPLETE", color: "text-gray-500" };
 
     const minutes = Math.floor(diff / 60000);
     const seconds = Math.floor((diff % 60000) / 1000).toString().padStart(2, '0');
