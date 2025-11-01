@@ -94,11 +94,21 @@ class RacingAndSportsAdapter(BaseAdapterV3):
         if not runners:
             return None
 
+        try:
+            start_time = datetime.fromisoformat(start_time_str)
+        except (ValueError, TypeError):
+            self.logger.warning(
+                "Invalid start time format for RacingAndSports race",
+                start_time_str=start_time_str,
+                race_id=race_id,
+            )
+            return None
+
         return Race(
             id=f"ras_{race_id}",
             venue=meeting.get("venueName", "Unknown Venue"),
             race_number=race_number,
-            start_time=datetime.fromisoformat(start_time_str),
+            start_time=start_time,
             runners=runners,
             source=self.source_name,
         )

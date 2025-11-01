@@ -40,8 +40,10 @@ export const LiveRaceDashboard = React.memo(() => {
     setFailedSources([]); // Clear previous failures on each fetch
 
     try {
-      const apiKey = process.env.NEXT_PUBLIC_API_KEY;
-      if (!apiKey) throw new Error('API key not configured');
+      const apiKey = await window.electronAPI.getApiKey();
+      if (!apiKey) {
+        throw new Error('API key could not be retrieved from the main process. Ensure the backend is configured correctly.');
+      }
 
       const queryParams = new URLSearchParams({
         max_field_size: params.maxFieldSize.toString(),
