@@ -14,6 +14,7 @@ from .adapters import *  # Import all adapter classes
 from .core.exceptions import AdapterConfigError, AdapterHttpError
 from .cache_manager import cache_async_result
 from .config import get_settings
+from .manual_override_manager import ManualOverrideManager
 from .models import AggregatedResponse, Race, Runner
 from pydantic import ValidationError
 
@@ -21,7 +22,7 @@ log = structlog.get_logger(__name__)
 
 
 class OddsEngine:
-    def __init__(self, config=None):
+    def __init__(self, config=None, manual_override_manager: ManualOverrideManager = None):
         self.logger = structlog.get_logger(__name__)
         self.logger.info("Initializing FortunaEngine...")
 
@@ -74,7 +75,10 @@ class OddsEngine:
 
             for adapter_cls in adapter_classes:
                 try:
-                    self.adapters.append(adapter_cls(config=self.config))
+                    adapter_instance = adapter_cls(config=self.config)
+                    if manual_override_manager and getattr(adapter_instance, 'supports_manual_override', False):
+                        adapter_instance.enable_manual_override(manual_override_manager)
+                    self.adapters.append(adapter_instance)
                 except AdapterConfigError as e:
                     self.logger.warning(
                         "Skipping adapter due to configuration error",
@@ -89,13 +93,14 @@ class OddsEngine:
 
             # Special case for BetfairDataScientistAdapter with extra args
             try:
-                self.adapters.append(
-                    BetfairDataScientistAdapter(
-                        model_name="ThoroughbredModel",
-                        url="https://betfair-data-supplier-prod.herokuapp.com/api/widgets/kvs-ratings/datasets",
-                        config=self.config,
-                    )
+                bds_adapter = BetfairDataScientistAdapter(
+                    model_name="ThoroughbredModel",
+                    url="https://betfair-data-supplier-prod.herokuapp.com/api/widgets/kvs-ratings/datasets",
+                    config=self.config,
                 )
+                if manual_override_manager and getattr(bds_adapter, 'supports_manual_override', False):
+                    bds_adapter.enable_manual_override(manual_override_manager)
+                self.adapters.append(bds_adapter)
             except Exception:
                 self.logger.warning(
                     "Failed to initialize adapter: BetfairDataScientistAdapter",
