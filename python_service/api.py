@@ -328,3 +328,74 @@ async def cleanup_old_overrides(
     """Clean up old manual override requests"""
     manager.clear_old_requests(max_age_hours)
     return {"status": "success", "message": "Old requests cleaned"}
+
+
+# API Models
+class ManualDataSubmission(BaseModel):
+    request_id: str
+    content: str
+    content_type: str = "html"
+
+
+# New endpoints
+@app.get("/api/manual-overrides/pending")
+@limiter.limit("60/minute")
+async def get_pending_overrides(
+    request: Request,
+    api_key: str = Depends(verify_api_key),
+    manager: ManualOverrideManager = Depends(lambda: app.state.manual_override_manager),
+):
+    """Get all pending manual override requests"""
+    pending = manager.get_pending_requests()
+    return {"pending_requests": [req.model_dump() for req in pending]}
+
+
+@app.post("/api/manual-overrides/submit")
+@limiter.limit("30/minute")
+async def submit_manual_data(
+    request: Request,
+    submission: ManualDataSubmission,
+    api_key: str = Depends(verify_api_key),
+    manager: ManualOverrideManager = Depends(lambda: app.state.manual_override_manager),
+):
+    """Submit manually-provided data for a failed fetch"""
+    success = manager.submit_manual_data(
+        request_id=submission.request_id,
+        raw_content=submission.content,
+        content_type=submission.content_type,
+    )
+
+    if success:
+        return {"status": "success", "message": "Manual data submitted"}
+    else:
+        raise HTTPException(status_code=404, detail="Request not found")
+
+
+@app.post("/api/manual-overrides/skip/{request_id}")
+@limiter.limit("60/minute")
+async def skip_manual_override(
+    request: Request,
+    request_id: str,
+    api_key: str = Depends(verify_api_key),
+    manager: ManualOverrideManager = Depends(lambda: app.state.manual_override_manager),
+):
+    """Skip a manual override request"""
+    success = manager.skip_request(request_id)
+
+    if success:
+        return {"status": "success", "message": "Request skipped"}
+    else:
+        raise HTTPException(status_code=404, detail="Request not found")
+
+
+@app.post("/api/manual-overrides/cleanup")
+@limiter.limit("60/minute")
+async def cleanup_old_overrides(
+    request: Request,
+    max_age_hours: int = 24,
+    api_key: str = Depends(verify_api_key),
+    manager: ManualOverrideManager = Depends(lambda: app.state.manual_override_manager),
+):
+    """Clean up old manual override requests"""
+    manager.clear_old_requests(max_age_hours)
+    return {"status": "success", "message": "Old requests cleaned"}
