@@ -133,8 +133,8 @@ jobs:
           DEBUG: 'electron-builder'
           CI: 'true'
 
-      - name: Find Built MSI Path
-        id: find_msi
+      - name: Locate Built MSI Path
+        id: locate_msi
         shell: pwsh
         run: |
           $msiFiles = Get-ChildItem -Path ".\\electron\\dist" -Filter "*.msi" -Recurse
@@ -151,14 +151,6 @@ jobs:
           Write-Host "MSI Path: $msiPath"
           "msi_path=$msiPath" | Add-Content -Path $env:GITHUB_OUTPUT
 
-      - name: Find Built MSI Path
-        id: find_msi
-        shell: bash
-        run: |
-          MSI_PATH=$(find electron/dist -name "*.msi" -type f | head -n 1)
-          if [ -z "$MSI_PATH" ]; then exit 1; fi
-          echo "msi_path=$MSI_PATH" >> $GITHUB_OUTPUT
-
       - name: Generate sanitized artifact name
         id: sanitize
         shell: bash
@@ -168,14 +160,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.sanitize.outputs.name }}
-          path: ${{ steps.find_msi.outputs.msi_path }}
+          path: ${{ steps.locate_msi.outputs.msi_path }}
           retention-days: 30
 
       - name: Create Release (on tag)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
-          files: ${{ steps.find_msi.outputs.msi_path }}
+          files: ${{ steps.locate_msi.outputs.msi_path }}
           name: "Fortuna Faucet ${{ github.ref_name }}"
           draft: false
           prerelease: false
