@@ -210,40 +210,52 @@ jobs:
       - name: Verify MSI Contents (Extract & Inspect)
         shell: pwsh
         run: |
-          # Extract the MSI to inspect its actual contents
           $msiPath = "${{ steps.locate_msi.outputs.msi_path }}"
           $extractPath = ".\msi-extract"
-
           if (-not $msiPath) {
             Write-Error "No MSI found to verify"
             exit 1
           }
 
-          Write-Host "Extracting MSI from: $msiPath"
+          Write-Host "--- Starting 2-Stage MSI Content Verification ---"
 
-          # Use 7z to extract the MSI contents
+          # Stage 1: Extract the MSI itself
+          Write-Host "Stage 1: Extracting MSI contents from $msiPath"
           $null = New-Item -ItemType Directory -Path $extractPath -Force
           & 7z x "$msiPath" -o"$extractPath" -y
 
-          Write-Host ""
-          Write-Host "=== MSI Contents ==="
-          Get-ChildItem -Path $extractPath -Recurse | Select-Object -Property FullName | ForEach-Object { Write-Host $_.FullName }
+          # Stage 2: Find and extract any .cab files within the MSI contents
+          $cabFiles = Get-ChildItem -Path $extractPath -Recurse -Filter "*.cab"
+          if ($cabFiles.Count -eq 0) {
+            Write-Error "No .cab files found in the MSI. Cannot verify file contents."
+            exit 1
+          }
 
-          # Specifically look for critical files
+          foreach ($cab in $cabFiles) {
+            Write-Host "Stage 2: Extracting cabinet file: $($cab.FullName)"
+            # Extract the cab file into the same directory
+            & 7z x "$($cab.FullName)" -o"$($cab.DirectoryName)" -y
+          }
+
+          Write-Host ""
+          Write-Host "--- Deep Scan of Extracted Files ---"
+          Get-ChildItem -Path $extractPath -Recurse | Select-Object FullName
+
+          # Final Verification
           $backendExe = Get-ChildItem -Path $extractPath -Recurse -Filter "fortuna-backend.exe" -ErrorAction SilentlyContinue
           $indexHtml = Get-ChildItem -Path $extractPath -Recurse -Filter "index.html" -ErrorAction SilentlyContinue
 
           if ($backendExe) {
-            Write-Host "✅ Backend executable found: $($backendExe.FullName)"
+            Write-Host "✅ [PASS] Backend executable found: $($backendExe.FullName)"
           } else {
-            Write-Error "❌ CRITICAL: Backend executable NOT found in MSI"
+            Write-Error "❌ [FAIL] CRITICAL: Backend executable NOT found in MSI"
             exit 1
           }
 
           if ($indexHtml) {
-            Write-Host "✅ Frontend index.html found: $($indexHtml.FullName)"
+            Write-Host "✅ [PASS] Frontend index.html found: $($indexHtml.FullName)"
           } else {
-            Write-Error "❌ CRITICAL: Frontend index.html NOT found in MSI"
+            Write-Error "❌ [FAIL] CRITICAL: Frontend index.html NOT found in MSI"
             exit 1
           }
 
