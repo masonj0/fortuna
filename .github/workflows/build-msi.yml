@@ -151,6 +151,14 @@ jobs:
           Write-Host "MSI Path: $msiPath"
           "msi_path=$msiPath" | Add-Content -Path $env:GITHUB_OUTPUT
 
+      - name: Find Built MSI Path
+        id: find_msi
+        shell: bash
+        run: |
+          MSI_PATH=$(find electron/dist -name "*.msi" -type f | head -n 1)
+          if [ -z "$MSI_PATH" ]; then exit 1; fi
+          echo "msi_path=$MSI_PATH" >> $GITHUB_OUTPUT
+
       - name: Generate sanitized artifact name
         id: sanitize
         shell: bash
