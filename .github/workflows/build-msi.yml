@@ -13,6 +13,7 @@ jobs:
   build-installer:
     name: Build MSI Installer
     runs-on: windows-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout Repository
@@ -34,13 +35,21 @@ jobs:
           npm run build
 
       - name: Stage Frontend Assets for Packaging
-        shell: cmd
+        shell: powershell
         run: |
-          cd electron
-          if exist web-ui-build (rmdir /s /q web-ui-build)
-          mkdir web-ui-build
-          robocopy ../web_platform/frontend/out web-ui-build/out /E
-          if %ERRORLEVEL% LEQ 7 (exit /b 0) else (exit /b %ERRORLEVEL%)
+          $source = "web_platform/frontend/out"
+          $dest = "electron/web-ui-build/out"
+          if (Test-Path $dest) {
+            Remove-Item -Recurse -Force $dest
+          }
+          Copy-Item -Path $source -Destination $dest -Recurse -Force -ErrorAction Stop
+          $sourceFiles = (Get-ChildItem -Path $source -Recurse | Measure-Object).Count
+          $destFiles = (Get-ChildItem -Path $dest -Recurse | Measure-Object).Count
+          if ($destFiles -ne $sourceFiles) {
+            Write-Error "File count mismatch after staging frontend assets!"
+            exit 1
+          }
+          Write-Host "Successfully staged $destFiles frontend assets."
 
       - name: Install Electron Dependencies
         run: |
@@ -51,19 +60,51 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: python_service/requirements.txt
 
       - name: Build Backend Executable with PyInstaller
-        run: |
-          pip install -r requirements-dev.txt
-          pyinstaller --onefile --hidden-import=uvicorn --add-data "python_service/adapters;adapters" python_service/api.py
         shell: bash
+        run: |
+          pip install -r python_service/requirements.txt
+          pip install pyinstaller
+          pyinstaller --onefile \
+            --name fortuna-backend \
+            --hidden-import=uvicorn \
+            --hidden-import=uvicorn.logging \
+            --hidden-import=httpx.models \
+            --hidden-import=redis.asyncio \
+            --hidden-import=fastapi \
+            --hidden-import=pydantic \
+            --hidden-import=structlog \
+            --hidden-import=httpx \
+            --add-data "python_service/adapters:adapters" \
+            python_service/api.py
+
+      - name: Stage Backend Executable
+        shell: bash
+        run: |
+          mkdir -p electron/resources
+          cp ./dist/fortuna-backend.exe electron/resources/
+          if [ ! -f "electron/resources/fortuna-backend.exe" ]; then
+            echo "ERROR: Could not find backend exe in root dist!"
+            ls -la dist/
+            exit 1
+          fi
+          echo "Backend executable staged successfully."
 
       - name: Verify Build Inputs
+        shell: bash
         run: |
-          echo "--- Verifying contents of electron/web-ui-build ---"
-          ls -R electron/web-ui-build
-          echo "--- Verifying contents of python_service/dist ---"
-          ls -R python_service/dist
+          if [ ! -f "electron/resources/fortuna-backend.exe" ]; then
+            echo "CRITICAL: Backend executable not found!"
+            exit 1
+          fi
+          if [ ! -d "electron/web-ui-build/out" ]; then
+            echo "CRITICAL: Frontend build directory not found!"
+            exit 1
+          fi
+          echo "All critical artifacts verified."
 
       - name: Build MSI Installer using electron-builder
         run: |
@@ -75,6 +116,14 @@ jobs:
           FORTUNA_BUILD_TYPE: 'full' # For now, we only build the full version
           DEBUG: 'electron-builder'
 
+      - name: Find Built MSI Path
+        id: find_msi
+        shell: bash
+        run: |
+          MSI_PATH=$(find electron/dist -name "*.msi" -type f | head -n 1)
+          if [ -z "$MSI_PATH" ]; then exit 1; fi
+          echo "msi_path=$MSI_PATH" >> $GITHUB_OUTPUT
+
       - name: Generate sanitized artifact name
         id: sanitize
         shell: bash
@@ -84,15 +133,15 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.sanitize.outputs.name }}
-          path: "electron/dist/JBMason's 1st App*.msi"
+          path: ${{ steps.find_msi.outputs.msi_path }}
           retention-days: 30
 
       - name: Create Release (on tag)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
-          files: "electron/dist/JBMason's 1st App*.msi"
-          name: "JBMason's 1st App ${{ github.ref_name }}"
+          files: ${{ steps.find_msi.outputs.msi_path }}
+          name: "Fortuna Faucet ${{ github.ref_name }}"
           draft: false
           prerelease: false
         env:

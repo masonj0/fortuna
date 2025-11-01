@@ -17,7 +17,8 @@
   },
   "build": {
     "appId": "com.fortuna.faucet",
-    "productName": "JBMason's 1st App",
+    "productName": "Fortuna Faucet",
+    "artifactName": "${productName}-${version}-${arch}.${ext}",
     "files": [
       "main.js",
       "preload.js",
@@ -25,10 +26,10 @@
     ],
     "extraResources": [
       {
-        "from": "../python_service/dist/",
-        "to": "./",
+        "from": "resources/",
+        "to": "resources",
         "filter": [
-          "**/api.exe"
+          "**/*"
         ]
       }
     ],
@@ -40,7 +41,7 @@
       "oneClick": false,
       "perMachine": true,
       "createDesktopShortcut": true,
-      "shortcutName": "JBMason's 1st App"
+      "shortcutName": "Fortuna Faucet"
     },
     "nsis": {
       "oneClick": false,
