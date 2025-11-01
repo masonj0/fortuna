@@ -13,6 +13,7 @@ jobs:
   build-installer:
     name: Build MSI Installer
     runs-on: windows-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout Repository
@@ -28,21 +29,31 @@ jobs:
             web_platform/frontend/package-lock.json
 
       - name: Install Frontend Dependencies & Build
+        shell: pwsh
         run: |
           cd web_platform/frontend
           npm ci
           npm run build
 
       - name: Stage Frontend Assets for Packaging
-        shell: cmd
+        shell: pwsh
         run: |
-          cd electron
-          if exist web-ui-build (rmdir /s /q web-ui-build)
-          mkdir web-ui-build
-          robocopy ../web_platform/frontend/out web-ui-build/out /E
-          if %ERRORLEVEL% LEQ 7 (exit /b 0) else (exit /b %ERRORLEVEL%)
+          $source = "web_platform/frontend/out"
+          $dest = "electron/web-ui-build/out"
+          if (Test-Path $dest) {
+            Remove-Item -Recurse -Force $dest
+          }
+          Copy-Item -Path $source -Destination $dest -Recurse -Force -ErrorAction Stop
+          $sourceFiles = (Get-ChildItem -Path $source -Recurse | Measure-Object).Count
+          $destFiles = (Get-ChildItem -Path $dest -Recurse | Measure-Object).Count
+          if ($destFiles -ne $sourceFiles) {
+            Write-Error "File count mismatch after staging frontend assets!"
+            exit 1
+          }
+          Write-Host "Successfully staged $destFiles frontend assets."
 
       - name: Install Electron Dependencies
+        shell: pwsh
         run: |
           cd electron
           npm ci
@@ -51,29 +62,94 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: python_service/requirements.txt
 
       - name: Build Backend Executable with PyInstaller
+        shell: pwsh
         run: |
-          pip install -r requirements-dev.txt
-          pyinstaller --onefile --hidden-import=uvicorn --add-data "python_service/adapters;adapters" python_service/api.py
-        shell: bash
+          pip install -r python_service/requirements.txt
+          pip install pyinstaller
+          pyinstaller --onefile `
+            --name fortuna-backend `
+            --hidden-import=uvicorn `
+            --hidden-import=uvicorn.logging `
+            --hidden-import=httpx.models `
+            --hidden-import=redis.asyncio `
+            --hidden-import=fastapi `
+            --hidden-import=pydantic `
+            --hidden-import=structlog `
+            --hidden-import=httpx `
+            --add-data "python_service/adapters:adapters" `
+            python_service/api.py
+
+      - name: Stage Backend Executable
+        shell: pwsh
+        run: |
+          $distPath = ".\\dist\\fortuna-backend.exe"
+          $destDir = ".\\electron\\resources"
+          if (-not (Test-Path $destDir)) {
+            New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+          }
+          if (Test-Path $distPath) {
+            Copy-Item -Path $distPath -Destination $destDir -Force
+            Write-Host "Backend executable staged successfully."
+          } else {
+            Write-Error "ERROR: Could not find backend exe at $distPath"
+            Get-ChildItem -Path ".\\dist\\" -Recurse
+            exit 1
+          }
 
       - name: Verify Build Inputs
+        shell: pwsh
         run: |
-          echo "--- Verifying contents of electron/web-ui-build ---"
-          ls -R electron/web-ui-build
-          echo "--- Verifying contents of python_service/dist ---"
-          ls -R python_service/dist
+          $backendExe = ".\\electron\\resources\\fortuna-backend.exe"
+          $frontendDir = ".\\electron\\web-ui-build\\out"
+          if (-not (Test-Path $backendExe)) {
+            Write-Error "CRITICAL: Backend executable not found at $backendExe"
+            Get-ChildItem -Path ".\\electron\\resources\\" -Recurse
+            exit 1
+          }
+          if (-not (Test-Path $frontendDir)) {
+            Write-Error "CRITICAL: Frontend build directory not found at $frontendDir"
+            Get-ChildItem -Path ".\\electron\\web-ui-build\\" -Recurse
+            exit 1
+          }
+          Write-Host "All critical artifacts verified successfully."
 
       - name: Build MSI Installer using electron-builder
+        shell: pwsh
         run: |
           cd electron
           npm run dist
-          echo "--- Verifying contents of electron/dist ---"
-          ls -R dist
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "electron-builder failed with exit code $LASTEXITCODE"
+            exit 1
+          }
+          Write-Host "--- Verifying contents of electron/dist ---"
+          Get-ChildItem -Path dist -Recurse
         env:
-          FORTUNA_BUILD_TYPE: 'full' # For now, we only build the full version
+          FORTUNA_BUILD_TYPE: 'full'
           DEBUG: 'electron-builder'
+          CI: 'true'
+
+      - name: Find Built MSI Path
+        id: find_msi
+        shell: pwsh
+        run: |
+          $msiFiles = Get-ChildItem -Path ".\\electron\\dist" -Filter "*.msi" -Recurse
+          if ($msiFiles.Count -eq 0) {
+            Write-Error "CRITICAL: No MSI files found in electron/dist directory."
+            Write-Host "Directory contents:"
+            Get-ChildItem -Path ".\\electron\\dist" -Recurse
+            exit 1
+          }
+          if ($msiFiles.Count -gt 1) {
+            Write-Warning "Multiple MSI files found. Using the first one: $($msiFiles[0].FullName)"
+          }
+          $msiPath = $msiFiles[0].FullName
+          Write-Host "MSI Path: $msiPath"
+          "msi_path=$msiPath" | Add-Content -Path $env:GITHUB_OUTPUT
 
       - name: Generate sanitized artifact name
         id: sanitize
@@ -84,15 +160,15 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.sanitize.outputs.name }}
-          path: "electron/dist/JBMason's 1st App*.msi"
+          path: ${{ steps.find_msi.outputs.msi_path }}
           retention-days: 30
 
       - name: Create Release (on tag)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
-          files: "electron/dist/JBMason's 1st App*.msi"
-          name: "JBMason's 1st App ${{ github.ref_name }}"
+          files: ${{ steps.find_msi.outputs.msi_path }}
+          name: "Fortuna Faucet ${{ github.ref_name }}"
           draft: false
           prerelease: false
         env:
