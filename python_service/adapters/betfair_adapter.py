@@ -1,6 +1,7 @@
 # python_service/adapters/betfair_adapter.py
 from datetime import datetime, timedelta
 from typing import Any, List
+import re
 
 from ..models import Race, Runner
 from .base_v3 import BaseAdapterV3
@@ -27,7 +28,7 @@ class BetfairAdapter(BetfairAuthMixin, BaseAdapterV3):
 
         start_time, end_time = self._get_datetime_range(date)
 
-        return await self.make_request(
+        response = await self.make_request(
             self.http_client,
             method="post",
             url=f"{self.BASE_URL}listMarketCatalogue/",
@@ -45,6 +46,7 @@ class BetfairAdapter(BetfairAuthMixin, BaseAdapterV3):
                 "marketProjection": ["EVENT", "RUNNER_DESCRIPTION"],
             },
         )
+        return response.json() if response else None
 
     def _parse_races(self, raw_data: Any) -> List[Race]:
         """Parses the raw market catalogue into a list of Race objects."""
@@ -54,7 +56,8 @@ class BetfairAdapter(BetfairAuthMixin, BaseAdapterV3):
         races = []
         for market in raw_data:
             try:
-                races.append(self._parse_race(market))
+                if race := self._parse_race(market):
+                    races.append(race)
             except (KeyError, TypeError):
                 self.logger.warning(
                     "Failed to parse a Betfair market.", exc_info=True, market=market
@@ -64,20 +67,24 @@ class BetfairAdapter(BetfairAuthMixin, BaseAdapterV3):
 
     def _parse_race(self, market: dict) -> Race:
         """Parses a single market from the Betfair API into a Race object."""
-        market_id = market["marketId"]
-        event = market["event"]
-        start_time = datetime.fromisoformat(
-            market["marketStartTime"].replace("Z", "+00:00")
-        )
+        market_id = market.get("marketId")
+        event = market.get("event", {})
+        market_start_time = market.get("marketStartTime")
+
+        if not all([market_id, market_start_time]):
+            return None
+
+        start_time = datetime.fromisoformat(market_start_time.replace("Z", "+00:00"))
 
         runners = [
             Runner(
                 number=runner.get("sortPriority", i + 1),
-                name=runner["runnerName"],
-                scratched=runner["status"] != "ACTIVE",
-                selection_id=runner["selectionId"],
+                name=runner.get("runnerName"),
+                scratched=runner.get("status") != "ACTIVE",
+                selection_id=runner.get("selectionId"),
             )
             for i, runner in enumerate(market.get("runners", []))
+            if runner.get("runnerName")
         ]
 
         return Race(
@@ -91,8 +98,6 @@ class BetfairAdapter(BetfairAuthMixin, BaseAdapterV3):
 
     def _extract_race_number(self, name: str) -> int:
         """Extracts the race number from a market name (e.g., 'R1 1m Mdn Stks')."""
-        import re
-
         match = re.search(r"\bR(\d{1,2})\b", name)
         return int(match.group(1)) if match else 0
 

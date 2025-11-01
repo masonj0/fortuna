@@ -67,16 +67,20 @@ class AtTheRacesAdapter(BaseAdapterV3):
                 continue
             try:
                 soup = BeautifulSoup(html, "html.parser")
-                header = soup.select_one("h1.heading-racecard-title").get_text()
+                header_element = soup.select_one("h1.heading-racecard-title")
+                if not header_element:
+                    continue
+                header = header_element.get_text()
                 track_name_raw, race_time = [p.strip() for p in header.split("|")[:2]]
                 track_name = normalize_venue_name(track_name_raw)
                 active_link = soup.select_one("a.race-time-link.active")
-                race_number = (
-                    active_link.find_parent("div", "races")
-                    .select("a.race-time-link")
-                    .index(active_link)
-                    + 1
-                )
+                race_number = 1
+                if active_link:
+                    parent_div = active_link.find_parent("div", "races")
+                    if parent_div:
+                        all_links = parent_div.select("a.race-time-link")
+                        race_number = all_links.index(active_link) + 1
+
                 start_time = datetime.combine(
                     race_date, datetime.strptime(race_time, "%H:%M").time()
                 )
@@ -103,10 +107,20 @@ class AtTheRacesAdapter(BaseAdapterV3):
 
     def _parse_runner(self, row: Tag) -> Optional[Runner]:
         try:
-            name = clean_text(row.select_one("h3.horse-name a").get_text())
-            num_str = clean_text(row.select_one("span.horse-number").get_text())
+            name_element = row.select_one("h3.horse-name a")
+            if not name_element:
+                return None
+            name = clean_text(name_element.get_text())
+
+            num_element = row.select_one("span.horse-number")
+            if not num_element:
+                return None
+            num_str = clean_text(num_element.get_text())
             number = int("".join(filter(str.isdigit, num_str)))
-            odds_str = clean_text(row.select_one("button.best-odds").get_text())
+
+            odds_element = row.select_one("button.best-odds")
+            odds_str = clean_text(odds_element.get_text()) if odds_element else ""
+
             win_odds = parse_odds_to_decimal(odds_str)
             odds_data = (
                 {

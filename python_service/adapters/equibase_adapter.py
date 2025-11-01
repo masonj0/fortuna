@@ -3,7 +3,7 @@ import asyncio
 from datetime import datetime
 from typing import Any, List, Optional
 
-from selectolax.parser import HTMLParser
+from selectolax.parser import HTMLParser, Node
 
 from ..models import OddsData, Race, Runner
 from ..utils.odds import parse_odds_to_decimal
@@ -85,50 +85,34 @@ class EquibaseAdapter(BaseAdapterV3):
                 continue
             try:
                 parser = HTMLParser(html)
-                venue = clean_text(
-                    parser.css_first("div.track-information strong").text()
-                )
-                race_number = int(
-                    parser.css_first("div.race-information strong")
-                    .text()
-                    .replace("Race", "")
-                    .strip()
-                )
-                post_time_str = parser.css_first("p.post-time span").text().strip()
+
+                venue_node = parser.css_first("div.track-information strong")
+                if not venue_node:
+                    continue
+                venue = clean_text(venue_node.text())
+
+                race_number_node = parser.css_first("div.race-information strong")
+                if not race_number_node:
+                    continue
+                race_number_text = race_number_node.text().replace("Race", "").strip()
+                if not race_number_text.isdigit():
+                    continue
+                race_number = int(race_number_text)
+
+                post_time_node = parser.css_first("p.post-time span")
+                if not post_time_node:
+                    continue
+                post_time_str = post_time_node.text().strip()
                 start_time = self._parse_post_time(date, post_time_str)
 
                 runners = []
                 runner_nodes = parser.css("table.entries-table tbody tr")
                 for node in runner_nodes:
-                    try:
-                        number = int(node.css_first("td:nth-child(1)").text(strip=True))
-                        name = clean_text(node.css_first("td:nth-child(3)").text())
-                        odds_str = clean_text(node.css_first("td:nth-child(10)").text())
-                        scratched = (
-                            "scratched" in node.attributes.get("class", "").lower()
-                        )
+                    if runner := self._parse_runner(node):
+                        runners.append(runner)
 
-                        odds = {}
-                        if not scratched:
-                            win_odds = parse_odds_to_decimal(odds_str)
-                            if win_odds and win_odds < 999:
-                                odds = {
-                                    self.source_name: OddsData(
-                                        win=win_odds,
-                                        source=self.source_name,
-                                        last_updated=datetime.now(),
-                                    )
-                                }
-                        runners.append(
-                            Runner(
-                                number=number, name=name, odds=odds, scratched=scratched
-                            )
-                        )
-                    except (ValueError, AttributeError, IndexError):
-                        self.logger.warning(
-                            "Could not parse Equibase runner, skipping.", exc_info=True
-                        )
-                        continue
+                if not runners:
+                    continue
 
                 race = Race(
                     id=f"eqb_{venue.lower().replace(' ', '')}_{date}_{race_number}",
@@ -143,6 +127,39 @@ class EquibaseAdapter(BaseAdapterV3):
                 self.logger.error("Failed to parse Equibase race page.", exc_info=True)
                 continue
         return all_races
+
+    def _parse_runner(self, node: Node) -> Optional[Runner]:
+        try:
+            number_node = node.css_first("td:nth-child(1)")
+            if not number_node or not number_node.text(strip=True).isdigit():
+                return None
+            number = int(number_node.text(strip=True))
+
+            name_node = node.css_first("td:nth-child(3)")
+            if not name_node:
+                return None
+            name = clean_text(name_node.text())
+
+            odds_node = node.css_first("td:nth-child(10)")
+            odds_str = clean_text(odds_node.text()) if odds_node else ""
+
+            scratched = "scratched" in node.attributes.get("class", "").lower()
+
+            odds = {}
+            if not scratched:
+                win_odds = parse_odds_to_decimal(odds_str)
+                if win_odds and win_odds < 999:
+                    odds = {
+                        self.source_name: OddsData(
+                            win=win_odds,
+                            source=self.source_name,
+                            last_updated=datetime.now(),
+                        )
+                    }
+            return Runner(number=number, name=name, odds=odds, scratched=scratched)
+        except (ValueError, AttributeError, IndexError):
+            self.logger.warning("Could not parse Equibase runner, skipping.", exc_info=True)
+            return None
 
     def _parse_post_time(self, date_str: str, time_str: str) -> datetime:
         """Parses a time string like 'Post Time: 12:30 PM ET' into a datetime object."""

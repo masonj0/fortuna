@@ -72,12 +72,17 @@ class SportingLifeAdapter(BaseAdapterV3):
                 continue
             try:
                 soup = BeautifulSoup(html, "html.parser")
-                track_name = clean_text(
-                    soup.select_one("a.hr-race-header-course-name__link").get_text()
-                )
-                race_time_str = clean_text(
-                    soup.select_one("span.hr-race-header-time__time").get_text()
-                )
+
+                track_name_node = soup.select_one("a.hr-race-header-course-name__link")
+                if not track_name_node:
+                    continue
+                track_name = clean_text(track_name_node.get_text())
+
+                race_time_node = soup.select_one("span.hr-race-header-time__time")
+                if not race_time_node:
+                    continue
+                race_time_str = clean_text(race_time_node.get_text())
+
                 start_time = datetime.combine(
                     race_date, datetime.strptime(race_time_str, "%H:%M").time()
                 )
@@ -85,12 +90,14 @@ class SportingLifeAdapter(BaseAdapterV3):
                 active_link = soup.select_one(
                     "a.hr-race-header-navigation-link--active"
                 )
-                race_number = (
-                    soup.select("a.hr-race-header-navigation-link").index(active_link)
-                    + 1
-                    if active_link
-                    else 1
-                )
+                race_number = 1
+                if active_link:
+                    all_links = soup.select("a.hr-race-header-navigation-link")
+                    try:
+                        race_number = all_links.index(active_link) + 1
+                    except ValueError:
+                        pass # Keep default race number if active link not in all links
+
                 runners = [
                     self._parse_runner(row)
                     for row in soup.select("div.hr-racing-runner-card")
@@ -115,16 +122,20 @@ class SportingLifeAdapter(BaseAdapterV3):
 
     def _parse_runner(self, row: Tag) -> Optional[Runner]:
         try:
-            name = clean_text(
-                row.select_one("a.hr-racing-runner-horse-name").get_text()
-            )
-            num_str = clean_text(
-                row.select_one("span.hr-racing-runner-saddle-cloth-no").get_text()
-            )
+            name_node = row.select_one("a.hr-racing-runner-horse-name")
+            if not name_node:
+                return None
+            name = clean_text(name_node.get_text())
+
+            num_node = row.select_one("span.hr-racing-runner-saddle-cloth-no")
+            if not num_node:
+                return None
+            num_str = clean_text(num_node.get_text())
             number = int("".join(filter(str.isdigit, num_str)))
-            odds_str = clean_text(
-                row.select_one("span.hr-racing-runner-odds").get_text()
-            )
+
+            odds_node = row.select_one("span.hr-racing-runner-odds")
+            odds_str = clean_text(odds_node.get_text()) if odds_node else ""
+
             win_odds = parse_odds_to_decimal(odds_str)
             odds_data = (
                 {
