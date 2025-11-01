@@ -61,20 +61,23 @@ jobs:
         with:
           python-version: '3.12'
           cache: 'pip'
-          cache-dependency-path: requirements.txt
+          cache-dependency-path: python_service/requirements.txt
 
       - name: Build Backend Executable with PyInstaller
         shell: bash
         run: |
-          pip install -r requirements.txt
+          pip install -r python_service/requirements.txt
           pip install pyinstaller
           pyinstaller --onefile \
             --name fortuna-backend \
+            --hidden-import=uvicorn \
+            --hidden-import=uvicorn.logging \
+            --hidden-import=httpx.models \
+            --hidden-import=redis.asyncio \
             --hidden-import=fastapi \
             --hidden-import=pydantic \
             --hidden-import=structlog \
             --hidden-import=httpx \
-            --hidden-import=redis \
             --add-data "python_service/adapters:adapters" \
             python_service/api.py
 
@@ -82,9 +85,10 @@ jobs:
         shell: bash
         run: |
           mkdir -p electron/resources
-          cp dist/fortuna-backend.exe electron/resources/
+          cp ./dist/fortuna-backend.exe electron/resources/
           if [ ! -f "electron/resources/fortuna-backend.exe" ]; then
-            echo "Failed to copy backend executable!"
+            echo "ERROR: Could not find backend exe in root dist!"
+            ls -la dist/
             exit 1
           fi
           echo "Backend executable staged successfully."
@@ -112,6 +116,14 @@ jobs:
           FORTUNA_BUILD_TYPE: 'full' # For now, we only build the full version
           DEBUG: 'electron-builder'
 
+      - name: Find Built MSI Path
+        id: find_msi
+        shell: bash
+        run: |
+          MSI_PATH=$(find electron/dist -name "*.msi" -type f | head -n 1)
+          if [ -z "$MSI_PATH" ]; then exit 1; fi
+          echo "msi_path=$MSI_PATH" >> $GITHUB_OUTPUT
+
       - name: Generate sanitized artifact name
         id: sanitize
         shell: bash
@@ -121,14 +133,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.sanitize.outputs.name }}
-          path: "electron/dist/Fortuna Faucet*.msi"
+          path: ${{ steps.find_msi.outputs.msi_path }}
           retention-days: 30
 
       - name: Create Release (on tag)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
-          files: "electron/dist/Fortuna Faucet*.msi"
+          files: ${{ steps.find_msi.outputs.msi_path }}
           name: "Fortuna Faucet ${{ github.ref_name }}"
           draft: false
           prerelease: false
