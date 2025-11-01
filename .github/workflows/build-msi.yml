@@ -29,13 +29,14 @@ jobs:
             web_platform/frontend/package-lock.json
 
       - name: Install Frontend Dependencies & Build
+        shell: pwsh
         run: |
           cd web_platform/frontend
           npm ci
           npm run build
 
       - name: Stage Frontend Assets for Packaging
-        shell: powershell
+        shell: pwsh
         run: |
           $source = "web_platform/frontend/out"
           $dest = "electron/web-ui-build/out"
@@ -52,6 +53,7 @@ jobs:
           Write-Host "Successfully staged $destFiles frontend assets."
 
       - name: Install Electron Dependencies
+        shell: pwsh
         run: |
           cd electron
           npm ci
@@ -64,57 +66,90 @@ jobs:
           cache-dependency-path: python_service/requirements.txt
 
       - name: Build Backend Executable with PyInstaller
-        shell: bash
+        shell: pwsh
         run: |
           pip install -r python_service/requirements.txt
           pip install pyinstaller
-          pyinstaller --onefile \
-            --name fortuna-backend \
-            --hidden-import=uvicorn \
-            --hidden-import=uvicorn.logging \
-            --hidden-import=httpx.models \
-            --hidden-import=redis.asyncio \
-            --hidden-import=fastapi \
-            --hidden-import=pydantic \
-            --hidden-import=structlog \
-            --hidden-import=httpx \
-            --add-data "python_service/adapters:adapters" \
+          pyinstaller --onefile `
+            --name fortuna-backend `
+            --hidden-import=uvicorn `
+            --hidden-import=uvicorn.logging `
+            --hidden-import=httpx.models `
+            --hidden-import=redis.asyncio `
+            --hidden-import=fastapi `
+            --hidden-import=pydantic `
+            --hidden-import=structlog `
+            --hidden-import=httpx `
+            --add-data "python_service/adapters:adapters" `
             python_service/api.py
 
       - name: Stage Backend Executable
-        shell: bash
+        shell: pwsh
         run: |
-          mkdir -p electron/resources
-          cp ./dist/fortuna-backend.exe electron/resources/
-          if [ ! -f "electron/resources/fortuna-backend.exe" ]; then
-            echo "ERROR: Could not find backend exe in root dist!"
-            ls -la dist/
+          $distPath = ".\\dist\\fortuna-backend.exe"
+          $destDir = ".\\electron\\resources"
+          if (-not (Test-Path $destDir)) {
+            New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+          }
+          if (Test-Path $distPath) {
+            Copy-Item -Path $distPath -Destination $destDir -Force
+            Write-Host "Backend executable staged successfully."
+          } else {
+            Write-Error "ERROR: Could not find backend exe at $distPath"
+            Get-ChildItem -Path ".\\dist\\" -Recurse
             exit 1
-          fi
-          echo "Backend executable staged successfully."
+          }
 
       - name: Verify Build Inputs
-        shell: bash
+        shell: pwsh
         run: |
-          if [ ! -f "electron/resources/fortuna-backend.exe" ]; then
-            echo "CRITICAL: Backend executable not found!"
+          $backendExe = ".\\electron\\resources\\fortuna-backend.exe"
+          $frontendDir = ".\\electron\\web-ui-build\\out"
+          if (-not (Test-Path $backendExe)) {
+            Write-Error "CRITICAL: Backend executable not found at $backendExe"
+            Get-ChildItem -Path ".\\electron\\resources\\" -Recurse
             exit 1
-          fi
-          if [ ! -d "electron/web-ui-build/out" ]; then
-            echo "CRITICAL: Frontend build directory not found!"
+          }
+          if (-not (Test-Path $frontendDir)) {
+            Write-Error "CRITICAL: Frontend build directory not found at $frontendDir"
+            Get-ChildItem -Path ".\\electron\\web-ui-build\\" -Recurse
             exit 1
-          fi
-          echo "All critical artifacts verified."
+          }
+          Write-Host "All critical artifacts verified successfully."
 
       - name: Build MSI Installer using electron-builder
+        shell: pwsh
         run: |
           cd electron
           npm run dist
-          echo "--- Verifying contents of electron/dist ---"
-          ls -R dist
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "electron-builder failed with exit code $LASTEXITCODE"
+            exit 1
+          }
+          Write-Host "--- Verifying contents of electron/dist ---"
+          Get-ChildItem -Path dist -Recurse
         env:
-          FORTUNA_BUILD_TYPE: 'full' # For now, we only build the full version
+          FORTUNA_BUILD_TYPE: 'full'
           DEBUG: 'electron-builder'
+          CI: 'true'
+
+      - name: Find Built MSI Path
+        id: find_msi
+        shell: pwsh
+        run: |
+          $msiFiles = Get-ChildItem -Path ".\\electron\\dist" -Filter "*.msi" -Recurse
+          if ($msiFiles.Count -eq 0) {
+            Write-Error "CRITICAL: No MSI files found in electron/dist directory."
+            Write-Host "Directory contents:"
+            Get-ChildItem -Path ".\\electron\\dist" -Recurse
+            exit 1
+          }
+          if ($msiFiles.Count -gt 1) {
+            Write-Warning "Multiple MSI files found. Using the first one: $($msiFiles[0].FullName)"
+          }
+          $msiPath = $msiFiles[0].FullName
+          Write-Host "MSI Path: $msiPath"
+          "msi_path=$msiPath" | Add-Content -Path $env:GITHUB_OUTPUT
 
       - name: Find Built MSI Path
         id: find_msi
