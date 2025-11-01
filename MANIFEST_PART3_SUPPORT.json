@@ -25,5 +25,6 @@
     "tests/test_msi_installation.ps1",
     "tests/test_silent_deployment.ps1",
     "tests/test_uninstall.ps1",
-    "tests/utils/test_odds.py"
+    "tests/utils/test_odds.py",
+    ".github/workflows/build-msi.yml"
 ]
