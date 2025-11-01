@@ -38,6 +38,9 @@ jobs:
       - name: Stage Frontend Assets for Packaging
         shell: pwsh
         run: |
+          # This script robustly stages the static frontend assets for Electron to package.
+          # It ensures the destination is clean, copies the files, and then verifies
+          # the file count to prevent packaging an incomplete UI.
           $source = "web_platform/frontend/out"
           $dest = "electron/web-ui-build/out"
           if (Test-Path $dest) {
@@ -68,8 +71,13 @@ jobs:
       - name: Build Backend Executable with PyInstaller
         shell: pwsh
         run: |
+          # Install all Python dependencies from the locked requirements file.
           pip install -r python_service/requirements.txt
-          pip install pyinstaller
+          # Run PyInstaller to create a single-file executable.
+          # --onefile: Bundles everything into a single .exe.
+          # --name: Specifies the output filename.
+          # --hidden-import: Explicitly includes modules that PyInstaller might miss.
+          # --add-data: Packages the data adapters directory alongside the executable.
           pyinstaller --onefile `
             --name fortuna-backend `
             --hidden-import=uvicorn `
@@ -137,6 +145,9 @@ jobs:
         id: locate_msi
         shell: pwsh
         run: |
+          # Finds the generated MSI file in the dist directory.
+          # It handles cases with no MSI or multiple MSIs, and then
+          # exports the path for use in subsequent steps.
           $msiFiles = Get-ChildItem -Path ".\\electron\\dist" -Filter "*.msi" -Recurse
           if ($msiFiles.Count -eq 0) {
             Write-Error "CRITICAL: No MSI files found in electron/dist directory."
@@ -166,6 +177,7 @@ jobs:
       - name: Create Release (on tag)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
+        timeout-minutes: 10
         with:
           files: ${{ steps.locate_msi.outputs.msi_path }}
           name: "Fortuna Faucet ${{ github.ref_name }}"
