@@ -4,6 +4,7 @@
   "description": "Fortuna Faucet - Racing Analysis Engine",
   "main": "main.js",
   "homepage": "./",
+  "author": "JBMason",
 
   "scripts": {
     "start": "electron .",
@@ -14,47 +15,24 @@
   "build": {
     "appId": "com.fortuna.faucet",
     "productName": "Fortuna Faucet",
-    "directories": {
-      "buildResources": "assets"
-    },
-
     "files": [
       "main.js",
       "preload.js",
-      "package.json",
-      "web-ui-build/out/**/*"
+      "assets/**/*",
+      "web-ui-build/out/**/*",
+      "resources/**/*"
     ],
-
-    "extraResources": [
-      {
-        "from": "resources/fortuna-backend.exe",
-        "to": "fortuna-backend.exe"
-      }
-    ],
-
     "asarUnpack": [
-      "web-ui-build/**/*"
+      "**/resources/fortuna-backend.exe"
     ],
-
     "win": {
-      "target": [
-        {
-          "target": "msi",
-          "arch": ["x64"]
-        }
-      ],
-      "icon": "assets/icon.ico",
-      "certificateFile": null,
-      "certificatePassword": null,
-      "sign": null,
-      "signingHashAlgorithms": ["sha256"]
+      "target": "msi",
+      "icon": "assets/icon.ico"
     },
-
     "msi": {
       "oneClick": false,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "shortcutName": "Fortuna Faucet"
+      "perMachine": true,
+      "createDesktopShortcut": true
     }
   },
 
