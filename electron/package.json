@@ -22,7 +22,8 @@
       "main.js",
       "preload.js",
       "package.json",
-      "web-ui-build/out/**/*"
+      "web-ui-build/out/**/*",
+      "resources/**/*"
     ],
 
     "extraResources": [
