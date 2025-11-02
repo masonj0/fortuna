@@ -1,225 +1,248 @@
 // electron/main.js
-const { app, BrowserWindow, Tray, Menu, nativeImage, dialog, ipcMain } = require('electron');
-const { spawn, execFile } = require('child_process');
+const { app, BrowserWindow, ipcMain, Menu } = require('electron');
 const path = require('path');
+const { spawn } = require('child_process');
 const fs = require('fs');
+const isDev = process.env.NODE_ENV === 'development';
+
+let mainWindow = null;
+let backendProcess = null;
 
 /**
- * A centralized function to show a critical error message to the user
- * and then safely quit the application.
- * @param {string} title - The title for the error dialog.
- * @param {string} message - The main content of the error message.
+ * Get the correct path for the backend executable.
+ * In production with extraResources, backend.exe is in the app root directory.
  */
-function showCriticalError(title, message) {
-  console.error(`[CRITICAL ERROR] ${title}: ${message}`);
-  dialog.showErrorBox(title, message);
-  app.quit();
+function getBackendExePath() {
+  if (isDev) {
+    // Development: backend in electron/resources/fortuna-backend.exe
+    return path.join(__dirname, 'resources', 'fortuna-backend.exe');
+  } else {
+    // Production: extraResources places backend.exe in app root
+    // app.getAppPath() = /Program Files/Fortuna Faucet/resources/app.asar.unpacked
+    // Go up two levels to: /Program Files/Fortuna Faucet/fortuna-backend.exe
+    const asarUnpackedPath = app.getAppPath();
+    const appRoot = path.join(asarUnpackedPath, '..', '..');
+    return path.join(appRoot, 'fortuna-backend.exe');
+  }
 }
 
-class FortunaDesktopApp {
-  constructor() {
-    this.mainWindow = null;
-    this.tray = null;
-    this.backendProcess = null;
-
-    if (!app.requestSingleInstanceLock()) {
-      app.quit();
-    } else {
-      app.on('second-instance', () => {
-        if (this.mainWindow) {
-          if (this.mainWindow.isMinimized()) this.mainWindow.restore();
-          this.mainWindow.focus();
-        }
-      });
-    }
+/**
+ * Get the frontend path for both development and production.
+ */
+function getFrontendPath() {
+  if (isDev) {
+    return path.join(__dirname, 'web-ui-build', 'out');
+  } else {
+    return path.join(app.getAppPath(), 'web-ui-build', 'out');
   }
+}
 
-  createMainWindow() {
-    this.mainWindow = new BrowserWindow({
-      width: 1600,
-      height: 1000,
-      title: 'Fortuna Faucet - Racing Analysis',
-      icon: path.join(__dirname, 'assets', 'icon.ico'),
-      webPreferences: {
-        nodeIntegration: false,
-        contextIsolation: true,
-        preload: path.join(__dirname, 'preload.js')
-      },
-      autoHideMenuBar: true,
-      backgroundColor: '#1a1a2e',
-      show: false // Window is created hidden and shown only when ready
-    });
+/**
+ * Start the Python backend process.
+ */
+function startBackend() {
+  return new Promise((resolve, reject) => {
+    const backendExePath = getBackendExePath();
 
-    this.mainWindow.on('close', (event) => {
-      if (!app.isQuitting) {
-        event.preventDefault();
-        this.mainWindow.hide();
-      }
-    });
+    console.log('[MAIN] Starting backend...');
+    console.log('[MAIN] Backend executable path:', backendExePath);
+    console.log('[MAIN] App path:', app.getAppPath());
 
-    if (!app.isPackaged) {
-      this.mainWindow.loadURL('http://localhost:3000');
-    } else {
-      this.mainWindow.loadFile(path.join(__dirname, '..', 'web-ui-build', 'out', 'index.html'));
-    }
-  }
+    // Verify backend executable exists
+    if (!fs.existsSync(backendExePath)) {
+      console.error('[MAIN] ERROR: Backend executable not found!');
+      console.error('[MAIN] Expected at:', backendExePath);
 
-  createSystemTray() {
-    const iconPath = path.join(__dirname, 'assets', 'tray-icon.png');
-    const icon = nativeImage.createFromPath(iconPath);
-    this.tray = new Tray(icon.resize({ width: 16, height: 16 }));
-
-    const contextMenu = Menu.buildFromTemplate([
-      { label: 'Show Dashboard', click: () => this.showWindow() },
-      { type: 'separator' },
-      { label: 'Quit Fortuna Faucet', click: () => this.quitApp() }
-    ]);
-
-    this.tray.setToolTip('Fortuna Faucet - Monitoring Races');
-    this.tray.setContextMenu(contextMenu);
-    this.tray.on('double-click', () => this.showWindow());
-  }
-
-  showWindow() {
-    if (this.mainWindow) {
-      this.mainWindow.show();
-      this.mainWindow.focus();
-    }
-  }
-
-  quitApp() {
-    app.isQuitting = true;
-    app.quit();
-  }
-
-  startBackend() {
-    return new Promise((resolve, reject) => {
-      const platform = process.platform;
-      const backendExe = platform === 'win32' ? 'fortuna-backend.exe' : 'fortuna-backend';
-      let executablePath;
-
-      if (!app.isPackaged) {
-        // DEVELOPMENT: Run via Python script runner
-        executablePath = path.join(process.cwd(), '..', '.venv', 'Scripts', 'python.exe');
-        const scriptPath = path.join(process.cwd(), '..', 'run_backend.py');
-        this.backendProcess = spawn(executablePath, [scriptPath], { cwd: path.join(process.cwd(), '..') });
-      } else {
-        // PRODUCTION: Run the packaged executable from the 'resources' directory
-        // process.resourcesPath points to the directory containing the app's resources
-        executablePath = path.join(process.resourcesPath, 'resources', backendExe);
-
-        console.log(`[Backend Starter] Attempting to launch production backend at: ${executablePath}`);
-
-        if (!fs.existsSync(executablePath)) {
-          return reject(new Error(`Backend executable not found. The application is corrupted or installed incorrectly. Expected at: ${executablePath}`));
-        }
-
-        this.backendProcess = spawn(executablePath, [], {
-          // CRITICAL: Set CWD to the executable's directory to find bundled resources
-          cwd: path.dirname(executablePath)
+      // Debug: list app structure
+      const appRoot = path.dirname(app.getAppPath());
+      console.error('[MAIN] App root directory:', appRoot);
+      console.error('[MAIN] Contents of app root:');
+      try {
+        const files = fs.readdirSync(appRoot);
+        files.forEach(f => {
+          const fullPath = path.join(appRoot, f);
+          const isDir = fs.statSync(fullPath).isDirectory();
+          console.error('[MAIN]   -', isDir ? `[DIR] ${f}` : f);
         });
+      } catch (err) {
+        console.error('[MAIN]   Error reading directory:', err.message);
       }
 
-      let stdoutBuffer = '';
-      let startupResolved = false;
+      reject(new Error(`Backend executable not found at ${backendExePath}`));
+      return;
+    }
 
-      // Safety timeout for backend startup
-      const startupTimeout = setTimeout(() => {
-        if (!startupResolved) {
-          startupResolved = true;
-          reject(new Error(`Backend process failed to start within 30 seconds. Timeout exceeded. \n---LOGS---\n${stdoutBuffer}`));
-        }
-      }, 30000);
+    console.log('[MAIN] Backend executable found, spawning process...');
 
-      this.backendProcess.stdout.on('data', (data) => {
-        const logMsg = data.toString();
-        stdoutBuffer += logMsg;
-        console.log(`[Backend] ${logMsg.trim()}`);
-        // Look for the Uvicorn startup message as the success signal
-        if (!startupResolved && logMsg.includes('Uvicorn running on')) {
-          startupResolved = true;
-          clearTimeout(startupTimeout);
-          console.log('[Backend Starter] Backend startup signal detected.');
-          resolve();
-        }
-      });
-
-      this.backendProcess.stderr.on('data', (data) => {
-        console.error(`[Backend STDERR] ${data.toString().trim()}`);
-      });
-
-      this.backendProcess.on('error', (err) => {
-        if (!startupResolved) {
-          startupResolved = true;
-          clearTimeout(startupTimeout);
-          reject(new Error(`Failed to spawn backend process. Error: ${err.message}`));
-        }
-      });
-
-      this.backendProcess.on('close', (code) => {
-        console.log(`[Backend] Process exited with code ${code}`);
-        if (!startupResolved) {
-          startupResolved = true;
-          clearTimeout(startupTimeout);
-          reject(new Error(`Backend process exited prematurely with code ${code} before sending startup signal. \n---LOGS---\n${stdoutBuffer}`));
-        }
-      });
+    // Spawn backend process
+    backendProcess = spawn(backendExePath, [], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      detached: false,
+      shell: false
     });
-  }
 
-  async initialize() {
-    this.createSystemTray();
+    backendProcess.stdout.on('data', (data) => {
+      console.log('[BACKEND STDOUT]:', data.toString().trim());
+    });
 
-    // The UI now waits for the backend to start.
-    try {
-      console.log('Attempting to start backend...');
-      await this.startBackend();
-      console.log('Backend started successfully. Creating main window...');
+    backendProcess.stderr.on('data', (data) => {
+      console.error('[BACKEND STDERR]:', data.toString().trim());
+    });
 
-      this.createMainWindow();
-      this.mainWindow.once('ready-to-show', () => {
-        this.mainWindow.show();
-      });
+    backendProcess.on('error', (err) => {
+      console.error('[MAIN] Backend process spawn error:', err);
+      reject(err);
+    });
 
-    } catch (error) {
-      showCriticalError(
-        'Application Startup Failed',
-        `The backend service could not be started, so the application cannot run.\n\nDetails: ${error.message}`
-      );
-    }
-  }
+    backendProcess.on('exit', (code, signal) => {
+      console.log('[MAIN] Backend process exited with code:', code, 'signal:', signal);
+    });
 
-  cleanup() {
-    console.log('Cleaning up backend process...');
-    if (this.backendProcess) {
-      // Use 'taskkill' on Windows for a more forceful termination
-      if (process.platform === "win32") {
-        spawn("taskkill", ["/pid", this.backendProcess.pid, '/f', '/t']);
-      } else {
-        this.backendProcess.kill();
-      }
-    }
-  }
+    // Wait for backend to start listening
+    setTimeout(() => {
+      console.log('[MAIN] Backend startup completed');
+      resolve();
+    }, 5000);
+  });
 }
 
-let fortunaApp;
+/**
+ * Create the application window and load the frontend.
+ */
+function createWindow() {
+  const frontendPath = getFrontendPath();
+  const indexPath = path.join(frontendPath, 'index.html');
 
-app.whenReady().then(() => {
-  ipcMain.handle('get-api-key', () => {
-    // This is a placeholder for future secure key handling
-    return process.env.API_KEY || null;
+  console.log('[MAIN] Creating window...');
+  console.log('[MAIN] Frontend path:', frontendPath);
+  console.log('[MAIN] Index path:', indexPath);
+
+  // Verify frontend files exist
+  if (!fs.existsSync(indexPath)) {
+    console.error('[MAIN] ERROR: Frontend index.html not found!');
+    console.error('[MAIN] Expected at:', indexPath);
+
+    if (fs.existsSync(frontendPath)) {
+      console.error('[MAIN] Contents of frontend directory:');
+      try {
+        const files = fs.readdirSync(frontendPath);
+        files.forEach(f => console.error('[MAIN]   -', f));
+      } catch (err) {
+        console.error('[MAIN]   Error reading directory:', err.message);
+      }
+    } else {
+      console.error('[MAIN] Frontend directory does not exist!');
+    }
+  }
+
+  mainWindow = new BrowserWindow({
+    width: 1400,
+    height: 900,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      enableRemoteModule: false,
+      preload: path.join(__dirname, 'preload.js'),
+      sandbox: true
+    },
+    icon: path.join(__dirname, 'assets', 'icon.ico')
   });
 
-  fortunaApp = new FortunaDesktopApp();
-  fortunaApp.initialize();
-});
+  // Load frontend
+  if (isDev) {
+    console.log('[MAIN] Development mode: loading from localhost:3000');
+    mainWindow.loadURL('http://localhost:3000');
+    mainWindow.webDevTools.openDevTools();
+  } else {
+    console.log('[MAIN] Production mode: loading from file:', indexPath);
+    mainWindow.loadFile(indexPath).catch(err => {
+      console.error('[MAIN] Error loading index.html:', err);
+    });
+  }
 
-app.on('window-all-closed', (event) => {
-  event.preventDefault(); // Keep the app running in the tray
-});
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
 
-app.on('before-quit', () => {
-  if (fortunaApp) {
-    fortunaApp.cleanup();
+  console.log('[MAIN] Window created');
+}
+
+/**
+ * App event: ready
+ */
+app.on('ready', async () => {
+  console.log('[MAIN] App ready event');
+  console.log('[MAIN] App version:', app.getVersion());
+  console.log('[MAIN] Node version:', process.version);
+  console.log('[MAIN] Electron version:', process.versions.electron);
+  console.log('[MAIN] App path:', app.getAppPath());
+  console.log('[MAIN] User data path:', app.getPath('userData'));
+
+  try {
+    console.log('[MAIN] ========== STARTING BACKEND ==========');
+    await startBackend();
+    console.log('[MAIN] ========== BACKEND STARTED ==========');
+
+    console.log('[MAIN] ========== CREATING WINDOW ==========');
+    createWindow();
+    console.log('[MAIN] ========== WINDOW CREATED ==========');
+  } catch (err) {
+    console.error('[MAIN] FATAL ERROR during startup:', err);
+
+    const { dialog } = require('electron');
+    dialog.showErrorBox(
+      'Fortuna Faucet Startup Error',
+      `Failed to start application:\n\n${err.message}\n\nPlease check the application logs for more details.\n\nLogs location: ${app.getPath('userData')}`
+    );
+
+    app.quit();
   }
 });
+
+/**
+ * App event: window-all-closed
+ */
+app.on('window-all-closed', () => {
+  console.log('[MAIN] All windows closed');
+  if (process.platform !== 'darwin') {
+    if (backendProcess) {
+      console.log('[MAIN] Terminating backend process');
+      backendProcess.kill();
+    }
+    app.quit();
+  }
+});
+
+/**
+ * App event: activate (macOS)
+ */
+app.on('activate', () => {
+  console.log('[MAIN] Activate event');
+  if (mainWindow === null) {
+    createWindow();
+  }
+});
+
+/**
+ * App event: before-quit
+ */
+app.on('before-quit', () => {
+  console.log('[MAIN] Before quit event');
+  if (backendProcess) {
+    console.log('[MAIN] Killing backend process');
+    try {
+      backendProcess.kill();
+    } catch (err) {
+      console.error('[MAIN] Error killing backend:', err);
+    }
+  }
+});
+
+/**
+ * Handle uncaught exceptions
+ */
+process.on('uncaughtException', (err) => {
+  console.error('[MAIN] Uncaught exception:', err);
+});
+
+console.log('[MAIN] ========== ELECTRON MAIN PROCESS LOADED ==========');

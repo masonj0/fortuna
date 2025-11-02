@@ -129,11 +129,11 @@ jobs:
           }
           Write-Host "All critical artifacts verified successfully."
 
-      - name: Verify electron/package.json Has Build Config
+      - name: Verify electron/package.json Build Configuration
         shell: pwsh
         run: |
-          # This is CRITICAL - verify the build configuration exists
-          # before electron-builder runs.
+          Write-Host "=== Verifying electron/package.json ===" -ForegroundColor Cyan
+
           $packageJson = Get-Content electron/package.json | ConvertFrom-Json
 
           if (-not $packageJson.build) {
@@ -141,63 +141,143 @@ jobs:
             exit 1
           }
 
-          if (-not $packageJson.build.files) {
-            Write-Error "CRITICAL: electron/package.json build section missing 'files' array!"
+          if (-not $packageJson.build.extraResources) {
+            Write-Error "CRITICAL: electron/package.json build section missing 'extraResources' array!"
             exit 1
           }
 
-          $hasResources = $packageJson.build.files -contains "resources/**/*"
-          $hasWebUI = $packageJson.build.files -match "web-ui-build"
+          Write-Host "✅ 'extraResources' configuration found" -ForegroundColor Green
+          Write-Host "Extra resources:"
+          $packageJson.build.extraResources | ForEach-Object {
+            Write-Host "  from: $($_.from) -> to: $($_.to)" -ForegroundColor Cyan
+          }
 
-          if (-not $hasResources) {
-            Write-Error "CRITICAL: 'files' does not include resources/**/*"
+      - name: Verify Pre-Build Assets Exist
+        shell: pwsh
+        run: |
+          Write-Host "`n=== Verifying pre-build staging ===" -ForegroundColor Cyan
+
+          $backendExe = ".\electron\resources\fortuna-backend.exe"
+          $frontendDir = ".\electron\web-ui-build\out"
+          $frontendIndex = "$frontendDir\index.html"
+
+          if (-not (Test-Path $backendExe)) {
+            Write-Error "CRITICAL: Backend executable missing at: $backendExe"
+            exit 1
+          }
+          Write-Host "✅ Backend executable found: $('{0:N2}' -f ((Get-Item $backendExe).Length / 1MB)) MB" -ForegroundColor Green
+
+          if (-not (Test-Path $frontendDir)) {
+            Write-Error "CRITICAL: Frontend directory missing at: $frontendDir"
             exit 1
           }
 
-          if (-not $hasWebUI) {
-            Write-Error "CRITICAL: 'files' does not include web-ui-build"
+          if (-not (Test-Path $frontendIndex)) {
+            Write-Error "CRITICAL: Frontend index.html missing at: $frontendIndex"
             exit 1
           }
 
-          Write-Host "✅ electron/package.json build configuration is valid"
-          Write-Host "Files to include:"
-          $packageJson.build.files | ForEach-Object { Write-Host "  - $_" }
+          $fileCount = @(Get-ChildItem -Path $frontendDir -Recurse).Count
+          Write-Host "✅ Frontend directory found with $fileCount files" -ForegroundColor Green
 
       - name: Build MSI Installer using electron-builder
         shell: pwsh
         run: |
           cd electron
-          # CRITICAL: electron/package.json MUST have "files" and "asarUnpack"
-          # configured to point to:
-          #   - resources/ (backend executable)
-          #   - web-ui-build/out/ (frontend static build)
-          #
-          # Without this, electron-builder won't know WHERE to find
-          # the backend and frontend assets, resulting in a sparse MSI.
+          Write-Host "`n=== Building MSI with electron-builder ===" -ForegroundColor Cyan
           npm run dist
           if ($LASTEXITCODE -ne 0) {
             Write-Error "electron-builder failed with exit code $LASTEXITCODE"
             exit 1
           }
-          Write-Host "--- Verifying contents of electron/dist ---"
-          Get-ChildItem -Path dist -Recurse
+          Write-Host "✅ MSI build completed" -ForegroundColor Green
         env:
           FORTUNA_BUILD_TYPE: 'full'
           DEBUG: 'electron-builder'
           CI: 'true'
 
+      - name: Extract and Deep Search MSI Contents
+        shell: pwsh
+        run: |
+          Write-Host "`n========== DEEP MSI CONTENTS SEARCH ==========" -ForegroundColor Cyan
+
+          # Find the MSI file
+          $msiFile = Get-ChildItem -Path ".\electron\dist" -Filter "*.msi" -Recurse | Select-Object -First 1
+
+          if (-not $msiFile) {
+            Write-Error "No MSI file found in .\electron\dist"
+            exit 1
+          }
+
+          Write-Host "MSI file: $($msiFile.Name)" -ForegroundColor Green
+          Write-Host "Size: $('{0:N2}' -f ($msiFile.Length / 1MB)) MB" -ForegroundColor Green
+
+          # Extract MSI to inspect
+          $extractPath = ".\msi-extract"
+          if (Test-Path $extractPath) {
+            Remove-Item -Recurse -Force $extractPath
+          }
+          New-Item -ItemType Directory -Path $extractPath -Force | Out-Null
+
+          Write-Host "Extracting MSI..." -ForegroundColor Yellow
+
+          # Extract using 7z if available
+          $seven_zip = Get-Command 7z -ErrorAction SilentlyContinue
+          if ($seven_zip) {
+            & 7z x "$($msiFile.FullName)" -o"$extractPath" -y -bso0 -bsp0 | Out-Null
+          } else {
+            & msiexec /a "$($msiFile.FullName)" /qn TARGETDIR="$((Resolve-Path $extractPath).Path)"
+          }
+
+          # SEARCH: Find ALL .exe files
+          Write-Host "`n=== Searching for all .exe files ===" -ForegroundColor Yellow
+          $exeFiles = @(Get-ChildItem -Path $extractPath -Recurse -Filter "*.exe" -ErrorAction SilentlyContinue)
+
+          if ($exeFiles.Count -eq 0) {
+            Write-Host "❌ NO .exe files found in MSI!" -ForegroundColor Red
+            Write-Host "`nDirectory structure:"
+            Get-ChildItem -Path $extractPath -Recurse -Directory | Select-Object -First 20 | ForEach-Object {
+              Write-Host "  $($_.FullName.Substring($extractPath.Length))"
+            }
+            exit 1
+          }
+
+          Write-Host "✅ Found $($exeFiles.Count) .exe file(s):" -ForegroundColor Green
+          $exeFiles | ForEach-Object {
+            $relativePath = $_.FullName.Substring($extractPath.Length + 1)
+            $size = '{0:N2}' -f ($_.Length / 1MB)
+            Write-Host "   - [$($size) MB] $relativePath" -ForegroundColor Cyan
+          }
+
+          # Search for fortuna-backend.exe specifically
+          $backendFound = $exeFiles | Where-Object { $_.Name -eq "fortuna-backend.exe" }
+          if (-not $backendFound) {
+            Write-Host "`n❌ fortuna-backend.exe NOT found in MSI" -ForegroundColor Red
+            Write-Host "This means 'extraResources' is not working correctly" -ForegroundColor Yellow
+            exit 1
+          }
+
+          Write-Host "`n✅ BACKEND EXECUTABLE FOUND!" -ForegroundColor Green
+          Write-Host "   Location: $($backendFound.FullName.Substring($extractPath.Length + 1))" -ForegroundColor Cyan
+
+          # Search for index.html
+          Write-Host "`n=== Searching for frontend index.html ===" -ForegroundColor Yellow
+          $indexFiles = @(Get-ChildItem -Path $extractPath -Recurse -Filter "index.html" -ErrorAction SilentlyContinue)
+          if ($indexFiles.Count -eq 0) {
+            Write-Host "❌ NO index.html found!" -ForegroundColor Red
+            exit 1
+          }
+          Write-Host "✅ Frontend found at: $($indexFiles[0].FullName.Substring($extractPath.Length + 1))" -ForegroundColor Green
+
+          Write-Host "`n✅ ALL CRITICAL COMPONENTS VERIFIED!" -ForegroundColor Green
+
       - name: Locate Built MSI Path
         id: locate_msi
         shell: pwsh
         run: |
-          # Finds the generated MSI file in the dist directory.
-          # It handles cases with no MSI or multiple MSIs, and then
-          # exports the path for use in subsequent steps.
-          $msiFiles = Get-ChildItem -Path ".\\electron\\dist" -Filter "*.msi" -Recurse
+          $msiFiles = Get-ChildItem -Path ".\electron\dist" -Filter "*.msi" -Recurse
           if ($msiFiles.Count -eq 0) {
             Write-Error "CRITICAL: No MSI files found in electron/dist directory."
-            Write-Host "Directory contents:"
-            Get-ChildItem -Path ".\\electron\\dist" -Recurse
             exit 1
           }
           if ($msiFiles.Count -gt 1) {

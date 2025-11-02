@@ -1,59 +1,76 @@
 {
   "name": "fortuna-faucet",
   "version": "1.0.0",
-  "description": "Fortuna Faucet Data Management Console",
+  "description": "Fortuna Faucet - Racing Analysis Engine",
   "main": "main.js",
+  "homepage": "./",
+
   "scripts": {
     "start": "electron .",
-    "dist": "npm run prebuild-ui && electron-builder",
-    "prebuild-ui": "npm install --prefix ../web_platform/frontend && npm run build --prefix ../web_platform/frontend && (if exist web-ui-build rmdir /s /q web-ui-build) && mkdir web-ui-build && (robocopy ../web_platform/frontend/out web-ui-build/out /E & if %ERRORLEVEL% LEQ 7 (exit /b 0) else (exit /b %ERRORLEVEL%))",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dist": "electron-builder",
+    "dev": "electron ."
   },
-  "author": "JBMason",
-  "devDependencies": {
-    "cross-env": "^7.0.3",
-    "electron": "^28.0.0",
-    "electron-builder": "^24.9.1"
-  },
+
   "build": {
     "appId": "com.fortuna.faucet",
     "productName": "Fortuna Faucet",
-    "artifactName": "${productName}-${version}-${arch}.${ext}",
-    "extraResources": [
-      {
-        "from": "resources",
-        "to": "resources",
-        "filter": [
-          "**/*"
-        ]
-      }
-    ],
+    "directories": {
+      "buildResources": "assets"
+    },
+
     "files": [
       "main.js",
       "preload.js",
       "package.json",
       "web-ui-build/out/**/*"
     ],
+
+    "extraResources": [
+      {
+        "from": "resources/fortuna-backend.exe",
+        "to": "fortuna-backend.exe"
+      }
+    ],
+
+    "asarUnpack": [
+      "web-ui-build/**/*"
+    ],
+
     "win": {
       "target": [
         {
           "target": "msi",
-          "arch": [
-            "x64"
-          ]
+          "arch": ["x64"]
         }
       ],
-      "icon": "assets/icon.ico"
+      "certificateFile": null,
+      "certificatePassword": null,
+      "sign": null,
+      "signingHashAlgorithms": ["sha256"]
     },
+
     "msi": {
       "oneClick": false,
-      "perMachine": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Fortuna Faucet",
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico"
+    },
+
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Fortuna Faucet"
     }
   },
-  "dependencies": {
-    "node-notifier": "^10.0.1"
+
+  "dependencies": {},
+
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1"
   }
 }
