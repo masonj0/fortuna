@@ -27,6 +27,7 @@
     "jules-scratch/verification/launch.png",
     "jules-scratch/verification/verification.png",
     "jules-scratch/verification/verify_error_handling.py",
+    "jules-scratch/verification/verify_frontend.py",
     "jules-scratch/verification/verify_launch.py",
     "jules-scratch/verification/verify_page.py",
     "manual_override_tool.py",
