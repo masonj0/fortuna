@@ -37,6 +37,13 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Diagnostic - Initial Workspace Structure
+        shell: pwsh
+        run: |
+          Write-Host "--- [DIAG] Initial Workspace Structure ---"
+          Get-ChildItem -Recurse -Depth 3 | Out-String -Width 120
+          Write-Host "------------------------------------------"
+
       # ===== FRONTEND BUILD =====
       - name: Clear Caches for Fresh Build
         shell: pwsh
@@ -65,6 +72,10 @@ jobs:
 
           $fileCount = (Get-ChildItem -Path "out" -Recurse -File | Measure-Object).Count
           Write-Host "✅ Frontend built successfully: $fileCount files in out/" -ForegroundColor Green
+
+          Write-Host "--- [DIAG] Frontend Output Files (web_platform/frontend/out) ---"
+          Get-ChildItem -Recurse "out" | Out-String -Width 120
+          Write-Host "--------------------------------------------------------------"
 
       - name: Stage Frontend Assets for Electron
         shell: pwsh
@@ -98,6 +109,10 @@ jobs:
           }
 
           Write-Host "✅ Successfully staged $destFiles frontend files" -ForegroundColor Green
+
+          Write-Host "--- [DIAG] Staged Frontend Assets (electron/web-ui-build) ---"
+          Get-ChildItem -Recurse $dest | Out-String -Width 120
+          Write-Host "---------------------------------------------------------------"
 
       # ===== BACKEND BUILD =====
       - name: Install Python Dependencies
@@ -150,6 +165,10 @@ jobs:
 
           Write-Host "✅ Backend executable built" -ForegroundColor Green
 
+          Write-Host "--- [DIAG] PyInstaller Output (dist/) ---"
+          Get-ChildItem -Recurse ".\dist\" | Out-String -Width 120
+          Write-Host "-----------------------------------------"
+
       - name: Stage Backend Executable
         shell: pwsh
         run: |
@@ -184,6 +203,10 @@ jobs:
           }
 
           Write-Host "✅ Backend executable staged successfully" -ForegroundColor Green
+
+          Write-Host "--- [DIAG] Staged Backend Assets (electron/resources) ---"
+          Get-ChildItem -Recurse $destDir | Out-String -Width 120
+          Write-Host "---------------------------------------------------------"
 
       # ===== ELECTRON BUILD =====
       - name: Install Electron Dependencies
@@ -241,54 +264,12 @@ jobs:
 
           Write-Host "`n✅ All pre-build checks passed!" -ForegroundColor Green
 
-      - name: Force-Correct package.json on Runner
+      - name: Diagnostic - Final Pre-Build Structure
         shell: pwsh
         run: |
-          $correctConfig = @'
-          {
-            "name": "fortuna-faucet",
-            "version": "1.0.0",
-            "description": "Fortuna Faucet Data Management Console",
-            "main": "main.js",
-            "scripts": {
-              "start": "electron .",
-              "dist": "electron-builder"
-            },
-            "author": "Fortuna Development Team",
-            "devDependencies": {
-              "electron": "^28.0.0",
-              "electron-builder": "^24.9.1"
-            },
-            "build": {
-              "appId": "com.fortuna.faucet",
-              "productName": "Fortuna Faucet",
-              "files": [
-                "main.js",
-                "preload.js",
-                "assets/**/*",
-                "web-ui-build/**/*",
-                "!node_modules/**/*"
-              ],
-              "extraResources": [
-                {
-                  "from": "resources/fortuna-backend.exe",
-                  "to": "fortuna-backend.exe"
-                }
-              ],
-              "win": {
-                "target": "msi",
-                "icon": "assets/icon.ico"
-              },
-              "msi": {
-                "oneClick": false,
-                "perMachine": true,
-                "createDesktopShortcut": true
-              }
-            }
-          }
-          '@
-          Set-Content -Path "electron/package.json" -Value $correctConfig -Force
-          Write-Host "✅ Forcefully overwrote electron/package.json with correct configuration." -ForegroundColor Green
+          Write-Host "--- [DIAG] Final Structure of 'electron' directory before build ---"
+          Get-ChildItem -Recurse ".\electron\" -Depth 4 | Out-String -Width 120
+          Write-Host "--------------------------------------------------------------------"
 
       - name: Build MSI Installer
         shell: pwsh
@@ -342,6 +323,30 @@ jobs:
           } else {
             $fullPath = (Resolve-Path $extractPath).Path
             & msiexec /a "$($msiFile.FullName)" /qn TARGETDIR="$fullPath"
+          }
+
+          Write-Host "--- [DIAG] Full Extracted MSI Contents ---"
+          Get-ChildItem -Recurse $extractPath | Out-String -Width 120
+          Write-Host "------------------------------------------"
+
+          # Stage 2: Extract the CAB file to see the real contents
+          $cabFile = Get-ChildItem -Path $extractPath -Recurse -Filter "*.cab" | Select-Object -First 1
+          if ($cabFile) {
+            $cabExtractPath = ".\cab-extract"
+            if (Test-Path $cabExtractPath) { Remove-Item -Recurse -Force $cabExtractPath }
+            New-Item -ItemType Directory -Path $cabExtractPath -Force | Out-Null
+
+            Write-Host "--- [DIAG] Extracting CAB file: $($cabFile.Name) ---"
+            & 7z x "$($cabFile.FullName)" -o"$cabExtractPath" -y -bso0 -bsp0 | Out-Null
+
+            Write-Host "--- [DIAG] Full Extracted CAB Contents ---"
+            Get-ChildItem -Recurse $cabExtractPath | Out-String -Width 120
+            Write-Host "------------------------------------------"
+
+            # Search within the CAB contents
+            $extractPath = $cabExtractPath
+          } else {
+            Write-Warning "No CAB file found in MSI, searching primary extraction..."
           }
 
           # Search for critical components
