@@ -22,14 +22,12 @@
     "files": [
       "main.js",
       "preload.js",
-      "install-validator.js",
       "package.json",
       "resources/**/*",
       "web-ui-build/out/**/*"
     ],
     "asarUnpack": [
-      "resources/fortuna-backend.exe",
-      "web-ui-build/**/*"
+      "resources/**/*"
     ],
     "win": {
       "target": [
