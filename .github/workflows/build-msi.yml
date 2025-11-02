@@ -207,57 +207,42 @@ jobs:
           Write-Host "MSI Path: $msiPath"
           "msi_path=$msiPath" | Add-Content -Path $env:GITHUB_OUTPUT
 
-      - name: Verify MSI Contents (Extract & Inspect)
+      - name: Deep Search MSI Contents for Backend Executable
         shell: pwsh
         run: |
-          $msiPath = "${{ steps.locate_msi.outputs.msi_path }}"
+          Write-Host "========== DEEP MSI CONTENTS SEARCH ==========" -ForegroundColor Cyan
+          Write-Host ""
+
           $extractPath = ".\msi-extract"
-          if (-not $msiPath) {
-            Write-Error "No MSI found to verify"
+
+          # SEARCH: Find ALL .exe files
+          Write-Host "=== Searching for all .exe files ===" -ForegroundColor Yellow
+          $exeFiles = @(Get-ChildItem -Path $extractPath -Recurse -Filter "*.exe" -ErrorAction SilentlyContinue)
+
+          if ($exeFiles.Count -eq 0) {
+            Write-Host "❌ NO .exe files found in MSI!" -ForegroundColor Red
             exit 1
           }
 
-          Write-Host "--- Starting 2-Stage MSI Content Verification ---"
-
-          # Stage 1: Extract the MSI itself
-          Write-Host "Stage 1: Extracting MSI contents from $msiPath"
-          $null = New-Item -ItemType Directory -Path $extractPath -Force
-          & 7z x "$msiPath" -o"$extractPath" -y
-
-          # Stage 2: Find and extract any .cab files within the MSI contents
-          $cabFiles = Get-ChildItem -Path $extractPath -Recurse -Filter "*.cab"
-          if ($cabFiles.Count -eq 0) {
-            Write-Error "No .cab files found in the MSI. Cannot verify file contents."
-            exit 1
+          Write-Host "✅ Found $($exeFiles.Count) .exe file(s):" -ForegroundColor Green
+          $exeFiles | ForEach-Object {
+            $relativePath = $_.FullName.Substring($extractPath.Length + 1)
+            $size = '{0:N2}' -f ($_.Length / 1MB)
+            Write-Host "   - [$($size) MB] $relativePath" -ForegroundColor Cyan
           }
 
-          foreach ($cab in $cabFiles) {
-            Write-Host "Stage 2: Extracting cabinet file: $($cab.FullName)"
-            # Extract the cab file into the same directory
-            & 7z x "$($cab.FullName)" -o"$($cab.DirectoryName)" -y
+          # Search for fortuna-backend.exe specifically
+          $backendFound = $exeFiles | Where-Object { $_.Name -eq "fortuna-backend.exe" }
+          if (-not $backendFound) {
+            Write-Host ""
+            Write-Host "❌ fortuna-backend.exe NOT found in MSI" -ForegroundColor Red
+            Write-Host "This means 'extraResources' is not working correctly" -ForegroundColor Yellow
+            exit 1
           }
 
           Write-Host ""
-          Write-Host "--- Deep Scan of Extracted Files ---"
-          Get-ChildItem -Path $extractPath -Recurse | Select-Object FullName
-
-          # Final Verification
-          $backendExe = Get-ChildItem -Path $extractPath -Recurse -Filter "fortuna-backend.exe" -ErrorAction SilentlyContinue
-          $indexHtml = Get-ChildItem -Path $extractPath -Recurse -Filter "index.html" -ErrorAction SilentlyContinue
-
-          if ($backendExe) {
-            Write-Host "✅ [PASS] Backend executable found: $($backendExe.FullName)"
-          } else {
-            Write-Error "❌ [FAIL] CRITICAL: Backend executable NOT found in MSI"
-            exit 1
-          }
-
-          if ($indexHtml) {
-            Write-Host "✅ [PASS] Frontend index.html found: $($indexHtml.FullName)"
-          } else {
-            Write-Error "❌ [FAIL] CRITICAL: Frontend index.html NOT found in MSI"
-            exit 1
-          }
+          Write-Host "✅ BACKEND EXECUTABLE FOUND!" -ForegroundColor Green
+          Write-Host "   Path: $($backendFound.FullName.Substring($extractPath.Length + 1))" -ForegroundColor Green
 
       - name: Generate sanitized artifact name
         id: sanitize

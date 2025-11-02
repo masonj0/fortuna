@@ -104,10 +104,9 @@ class FortunaDesktopApp {
         const scriptPath = path.join(process.cwd(), '..', 'run_backend.py');
         this.backendProcess = spawn(executablePath, [scriptPath], { cwd: path.join(process.cwd(), '..') });
       } else {
-        // PRODUCTION: Run the packaged executable
-        // path.join(__dirname) points to the root of app.asar
-        // The executable is unpacked into a sibling directory 'app.asar.unpacked'
-        executablePath = path.join(path.dirname(app.getAppPath()), 'app.asar.unpacked', 'resources', backendExe);
+        // PRODUCTION: Run the packaged executable from the 'resources' directory
+        // process.resourcesPath points to the directory containing the app's resources
+        executablePath = path.join(process.resourcesPath, 'resources', backendExe);
 
         console.log(`[Backend Starter] Attempting to launch production backend at: ${executablePath}`);
 

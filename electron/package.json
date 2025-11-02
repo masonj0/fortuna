@@ -19,15 +19,20 @@
     "appId": "com.fortuna.faucet",
     "productName": "Fortuna Faucet",
     "artifactName": "${productName}-${version}-${arch}.${ext}",
+    "extraResources": [
+      {
+        "from": "resources",
+        "to": "resources",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
     "files": [
       "main.js",
       "preload.js",
       "package.json",
-      "resources/**/*",
       "web-ui-build/out/**/*"
-    ],
-    "asarUnpack": [
-      "resources/**/*"
     ],
     "win": {
       "target": [
@@ -38,13 +43,7 @@
           ]
         }
       ],
-      "icon": "assets/icon.ico",
-      "certificateFile": null,
-      "certificatePassword": null,
-      "signingHashAlgorithms": [
-        "sha256"
-      ],
-      "sign": null
+      "icon": "assets/icon.ico"
     },
     "msi": {
       "oneClick": false,
