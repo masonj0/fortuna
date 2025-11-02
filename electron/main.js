@@ -13,7 +13,7 @@ class FortunaDesktopApp {
 
   async startBackend() {
     return new Promise((resolve, reject) => {
-      const isDev = process.env.NODE_ENV !== 'production';
+      const isDev = !app.isPackaged;
 
       if (isDev) {
         // Development: use Python venv
@@ -119,7 +119,7 @@ class FortunaDesktopApp {
       backgroundColor: '#1a1a2e'
     });
 
-    const isDev = process.env.NODE_ENV !== 'production';
+    const isDev = !app.isPackaged;
 
     if (isDev) {
       // Development: load from Next.js dev server
@@ -214,7 +214,7 @@ class FortunaDesktopApp {
   async initialize() {
     try {
       console.log('=== Fortuna Faucet Starting ===');
-      console.log('Mode:', process.env.NODE_ENV || 'production');
+      console.log('Mode:', !app.isPackaged ? 'Development' : 'Production');
       console.log('Platform:', process.platform);
       console.log('Electron version:', process.versions.electron);
 
