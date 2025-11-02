@@ -41,10 +41,23 @@ class FortunaDesktopApp {
         console.log('[PROD MODE] Starting backend from packaged executable...');
         const exePath = path.join(process.resourcesPath, 'fortuna-backend.exe');
 
+        console.log('DEBUG: process.resourcesPath =', process.resourcesPath);
+        console.log('DEBUG: exePath =', exePath);
+        console.log('DEBUG: Checking if file exists:', fs.existsSync(exePath));
+
         if (!fs.existsSync(exePath)) {
           console.error('FATAL: Backend executable not found at:', exePath);
           console.error('process.resourcesPath:', process.resourcesPath);
           console.error('Expected path:', exePath);
+
+          // List what's actually in resources
+          try {
+            const resourcesContents = fs.readdirSync(process.resourcesPath);
+            console.error('Contents of resources directory:', resourcesContents);
+          } catch (err) {
+            console.error('Could not list resources:', err);
+          }
+
           reject(new Error('Backend executable missing from installation'));
           return;
         }
@@ -104,6 +117,56 @@ class FortunaDesktopApp {
     });
   }
 
+  getFrontendPath() {
+    const isDev = !app.isPackaged;
+
+    if (isDev) {
+      return 'http://localhost:3000';
+    }
+
+    // FIXED: In production, the frontend files are in app/web-ui-build/out/
+    // When packaged in app.asar, use app.getAppPath() to get the asar location
+    // The files are included via the files array in package.json
+    const indexPath = path.join(app.getAppPath(), 'web-ui-build', 'out', 'index.html');
+
+    console.log('DEBUG [Frontend Path Resolution]:');
+    console.log('  app.isPackaged:', app.isPackaged);
+    console.log('  app.getAppPath():', app.getAppPath());
+    console.log('  Resolved path:', indexPath);
+    console.log('  File exists:', fs.existsSync(indexPath));
+
+    // If not found, list what's actually there for debugging
+    if (!fs.existsSync(indexPath)) {
+      const appPath = app.getAppPath();
+      try {
+        console.error('Contents of app directory:');
+        const listDir = (dir, depth = 0) => {
+          if (depth > 3) return; // Limit recursion
+          try {
+            const files = fs.readdirSync(dir);
+            files.forEach(file => {
+              const fullPath = path.join(dir, file);
+              const indent = '  '.repeat(depth);
+              if (fs.statSync(fullPath).isDirectory()) {
+                console.error(`${indent}📁 ${file}/`);
+                listDir(fullPath, depth + 1);
+              } else {
+                console.error(`${indent}📄 ${file}`);
+              }
+            });
+          } catch (err) {
+            console.error(`Error listing ${dir}:`, err.message);
+          }
+        };
+        listDir(appPath);
+      } catch (err) {
+        console.error('Could not list app directory:', err);
+      }
+    }
+
+    return `file://${indexPath}`;
+  }
+
   createMainWindow() {
     this.mainWindow = new BrowserWindow({
       width: 1600,
@@ -130,12 +193,10 @@ class FortunaDesktopApp {
       this.mainWindow.webContents.openDevTools();
     } else {
       // Production: load from bundled static files
-      const indexPath = path.join(__dirname, 'web-ui-build', 'out', 'index.html');
+      const frontendUrl = this.getFrontendPath();
 
-      if (!fs.existsSync(indexPath)) {
-        console.error('FATAL: Frontend index.html not found at:', indexPath);
-        console.error('__dirname:', __dirname);
-        console.error('Expected path:', indexPath);
+      if (!frontendUrl.startsWith('http') && !fs.existsSync(frontendUrl.replace('file://', ''))) {
+        console.error('FATAL: Frontend index.html not found!');
 
         // Show error dialog to user
         const { dialog } = require('electron');
@@ -147,8 +208,8 @@ class FortunaDesktopApp {
         return;
       }
 
-      console.log('[PROD MODE] Loading frontend from:', indexPath);
-      this.mainWindow.loadFile(indexPath);
+      console.log('[PROD MODE] Loading frontend from:', frontendUrl);
+      this.mainWindow.loadURL(frontendUrl);
     }
 
     // Handle window close - keep running in tray
