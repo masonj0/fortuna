@@ -287,6 +287,43 @@ jobs:
           Write-Host "MSI Path: $msiPath"
           "msi_path=$msiPath" | Add-Content -Path $env:GITHUB_OUTPUT
 
+      - name: Deep Search MSI Contents for Backend Executable
+        shell: pwsh
+        run: |
+          Write-Host "========== DEEP MSI CONTENTS SEARCH ==========" -ForegroundColor Cyan
+          Write-Host ""
+
+          $extractPath = ".\msi-extract"
+
+          # SEARCH: Find ALL .exe files
+          Write-Host "=== Searching for all .exe files ===" -ForegroundColor Yellow
+          $exeFiles = @(Get-ChildItem -Path $extractPath -Recurse -Filter "*.exe" -ErrorAction SilentlyContinue)
+
+          if ($exeFiles.Count -eq 0) {
+            Write-Host "❌ NO .exe files found in MSI!" -ForegroundColor Red
+            exit 1
+          }
+
+          Write-Host "✅ Found $($exeFiles.Count) .exe file(s):" -ForegroundColor Green
+          $exeFiles | ForEach-Object {
+            $relativePath = $_.FullName.Substring($extractPath.Length + 1)
+            $size = '{0:N2}' -f ($_.Length / 1MB)
+            Write-Host "   - [$($size) MB] $relativePath" -ForegroundColor Cyan
+          }
+
+          # Search for fortuna-backend.exe specifically
+          $backendFound = $exeFiles | Where-Object { $_.Name -eq "fortuna-backend.exe" }
+          if (-not $backendFound) {
+            Write-Host ""
+            Write-Host "❌ fortuna-backend.exe NOT found in MSI" -ForegroundColor Red
+            Write-Host "This means 'extraResources' is not working correctly" -ForegroundColor Yellow
+            exit 1
+          }
+
+          Write-Host ""
+          Write-Host "✅ BACKEND EXECUTABLE FOUND!" -ForegroundColor Green
+          Write-Host "   Path: $($backendFound.FullName.Substring($extractPath.Length + 1))" -ForegroundColor Green
+
       - name: Generate sanitized artifact name
         id: sanitize
         shell: bash
