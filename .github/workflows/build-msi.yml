@@ -37,6 +37,13 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Diagnostic - Initial Workspace Structure
+        shell: pwsh
+        run: |
+          Write-Host "--- [DIAG] Initial Workspace Structure ---"
+          Get-ChildItem -Recurse -Depth 3 | Out-String -Width 120
+          Write-Host "------------------------------------------"
+
       # ===== FRONTEND BUILD =====
       - name: Clear Caches for Fresh Build
         shell: pwsh
@@ -65,6 +72,10 @@ jobs:
 
           $fileCount = (Get-ChildItem -Path "out" -Recurse -File | Measure-Object).Count
           Write-Host "✅ Frontend built successfully: $fileCount files in out/" -ForegroundColor Green
+
+          Write-Host "--- [DIAG] Frontend Output Files (web_platform/frontend/out) ---"
+          Get-ChildItem -Recurse "out" | Out-String -Width 120
+          Write-Host "--------------------------------------------------------------"
 
       - name: Stage Frontend Assets for Electron
         shell: pwsh
@@ -98,6 +109,10 @@ jobs:
           }
 
           Write-Host "✅ Successfully staged $destFiles frontend files" -ForegroundColor Green
+
+          Write-Host "--- [DIAG] Staged Frontend Assets (electron/web-ui-build) ---"
+          Get-ChildItem -Recurse $dest | Out-String -Width 120
+          Write-Host "---------------------------------------------------------------"
 
       # ===== BACKEND BUILD =====
       - name: Install Python Dependencies
@@ -150,6 +165,10 @@ jobs:
 
           Write-Host "✅ Backend executable built" -ForegroundColor Green
 
+          Write-Host "--- [DIAG] PyInstaller Output (dist/) ---"
+          Get-ChildItem -Recurse ".\dist\" | Out-String -Width 120
+          Write-Host "-----------------------------------------"
+
       - name: Stage Backend Executable
         shell: pwsh
         run: |
@@ -184,6 +203,10 @@ jobs:
           }
 
           Write-Host "✅ Backend executable staged successfully" -ForegroundColor Green
+
+          Write-Host "--- [DIAG] Staged Backend Assets (electron/resources) ---"
+          Get-ChildItem -Recurse $destDir | Out-String -Width 120
+          Write-Host "---------------------------------------------------------"
 
       # ===== ELECTRON BUILD =====
       - name: Install Electron Dependencies
@@ -290,6 +313,13 @@ jobs:
           Set-Content -Path "electron/package.json" -Value $correctConfig -Force
           Write-Host "✅ Forcefully overwrote electron/package.json with correct configuration." -ForegroundColor Green
 
+      - name: Diagnostic - Final Pre-Build Structure
+        shell: pwsh
+        run: |
+          Write-Host "--- [DIAG] Final Structure of 'electron' directory before build ---"
+          Get-ChildItem -Recurse ".\electron\" -Depth 4 | Out-String -Width 120
+          Write-Host "--------------------------------------------------------------------"
+
       - name: Build MSI Installer
         shell: pwsh
         run: |
@@ -343,6 +373,10 @@ jobs:
             $fullPath = (Resolve-Path $extractPath).Path
             & msiexec /a "$($msiFile.FullName)" /qn TARGETDIR="$fullPath"
           }
+
+          Write-Host "--- [DIAG] Full Extracted MSI Contents ---"
+          Get-ChildItem -Recurse $extractPath | Out-String -Width 120
+          Write-Host "------------------------------------------"
 
           # Search for critical components
           Write-Host "`nSearching for backend executable..." -ForegroundColor Yellow
