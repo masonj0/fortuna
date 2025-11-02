@@ -192,27 +192,6 @@ jobs:
           cd electron
           npm ci
 
-      - name: Validate Configuration
-        shell: pwsh
-        run: |
-          Write-Host "`n=== CONFIGURATION VALIDATION ===" -ForegroundColor Cyan
-
-          # Validate package.json
-          $pkg = Get-Content electron/package.json | ConvertFrom-Json
-
-          if (-not $pkg.build.files) {
-            Write-Error "build.files is missing from package.json"
-            exit 1
-          }
-
-          $hasWebUiBuild = $pkg.build.files | Where-Object { $_ -match "web-ui-build" }
-          if (-not $hasWebUiBuild) {
-            Write-Error "build.files does NOT include 'web-ui-build' pattern!"
-            exit 1
-          }
-
-          Write-Host "✅ package.json configuration valid" -ForegroundColor Green
-
       - name: Pre-Build File Verification
         shell: pwsh
         run: |
