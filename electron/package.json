@@ -34,6 +34,7 @@
     },
     "msi": {
       "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
       "perMachine": true,
       "createDesktopShortcut": true
     }
