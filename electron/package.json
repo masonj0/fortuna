@@ -15,12 +15,19 @@
   "build": {
     "appId": "com.fortuna.faucet",
     "productName": "Fortuna Faucet",
+    "directories": {
+      "buildResources": "assets",
+      "output": "dist"
+    },
     "files": [
       "main.js",
       "preload.js",
       "assets/**/*",
       "web-ui-build/**/*",
-      "!node_modules/**/*"
+      "resources/**/*",
+      "!node_modules/**/*",
+      "!dist/**/*",
+      "!build/**/*"
     ],
     "extraResources": [
       {
@@ -34,9 +41,10 @@
     },
     "msi": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
       "perMachine": true,
-      "createDesktopShortcut": true
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Fortuna Faucet"
     }
   }
 }
