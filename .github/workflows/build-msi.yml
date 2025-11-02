@@ -240,12 +240,59 @@ jobs:
 
           Write-Host "`n✅ All pre-build checks passed!" -ForegroundColor Green
 
+      - name: Force-Correct package.json on Runner
+        shell: pwsh
+        run: |
+          $correctConfig = @'
+          {
+            "name": "fortuna-faucet",
+            "version": "1.0.0",
+            "description": "Fortuna Faucet Data Management Console",
+            "main": "main.js",
+            "scripts": {
+              "start": "electron .",
+              "dist": "electron-builder"
+            },
+            "author": "Fortuna Development Team",
+            "devDependencies": {
+              "electron": "^28.0.0",
+              "electron-builder": "^24.9.1"
+            },
+            "build": {
+              "appId": "com.fortuna.faucet",
+              "productName": "Fortuna Faucet",
+              "files": [
+                "main.js",
+                "preload.js",
+                "assets/**/*",
+                "web-ui-build/**/*",
+                "!node_modules/**/*"
+              ],
+              "extraResources": [
+                {
+                  "from": "resources/fortuna-backend.exe",
+                  "to": "fortuna-backend.exe"
+                }
+              ],
+              "win": {
+                "target": "msi",
+                "icon": "assets/icon.ico"
+              },
+              "msi": {
+                "oneClick": false,
+                "perMachine": true,
+                "createDesktopShortcut": true
+              }
+            }
+          }
+          '@
+          Set-Content -Path "electron/package.json" -Value $correctConfig -Force
+          Write-Host "✅ Forcefully overwrote electron/package.json with correct configuration." -ForegroundColor Green
+
       - name: Build MSI Installer
         shell: pwsh
         run: |
           cd electron
-          Write-Host "`n=== DIAGNOSTIC: Displaying package.json before build ===" -ForegroundColor Yellow
-          Get-Content package.json
           Write-Host "`n=== BUILDING MSI INSTALLER ===" -ForegroundColor Cyan
 
           npm run dist
