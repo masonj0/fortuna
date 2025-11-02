@@ -244,6 +244,8 @@ jobs:
         shell: pwsh
         run: |
           cd electron
+          Write-Host "`n=== DIAGNOSTIC: Displaying package.json before build ===" -ForegroundColor Yellow
+          Get-Content package.json
           Write-Host "`n=== BUILDING MSI INSTALLER ===" -ForegroundColor Cyan
 
           npm run dist
