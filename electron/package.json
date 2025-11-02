@@ -22,6 +22,12 @@
       "web-ui-build/out/**/*",
       "resources/**/*"
     ],
+    "extraResources": [
+      {
+        "from": "resources/fortuna-backend.exe",
+        "to": "resources/fortuna-backend.exe"
+      }
+    ],
     "asarUnpack": [
       "**/resources/fortuna-backend.exe"
     ],
