@@ -290,6 +290,7 @@ jobs:
                 "preload.js",
                 "assets/**/*",
                 "web-ui-build/**/*",
+                "resources/**/*",
                 "!node_modules/**/*"
               ],
               "extraResources": [
@@ -377,6 +378,26 @@ jobs:
           Write-Host "--- [DIAG] Full Extracted MSI Contents ---"
           Get-ChildItem -Recurse $extractPath | Out-String -Width 120
           Write-Host "------------------------------------------"
+
+          # Stage 2: Extract the CAB file to see the real contents
+          $cabFile = Get-ChildItem -Path $extractPath -Recurse -Filter "*.cab" | Select-Object -First 1
+          if ($cabFile) {
+            $cabExtractPath = ".\cab-extract"
+            if (Test-Path $cabExtractPath) { Remove-Item -Recurse -Force $cabExtractPath }
+            New-Item -ItemType Directory -Path $cabExtractPath -Force | Out-Null
+
+            Write-Host "--- [DIAG] Extracting CAB file: $($cabFile.Name) ---"
+            & 7z x "$($cabFile.FullName)" -o"$cabExtractPath" -y -bso0 -bsp0 | Out-Null
+
+            Write-Host "--- [DIAG] Full Extracted CAB Contents ---"
+            Get-ChildItem -Recurse $cabExtractPath | Out-String -Width 120
+            Write-Host "------------------------------------------"
+
+            # Search within the CAB contents
+            $extractPath = $cabExtractPath
+          } else {
+            Write-Warning "No CAB file found in MSI, searching primary extraction..."
+          }
 
           # Search for critical components
           Write-Host "`nSearching for backend executable..." -ForegroundColor Yellow
