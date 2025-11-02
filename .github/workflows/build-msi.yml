@@ -75,24 +75,23 @@ jobs:
       - name: Build Backend Executable with PyInstaller
         shell: pwsh
         run: |
-          # Install all Python dependencies from the locked requirements file.
           pip install -r python_service/requirements.txt
-          # Run PyInstaller to create a single-file executable.
-          # --onefile: Bundles everything into a single .exe.
-          # --name: Specifies the output filename.
-          # --hidden-import: Explicitly includes modules that PyInstaller might miss.
-          # --add-data: Packages the data adapters directory alongside the executable.
           pyinstaller --onefile `
             --name fortuna-backend `
             --hidden-import=uvicorn `
             --hidden-import=uvicorn.logging `
-            --hidden-import=httpx.models `
-            --hidden-import=redis.asyncio `
+            --hidden-import=uvicorn.loops `
+            --hidden-import=uvicorn.loops.auto `
+            --hidden-import=uvicorn.protocols `
+            --hidden-import=uvicorn.protocols.http `
+            --hidden-import=uvicorn.protocols.http.auto `
+            --hidden-import=uvicorn.lifespan `
+            --hidden-import=uvicorn.lifespan.on `
             --hidden-import=fastapi `
             --hidden-import=pydantic `
-            --hidden-import=structlog `
             --hidden-import=httpx `
-            --add-data "python_service/adapters:adapters" `
+            --hidden-import=redis.asyncio `
+            --add-data "python_service/adapters;adapters" `
             python_service/api.py
 
       - name: Stage Backend Executable
