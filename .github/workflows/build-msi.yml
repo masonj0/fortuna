@@ -1,3 +1,4 @@
+# Cache-buster: 2025-11-02 08:09:23
 name: Build Fortuna Faucet MSI Installer
 
 on:
@@ -36,6 +37,12 @@ jobs:
           cache-dependency-path: python_service/requirements.txt
 
       # ===== FRONTEND BUILD =====
+      - name: Clear Caches for Fresh Build
+        shell: pwsh
+        run: |
+          Write-Host "Clearing npm and pip caches for cache-busting..." -ForegroundColor Yellow
+          npm cache clean --force
+          pip cache purge
       - name: Install Frontend Dependencies
         shell: pwsh
         run: |
