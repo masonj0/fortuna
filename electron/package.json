@@ -25,7 +25,7 @@
     "extraResources": [
       {
         "from": "resources/fortuna-backend.exe",
-        "to": "fortuna-backend.exe"
+        "to": "resources/fortuna-backend.exe"
       }
     ],
     "win": {
