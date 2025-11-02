@@ -271,6 +271,13 @@ jobs:
           Get-ChildItem -Recurse ".\electron\" -Depth 4 | Out-String -Width 120
           Write-Host "--------------------------------------------------------------------"
 
+      - name: Diagnostic - Final Pre-Build Structure
+        shell: pwsh
+        run: |
+          Write-Host "--- [DIAG] Final Structure of 'electron' directory before build ---"
+          Get-ChildItem -Recurse ".\electron\" -Depth 4 | Out-String -Width 120
+          Write-Host "--------------------------------------------------------------------"
+
       - name: Build MSI Installer
         shell: pwsh
         run: |
