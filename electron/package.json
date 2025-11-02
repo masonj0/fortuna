@@ -22,32 +22,36 @@
     "files": [
       "main.js",
       "preload.js",
-      "install-validator.js",
+      "package.json",
+      "resources/**/*",
       "web-ui-build/out/**/*"
     ],
-    "extraResources": [
-      {
-        "from": "resources/",
-        "to": "resources",
-        "filter": [
-          "**/*"
-        ]
-      }
+    "asarUnpack": [
+      "resources/**/*"
     ],
     "win": {
-      "target": "msi",
-      "icon": "assets/icon.ico"
+      "target": [
+        {
+          "target": "msi",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.ico",
+      "certificateFile": null,
+      "certificatePassword": null,
+      "signingHashAlgorithms": [
+        "sha256"
+      ],
+      "sign": null
     },
     "msi": {
       "oneClick": false,
       "perMachine": true,
       "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
       "shortcutName": "Fortuna Faucet"
-    },
-    "nsis": {
-      "oneClick": false,
-      "perMachine": true,
-      "createDesktopShortcut": true
     }
   },
   "dependencies": {
