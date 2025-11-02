@@ -13,7 +13,7 @@ jobs:
   build-installer:
     name: Build MSI Installer
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 45  # Increased timeout for safety
 
     steps:
       - name: Checkout Repository
@@ -27,41 +27,6 @@ jobs:
           cache-dependency-path: |
             electron/package-lock.json
             web_platform/frontend/package-lock.json
-        env:
-          SETUP_NODE_CACHE_KEY: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}-20251101
-
-      - name: Install Frontend Dependencies & Build
-        shell: pwsh
-        run: |
-          cd web_platform/frontend
-          npm ci
-          npm run build
-
-      - name: Stage Frontend Assets for Packaging
-        shell: pwsh
-        run: |
-          # This script robustly stages the static frontend assets for Electron to package.
-          # It ensures the destination is clean, copies the files, and then verifies
-          # the file count to prevent packaging an incomplete UI.
-          $source = "web_platform/frontend/out"
-          $dest = "electron/web-ui-build/out"
-          if (Test-Path $dest) {
-            Remove-Item -Recurse -Force $dest
-          }
-          Copy-Item -Path $source -Destination $dest -Recurse -Force -ErrorAction Stop
-          $sourceFiles = (Get-ChildItem -Path $source -Recurse | Measure-Object).Count
-          $destFiles = (Get-ChildItem -Path $dest -Recurse | Measure-Object).Count
-          if ($destFiles -ne $sourceFiles) {
-            Write-Error "File count mismatch after staging frontend assets!"
-            exit 1
-          }
-          Write-Host "Successfully staged $destFiles frontend assets."
-
-      - name: Install Electron Dependencies
-        shell: pwsh
-        run: |
-          cd electron
-          npm ci
 
       - name: Setup Python 3.12
         uses: actions/setup-python@v5
@@ -69,15 +34,79 @@ jobs:
           python-version: '3.12'
           cache: 'pip'
           cache-dependency-path: python_service/requirements.txt
-        env:
-          SETUP_PYTHON_CACHE_KEY: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}-20251101
+
+      # ===== FRONTEND BUILD =====
+      - name: Install Frontend Dependencies
+        shell: pwsh
+        run: |
+          cd web_platform/frontend
+          npm ci
+
+      - name: Build Frontend (Static Export)
+        shell: pwsh
+        run: |
+          cd web_platform/frontend
+          Write-Host "Building Next.js frontend for static export..." -ForegroundColor Cyan
+          npm run build
+
+          # Verify the build succeeded
+          if (-not (Test-Path "out/index.html")) {
+            Write-Error "Frontend build failed - out/index.html not found"
+            exit 1
+          }
+
+          $fileCount = (Get-ChildItem -Path "out" -Recurse -File | Measure-Object).Count
+          Write-Host "✅ Frontend built successfully: $fileCount files in out/" -ForegroundColor Green
+
+      - name: Stage Frontend Assets for Electron
+        shell: pwsh
+        run: |
+          Write-Host "Staging frontend assets for Electron packaging..." -ForegroundColor Cyan
+
+          $source = "web_platform/frontend/out"
+          $dest = "electron/web-ui-build/out"
+
+          # Clean destination
+          if (Test-Path $dest) {
+            Remove-Item -Recurse -Force $dest
+          }
+
+          # Copy with verification
+          Copy-Item -Path $source -Destination $dest -Recurse -Force -ErrorAction Stop
+
+          # Verify file counts match
+          $sourceFiles = (Get-ChildItem -Path $source -Recurse -File | Measure-Object).Count
+          $destFiles = (Get-ChildItem -Path $dest -Recurse -File | Measure-Object).Count
+
+          if ($destFiles -ne $sourceFiles) {
+            Write-Error "File count mismatch! Source: $sourceFiles, Dest: $destFiles"
+            exit 1
+          }
+
+          # Verify critical files
+          if (-not (Test-Path "$dest/index.html")) {
+            Write-Error "Critical file missing: index.html"
+            exit 1
+          }
+
+          Write-Host "✅ Successfully staged $destFiles frontend files" -ForegroundColor Green
+
+      # ===== BACKEND BUILD =====
+      - name: Install Python Dependencies
+        shell: pwsh
+        run: |
+          Write-Host "Installing Python dependencies..." -ForegroundColor Cyan
+          pip install -r python_service/requirements.txt
+          Write-Host "✅ Dependencies installed" -ForegroundColor Green
 
       - name: Build Backend Executable with PyInstaller
         shell: pwsh
         run: |
-          pip install -r python_service/requirements.txt
+          Write-Host "Building backend executable with PyInstaller..." -ForegroundColor Cyan
+
           pyinstaller --onefile `
             --name fortuna-backend `
+            --console `
             --hidden-import=uvicorn `
             --hidden-import=uvicorn.logging `
             --hidden-import=uvicorn.loops `
@@ -85,220 +114,239 @@ jobs:
             --hidden-import=uvicorn.protocols `
             --hidden-import=uvicorn.protocols.http `
             --hidden-import=uvicorn.protocols.http.auto `
+            --hidden-import=uvicorn.protocols.http.httptools_impl `
+            --hidden-import=uvicorn.protocols.websockets `
+            --hidden-import=uvicorn.protocols.websockets.auto `
             --hidden-import=uvicorn.lifespan `
             --hidden-import=uvicorn.lifespan.on `
             --hidden-import=fastapi `
+            --hidden-import=fastapi.routing `
             --hidden-import=pydantic `
+            --hidden-import=pydantic_core `
             --hidden-import=httpx `
+            --hidden-import=httpx._transports `
+            --hidden-import=httpx._transports.default `
+            --hidden-import=redis `
             --hidden-import=redis.asyncio `
+            --hidden-import=redis.asyncio.client `
+            --hidden-import=redis.asyncio.connection `
+            --collect-all=uvicorn `
+            --collect-all=fastapi `
             --add-data "python_service/adapters;adapters" `
             python_service/api.py
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "PyInstaller failed with exit code $LASTEXITCODE"
+            exit 1
+          }
+
+          Write-Host "✅ Backend executable built" -ForegroundColor Green
 
       - name: Stage Backend Executable
         shell: pwsh
         run: |
-          $distPath = ".\\dist\\fortuna-backend.exe"
-          $destDir = ".\\electron\\resources"
+          Write-Host "Staging backend executable..." -ForegroundColor Cyan
+
+          $exePath = ".\dist\fortuna-backend.exe"
+          $destDir = ".\electron\resources"
+
+          # Verify exe exists
+          if (-not (Test-Path $exePath)) {
+            Write-Error "Backend executable not found at: $exePath"
+            Write-Host "Contents of dist/:"
+            Get-ChildItem -Path ".\dist\" -Recurse
+            exit 1
+          }
+
+          # Get file size
+          $exeSize = (Get-Item $exePath).Length / 1MB
+          Write-Host "Backend exe size: $([math]::Round($exeSize, 2)) MB"
+
+          # Create destination and copy
           if (-not (Test-Path $destDir)) {
             New-Item -ItemType Directory -Path $destDir -Force | Out-Null
           }
-          if (Test-Path $distPath) {
-            Copy-Item -Path $distPath -Destination $destDir -Force
-            Write-Host "Backend executable staged successfully."
-          } else {
-            Write-Error "ERROR: Could not find backend exe at $distPath"
-            Get-ChildItem -Path ".\\dist\\" -Recurse
+          Copy-Item -Path $exePath -Destination $destDir -Force
+
+          # Verify copy
+          $copiedExe = Join-Path $destDir "fortuna-backend.exe"
+          if (-not (Test-Path $copiedExe)) {
+            Write-Error "Failed to copy executable to: $copiedExe"
             exit 1
           }
 
-      - name: Verify Build Inputs
+          Write-Host "✅ Backend executable staged successfully" -ForegroundColor Green
+
+      # ===== ELECTRON BUILD =====
+      - name: Install Electron Dependencies
         shell: pwsh
         run: |
-          $backendExe = ".\\electron\\resources\\fortuna-backend.exe"
-          $frontendDir = ".\\electron\\web-ui-build\\out"
-          if (-not (Test-Path $backendExe)) {
-            Write-Error "CRITICAL: Backend executable not found at $backendExe"
-            Get-ChildItem -Path ".\\electron\\resources\\" -Recurse
-            exit 1
-          }
-          if (-not (Test-Path $frontendDir)) {
-            Write-Error "CRITICAL: Frontend build directory not found at $frontendDir"
-            Get-ChildItem -Path ".\\electron\\web-ui-build\\" -Recurse
-            exit 1
-          }
-          Write-Host "All critical artifacts verified successfully."
+          cd electron
+          npm ci
 
-      - name: Verify electron/package.json Build Configuration
+      - name: Pre-Build Verification
         shell: pwsh
         run: |
-          Write-Host "=== Verifying electron/package.json ===" -ForegroundColor Cyan
+          Write-Host "`n=== PRE-BUILD VERIFICATION ===" -ForegroundColor Cyan
 
+          # Check package.json configuration
           $packageJson = Get-Content electron/package.json | ConvertFrom-Json
 
           if (-not $packageJson.build) {
-            Write-Error "CRITICAL: electron/package.json missing 'build' section!"
+            Write-Error "electron/package.json missing 'build' section"
             exit 1
           }
 
-          if (-not $packageJson.build.extraResources) {
-            Write-Error "CRITICAL: electron/package.json build section missing 'extraResources' array!"
-            exit 1
+          # Verify files array includes frontend
+          $filesArray = $packageJson.build.files
+          $hasFrontend = $filesArray | Where-Object { $_ -like "*web-ui-build*" }
+          if (-not $hasFrontend) {
+            Write-Warning "WARNING: 'web-ui-build' not found in files array!"
+            Write-Host "Current files array: $($filesArray -join ', ')"
           }
 
-          Write-Host "✅ 'extraResources' configuration found" -ForegroundColor Green
-          Write-Host "Extra resources:"
-          $packageJson.build.extraResources | ForEach-Object {
-            Write-Host "  from: $($_.from) -> to: $($_.to)" -ForegroundColor Cyan
-          }
-
-      - name: Verify Pre-Build Assets Exist
-        shell: pwsh
-        run: |
-          Write-Host "`n=== Verifying pre-build staging ===" -ForegroundColor Cyan
-
+          # Check backend exe
           $backendExe = ".\electron\resources\fortuna-backend.exe"
+          if (-not (Test-Path $backendExe)) {
+            Write-Error "Backend executable missing: $backendExe"
+            exit 1
+          }
+          $backendSize = (Get-Item $backendExe).Length / 1MB
+          Write-Host "✅ Backend: $([math]::Round($backendSize, 2)) MB" -ForegroundColor Green
+
+          # Check frontend
           $frontendDir = ".\electron\web-ui-build\out"
           $frontendIndex = "$frontendDir\index.html"
 
-          if (-not (Test-Path $backendExe)) {
-            Write-Error "CRITICAL: Backend executable missing at: $backendExe"
-            exit 1
-          }
-          Write-Host "✅ Backend executable found: $('{0:N2}' -f ((Get-Item $backendExe).Length / 1MB)) MB" -ForegroundColor Green
-
           if (-not (Test-Path $frontendDir)) {
-            Write-Error "CRITICAL: Frontend directory missing at: $frontendDir"
+            Write-Error "Frontend directory missing: $frontendDir"
             exit 1
           }
 
           if (-not (Test-Path $frontendIndex)) {
-            Write-Error "CRITICAL: Frontend index.html missing at: $frontendIndex"
+            Write-Error "Frontend index.html missing: $frontendIndex"
             exit 1
           }
 
-          $fileCount = @(Get-ChildItem -Path $frontendDir -Recurse).Count
-          Write-Host "✅ Frontend directory found with $fileCount files" -ForegroundColor Green
+          $frontendFiles = (Get-ChildItem -Path $frontendDir -Recurse -File | Measure-Object).Count
+          Write-Host "✅ Frontend: $frontendFiles files" -ForegroundColor Green
 
-      - name: Build MSI Installer using electron-builder
+          Write-Host "`n✅ All pre-build checks passed!" -ForegroundColor Green
+
+      - name: Build MSI Installer
         shell: pwsh
         run: |
           cd electron
-          Write-Host "`n=== Building MSI with electron-builder ===" -ForegroundColor Cyan
+          Write-Host "`n=== BUILDING MSI INSTALLER ===" -ForegroundColor Cyan
+
           npm run dist
+
           if ($LASTEXITCODE -ne 0) {
             Write-Error "electron-builder failed with exit code $LASTEXITCODE"
             exit 1
           }
-          Write-Host "✅ MSI build completed" -ForegroundColor Green
+
+          Write-Host "✅ MSI build completed successfully" -ForegroundColor Green
         env:
-          FORTUNA_BUILD_TYPE: 'full'
-          DEBUG: 'electron-builder'
           CI: 'true'
 
-      - name: Extract and Deep Search MSI Contents
+      # ===== POST-BUILD VERIFICATION =====
+      - name: Verify MSI Contents
         shell: pwsh
         run: |
-          Write-Host "`n========== DEEP MSI CONTENTS SEARCH ==========" -ForegroundColor Cyan
+          Write-Host "`n=== VERIFYING MSI CONTENTS ===" -ForegroundColor Cyan
 
-          # Find the MSI file
+          # Find MSI file
           $msiFile = Get-ChildItem -Path ".\electron\dist" -Filter "*.msi" -Recurse | Select-Object -First 1
 
           if (-not $msiFile) {
-            Write-Error "No MSI file found in .\electron\dist"
+            Write-Error "No MSI file found in electron/dist"
+            Get-ChildItem -Path ".\electron\dist" -Recurse
             exit 1
           }
 
+          $msiSize = $msiFile.Length / 1MB
           Write-Host "MSI file: $($msiFile.Name)" -ForegroundColor Green
-          Write-Host "Size: $('{0:N2}' -f ($msiFile.Length / 1MB)) MB" -ForegroundColor Green
+          Write-Host "Size: $([math]::Round($msiSize, 2)) MB" -ForegroundColor Green
 
-          # Extract MSI to inspect
+          # Extract MSI for verification
           $extractPath = ".\msi-extract"
           if (Test-Path $extractPath) {
             Remove-Item -Recurse -Force $extractPath
           }
           New-Item -ItemType Directory -Path $extractPath -Force | Out-Null
 
-          Write-Host "Extracting MSI..." -ForegroundColor Yellow
+          Write-Host "Extracting MSI for verification..." -ForegroundColor Yellow
 
-          # Extract using 7z if available
-          $seven_zip = Get-Command 7z -ErrorAction SilentlyContinue
-          if ($seven_zip) {
+          # Try 7z first, fall back to msiexec
+          $sevenZip = Get-Command 7z -ErrorAction SilentlyContinue
+          if ($sevenZip) {
             & 7z x "$($msiFile.FullName)" -o"$extractPath" -y -bso0 -bsp0 | Out-Null
           } else {
-            & msiexec /a "$($msiFile.FullName)" /qn TARGETDIR="$((Resolve-Path $extractPath).Path)"
+            $fullPath = (Resolve-Path $extractPath).Path
+            & msiexec /a "$($msiFile.FullName)" /qn TARGETDIR="$fullPath"
           }
 
-          # SEARCH: Find ALL .exe files
-          Write-Host "`n=== Searching for all .exe files ===" -ForegroundColor Yellow
-          $exeFiles = @(Get-ChildItem -Path $extractPath -Recurse -Filter "*.exe" -ErrorAction SilentlyContinue)
+          # Search for critical components
+          Write-Host "`nSearching for backend executable..." -ForegroundColor Yellow
+          $backendExes = @(Get-ChildItem -Path $extractPath -Recurse -Filter "fortuna-backend.exe" -ErrorAction SilentlyContinue)
 
-          if ($exeFiles.Count -eq 0) {
-            Write-Host "❌ NO .exe files found in MSI!" -ForegroundColor Red
-            Write-Host "`nDirectory structure:"
-            Get-ChildItem -Path $extractPath -Recurse -Directory | Select-Object -First 20 | ForEach-Object {
-              Write-Host "  $($_.FullName.Substring($extractPath.Length))"
-            }
+          if ($backendExes.Count -eq 0) {
+            Write-Error "❌ fortuna-backend.exe NOT FOUND in MSI!"
+            Write-Host "This means extraResources configuration failed"
             exit 1
           }
 
-          Write-Host "✅ Found $($exeFiles.Count) .exe file(s):" -ForegroundColor Green
-          $exeFiles | ForEach-Object {
-            $relativePath = $_.FullName.Substring($extractPath.Length + 1)
-            $size = '{0:N2}' -f ($_.Length / 1MB)
-            Write-Host "   - [$($size) MB] $relativePath" -ForegroundColor Cyan
-          }
+          Write-Host "✅ Backend found: $($backendExes[0].FullName.Substring($extractPath.Length))" -ForegroundColor Green
 
-          # Search for fortuna-backend.exe specifically
-          $backendFound = $exeFiles | Where-Object { $_.Name -eq "fortuna-backend.exe" }
-          if (-not $backendFound) {
-            Write-Host "`n❌ fortuna-backend.exe NOT found in MSI" -ForegroundColor Red
-            Write-Host "This means 'extraResources' is not working correctly" -ForegroundColor Yellow
-            exit 1
-          }
-
-          Write-Host "`n✅ BACKEND EXECUTABLE FOUND!" -ForegroundColor Green
-          Write-Host "   Location: $($backendFound.FullName.Substring($extractPath.Length + 1))" -ForegroundColor Cyan
-
-          # Search for index.html
-          Write-Host "`n=== Searching for frontend index.html ===" -ForegroundColor Yellow
+          Write-Host "`nSearching for frontend..." -ForegroundColor Yellow
           $indexFiles = @(Get-ChildItem -Path $extractPath -Recurse -Filter "index.html" -ErrorAction SilentlyContinue)
+
           if ($indexFiles.Count -eq 0) {
-            Write-Host "❌ NO index.html found!" -ForegroundColor Red
+            Write-Error "❌ index.html NOT FOUND in MSI!"
             exit 1
           }
-          Write-Host "✅ Frontend found at: $($indexFiles[0].FullName.Substring($extractPath.Length + 1))" -ForegroundColor Green
 
-          Write-Host "`n✅ ALL CRITICAL COMPONENTS VERIFIED!" -ForegroundColor Green
+          Write-Host "✅ Frontend found: $($indexFiles[0].FullName.Substring($extractPath.Length))" -ForegroundColor Green
 
-      - name: Locate Built MSI Path
+          Write-Host "`n✅ MSI VERIFICATION PASSED!" -ForegroundColor Green
+
+      # ===== ARTIFACT UPLOAD =====
+      - name: Locate MSI for Upload
         id: locate_msi
         shell: pwsh
         run: |
-          $msiFiles = Get-ChildItem -Path ".\electron\dist" -Filter "*.msi" -Recurse
-          if ($msiFiles.Count -eq 0) {
-            Write-Error "CRITICAL: No MSI files found in electron/dist directory."
+          $msiFile = Get-ChildItem -Path ".\electron\dist" -Filter "*.msi" -Recurse | Select-Object -First 1
+
+          if (-not $msiFile) {
+            Write-Error "No MSI file found for upload"
             exit 1
           }
-          if ($msiFiles.Count -gt 1) {
-            Write-Warning "Multiple MSI files found. Using the first one: $($msiFiles[0].FullName)"
-          }
-          $msiPath = $msiFiles[0].FullName
-          Write-Host "MSI Path: $msiPath"
-          "msi_path=$msiPath" | Add-Content -Path $env:GITHUB_OUTPUT
 
-      - name: Generate sanitized artifact name
-        id: sanitize
+          $msiPath = $msiFile.FullName
+          Write-Host "MSI Path: $msiPath"
+
+          # Output for GitHub Actions
+          "msi_path=$msiPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Generate Artifact Name
+        id: artifact_name
         shell: bash
-        run: echo "name=fortuna-faucet-installer-$(echo ${{ github.ref_name }} | sed 's/\//-/g')" >> $GITHUB_OUTPUT
+        run: |
+          # Sanitize branch/tag name for artifact
+          NAME="fortuna-faucet-installer-$(echo ${{ github.ref_name }} | sed 's/\//-/g')"
+          echo "name=$NAME" >> $GITHUB_OUTPUT
 
       - name: Upload MSI Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.sanitize.outputs.name }}
+          name: ${{ steps.artifact_name.outputs.name }}
           path: ${{ steps.locate_msi.outputs.msi_path }}
           retention-days: 30
+          if-no-files-found: error
 
-      - name: Create Release (on tag)
+      # ===== RELEASE (on tags) =====
+      - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         timeout-minutes: 10
@@ -307,5 +355,24 @@ jobs:
           name: "Fortuna Faucet ${{ github.ref_name }}"
           draft: false
           prerelease: false
+          body: |
+            ## Fortuna Faucet Release ${{ github.ref_name }}
+
+            ### What's Inside
+            - ✅ Python FastAPI backend (packaged as standalone executable)
+            - ✅ Next.js frontend (static HTML/CSS/JS)
+            - ✅ Electron desktop wrapper
+
+            ### Installation
+            1. Download the `.msi` installer below
+            2. Run the installer (requires Administrator privileges)
+            3. Launch "Fortuna Faucet" from your Start Menu
+
+            ### Requirements
+            - Windows 10/11 (64-bit)
+            - No Python or Node.js installation required!
+
+            ---
+            *Built with GitHub Actions*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
