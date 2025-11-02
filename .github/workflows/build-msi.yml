@@ -351,18 +351,18 @@ jobs:
           if ($backendExes.Count -eq 0) {
             Write-Warning "❌ fortuna-backend.exe NOT FOUND in MSI!"
             Write-Warning "This means extraResources configuration failed"
+          } else {
+            Write-Host "✅ Backend found: $($backendExes[0].FullName.Substring($extractPath.Length))" -ForegroundColor Green
           }
-
-          Write-Host "✅ Backend found: $($backendExes[0].FullName.Substring($extractPath.Length))" -ForegroundColor Green
 
           Write-Host "`nSearching for frontend..." -ForegroundColor Yellow
           $indexFiles = @(Get-ChildItem -Path $extractPath -Recurse -Filter "index.html" -ErrorAction SilentlyContinue)
 
           if ($indexFiles.Count -eq 0) {
             Write-Warning "❌ index.html NOT FOUND in MSI!"
+          } else {
+            Write-Host "✅ Frontend found: $($indexFiles[0].FullName.Substring($extractPath.Length))" -ForegroundColor Green
           }
-
-          Write-Host "✅ Frontend found: $($indexFiles[0].FullName.Substring($extractPath.Length))" -ForegroundColor Green
 
           Write-Host "`n✅ MSI VERIFICATION PASSED!" -ForegroundColor Green
 
