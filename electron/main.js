@@ -1,340 +1,248 @@
 // electron/main.js
-const { app, BrowserWindow, Tray, Menu, nativeImage, dialog, ipcMain } = require('electron');
-const { spawn, execFile } = require('child_process');
+const { app, BrowserWindow, ipcMain, Menu } = require('electron');
 const path = require('path');
+const { spawn } = require('child_process');
 const fs = require('fs');
-const notifier = require('node-notifier');
-const { validateInstallation } = require('./install-validator');
+const isDev = process.env.NODE_ENV === 'development';
+
+let mainWindow = null;
+let backendProcess = null;
 
 /**
- * Executes a Python script to securely retrieve the API key from the Windows Credential Manager.
- * @returns {Promise<string>} A promise that resolves with the API key.
- * @throws {Error} If the Python script fails or the key cannot be retrieved.
+ * Get the correct path for the backend executable.
+ * In production with extraResources, backend.exe is in the app root directory.
  */
-async function getApiKeyFromCredentials() {
+function getBackendExePath() {
+  if (isDev) {
+    // Development: backend in electron/resources/fortuna-backend.exe
+    return path.join(__dirname, 'resources', 'fortuna-backend.exe');
+  } else {
+    // Production: extraResources places backend.exe in app root
+    // app.getAppPath() = /Program Files/Fortuna Faucet/resources/app.asar.unpacked
+    // Go up two levels to: /Program Files/Fortuna Faucet/fortuna-backend.exe
+    const asarUnpackedPath = app.getAppPath();
+    const appRoot = path.join(asarUnpackedPath, '..', '..');
+    return path.join(appRoot, 'fortuna-backend.exe');
+  }
+}
+
+/**
+ * Get the frontend path for both development and production.
+ */
+function getFrontendPath() {
+  if (isDev) {
+    return path.join(__dirname, 'web-ui-build', 'out');
+  } else {
+    return path.join(app.getAppPath(), 'web-ui-build', 'out');
+  }
+}
+
+/**
+ * Start the Python backend process.
+ */
+function startBackend() {
   return new Promise((resolve, reject) => {
-    const isDev = process.env.NODE_ENV === 'development';
+    const backendExePath = getBackendExePath();
 
-    // Determine the correct paths for the Python executable and the script
-    const pythonExecutable = isDev
-      ? path.join(process.cwd(), '.venv', 'Scripts', 'python.exe')
-      : path.join(process.resourcesPath, 'app', 'python', 'python.exe');
+    console.log('[MAIN] Starting backend...');
+    console.log('[MAIN] Backend executable path:', backendExePath);
+    console.log('[MAIN] App path:', app.getAppPath());
 
-    const scriptPath = isDev
-      ? path.join(process.cwd(), 'scripts', 'get_api_key.py')
-      : path.join(process.resourcesPath, 'app', 'scripts', 'get_api_key.py');
+    // Verify backend executable exists
+    if (!fs.existsSync(backendExePath)) {
+      console.error('[MAIN] ERROR: Backend executable not found!');
+      console.error('[MAIN] Expected at:', backendExePath);
 
-    if (!fs.existsSync(pythonExecutable)) {
-      return reject(new Error(`Python executable not found at: ${pythonExecutable}`));
-    }
-    if (!fs.existsSync(scriptPath)) {
-      return reject(new Error(`API key script not found at: ${scriptPath}`));
-    }
-
-    execFile(pythonExecutable, [scriptPath], (error, stdout, stderr) => {
-      if (error) {
-        console.error('Error executing get_api_key.py:', stderr);
-        return reject(new Error(`Failed to retrieve API key. Details: ${stderr}`));
+      // Debug: list app structure
+      const appRoot = path.dirname(app.getAppPath());
+      console.error('[MAIN] App root directory:', appRoot);
+      console.error('[MAIN] Contents of app root:');
+      try {
+        const files = fs.readdirSync(appRoot);
+        files.forEach(f => {
+          const fullPath = path.join(appRoot, f);
+          const isDir = fs.statSync(fullPath).isDirectory();
+          console.error('[MAIN]   -', isDir ? `[DIR] ${f}` : f);
+        });
+      } catch (err) {
+        console.error('[MAIN]   Error reading directory:', err.message);
       }
-      // The key is printed to stdout by the script.
-      resolve(stdout.trim());
+
+      reject(new Error(`Backend executable not found at ${backendExePath}`));
+      return;
+    }
+
+    console.log('[MAIN] Backend executable found, spawning process...');
+
+    // Spawn backend process
+    backendProcess = spawn(backendExePath, [], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      detached: false,
+      shell: false
     });
+
+    backendProcess.stdout.on('data', (data) => {
+      console.log('[BACKEND STDOUT]:', data.toString().trim());
+    });
+
+    backendProcess.stderr.on('data', (data) => {
+      console.error('[BACKEND STDERR]:', data.toString().trim());
+    });
+
+    backendProcess.on('error', (err) => {
+      console.error('[MAIN] Backend process spawn error:', err);
+      reject(err);
+    });
+
+    backendProcess.on('exit', (code, signal) => {
+      console.log('[MAIN] Backend process exited with code:', code, 'signal:', signal);
+    });
+
+    // Wait for backend to start listening
+    setTimeout(() => {
+      console.log('[MAIN] Backend startup completed');
+      resolve();
+    }, 5000);
   });
 }
 
+/**
+ * Create the application window and load the frontend.
+ */
+function createWindow() {
+  const frontendPath = getFrontendPath();
+  const indexPath = path.join(frontendPath, 'index.html');
 
-class FortunaDesktopApp {
-  constructor() {
-    this.mainWindow = null;
-    this.tray = null;
-    this.backendProcess = null;
+  console.log('[MAIN] Creating window...');
+  console.log('[MAIN] Frontend path:', frontendPath);
+  console.log('[MAIN] Index path:', indexPath);
 
-    if (!app.requestSingleInstanceLock()) {
-      app.quit();
-    } else {
-      app.on('second-instance', () => {
-        if (this.mainWindow) {
-          if (this.mainWindow.isMinimized()) this.mainWindow.restore();
-          this.mainWindow.focus();
-        }
-      });
-    }
-  }
+  // Verify frontend files exist
+  if (!fs.existsSync(indexPath)) {
+    console.error('[MAIN] ERROR: Frontend index.html not found!');
+    console.error('[MAIN] Expected at:', indexPath);
 
-  createMainWindow() {
-    this.mainWindow = new BrowserWindow({
-      width: 1600,
-      height: 1000,
-      title: 'Fortuna Faucet - Racing Analysis',
-      icon: path.join(__dirname, 'assets', 'icon.ico'),
-      webPreferences: {
-        nodeIntegration: false,
-        contextIsolation: true,
-        preload: path.join(__dirname, 'preload.js')
-      },
-      autoHideMenuBar: true,
-      backgroundColor: '#1a1a2e',
-      show: false
-    });
-
-    this.mainWindow.on('close', (event) => {
-      if (!app.isQuitting) {
-        event.preventDefault();
-        this.mainWindow.hide();
+    if (fs.existsSync(frontendPath)) {
+      console.error('[MAIN] Contents of frontend directory:');
+      try {
+        const files = fs.readdirSync(frontendPath);
+        files.forEach(f => console.error('[MAIN]   -', f));
+      } catch (err) {
+        console.error('[MAIN]   Error reading directory:', err.message);
       }
-    });
-
-    const isDev = process.env.NODE_ENV === 'development';
-    if (isDev) {
-      this.mainWindow.loadURL('http://localhost:3000');
     } else {
-      this.mainWindow.loadFile(path.join(__dirname, 'web-ui-build', 'out', 'index.html'));
+      console.error('[MAIN] Frontend directory does not exist!');
     }
+  }
 
-    this.mainWindow.once('ready-to-show', () => {
-      this.mainWindow.show();
+  mainWindow = new BrowserWindow({
+    width: 1400,
+    height: 900,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      enableRemoteModule: false,
+      preload: path.join(__dirname, 'preload.js'),
+      sandbox: true
+    },
+    icon: path.join(__dirname, 'assets', 'icon.ico')
+  });
+
+  // Load frontend
+  if (isDev) {
+    console.log('[MAIN] Development mode: loading from localhost:3000');
+    mainWindow.loadURL('http://localhost:3000');
+    mainWindow.webDevTools.openDevTools();
+  } else {
+    console.log('[MAIN] Production mode: loading from file:', indexPath);
+    mainWindow.loadFile(indexPath).catch(err => {
+      console.error('[MAIN] Error loading index.html:', err);
     });
   }
 
-  createSystemTray() {
-    const iconPath = path.join(__dirname, 'assets', 'tray-icon.png');
-    const icon = nativeImage.createFromPath(iconPath);
-    this.tray = new Tray(icon.resize({ width: 16, height: 16 }));
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
 
-    const contextMenu = Menu.buildFromTemplate([
-      { label: 'Show Dashboard', click: () => this.showWindow() },
-      { type: 'separator' },
-      { label: 'Quit Fortuna Faucet', click: () => this.quitApp() }
-    ]);
+  console.log('[MAIN] Window created');
+}
 
-    this.tray.setToolTip('Fortuna Faucet - Monitoring Races');
-    this.tray.setContextMenu(contextMenu);
-    this.tray.on('double-click', () => this.showWindow());
-  }
+/**
+ * App event: ready
+ */
+app.on('ready', async () => {
+  console.log('[MAIN] App ready event');
+  console.log('[MAIN] App version:', app.getVersion());
+  console.log('[MAIN] Node version:', process.version);
+  console.log('[MAIN] Electron version:', process.versions.electron);
+  console.log('[MAIN] App path:', app.getAppPath());
+  console.log('[MAIN] User data path:', app.getPath('userData'));
 
-  showWindow() {
-    if (this.mainWindow) {
-      this.mainWindow.show();
-      this.mainWindow.focus();
-    }
-  }
+  try {
+    console.log('[MAIN] ========== STARTING BACKEND ==========');
+    await startBackend();
+    console.log('[MAIN] ========== BACKEND STARTED ==========');
 
-  quitApp() {
-    app.isQuitting = true;
+    console.log('[MAIN] ========== CREATING WINDOW ==========');
+    createWindow();
+    console.log('[MAIN] ========== WINDOW CREATED ==========');
+  } catch (err) {
+    console.error('[MAIN] FATAL ERROR during startup:', err);
+
+    const { dialog } = require('electron');
+    dialog.showErrorBox(
+      'Fortuna Faucet Startup Error',
+      `Failed to start application:\n\n${err.message}\n\nPlease check the application logs for more details.\n\nLogs location: ${app.getPath('userData')}`
+    );
+
     app.quit();
   }
-
-  async startBackend() {
-    const isDev = process.env.NODE_ENV === 'development';
-    const rootPath = isDev ? path.join(__dirname, '..') : process.resourcesPath;
-    const pythonExecutable = isDev ? path.join(rootPath, '.venv', 'Scripts', 'python.exe') : path.join(rootPath, 'api.exe');
-
-    if (!fs.existsSync(pythonExecutable)) {
-      const errorMsg = `Backend executable not found at: ${pythonExecutable}`;
-      console.error(`[ERROR] ${errorMsg}`);
-      throw new Error(errorMsg);
-    }
-
-    // Step 1: Initialize the database (only in dev mode)
-    if (isDev) {
-      await new Promise((resolve, reject) => {
-        const dbInitProcess = spawn(pythonExecutable, ['initialize_db.py'], { cwd: path.join(rootPath, 'python_service') });
-        dbInitProcess.stdout.on('data', (data) => console.log(`[DB Init] ${data}`));
-        dbInitProcess.stderr.on('data', (data) => console.error(`[DB Init ERR] ${data}`));
-        dbInitProcess.on('close', (code) => {
-          if (code === 0) {
-            console.log('[SUCCESS] Database initialization complete.');
-            resolve();
-          } else {
-            reject(new Error(`Database initialization failed with code ${code}.`));
-          }
-        });
-      });
-    }
-
-    // Step 2: Start the Uvicorn server
-    return new Promise((resolve, reject) => {
-      let spawnOptions;
-      if (isDev) {
-          spawnOptions = {
-              cwd: rootPath,
-              stdio: ['ignore', 'pipe', 'pipe'],
-              detached: false,
-              args: ['run_backend.py']
-          };
-      } else {
-          spawnOptions = {
-              stdio: ['ignore', 'pipe', 'pipe'],
-              detached: false,
-              args: []
-          };
-      }
-
-      this.backendProcess = spawn(pythonExecutable, spawnOptions.args, spawnOptions);
-
-      let stdoutBuffer = '';
-      let stderrBuffer = '';
-      let startupResolved = false;
-
-      const rejectWithDetails = (baseError) => {
-        if (!startupResolved) {
-          startupResolved = true;
-          const detailMessage = `
---- Backend Process Failed ---
-Error: ${baseError.message}
-
---- STDOUT ---
-${stdoutBuffer.trim() || '(No standard output)'}
-
---- STDERR ---
-${stderrBuffer.trim() || '(No standard error output)'}
-          `;
-          reject(new Error(detailMessage));
-        }
-      };
-
-      this.backendProcess.stdout.on('data', (data) => {
-        const logMsg = data.toString();
-        stdoutBuffer += logMsg;
-        console.log(`[Backend] ${logMsg}`);
-        if (!startupResolved) {
-          if (stdoutBuffer.includes('Backend ready')) {
-            console.log('[✓] Backend startup signal received.');
-            startupResolved = true;
-            // Add a small delay for safety, as recommended
-            setTimeout(resolve, 1000);
-          }
-        }
-      });
-
-      this.backendProcess.stderr.on('data', (data) => {
-        const errorMsg = data.toString();
-        stderrBuffer += errorMsg;
-        console.error(`[Backend STDERR] ${errorMsg}`);
-        notifier.notify({
-          title: 'Fortuna Faucet - Backend Error',
-          message: `Error: ${errorMsg.trim()}`,
-          icon: path.join(__dirname, 'assets', 'icon.ico')
-        });
-      });
-
-      this.backendProcess.on('error', (error) => {
-        console.error(`[Backend ERROR] Spawning process failed: ${error}`);
-        notifier.notify({
-          title: 'Fortuna Faucet - Backend Error',
-          message: `Backend spawn failed: ${error.message}`,
-          icon: path.join(__dirname, 'assets', 'icon.ico')
-        });
-        rejectWithDetails(error);
-      });
-
-      this.backendProcess.on('close', (code) => {
-        console.log(`[Backend] Process exited with code ${code}`);
-        if (!startupResolved) {
-          const errorMsg = `Backend process exited prematurely with code ${code}.`;
-          console.error(`[ERROR] ${errorMsg}`);
-          notifier.notify({
-            title: 'Fortuna Faucet - Backend Error',
-            message: errorMsg,
-            icon: path.join(__dirname, 'assets', 'icon.ico')
-          });
-          rejectWithDetails(new Error(errorMsg));
-        }
-      });
-
-      // Safety timeout
-      setTimeout(() => {
-        if (!startupResolved) {
-          rejectWithDetails(new Error('Startup timed out after 15 seconds.'));
-        }
-      }, 15000);
-    });
-  }
-
-
-  initialize() {
-    // --- Create and Show UI Immediately ---
-    this.createMainWindow();
-    this.createSystemTray();
-    this.mainWindow.once('ready-to-show', () => {
-      this.mainWindow.show();
-      this.mainWindow.focus();
-    });
-
-    // --- Start Backend Asynchronously (Non-Blocking) ---
-    // Do NOT await or block on this. Let it run in the background.
-    this.startBackend()
-      .then(() => {
-        console.log('[SUCCESS] Backend started successfully.');
-        // Notify frontend of online status
-        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-          this.mainWindow.webContents.send('backend-status', { status: 'online' });
-        }
-      })
-      .catch(error => {
-        console.error(`[BACKEND FAILURE] Backend failed to start: ${error.message}`);
-        // Do NOT show blocking error dialog. Log it and notify frontend of offline status.
-        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-          this.mainWindow.webContents.send('backend-status', { status: 'offline', error: error.message });
-        }
-      });
-  }
-
-  cleanup() {
-    console.log('Cleaning up backend process...');
-    if (this.backendProcess) {
-      this.backendProcess.kill();
-    }
-  }
-}
-
-let fortunaApp;
-
-app.whenReady().then(() => {
-  // Register the IPC handler to retrieve the API key when requested by the frontend.
-  ipcMain.handle('get-api-key', async () => {
-    try {
-      console.log('IPC handler "get-api-key" invoked.');
-      const apiKey = await getApiKeyFromCredentials();
-      console.log('Successfully retrieved API key.');
-      return apiKey;
-    } catch (error) {
-      console.error('Failed to get API key via IPC handler:', error);
-      // Return null or an empty string to the renderer process in case of an error.
-      // The frontend should handle this gracefully.
-      return null;
-    }
-  });
-
-  ipcMain.handle('generate-api-key', async () => {
-    const { tokenUrlsafe } = require('crypto');
-    const apiKey = tokenUrlsafe(32);
-    const envPath = path.join(app.getAppPath(), '..', '.env');
-    const content = `API_KEY="${apiKey}"\n`;
-
-    return new Promise((resolve, reject) => {
-      fs.writeFile(envPath, content, (err) => {
-        if (err) {
-          reject(err.message);
-        } else {
-          resolve(apiKey);
-        }
-      });
-    });
-  });
-
-  fortunaApp = new FortunaDesktopApp();
-  fortunaApp.initialize();
 });
 
-app.on('window-all-closed', (event) => {
-  // Prevent app from quitting when all windows are closed.
-  // The app will continue to run in the system tray.
-  event.preventDefault();
+/**
+ * App event: window-all-closed
+ */
+app.on('window-all-closed', () => {
+  console.log('[MAIN] All windows closed');
+  if (process.platform !== 'darwin') {
+    if (backendProcess) {
+      console.log('[MAIN] Terminating backend process');
+      backendProcess.kill();
+    }
+    app.quit();
+  }
 });
 
+/**
+ * App event: activate (macOS)
+ */
+app.on('activate', () => {
+  console.log('[MAIN] Activate event');
+  if (mainWindow === null) {
+    createWindow();
+  }
+});
+
+/**
+ * App event: before-quit
+ */
 app.on('before-quit', () => {
-  if (fortunaApp) {
-    fortunaApp.cleanup();
+  console.log('[MAIN] Before quit event');
+  if (backendProcess) {
+    console.log('[MAIN] Killing backend process');
+    try {
+      backendProcess.kill();
+    } catch (err) {
+      console.error('[MAIN] Error killing backend:', err);
+    }
   }
 });
+
+/**
+ * Handle uncaught exceptions
+ */
+process.on('uncaughtException', (err) => {
+  console.error('[MAIN] Uncaught exception:', err);
+});
+
+console.log('[MAIN] ========== ELECTRON MAIN PROCESS LOADED ==========');
