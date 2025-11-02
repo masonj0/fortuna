@@ -20,10 +20,12 @@
       "output": "dist"
     },
     "files": [
-      "**/*",
-      "!node_modules/**/*",
-      "!dist/**/*",
-      "!build/**/*"
+      "main.js",
+      "preload.js",
+      "assets/**/*",
+      "web-ui-build/**/*",
+      "resources/**/*",
+      "!node_modules/**/*"
     ],
     "extraResources": [
       {
