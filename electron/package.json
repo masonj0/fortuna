@@ -20,6 +20,7 @@
       "preload.js",
       "assets/**/*",
       "web-ui-build/**/*",
+      "resources/**/*",
       "!node_modules/**/*"
     ],
     "extraResources": [
@@ -34,7 +35,6 @@
     },
     "msi": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
       "perMachine": true,
       "createDesktopShortcut": true
     }
