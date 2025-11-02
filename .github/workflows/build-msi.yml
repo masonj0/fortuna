@@ -44,13 +44,6 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Diagnostic - Initial Workspace Structure
-        shell: pwsh
-        run: |
-          Write-Host "--- [DIAG] Initial Workspace Structure ---"
-          Get-ChildItem -Recurse -Depth 3 | Out-String -Width 120
-          Write-Host "------------------------------------------"
-
       # ===== FRONTEND BUILD =====
       - name: Install Frontend Dependencies
         shell: pwsh
@@ -72,10 +65,6 @@ jobs:
 
           $fileCount = (Get-ChildItem -Path "out" -Recurse -File | Measure-Object).Count
           Write-Host "✅ Frontend built successfully: $fileCount files" -ForegroundColor Green
-
-          Write-Host "--- [DIAG] Frontend Output Files (web_platform/frontend/out) ---"
-          Get-ChildItem -Recurse "out" | Out-String -Width 120
-          Write-Host "--------------------------------------------------------------"
 
       - name: Stage Frontend Assets for Electron
         shell: pwsh
@@ -105,10 +94,6 @@ jobs:
           }
 
           Write-Host "✅ Staged $destFiles frontend files to $dest" -ForegroundColor Green
-
-          Write-Host "--- [DIAG] Staged Frontend Assets (electron/web-ui-build) ---"
-          Get-ChildItem -Recurse $dest | Out-String -Width 120
-          Write-Host "---------------------------------------------------------------"
 
       # ===== BACKEND BUILD =====
       - name: Install Python Dependencies
