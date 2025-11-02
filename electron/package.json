@@ -19,35 +19,38 @@
     "appId": "com.fortuna.faucet",
     "productName": "Fortuna Faucet",
     "artifactName": "${productName}-${version}-${arch}.${ext}",
-    "files": [
-      "main.js",
-      "preload.js",
-      "install-validator.js",
-      "web-ui-build/out/**/*"
-    ],
     "extraResources": [
       {
-        "from": "resources/",
+        "from": "resources",
         "to": "resources",
         "filter": [
           "**/*"
         ]
       }
     ],
+    "files": [
+      "main.js",
+      "preload.js",
+      "package.json",
+      "web-ui-build/out/**/*"
+    ],
     "win": {
-      "target": "msi",
+      "target": [
+        {
+          "target": "msi",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "icon": "assets/icon.ico"
     },
     "msi": {
       "oneClick": false,
       "perMachine": true,
       "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
       "shortcutName": "Fortuna Faucet"
-    },
-    "nsis": {
-      "oneClick": false,
-      "perMachine": true,
-      "createDesktopShortcut": true
     }
   },
   "dependencies": {
