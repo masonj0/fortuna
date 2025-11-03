@@ -27,6 +27,13 @@ jobs:
           npm cache clean --force
           pip cache purge
 
+      - name: Clear Caches for Fresh Build
+        shell: pwsh
+        run: |
+          Write-Host "Clearing npm and pip caches for cache-busting..." -ForegroundColor Yellow
+          npm cache clean --force
+          pip cache purge
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -38,12 +45,6 @@ jobs:
           python-version: '3.12'
 
       # ===== FRONTEND BUILD =====
-      - name: Clear Caches for Fresh Build
-        shell: pwsh
-        run: |
-          Write-Host "Clearing npm and pip caches for cache-busting..." -ForegroundColor Yellow
-          npm cache clean --force
-          pip cache purge
       - name: Install Frontend Dependencies
         shell: pwsh
         run: |
@@ -145,6 +146,10 @@ jobs:
 
           Write-Host "✅ Backend executable built" -ForegroundColor Green
 
+          Write-Host "--- [DIAG] PyInstaller Output (dist/) ---"
+          Get-ChildItem -Recurse ".\dist\" | Out-String -Width 120
+          Write-Host "-----------------------------------------"
+
       - name: Stage Backend Executable
         shell: pwsh
         run: |
@@ -175,6 +180,10 @@ jobs:
           }
 
           Write-Host "✅ Backend executable staged successfully" -ForegroundColor Green
+
+          Write-Host "--- [DIAG] Staged Backend Assets (electron/resources) ---"
+          Get-ChildItem -Recurse $destDir | Out-String -Width 120
+          Write-Host "---------------------------------------------------------"
 
       # ===== ELECTRON BUILD =====
       - name: Install Electron Dependencies
