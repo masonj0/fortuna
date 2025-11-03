@@ -36,12 +36,9 @@ jobs:
           # Python cleanup
           py -m pip cache purge 2>&1 | Out-Null
 
-          # Windows-specific cleanup
+          # Intentionally leaving global caches for actions/setup-node to manage
+          # but clearing temp files for good measure.
           $cleanupPaths = @(
-            "$env:APPDATA\npm-cache",
-            "$env:APPDATA\npm",
-            "$env:USERPROFILE\.npm",
-            "$env:USERPROFILE\.node-gyp",
             "$env:TEMP\npm-*",
             "$env:TEMP\pip-*"
           )
