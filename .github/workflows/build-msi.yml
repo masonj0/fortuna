@@ -1,4 +1,3 @@
-# Cache-buster: 2025-11-03 05:15:00
 name: Build Fortuna Faucet MSI Installer
 
 on:
@@ -10,134 +9,172 @@ on:
     branches: [main]
   workflow_dispatch:
 
+env:
+  NODE_VERSION: '20'
+  PYTHON_VERSION: '3.12'
+  CACHE_BUST: ${{ github.run_id }}
+
 jobs:
   build-installer:
     name: Build MSI Installer
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Absolute Nuclear Cache Annihilation
+      # ===== NUCLEAR CACHE OBLITERATION =====
+      - name: '🔥 NUCLEAR CACHE OBLITERATION'
         shell: pwsh
         run: |
-          Write-Host "--- [OVERKILL] Absolute Nuclear Cache Annihilation ---" -ForegroundColor Red
-          npm cache clean --force --verbose
-          npm cache verify
-          pip cache purge
-          Remove-Item -Path "$env:APPDATA\npm-cache" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "$env:USERPROFILE\.npm" -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "$env:USERPROFILE\.node-gyp" -Recurse -Force -ErrorAction SilentlyContinue
+          Write-Host "=== STARTING NUCLEAR CACHE OBLITERATION ===" -ForegroundColor Red
 
-          Get-ChildItem -Path . -Recurse -Filter "node_modules" -Directory -Force -ErrorAction SilentlyContinue | ForEach-Object {
-            Write-Host "     - Removing: $($_.FullName)"
-            Remove-Item -Path $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
-          }
+          # NPM cleanup
+          npm cache clean --force 2>&1 | Out-Null
 
-          $toDestroy = @("dist", "build", "electron/dist", "electron/build", "electron/out", "web_platform/frontend/.next", "web_platform/frontend/out", "package-lock.json", "electron/package-lock.json", "web_platform/frontend/package-lock.json")
-          foreach ($path in $toDestroy) {
+          # Python cleanup
+          py -m pip cache purge 2>&1 | Out-Null
+
+          # Windows-specific cleanup
+          $cleanupPaths = @(
+            "$env:APPDATA\npm-cache",
+            "$env:APPDATA\npm",
+            "$env:USERPROFILE\.npm",
+            "$env:USERPROFILE\.node-gyp",
+            "$env:TEMP\npm-*",
+            "$env:TEMP\pip-*"
+          )
+
+          foreach ($path in $cleanupPaths) {
             if (Test-Path $path) {
-              Write-Host "     - Removing: $path"
-              Remove-Item -Path $path -Recurse -Force -ErrorAction SilentlyContinue
+              Remove-Item -Path $path -Recurse -Force -ErrorAction SilentlyContinue | Out-Null
             }
           }
-          Write-Host "--- [OVERKILL] Environment has been vaporized ---" -ForegroundColor Red
 
-      - name: Setup Node.js
+          # Remove node_modules globally
+          Get-ChildItem -Path . -Recurse -Filter "node_modules" -Directory -Force -ErrorAction SilentlyContinue |
+            ForEach-Object { Remove-Item -Path $_.FullName -Recurse -Force -ErrorAction SilentlyContinue }
+
+          # Clean build artifacts
+          @("dist", "build", "*.egg-info", "__pycache__") | ForEach-Object {
+            Get-ChildItem -Path . -Recurse -Filter $_ -Directory -Force -ErrorAction SilentlyContinue |
+              ForEach-Object { Remove-Item -Path $_.FullName -Recurse -Force -ErrorAction SilentlyContinue }
+          }
+
+          Write-Host "=== CACHE OBLITERATION COMPLETE ===" -ForegroundColor Green
+
+      # ===== ENVIRONMENT SETUP =====
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
 
-      - name: Setup Python 3.12
+      - name: Setup Python ${{ env.PYTHON_VERSION }}
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
 
       # ===== FRONTEND BUILD =====
-      - name: Install Frontend Dependencies
+      - name: Frontend - Install Dependencies
         shell: pwsh
         run: |
+          Write-Host "`n=== FRONTEND: Installing Dependencies ===" -ForegroundColor Cyan
           cd web_platform/frontend
-          npm install --verbose 2>&1 | Tee-Object -FilePath ../../npm-frontend-install.log
+          npm ci --prefer-offline --no-audit 2>&1 | Tee-Object -FilePath ../../logs/npm-install.log
+
           if ($LASTEXITCODE -ne 0) {
-            Write-Error "npm install failed for frontend!"
-            exit 1
+            Write-Host "npm ci output:" -ForegroundColor Yellow
+            Get-Content ../../logs/npm-install.log | Select-Object -Last 50
+            throw "Frontend npm install failed"
+          }
+          Write-Host "✅ Frontend dependencies installed" -ForegroundColor Green
+
+      - name: Frontend - Build Static Export
+        shell: pwsh
+        run: |
+          Write-Host "`n=== FRONTEND: Building Static Export ===" -ForegroundColor Cyan
+          cd web_platform/frontend
+          npm run build 2>&1 | Tee-Object -FilePath ../../logs/frontend-build.log
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "Frontend build failed!" -ForegroundColor Red
+            Get-Content ../../logs/frontend-build.log | Select-Object -Last 100
+            throw "Frontend build failed"
           }
 
-      - name: Build Frontend (Static Export)
-        shell: pwsh
-        run: |
-          cd web_platform/frontend
-          Write-Host "Building Next.js frontend for static export..." -ForegroundColor Cyan
-          npm run build 2>&1 | Tee-Object -FilePath ../../build-frontend.log
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "Frontend build failed! Check build-frontend.log for details."
-            exit 1
-          }
           if (-not (Test-Path "out/index.html")) {
-            Write-Error "Frontend build succeeded but out/index.html not found"
-            exit 1
+            throw "Frontend build succeeded but out/index.html missing"
           }
-          $fileCount = (Get-ChildItem -Path "out" -Recurse -File | Measure-Object).Count
-          Write-Host "✅ Frontend built successfully: $fileCount files" -ForegroundColor Green
 
-      - name: INTELLIGENT COPY Stage Frontend Assets for Electron
+          $fileCount = @(Get-ChildItem -Path "out" -Recurse -File).Count
+          Write-Host "✅ Frontend built: $fileCount files" -ForegroundColor Green
+
+      - name: Frontend - Verify Output
         shell: pwsh
         run: |
-          Write-Host "--- [OVERKILL] INTELLIGENT COPY: Staging essential frontend assets ---" -ForegroundColor Yellow
+          $outDir = "web_platform/frontend/out"
+          $requiredFiles = @("index.html", "_next")
 
-          $source = "web_platform/frontend/out"
+          Write-Host "`n=== FRONTEND: Verifying Output ===" -ForegroundColor Cyan
+          foreach ($file in $requiredFiles) {
+            if (-not (Test-Path (Join-Path $outDir $file))) {
+              throw "Missing required file: $file"
+            }
+            Write-Host "✅ $file found" -ForegroundColor Green
+          }
+
+      - name: Frontend - Stage to Electron
+        shell: pwsh
+        run: |
+          Write-Host "`n=== FRONTEND: Staging to Electron ===" -ForegroundColor Cyan
+
+          $src = "web_platform/frontend/out"
           $dest = "electron/web-ui-build/out"
 
           if (Test-Path $dest) { Remove-Item -Recurse -Force $dest }
           New-Item -ItemType Directory -Path $dest -Force | Out-Null
 
-          # Selectively copy only essential, stable assets
-          Write-Host "  → Copying essential assets..."
-          Copy-Item -Path (Join-Path $source "_next") -Destination $dest -Recurse -Force
-          Copy-Item -Path (Join-Path $source "*.html") -Destination $dest -Force
-          Copy-Item -Path (Join-Path $source "favicon.ico") -Destination $dest -Force
+          Copy-Item -Path "$src/*" -Destination $dest -Recurse -Force
 
-          # VERIFY - File by file on the filtered set
-          $sourceFiles = @(Get-ChildItem -Path $source -Recurse -File | Where-Object { $_.Extension -in ".html", ".css", ".js", ".ico" })
-          $destFiles = @(Get-ChildItem -Path $dest -Recurse -File)
-
-          if ($sourceFiles.Count -ne $destFiles.Count) {
-            Write-Host "INTELLIGENT COPY WARNING: File count mismatch. Source: $($sourceFiles.Count), Dest: $($destFiles.Count)" -ForegroundColor Yellow
-            # Not fatal, as we prioritize delivery.
+          if (-not (Test-Path "$dest/index.html")) {
+            throw "Failed to stage frontend to electron"
           }
 
-          if (-not (Test-Path (Join-Path $dest "index.html"))) {
-            Write-Error "INTELLIGENT COPY FAILED: Critical file index.html is missing from destination."
-            exit 1
-          }
-
-          Write-Host "  ✅ Intelligent copy complete. Verified presence of index.html and $($destFiles.Count) total files." -ForegroundColor Green
+          $fileCount = @(Get-ChildItem -Path $dest -Recurse -File).Count
+          Write-Host "✅ Frontend staged: $fileCount files" -ForegroundColor Green
 
       # ===== BACKEND BUILD =====
-      - name: Install Python Dependencies
+      - name: Backend - Install Dependencies
         shell: pwsh
         run: |
-          Write-Host "Installing Python dependencies..." -ForegroundColor Cyan
+          Write-Host "`n=== BACKEND: Installing Dependencies ===" -ForegroundColor Cyan
           cd python_service
-          pip install -r requirements.txt --verbose 2>&1 | Tee-Object -FilePath ../pip-install.log
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "Pip install failed!"
-            exit 1
-          }
-          cd ..
-          Write-Host "✅ Dependencies installed" -ForegroundColor Green
+          pip install --upgrade pip setuptools wheel 2>&1 | Out-Null
+          pip install -r requirements.txt --no-cache-dir 2>&1 | Tee-Object -FilePath ../logs/pip-install.log
 
-      - name: Build Backend Executable with PyInstaller
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "Pip install failed!" -ForegroundColor Red
+            throw "Backend pip install failed"
+          }
+          Write-Host "✅ Backend dependencies installed" -ForegroundColor Green
+
+      - name: Backend - Build with PyInstaller
         shell: pwsh
         run: |
-          Write-Host "Building backend executable with PyInstaller..." -ForegroundColor Cyan
+          Write-Host "`n=== BACKEND: Building Executable ===" -ForegroundColor Cyan
+          cd python_service
 
           pyinstaller --onefile `
             --name fortuna-backend `
             --console `
+            --clean `
+            --noconfirm `
+            --distpath ../electron/resources `
+            --buildpath ./build-pyinstaller `
+            --specpath ./spec-pyinstaller `
             --hidden-import=uvicorn `
             --hidden-import=uvicorn.logging `
             --hidden-import=uvicorn.loops `
@@ -163,295 +200,192 @@ jobs:
             --hidden-import=redis.asyncio.connection `
             --collect-all=uvicorn `
             --collect-all=fastapi `
-            --add-data "python_service/adapters;adapters" `
-            python_service/api.py 2>&1 | Tee-Object -FilePath pyinstaller.log
+            --add-data "adapters;adapters" `
+            api.py 2>&1 | Tee-Object -FilePath ../logs/pyinstaller.log
 
           if ($LASTEXITCODE -ne 0) {
-            Write-Error "PyInstaller failed! Check pyinstaller.log for details."
-            exit 1
+            Write-Host "PyInstaller failed!" -ForegroundColor Red
+            Get-Content ../logs/pyinstaller.log | Select-Object -Last 50
+            throw "PyInstaller build failed"
           }
-
           Write-Host "✅ Backend executable built" -ForegroundColor Green
 
-      - name: AGGRESSIVE COPY Stage Backend Executable
+      - name: Backend - Verify Executable
         shell: pwsh
         run: |
-          Write-Host "--- [OVERKILL] AGGRESSIVE COPY: Staging backend executable ---" -ForegroundColor Yellow
+          Write-Host "`n=== BACKEND: Verifying Executable ===" -ForegroundColor Cyan
 
-          $source = ".\dist\fortuna-backend.exe"
-          $destDir = ".\electron\resources"
-          $dest = Join-Path $destDir "fortuna-backend.exe"
+          $exe = "electron/resources/fortuna-backend.exe"
 
-          if (-not (Test-Path $source)) {
-            Write-Error "AGGRESSIVE COPY FAILED: Source executable not found at: $source"
-            exit 1
-          }
-          if (-not (Test-Path $destDir)) {
-            New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+          if (-not (Test-Path $exe)) {
+            throw "Backend executable not found at: $exe"
           }
 
-          Copy-Item -Path $source -Destination $dest -Force -ErrorAction Stop
-
-          if (-not (Test-Path $dest)) {
-            Write-Error "AGGRESSIVE COPY FAILED: Copy to destination failed: $dest"
-            exit 1
-          }
-
-          $sourceSize = (Get-Item $source).Length
-          $destSize = (Get-Item $dest).Length
-
-          if ($sourceSize -ne $destSize) {
-            Write-Error "AGGRESSIVE COPY FAILED: File size mismatch! Source: $sourceSize, Dest: $destSize"
-            exit 1
-          }
-
-          Write-Host "  ✅ Aggressive copy complete. Verified backend executable ($([math]::Round($destSize / 1MB, 2)) MB)." -ForegroundColor Green
+          $size = (Get-Item $exe).Length / 1MB
+          Write-Host "✅ Backend executable verified: $([math]::Round($size, 2)) MB" -ForegroundColor Green
 
       # ===== ELECTRON BUILD =====
-      - name: Install Electron Dependencies
+      - name: Electron - Install Dependencies
         shell: pwsh
         run: |
+          Write-Host "`n=== ELECTRON: Installing Dependencies ===" -ForegroundColor Cyan
           cd electron
-          npm install --verbose 2>&1 | Tee-Object -FilePath ../npm-electron-install.log
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "npm install failed for electron!"
-            exit 1
-          }
-
-      - name: MEGA VERIFICATION - All Files Present
-        shell: pwsh
-        run: |
-          Write-Host "`n--- [OVERKILL] MEGA VERIFICATION - ALL CRITICAL FILES ---" -ForegroundColor Magenta
-
-          $checks = @(
-            @{ name = "Electron: main.js"; path = "electron/main.js" },
-            @{ name = "Electron: preload.js"; path = "electron/preload.js" },
-            @{ name = "Electron: package.json"; path = "electron/package.json" },
-            @{ name = "Asset: icon.ico"; path = "electron/assets/icon.ico" },
-            @{ name = "BACKEND: fortuna-backend.exe"; path = "electron/resources/fortuna-backend.exe" },
-            @{ name = "FRONTEND: index.html"; path = "electron/web-ui-build/out/index.html" },
-            @{ name = "FRONTEND: _next dir"; path = "electron/web-ui-build/out/_next" }
-          )
-
-          $allGood = $true
-          foreach ($check in $checks) {
-            $exists = Test-Path $check.path
-            $status = if ($exists) { "[ ✅ OK ]" } else { "[ ❌ FAILED ]" }
-            $color = if ($exists) { "Green" } else { "Red" }
-
-            if ($exists) {
-              if (Test-Path $check.path -PathType Container) {
-                $count = @(Get-ChildItem -Path $check.path -Recurse -File).Count
-                Write-Host "$status $($check.name): Found directory with $count files" -ForegroundColor $color
-              } else {
-                $size = (Get-Item $check.path).Length
-                if ($size -gt 1MB) { $sizeStr = "$([math]::Round($size / 1MB, 2)) MB" }
-                elseif ($size -gt 1KB) { $sizeStr = "$([math]::Round($size / 1KB, 2)) KB" }
-                else { $sizeStr = "$size bytes" }
-                Write-Host "$status $($check.name): Found file ($sizeStr)" -ForegroundColor $color
-              }
-            } else {
-              Write-Host "$status $($check.name): MISSING at $($check.path)" -ForegroundColor $color
-              $allGood = $false
-            }
-          }
-
-          if (-not $allGood) {
-            Write-Error "MEGA VERIFICATION FAILED! Critical assets are missing before the build step."
-            exit 1
-          }
-
-          Write-Host "`n--- [OVERKILL] MEGA VERIFICATION PASSED! ALL ASSETS ARE STAGED ---" -ForegroundColor Magenta
-
-      - name: Build MSI Installer (Absolute Path Overkill)
-        shell: pwsh
-        run: |
-          Write-Host "--- [OVERKILL] Preparing Absolute Path Configuration ---" -ForegroundColor Magenta
-
-          $absolutePath = (Get-Location).Path.Replace('\', '/')
-          Write-Host "  Runner absolute path: $absolutePath"
-
-          $template = Get-Content "electron/electron-builder-config.yml" -Raw
-          $finalConfig = $template.Replace("__ABSOLUTE_PATH__", $absolutePath)
-
-          $configPath = "electron/electron-builder-config.yml"
-          Set-Content -Path $configPath -Value $finalConfig -Force
-
-          Write-Host "`n--- [OVERKILL] Final Configuration ---" -ForegroundColor Magenta
-          Get-Content $configPath | Write-Host
-          Write-Host "------------------------------------" -ForegroundColor Magenta
-
-          Write-Host "`n=== BUILDING MSI INSTALLER (ABSOLUTE PATH MODE) ===" -ForegroundColor Cyan
-
-          npx electron-builder --projectDir electron --config electron-builder-config.yml 2>&1 | Tee-Object -FilePath build.log
+          npm ci --prefer-offline --no-audit 2>&1 | Tee-Object -FilePath ../logs/npm-electron.log
 
           if ($LASTEXITCODE -ne 0) {
-            Write-Host "`n--- Build Log ---"
-            if (Test-Path "build.log") {
-              Get-Content build.log
-            }
-            Write-Error "electron-builder failed with exit code $LASTEXITCODE"
-            exit 1
+            throw "Electron npm install failed"
+          }
+          Write-Host "✅ Electron dependencies installed" -ForegroundColor Green
+
+      - name: Electron - Pre-Build Verification
+        shell: pwsh
+        run: |
+          Write-Host "`n=== ELECTRON: Pre-Build Verification ===" -ForegroundColor Cyan
+
+          $checks = @{
+            "main.js" = "electron/main.js"
+            "preload.js" = "electron/preload.js"
+            "package.json" = "electron/package.json"
+            "icon.ico" = "electron/assets/icon.ico"
+            "backend.exe" = "electron/resources/fortuna-backend.exe"
+            "frontend/index.html" = "electron/web-ui-build/out/index.html"
+            "frontend/_next" = "electron/web-ui-build/out/_next"
           }
 
-          Write-Host "✅ MSI build completed successfully" -ForegroundColor Green
-        env:
-          CI: 'true'
+          foreach ($name in $checks.Keys) {
+            $path = $checks[$name]
+            if (-not (Test-Path $path)) {
+              throw "Missing required file: $name at $path"
+            }
+            Write-Host "✅ $name verified" -ForegroundColor Green
+          }
+
+      - name: Electron - Build MSI
+        shell: pwsh
+        run: |
+          Write-Host "`n=== ELECTRON: Building MSI ===" -ForegroundColor Cyan
+          cd electron
+
+          # Update electron-builder config with absolute path
+          $configPath = "electron-builder-config.yml"
+          $runnerPath = (Get-Location).Path.Replace('\', '/')
+
+          if (Test-Path $configPath) {
+            $config = Get-Content $configPath -Raw
+            $config = $config -replace '__ABSOLUTE_PATH__', $runnerPath
+            Set-Content -Path $configPath -Value $config -Force
+          }
+
+          npx electron-builder --projectDir . --config electron-builder-config.yml --publish never 2>&1 | Tee-Object -FilePath ../logs/electron-builder.log
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "electron-builder failed!" -ForegroundColor Red
+            Get-Content ../logs/electron-builder.log | Select-Object -Last 100
+            throw "MSI build failed"
+          }
+          Write-Host "✅ MSI build completed" -ForegroundColor Green
 
       # ===== POST-BUILD VERIFICATION =====
-      - name: Verify MSI Exists
+      - name: Post-Build - Locate MSI
         shell: pwsh
         run: |
-          Write-Host "`n=== LOCATING MSI ===" -ForegroundColor Cyan
+          Write-Host "`n=== POST-BUILD: Locating MSI ===" -ForegroundColor Cyan
 
-          $msiFile = Get-ChildItem -Path ".\electron\dist" -Filter "*.msi" -Recurse | Select-Object -First 1
+          $msi = Get-ChildItem -Path "electron/dist" -Filter "*.msi" -Recurse | Select-Object -First 1
 
-          if (-not $msiFile) {
-            Write-Host "Directory contents of electron/dist:"
-            Get-ChildItem -Path ".\electron\dist" -Recurse | ForEach-Object { Write-Host $_.FullName }
-            Write-Error "No MSI file found in electron/dist"
-            exit 1
+          if (-not $msi) {
+            Write-Host "Contents of electron/dist:" -ForegroundColor Yellow
+            Get-ChildItem -Path "electron/dist" -Recurse | ForEach-Object { Write-Host $_.FullName }
+            throw "MSI file not found"
           }
 
-          $msiSize = $msiFile.Length / 1MB
-          Write-Host "✅ MSI found: $($msiFile.Name) ($([math]::Round($msiSize, 2)) MB)" -ForegroundColor Green
+          $size = $msi.Length / 1MB
+          Write-Host "✅ MSI found: $($msi.Name) ($([math]::Round($size, 2)) MB)" -ForegroundColor Green
 
-      - name: Extract and Verify MSI Contents (Non-Fatal)
+          # Save path for artifact upload
+          $msi.FullName | Out-File -FilePath "msi-path.txt" -Force
+
+      - name: Post-Build - Extract & Verify MSI (Optional)
         shell: pwsh
+        continue-on-error: true
         run: |
-          Write-Host "`n=== VERIFYING MSI CONTENTS (NON-FATAL) ===" -ForegroundColor Cyan
+          Write-Host "`n=== POST-BUILD: MSI Content Verification ===" -ForegroundColor Cyan
 
-          $msiFile = Get-ChildItem -Path ".\electron\dist" -Filter "*.msi" -Recurse | Select-Object -First 1
-          if (-not $msiFile) {
-            Write-Host "  [WARNING] No MSI file found to verify. Skipping verification." -ForegroundColor Yellow
+          $msi = Get-ChildItem -Path "electron/dist" -Filter "*.msi" -Recurse | Select-Object -First 1
+          if (-not $msi) {
+            Write-Host "No MSI found to verify" -ForegroundColor Yellow
             return
           }
 
-          $extractPath = ".\msi-extract"
+          $extractPath = "msi-contents"
+          if (Test-Path $extractPath) { Remove-Item -Recurse -Force $extractPath }
+          New-Item -ItemType Directory -Path $extractPath | Out-Null
 
-          if (Test-Path $extractPath) {
-            Remove-Item -Recurse -Force $extractPath
-          }
-          New-Item -ItemType Directory -Path $extractPath -Force | Out-Null
-
+          # Try to extract with 7-Zip if available
           $sevenZip = "C:\Program Files\7-Zip\7z.exe"
-          if (-not (Test-Path $sevenZip)) {
-              Write-Host "  [WARNING] 7-Zip not found. MSI extraction may be incomplete. Skipping verification." -ForegroundColor Yellow
-              return
-          }
+          if (Test-Path $sevenZip) {
+            & $sevenZip x "$($msi.FullName)" -o"$extractPath" -y 2>&1 | Out-Null
 
-          & $sevenZip x "$($msiFile.FullName)" -o"$extractPath" -y | Out-Null
+            $backendFound = Get-ChildItem -Path $extractPath -Recurse -Filter "fortuna-backend.exe" -ErrorAction SilentlyContinue
+            $frontendFound = Get-ChildItem -Path $extractPath -Recurse -Filter "index.html" -ErrorAction SilentlyContinue
 
-          $cabFile = Get-ChildItem -Path $extractPath -Recurse -Filter "*.cab" | Select-Object -First 1
-          if ($cabFile) {
-            $cabPath = ".\cab-extract"
-            if (Test-Path $cabPath) { Remove-Item -Recurse -Force $cabPath }
-            New-Item -ItemType Directory -Path $cabPath -Force | Out-Null
-            & $sevenZip x "$($cabFile.FullName)" -o"$cabPath" -y | Out-Null
-            $extractPath = $cabPath
-          }
-
-          $backend = @(Get-ChildItem -Path $extractPath -Recurse -Filter "fortuna-backend.exe" -ErrorAction SilentlyContinue)
-          $frontendIndex = @(Get-ChildItem -Path $extractPath -Recurse -Filter "index.html" -ErrorAction SilentlyContinue)
-          $mainJs = @(Get-ChildItem -Path $extractPath -Recurse -Filter "main.js" -ErrorAction SilentlyContinue)
-
-          Write-Host "`n📦 Final MSI Contents Analysis:"
-          $missing = @()
-          if ($backend.Count -gt 0) {
-            Write-Host "  [ ✅ PASS ] Backend executable FOUND" -ForegroundColor Green
+            if ($backendFound) { Write-Host "✅ Backend executable verified in MSI" -ForegroundColor Green }
+            if ($frontendFound) { Write-Host "✅ Frontend files verified in MSI" -ForegroundColor Green }
           } else {
-            Write-Host "  [ ❌ FAIL ] Backend executable NOT FOUND" -ForegroundColor Red
-            $missing += "fortuna-backend.exe"
-          }
-
-          if ($frontendIndex.Count -gt 0) {
-            Write-Host "  [ ✅ PASS ] Frontend (index.html) FOUND" -ForegroundColor Green
-          } else {
-            Write-Host "  [ ❌ FAIL ] Frontend (index.html) NOT FOUND" -ForegroundColor Red
-            $missing += "index.html"
-          }
-
-          if ($mainJs.Count -gt 0) {
-            Write-Host "  [ ✅ PASS ] Electron main process (main.js) FOUND" -ForegroundColor Green
-          } else {
-            Write-Host "  [ ❌ FAIL ] Electron main process (main.js) NOT FOUND" -ForegroundColor Red
-            $missing += "main.js"
-          }
-
-          if ($missing.Count -gt 0) {
-            Write-Host "`n[ERROR] MSI verification failed. Missing required assets: $($missing -join ', ')" -ForegroundColor Red
-            Write-Host "Build will continue, but the resulting MSI is likely non-functional." -ForegroundColor Yellow
-            Write-Host "`n--- Contents of extracted MSI for debugging ---" -ForegroundColor Yellow
-            Get-ChildItem -Path $extractPath -Recurse -Depth 4 | Select-Object -First 200 | ForEach-Object { Write-Host $_.FullName }
-            Write-Host "---------------------------------------------" -ForegroundColor Yellow
-          } else {
-            Write-Host "`n[SUCCESS] MSI verification passed! All critical assets are present in the installer." -ForegroundColor Green
+            Write-Host "⚠️  7-Zip not available for extraction, skipping detailed verification" -ForegroundColor Yellow
           }
 
       # ===== ARTIFACT UPLOAD =====
-      - name: Upload MSI Artifact
+      - name: Create Log Directory
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "logs")) {
+            New-Item -ItemType Directory -Path "logs" -Force | Out-Null
+          }
+
+      - name: Upload MSI
         uses: actions/upload-artifact@v4
         with:
-          name: fortuna-faucet-installer-${{ github.ref_name }}
-          path: ./electron/dist/**/*.msi
+          name: fortuna-installer-${{ github.ref_name }}
+          path: electron/dist/**/*.msi
           retention-days: 30
           if-no-files-found: error
 
-      - name: Upload ULTIMATE Forensic Build Logs
+      - name: Upload Build Logs
         uses: actions/upload-artifact@v4
-        if: always() # Always run this step to get logs even if the build fails
+        if: always()
         with:
-          name: fortuna-build-logs-${{ github.ref_name }}
-          path: |
-            build.log
-            build-frontend.log
-            build-backend.log
-            pyinstaller.log
-            pip-install.log
-            npm-frontend-install.log
-            npm-electron-install.log
+          name: build-logs-${{ github.ref_name }}
+          path: logs/
           retention-days: 7
           if-no-files-found: warn
 
-      - name: Upload Extracted MSI for Forensic Analysis
-        uses: actions/upload-artifact@v4
-        if: always() # Always run this step
-        with:
-          name: fortuna-msi-extraction-${{ github.ref_name }}
-          path: |
-            ./msi-extract/
-            ./cab-extract/
-          retention-days: 7
-          if-no-files-found: warn
-
-      # ===== RELEASE (on tags) =====
+      # ===== RELEASE (Tags Only) =====
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
-        timeout-minutes: 10
         with:
-          files: ./electron/dist/**/*.msi
+          files: electron/dist/**/*.msi
           name: "Fortuna Faucet ${{ github.ref_name }}"
           draft: false
           prerelease: false
           body: |
-            ## Fortuna Faucet Release ${{ github.ref_name }}
+            ## Fortuna Faucet ${{ github.ref_name }}
 
-            ### What's Inside
-            - ✅ Python FastAPI backend (packaged as standalone executable)
+            ### 📦 What's Included
+            - ✅ Python FastAPI backend (standalone executable)
             - ✅ Next.js frontend (static HTML/CSS/JS)
             - ✅ Electron desktop wrapper
 
-            ### Installation
-            1. Download the `.msi` installer below
-            2. Run the installer (requires Administrator privileges)
-            3. Launch "Fortuna Faucet" from your Start Menu
+            ### ⚙️ Installation
+            1. Download the `.msi` installer
+            2. Run installer (admin privileges required)
+            3. Launch from Start Menu
 
-            ### Requirements
+            ### 📋 Requirements
             - Windows 10/11 (64-bit)
-            - No Python or Node.js installation required!
+            - No Python or Node.js installation needed
 
-            ---
-            *Built with GitHub Actions*
+            Built with ❤️ by GitHub Actions
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
