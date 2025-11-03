@@ -173,7 +173,7 @@ jobs:
 
           Write-Host "✅ Backend executable built" -ForegroundColor Green
 
-      - name: AGGRESSIVE COPY: Stage Backend Executable
+      - name: AGGRESSIVE COPY Stage Backend Executable
         shell: pwsh
         run: |
           Write-Host "--- [OVERKILL] AGGRESSIVE COPY: Staging backend executable ---" -ForegroundColor Yellow
