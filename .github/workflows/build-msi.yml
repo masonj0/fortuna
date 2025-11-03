@@ -20,12 +20,36 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Clear Caches for Fresh Build
+      - name: Nuclear Cache & Artifact Clearing
         shell: pwsh
         run: |
-          Write-Host "Clearing npm and pip caches for cache-busting..." -ForegroundColor Yellow
-          npm cache clean --force
+          Write-Host "--- [OVERKILL] Obliterating all caches and previous artifacts ---" -ForegroundColor Magenta
+          Write-Host "  → Clearing npm cache..."
+          npm cache clean --force --verbose
+          Write-Host "  → Clearing pip cache..."
           pip cache purge
+
+          Write-Host "  → Nuking old build artifacts and node_modules..."
+          $toNuke = @(
+            "dist",
+            "build",
+            "electron/dist",
+            "electron/build",
+            "electron/out",
+            "electron/node_modules",
+            "web_platform/frontend/.next",
+            "web_platform/frontend/out",
+            "web_platform/frontend/node_modules",
+            "node_modules"
+          )
+
+          foreach ($path in $toNuke) {
+            if (Test-Path $path) {
+              Write-Host "    - Removing $path"
+              Remove-Item -Path $path -Recurse -Force -ErrorAction SilentlyContinue
+            }
+          }
+          Write-Host "--- [OVERKILL] Environment is now sterile ---" -ForegroundColor Magenta
 
       - name: Clear Caches for Fresh Build
         shell: pwsh
@@ -211,43 +235,50 @@ jobs:
           cd electron
           npm ci
 
-      - name: Pre-Build File Verification
+      - name: MEGA VERIFICATION - All Files Present
         shell: pwsh
         run: |
-          Write-Host "`n=== PRE-BUILD FILE VERIFICATION ===" -ForegroundColor Cyan
+          Write-Host "`n--- [OVERKILL] MEGA VERIFICATION - ALL CRITICAL FILES ---" -ForegroundColor Magenta
 
-          $criticalFiles = @(
-            ("main.js", ".\electron\main.js"),
-            ("preload.js", ".\electron\preload.js"),
-            ("icon", ".\electron\assets\icon.ico"),
-            ("backend.exe", ".\electron\resources\fortuna-backend.exe"),
-            ("frontend", ".\electron\web-ui-build\out\index.html")
+          $checks = @(
+            @{ name = "Electron: main.js"; path = "electron/main.js" },
+            @{ name = "Electron: preload.js"; path = "electron/preload.js" },
+            @{ name = "Electron: package.json"; path = "electron/package.json" },
+            @{ name = "Asset: icon.ico"; path = "electron/assets/icon.ico" },
+            @{ name = "BACKEND: fortuna-backend.exe"; path = "electron/resources/fortuna-backend.exe" },
+            @{ name = "FRONTEND: index.html"; path = "electron/web-ui-build/out/index.html" },
+            @{ name = "FRONTEND: _next dir"; path = "electron/web-ui-build/out/_next" }
           )
 
-          $allOk = $true
-          foreach ($file in $criticalFiles) {
-            $name, $path = $file
-            if (Test-Path $path) {
-              $size = (Get-Item $path).Length
-              if ($size -gt 1MB) {
-                $sizeStr = "$([math]::Round($size / 1MB, 2)) MB"
-              } elseif ($size -gt 1KB) {
-                $sizeStr = "$([math]::Round($size / 1KB, 2)) KB"
+          $allGood = $true
+          foreach ($check in $checks) {
+            $exists = Test-Path $check.path
+            $status = if ($exists) { "[ ✅ OK ]" } else { "[ ❌ FAILED ]" }
+            $color = if ($exists) { "Green" } else { "Red" }
+
+            if ($exists) {
+              if (Test-Path $check.path -PathType Container) {
+                $count = @(Get-ChildItem -Path $check.path -Recurse -File).Count
+                Write-Host "$status $($check.name): Found directory with $count files" -ForegroundColor $color
               } else {
-                $sizeStr = "$size bytes"
+                $size = (Get-Item $check.path).Length
+                if ($size -gt 1MB) { $sizeStr = "$([math]::Round($size / 1MB, 2)) MB" }
+                elseif ($size -gt 1KB) { $sizeStr = "$([math]::Round($size / 1KB, 2)) KB" }
+                else { $sizeStr = "$size bytes" }
+                Write-Host "$status $($check.name): Found file ($sizeStr)" -ForegroundColor $color
               }
-              Write-Host "  ✅ $name ($sizeStr)" -ForegroundColor Green
             } else {
-              Write-Host "  ❌ $name - NOT FOUND at: $path" -ForegroundColor Red
-              $allOk = $false
+              Write-Host "$status $($check.name): MISSING at $($check.path)" -ForegroundColor $color
+              $allGood = $false
             }
           }
 
-          if (-not $allOk) {
+          if (-not $allGood) {
+            Write-Error "MEGA VERIFICATION FAILED! Critical assets are missing before the build step."
             exit 1
           }
 
-          Write-Host "`n✅ All critical files present" -ForegroundColor Green
+          Write-Host "`n--- [OVERKILL] MEGA VERIFICATION PASSED! ALL ASSETS ARE STAGED ---" -ForegroundColor Magenta
 
       - name: Diagnostic - Directory Structure Before Build
         shell: pwsh
@@ -317,12 +348,18 @@ jobs:
           $msiSize = $msiFile.Length / 1MB
           Write-Host "✅ MSI found: $($msiFile.Name) ($([math]::Round($msiSize, 2)) MB)" -ForegroundColor Green
 
-      - name: Extract and Verify MSI Contents
+      - name: Extract and Verify MSI Contents (Non-Fatal)
         shell: pwsh
         run: |
-          Write-Host "`n=== VERIFYING MSI CONTENTS ===" -ForegroundColor Cyan
+          Write-Host "`n=== VERIFYING MSI CONTENTS (NON-FATAL) ===" -ForegroundColor Cyan
 
           $msiFile = Get-ChildItem -Path ".\electron\dist" -Filter "*.msi" -Recurse | Select-Object -First 1
+          # If no MSI, we can't continue this step, but we won't fail the build.
+          if (-not $msiFile) {
+            Write-Host "  [WARNING] No MSI file found to verify. Skipping verification." -ForegroundColor Yellow
+            return
+          }
+
           $extractPath = ".\msi-extract"
 
           if (Test-Path $extractPath) {
@@ -330,56 +367,60 @@ jobs:
           }
           New-Item -ItemType Directory -Path $extractPath -Force | Out-Null
 
-          # Extract MSI
-          $7zPath = "C:\Program Files\7-Zip\7z.exe"
-          if (Test-Path $7zPath) {
-            & $7zPath x "$($msiFile.FullName)" -o"$extractPath" -y | Out-Null
-          } else {
-            $fullPath = (Resolve-Path $extractPath).Path
-            & msiexec /a "$($msiFile.FullName)" /qn TARGETDIR="$fullPath" | Out-Null
+          # Using 7-Zip is more reliable for extraction forensics
+          $sevenZip = "C:\Program Files\7-Zip\7z.exe"
+          if (-not (Test-Path $sevenZip)) {
+              Write-Host "  [WARNING] 7-Zip not found. MSI extraction may be incomplete. Skipping verification." -ForegroundColor Yellow
+              return
           }
 
-          # Find and extract CAB
+          & $sevenZip x "$($msiFile.FullName)" -o"$extractPath" -y | Out-Null
+
           $cabFile = Get-ChildItem -Path $extractPath -Recurse -Filter "*.cab" | Select-Object -First 1
           if ($cabFile) {
             $cabPath = ".\cab-extract"
             if (Test-Path $cabPath) { Remove-Item -Recurse -Force $cabPath }
             New-Item -ItemType Directory -Path $cabPath -Force | Out-Null
-
-            & $7zPath x "$($cabFile.FullName)" -o"$cabPath" -y | Out-Null
+            & $sevenZip x "$($cabFile.FullName)" -o"$cabPath" -y | Out-Null
             $extractPath = $cabPath
           }
 
-          # Search for critical components
           $backend = @(Get-ChildItem -Path $extractPath -Recurse -Filter "fortuna-backend.exe" -ErrorAction SilentlyContinue)
-          $frontend = @(Get-ChildItem -Path $extractPath -Recurse -Filter "index.html" -ErrorAction SilentlyContinue)
+          $frontendIndex = @(Get-ChildItem -Path $extractPath -Recurse -Filter "index.html" -ErrorAction SilentlyContinue)
           $mainJs = @(Get-ChildItem -Path $extractPath -Recurse -Filter "main.js" -ErrorAction SilentlyContinue)
 
-          Write-Host "`n📦 MSI Contents:"
+          Write-Host "`n📦 Final MSI Contents Analysis:"
+          $missing = @()
           if ($backend.Count -gt 0) {
-            Write-Host "  ✅ Backend: $($backend[0].Length / 1MB)MB" -ForegroundColor Green
+            Write-Host "  [ ✅ PASS ] Backend executable FOUND" -ForegroundColor Green
           } else {
-            Write-Host "  ❌ Backend executable NOT found" -ForegroundColor Red
+            Write-Host "  [ ❌ FAIL ] Backend executable NOT FOUND" -ForegroundColor Red
+            $missing += "fortuna-backend.exe"
           }
 
-          if ($frontend.Count -gt 0) {
-            Write-Host "  ✅ Frontend: $($frontend.Count) files" -ForegroundColor Green
+          if ($frontendIndex.Count -gt 0) {
+            Write-Host "  [ ✅ PASS ] Frontend (index.html) FOUND" -ForegroundColor Green
           } else {
-            Write-Host "  ❌ Frontend NOT found" -ForegroundColor Red
+            Write-Host "  [ ❌ FAIL ] Frontend (index.html) NOT FOUND" -ForegroundColor Red
+            $missing += "index.html"
           }
 
           if ($mainJs.Count -gt 0) {
-            Write-Host "  ✅ main.js present" -ForegroundColor Green
+            Write-Host "  [ ✅ PASS ] Electron main process (main.js) FOUND" -ForegroundColor Green
           } else {
-            Write-Host "  ⚠️  main.js not found" -ForegroundColor Yellow
+            Write-Host "  [ ❌ FAIL ] Electron main process (main.js) NOT FOUND" -ForegroundColor Red
+            $missing += "main.js"
           }
 
-          if ($backend.Count -eq 0 -or $frontend.Count -eq 0) {
-            Write-Host "`nMSI extraction directory contents:"
-            Get-ChildItem -Path $extractPath -Recurse -Depth 4 | ForEach-Object { Write-Host $_.FullName }
+          if ($missing.Count -gt 0) {
+            Write-Host "`n[ERROR] MSI verification failed. Missing required assets: $($missing -join ', ')" -ForegroundColor Red
+            Write-Host "Build will continue, but the resulting MSI is likely non-functional." -ForegroundColor Yellow
+            Write-Host "`n--- Contents of extracted MSI for debugging ---" -ForegroundColor Yellow
+            Get-ChildItem -Path $extractPath -Recurse -Depth 4 | Select-Object -First 200 | ForEach-Object { Write-Host $_.FullName }
+            Write-Host "---------------------------------------------" -ForegroundColor Yellow
+          } else {
+            Write-Host "`n[SUCCESS] MSI verification passed! All critical assets are present in the installer." -ForegroundColor Green
           }
-
-          Write-Host "`n✅ MSI verification passed!" -ForegroundColor Green
 
       # ===== ARTIFACT UPLOAD =====
       - name: Upload MSI Artifact
