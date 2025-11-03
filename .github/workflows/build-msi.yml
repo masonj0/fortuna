@@ -20,36 +20,30 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Nuclear Cache & Artifact Clearing
+      - name: Absolute Nuclear Cache Annihilation
         shell: pwsh
         run: |
-          Write-Host "--- [OVERKILL] Obliterating all caches and previous artifacts ---" -ForegroundColor Magenta
-          Write-Host "  → Clearing npm cache..."
+          Write-Host "--- [OVERKILL] Absolute Nuclear Cache Annihilation ---" -ForegroundColor Red
           npm cache clean --force --verbose
-          Write-Host "  → Clearing pip cache..."
+          npm cache verify
           pip cache purge
+          Remove-Item -Path "$env:APPDATA\npm-cache" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "$env:USERPROFILE\.npm" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "$env:USERPROFILE\.node-gyp" -Recurse -Force -ErrorAction SilentlyContinue
 
-          Write-Host "  → Nuking old build artifacts and node_modules..."
-          $toNuke = @(
-            "dist",
-            "build",
-            "electron/dist",
-            "electron/build",
-            "electron/out",
-            "electron/node_modules",
-            "web_platform/frontend/.next",
-            "web_platform/frontend/out",
-            "web_platform/frontend/node_modules",
-            "node_modules"
-          )
+          Get-ChildItem -Path . -Recurse -Filter "node_modules" -Directory -Force -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "     - Removing: $($_.FullName)"
+            Remove-Item -Path $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
+          }
 
-          foreach ($path in $toNuke) {
+          $toDestroy = @("dist", "build", "electron/dist", "electron/build", "electron/out", "web_platform/frontend/.next", "web_platform/frontend/out", "package-lock.json", "electron/package-lock.json", "web_platform/frontend/package-lock.json")
+          foreach ($path in $toDestroy) {
             if (Test-Path $path) {
-              Write-Host "    - Removing $path"
+              Write-Host "     - Removing: $path"
               Remove-Item -Path $path -Recurse -Force -ErrorAction SilentlyContinue
             }
           }
-          Write-Host "--- [OVERKILL] Environment is now sterile ---" -ForegroundColor Magenta
+          Write-Host "--- [OVERKILL] Environment has been vaporized ---" -ForegroundColor Red
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -88,34 +82,38 @@ jobs:
           $fileCount = (Get-ChildItem -Path "out" -Recurse -File | Measure-Object).Count
           Write-Host "✅ Frontend built successfully: $fileCount files" -ForegroundColor Green
 
-      - name: Stage Frontend Assets for Electron
+      - name: AGGRESSIVE COPY: Stage Frontend Assets for Electron
         shell: pwsh
         run: |
-          Write-Host "Staging frontend assets..." -ForegroundColor Cyan
+          Write-Host "--- [OVERKILL] AGGRESSIVE COPY: Staging frontend assets ---" -ForegroundColor Yellow
 
           $source = "web_platform/frontend/out"
           $dest = "electron/web-ui-build/out"
 
-          if (Test-Path $dest) {
-            Remove-Item -Recurse -Force $dest
-          }
+          if (Test-Path $dest) { Remove-Item -Recurse -Force $dest }
+          New-Item -ItemType Directory -Path $dest -Force | Out-Null
 
-          Copy-Item -Path $source -Destination $dest -Recurse -Force -ErrorAction Stop
+          Copy-Item -Path "$source\*" -Destination "$dest\" -Recurse -Force -ErrorAction Stop
 
-          $sourceFiles = (Get-ChildItem -Path $source -Recurse -File | Measure-Object).Count
-          $destFiles = (Get-ChildItem -Path $dest -Recurse -File | Measure-Object).Count
+          # VERIFY - File by file
+          $sourceFiles = @(Get-ChildItem -Path $source -Recurse -File)
+          $destFiles = @(Get-ChildItem -Path $dest -Recurse -File)
 
-          if ($destFiles -ne $sourceFiles) {
-            Write-Error "File count mismatch! Source: $sourceFiles, Dest: $destFiles"
+          if ($sourceFiles.Count -ne $destFiles.Count) {
+            Write-Error "AGGRESSIVE COPY FAILED: File count mismatch! Source: $($sourceFiles.Count), Dest: $($destFiles.Count)"
             exit 1
           }
 
-          if (-not (Test-Path "$dest/index.html")) {
-            Write-Error "Critical file missing: index.html"
-            exit 1
+          foreach ($file in $sourceFiles) {
+            $rel = $file.FullName.Substring($source.Length + 1)
+            $destFile = Join-Path $dest $rel
+            if (-not (Test-Path $destFile)) {
+              Write-Error "AGGRESSIVE COPY FAILED: Missing file in destination: $rel"
+              exit 1
+            }
           }
 
-          Write-Host "✅ Staged $destFiles frontend files to $dest" -ForegroundColor Green
+          Write-Host "  ✅ Aggressive copy complete. Verified $($destFiles.Count) files." -ForegroundColor Green
 
       - name: Diagnostic - Verify Staged Frontend
         shell: pwsh
@@ -179,40 +177,39 @@ jobs:
           Get-ChildItem -Recurse ".\dist\" | Out-String -Width 120
           Write-Host "-----------------------------------------"
 
-      - name: Stage Backend Executable
+      - name: AGGRESSIVE COPY: Stage Backend Executable
         shell: pwsh
         run: |
-          Write-Host "Staging backend executable..." -ForegroundColor Cyan
+          Write-Host "--- [OVERKILL] AGGRESSIVE COPY: Staging backend executable ---" -ForegroundColor Yellow
 
-          $exePath = ".\dist\fortuna-backend.exe"
+          $source = ".\dist\fortuna-backend.exe"
           $destDir = ".\electron\resources"
+          $dest = Join-Path $destDir "fortuna-backend.exe"
 
-          if (-not (Test-Path $exePath)) {
-            Write-Error "Backend executable not found at: $exePath"
-            Get-ChildItem -Path ".\dist\" -Recurse | ForEach-Object { Write-Host $_.FullName }
+          if (-not (Test-Path $source)) {
+            Write-Error "AGGRESSIVE COPY FAILED: Source executable not found at: $source"
             exit 1
           }
-
-          $exeSize = (Get-Item $exePath).Length / 1MB
-          Write-Host "Backend exe size: $([math]::Round($exeSize, 2)) MB"
-
           if (-not (Test-Path $destDir)) {
             New-Item -ItemType Directory -Path $destDir -Force | Out-Null
           }
 
-          Copy-Item -Path $exePath -Destination $destDir -Force
+          Copy-Item -Path $source -Destination $dest -Force -ErrorAction Stop
 
-          $copiedExe = Join-Path $destDir "fortuna-backend.exe"
-          if (-not (Test-Path $copiedExe)) {
-            Write-Error "Failed to copy executable to: $copiedExe"
+          if (-not (Test-Path $dest)) {
+            Write-Error "AGGRESSIVE COPY FAILED: Copy to destination failed: $dest"
             exit 1
           }
 
-          Write-Host "✅ Backend executable staged successfully" -ForegroundColor Green
+          $sourceSize = (Get-Item $source).Length
+          $destSize = (Get-Item $dest).Length
 
-          Write-Host "--- [DIAG] Staged Backend Assets (electron/resources) ---"
-          Get-ChildItem -Recurse $destDir | Out-String -Width 120
-          Write-Host "---------------------------------------------------------"
+          if ($sourceSize -ne $destSize) {
+            Write-Error "AGGRESSIVE COPY FAILED: File size mismatch! Source: $sourceSize, Dest: $destSize"
+            exit 1
+          }
+
+          Write-Host "  ✅ Aggressive copy complete. Verified backend executable ($([math]::Round($destSize / 1MB, 2)) MB)." -ForegroundColor Green
 
       - name: Diagnostic - Verify Staged Backend
         shell: pwsh
@@ -226,7 +223,11 @@ jobs:
         shell: pwsh
         run: |
           cd electron
-          npm ci
+          npm ci --verbose 2>&1 | Tee-Object -FilePath ../npm-electron-install.log
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "npm ci failed for electron!"
+            exit 1
+          }
 
       - name: MEGA VERIFICATION - All Files Present
         shell: pwsh
@@ -428,15 +429,19 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
-      - name: Upload Build Logs for Forensic Analysis
+      - name: Upload ULTIMATE Forensic Build Logs
         uses: actions/upload-artifact@v4
         if: always() # Always run this step to get logs even if the build fails
         with:
           name: fortuna-build-logs-${{ github.ref_name }}
           path: |
+            build.log
             build-frontend.log
             build-backend.log
-            build.log
+            pyinstaller.log
+            pip-install.log
+            npm-frontend-install.log
+            npm-electron-install.log
           retention-days: 7
           if-no-files-found: warn
 
