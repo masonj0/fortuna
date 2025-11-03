@@ -106,8 +106,8 @@ jobs:
           }
 
           foreach ($file in $sourceFiles) {
-            # Use the dynamic length of the source path for robustness
-            $rel = $file.FullName.Substring($source.PSPath.Length)
+            # Definitive method for getting relative path in PowerShell
+            $rel = $file.FullName -replace [regex]::Escape($source.FullName), ''
             $destFile = Join-Path $dest $rel
             if (-not (Test-Path $destFile)) {
               Write-Error "AGGRESSIVE COPY FAILED: Missing file in destination: $rel"
