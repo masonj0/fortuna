@@ -60,9 +60,9 @@ jobs:
         shell: pwsh
         run: |
           cd web_platform/frontend
-          npm ci --verbose 2>&1 | Tee-Object -FilePath ../../npm-frontend-install.log
+          npm install --verbose 2>&1 | Tee-Object -FilePath ../../npm-frontend-install.log
           if ($LASTEXITCODE -ne 0) {
-            Write-Error "npm ci failed for frontend!"
+            Write-Error "npm install failed for frontend!"
             exit 1
           }
 
@@ -212,9 +212,9 @@ jobs:
         shell: pwsh
         run: |
           cd electron
-          npm ci --verbose 2>&1 | Tee-Object -FilePath ../npm-electron-install.log
+          npm install --verbose 2>&1 | Tee-Object -FilePath ../npm-electron-install.log
           if ($LASTEXITCODE -ne 0) {
-            Write-Error "npm ci failed for electron!"
+            Write-Error "npm install failed for electron!"
             exit 1
           }
 
