@@ -122,6 +122,13 @@ jobs:
           Get-ChildItem -Path ".\electron\" -Recurse -Depth 4 | ForEach-Object { Write-Host $_.FullName }
           Write-Host "=========================================================" -ForegroundColor Yellow
 
+      - name: Diagnostic - Verify Staged Frontend
+        shell: pwsh
+        run: |
+          Write-Host "`n=== [DIAG] Post-Frontend-Staging Directory Listing ===" -ForegroundColor Yellow
+          Get-ChildItem -Path ".\electron\" -Recurse -Depth 4 | ForEach-Object { Write-Host $_.FullName }
+          Write-Host "=========================================================" -ForegroundColor Yellow
+
       # ===== BACKEND BUILD =====
       - name: Install Python Dependencies
         shell: pwsh
@@ -210,6 +217,13 @@ jobs:
           }
 
           Write-Host "  ✅ Aggressive copy complete. Verified backend executable ($([math]::Round($destSize / 1MB, 2)) MB)." -ForegroundColor Green
+
+      - name: Diagnostic - Verify Staged Backend
+        shell: pwsh
+        run: |
+          Write-Host "`n=== [DIAG] Post-Backend-Staging Directory Listing ===" -ForegroundColor Yellow
+          Get-ChildItem -Path ".\electron\" -Recurse -Depth 4 | ForEach-Object { Write-Host $_.FullName }
+          Write-Host "========================================================" -ForegroundColor Yellow
 
       - name: Diagnostic - Verify Staged Backend
         shell: pwsh
