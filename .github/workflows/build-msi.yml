@@ -180,7 +180,7 @@ jobs:
             --clean `
             --noconfirm `
             --distpath ../electron/resources `
-            --buildpath ./build-pyinstaller `
+            --workpath ./build-pyinstaller `
             --specpath ./spec-pyinstaller `
             --hidden-import=uvicorn `
             --hidden-import=uvicorn.logging `
@@ -208,7 +208,8 @@ jobs:
             --collect-all=uvicorn `
             --collect-all=fastapi `
             --add-data "adapters;adapters" `
-            api.py 2>&1 | Tee-Object -FilePath ../logs/pyinstaller.log
+            api.py `
+            2>&1 | Tee-Object -FilePath ../logs/pyinstaller.log
 
           if ($LASTEXITCODE -ne 0) {
             Write-Host "PyInstaller failed!" -ForegroundColor Red
