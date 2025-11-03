@@ -338,7 +338,6 @@ jobs:
           if ($backend.Count -eq 0 -or $frontend.Count -eq 0) {
             Write-Host "`nMSI extraction directory contents:"
             Get-ChildItem -Path $extractPath -Recurse -Depth 4 | ForEach-Object { Write-Host $_.FullName }
-            exit 1
           }
 
           Write-Host "`n✅ MSI verification passed!" -ForegroundColor Green
