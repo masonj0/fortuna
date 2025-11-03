@@ -56,10 +56,15 @@ jobs:
         run: |
           cd web_platform/frontend
           Write-Host "Building Next.js frontend for static export..." -ForegroundColor Cyan
-          npm run build
+          npm run build 2>&1 | Tee-Object -FilePath ../../build-frontend.log
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Frontend build failed! Check build-frontend.log for details."
+            exit 1
+          }
 
           if (-not (Test-Path "out/index.html")) {
-            Write-Error "Frontend build failed - out/index.html not found"
+            Write-Error "Frontend build succeeded but out/index.html not found"
             exit 1
           }
 
@@ -144,10 +149,10 @@ jobs:
             --collect-all=uvicorn `
             --collect-all=fastapi `
             --add-data "python_service/adapters;adapters" `
-            python_service/api.py
+            python_service/api.py 2>&1 | Tee-Object -FilePath build-backend.log
 
           if ($LASTEXITCODE -ne 0) {
-            Write-Error "PyInstaller failed with exit code $LASTEXITCODE"
+            Write-Error "PyInstaller failed! Check build-backend.log for details."
             exit 1
           }
 
@@ -257,17 +262,36 @@ jobs:
           Write-Host "----------------------------------"
           Write-Host "=================================================" -ForegroundColor Yellow
 
-      - name: Build MSI Installer
+      - name: Build MSI Installer (Sledgehammer Mode)
         shell: pwsh
         run: |
-          cd electron
-          Write-Host "`n=== BUILDING MSI INSTALLER ===" -ForegroundColor Cyan
+          Write-Host "Sledgehammer Pre-Build Setup & Verification..." -ForegroundColor Yellow
 
-          npm run dist 2>&1 | Tee-Object -FilePath build.log
+          # 1. Force-write the config to disk to prevent any caching issues.
+          $configContent = Get-Content "electron/electron-builder-config.yml" -Raw
+          Set-Content -Path "electron/electron-builder-config.yml" -Value $configContent -Force
+          Write-Host "  ✅ Force-wrote electron-builder-config.yml to disk"
+
+          # 2. Aggressively re-verify critical files are in their expected locations.
+          if (-not (Test-Path "electron/resources/fortuna-backend.exe")) {
+            Write-Error "SLEDGEHAMMER CHECK FAILED: fortuna-backend.exe is MISSING from electron/resources"
+            exit 1
+          }
+          if (-not (Test-Path "electron/web-ui-build/out/index.html")) {
+            Write-Error "SLEDGEHAMMER CHECK FAILED: index.html is MISSING from electron/web-ui-build/out"
+            exit 1
+          }
+          Write-Host "  ✅ Critical files aggressively verified in their staging directories."
+
+          cd electron
+          Write-Host "`n=== BUILDING MSI INSTALLER (OVERKILL MODE) ===" -ForegroundColor Cyan
+
+          # 3. Force the build command to use the explicit config file.
+          npm run dist -- --config electron-builder-config.yml 2>&1 | Tee-Object -FilePath ../build.log
 
           if ($LASTEXITCODE -ne 0) {
             Write-Host "`n--- Build Log ---"
-            Get-Content build.log
+            Get-Content ../build.log
             Write-Error "electron-builder failed with exit code $LASTEXITCODE"
             exit 1
           }
@@ -366,6 +390,29 @@ jobs:
           path: ./electron/dist/**/*.msi
           retention-days: 30
           if-no-files-found: error
+
+      - name: Upload Build Logs for Forensic Analysis
+        uses: actions/upload-artifact@v4
+        if: always() # Always run this step to get logs even if the build fails
+        with:
+          name: fortuna-build-logs-${{ github.ref_name }}
+          path: |
+            build-frontend.log
+            build-backend.log
+            build.log
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Upload Extracted MSI for Forensic Analysis
+        uses: actions/upload-artifact@v4
+        if: always() # Always run this step
+        with:
+          name: fortuna-msi-extraction-${{ github.ref_name }}
+          path: |
+            ./msi-extract/
+            ./cab-extract/
+          retention-days: 7
+          if-no-files-found: warn
 
       # ===== RELEASE (on tags) =====
       - name: Create GitHub Release
