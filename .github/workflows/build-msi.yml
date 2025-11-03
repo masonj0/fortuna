@@ -95,8 +95,10 @@ jobs:
           New-Item -ItemType Directory -Path $dest -Force | Out-Null
 
           # Selectively copy only essential, stable assets
-          Write-Host "  → Copying essential assets (_next, *.html, favicon.ico)..."
-          Get-ChildItem -Path $source -Recurse | Where-Object { $_.PSIsContainer -or $_.Name -like '*.html' -or $_.Name -eq 'favicon.ico' } | Copy-Item -Destination $dest -Recurse -Container
+          Write-Host "  → Copying essential assets..."
+          Copy-Item -Path (Join-Path $source "_next") -Destination $dest -Recurse -Force
+          Copy-Item -Path (Join-Path $source "*.html") -Destination $dest -Force
+          Copy-Item -Path (Join-Path $source "favicon.ico") -Destination $dest -Force
 
           # VERIFY - File by file on the filtered set
           $sourceFiles = @(Get-ChildItem -Path $source -Recurse -File | Where-Object { $_.Extension -in ".html", ".css", ".js", ".ico" })
