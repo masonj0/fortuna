@@ -124,11 +124,13 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "Installing Python dependencies..." -ForegroundColor Cyan
-          pip install -r python_service/requirements.txt --verbose 2>&1 | Tee-Object -FilePath pip-install.log
+          cd python_service
+          pip install -r requirements.txt --verbose 2>&1 | Tee-Object -FilePath ../pip-install.log
           if ($LASTEXITCODE -ne 0) {
             Write-Error "Pip install failed!"
             exit 1
           }
+          cd ..
           Write-Host "✅ Dependencies installed" -ForegroundColor Green
 
       - name: Build Backend Executable with PyInstaller
