@@ -95,6 +95,13 @@ jobs:
 
           Write-Host "✅ Staged $destFiles frontend files to $dest" -ForegroundColor Green
 
+      - name: Diagnostic - Verify Staged Frontend
+        shell: pwsh
+        run: |
+          Write-Host "`n=== [DIAG] Post-Frontend-Staging Directory Listing ===" -ForegroundColor Yellow
+          Get-ChildItem -Path ".\electron\" -Recurse -Depth 4 | ForEach-Object { Write-Host $_.FullName }
+          Write-Host "=========================================================" -ForegroundColor Yellow
+
       # ===== BACKEND BUILD =====
       - name: Install Python Dependencies
         shell: pwsh
@@ -185,6 +192,13 @@ jobs:
           Get-ChildItem -Recurse $destDir | Out-String -Width 120
           Write-Host "---------------------------------------------------------"
 
+      - name: Diagnostic - Verify Staged Backend
+        shell: pwsh
+        run: |
+          Write-Host "`n=== [DIAG] Post-Backend-Staging Directory Listing ===" -ForegroundColor Yellow
+          Get-ChildItem -Path ".\electron\" -Recurse -Depth 4 | ForEach-Object { Write-Host $_.FullName }
+          Write-Host "========================================================" -ForegroundColor Yellow
+
       # ===== ELECTRON BUILD =====
       - name: Install Electron Dependencies
         shell: pwsh
@@ -233,13 +247,15 @@ jobs:
       - name: Diagnostic - Directory Structure Before Build
         shell: pwsh
         run: |
-          Write-Host "`n=== ELECTRON DIRECTORY STRUCTURE ===" -ForegroundColor Cyan
-          Get-ChildItem -Path ".\electron\" -Recurse -Depth 3 -File |
-            ForEach-Object {
-              $relPath = $_.FullName.Replace("$(Get-Location)\electron\", "")
-              Write-Host "  $relPath"
-            }
-          Write-Host "=====================================" -ForegroundColor Cyan
+          Write-Host "`n=== [DIAG] Final Pre-Build Workspace State ===" -ForegroundColor Yellow
+          Write-Host "--- electron/package.json ---"
+          Get-Content -Path ".\electron\package.json" | Write-Host
+          Write-Host "-----------------------------"
+          Write-Host
+          Write-Host "--- Workspace Directory Listing ---"
+          Get-ChildItem -Path ".\" -Recurse -Depth 4 | ForEach-Object { Write-Host $_.FullName }
+          Write-Host "----------------------------------"
+          Write-Host "=================================================" -ForegroundColor Yellow
 
       - name: Build MSI Installer
         shell: pwsh
