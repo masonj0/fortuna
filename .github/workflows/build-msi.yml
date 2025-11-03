@@ -279,17 +279,7 @@ jobs:
           Write-Host "`n=== ELECTRON: Building MSI ===" -ForegroundColor Cyan
           cd electron
 
-          # Update electron-builder config with absolute path
-          $configPath = "electron-builder-config.yml"
-          $runnerPath = (Get-Location).Path.Replace('\', '/')
-
-          if (Test-Path $configPath) {
-            $config = Get-Content $configPath -Raw
-            $config = $config -replace '__ABSOLUTE_PATH__', $runnerPath
-            Set-Content -Path $configPath -Value $config -Force
-          }
-
-          npx electron-builder --projectDir . --config electron-builder-config.yml --publish never 2>&1 | Tee-Object -FilePath ../logs/electron-builder.log
+          npx electron-builder --config electron-builder-config.yml --publish never 2>&1 | Tee-Object -FilePath ../logs/electron-builder.log
 
           if ($LASTEXITCODE -ne 0) {
             Write-Host "electron-builder failed!" -ForegroundColor Red
