@@ -290,7 +290,7 @@ jobs:
 
           if ($LASTEXITCODE -ne 0) {
             Write-Host "`n--- Build Log ---"
-            Get-Content build.log
+            Get-Content ../build.log
             Write-Error "electron-builder failed with exit code $LASTEXITCODE"
             exit 1
           }
