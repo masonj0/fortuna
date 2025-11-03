@@ -1,18 +1,18 @@
 appId: com.fortuna.faucet
 productName: "Fortuna Faucet"
 directories:
-  buildResources: "assets"
+  buildResources: "__ABSOLUTE_PATH__/electron/assets"
   output: "dist"
 files:
   - "**/*"
   - "!node_modules/**/*"
   - "!dist/**/*"
 extraResources:
-  - from: "resources/fortuna-backend.exe"
+  - from: "__ABSOLUTE_PATH__/electron/resources/fortuna-backend.exe"
     to: "fortuna-backend.exe"
 win:
   target: "msi"
-  icon: "assets/icon.ico"
+  icon: "__ABSOLUTE_PATH__/electron/assets/icon.ico"
 msi:
   oneClick: false
   perMachine: true

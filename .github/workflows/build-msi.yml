@@ -262,32 +262,31 @@ jobs:
           Write-Host "----------------------------------"
           Write-Host "=================================================" -ForegroundColor Yellow
 
-      - name: Build MSI Installer (Sledgehammer Mode)
+      - name: Build MSI Installer (Absolute Path Overkill)
         shell: pwsh
         run: |
-          Write-Host "Sledgehammer Pre-Build Setup & Verification..." -ForegroundColor Yellow
+          Write-Host "--- [OVERKILL] Preparing Absolute Path Configuration ---" -ForegroundColor Magenta
 
-          # 1. Force-write the config to disk to prevent any caching issues.
-          $configContent = Get-Content "electron/electron-builder-config.yml" -Raw
-          Set-Content -Path "electron/electron-builder-config.yml" -Value $configContent -Force
-          Write-Host "  ✅ Force-wrote electron-builder-config.yml to disk"
+          # 1. Get the runner's absolute path and normalize it for YAML/JSON.
+          $absolutePath = (Get-Location).Path.Replace('\', '/')
+          Write-Host "  Runner absolute path: $absolutePath"
 
-          # 2. Aggressively re-verify critical files are in their expected locations.
-          if (-not (Test-Path "electron/resources/fortuna-backend.exe")) {
-            Write-Error "SLEDGEHAMMER CHECK FAILED: fortuna-backend.exe is MISSING from electron/resources"
-            exit 1
-          }
-          if (-not (Test-Path "electron/web-ui-build/out/index.html")) {
-            Write-Error "SLEDGEHAMMER CHECK FAILED: index.html is MISSING from electron/web-ui-build/out"
-            exit 1
-          }
-          Write-Host "  ✅ Critical files aggressively verified in their staging directories."
+          # 2. Read the template and inject the absolute path.
+          $template = Get-Content "electron/electron-builder-config.yml" -Raw
+          $finalConfig = $template.Replace("__ABSOLUTE_PATH__", $absolutePath)
 
-          cd electron
-          Write-Host "`n=== BUILDING MSI INSTALLER (OVERKILL MODE) ===" -ForegroundColor Cyan
+          # 3. Force-write the final, absolute-pathed config.
+          $configPath = "electron/electron-builder-config.yml"
+          Set-Content -Path $configPath -Value $finalConfig -Force
 
-          # 3. Force the build command to use the explicit config file.
-          npm run dist -- --config electron-builder-config.yml 2>&1 | Tee-Object -FilePath ../build.log
+          Write-Host "`n--- [OVERKILL] Final Configuration ---" -ForegroundColor Magenta
+          Get-Content $configPath | Write-Host
+          Write-Host "------------------------------------" -ForegroundColor Magenta
+
+          Write-Host "`n=== BUILDING MSI INSTALLER (ABSOLUTE PATH MODE) ===" -ForegroundColor Cyan
+
+          # 4. Run from the root, explicitly telling the builder where the project is and what config to use.
+          npx electron-builder --projectDir electron --config $configPath 2>&1 | Tee-Object -FilePath build.log
 
           if ($LASTEXITCODE -ne 0) {
             Write-Host "`n--- Build Log ---"
