@@ -207,7 +207,7 @@ jobs:
             --hidden-import=redis.asyncio.connection `
             --collect-all=uvicorn `
             --collect-all=fastapi `
-            --add-data "adapters;adapters" `
+            --add-data "./adapters;adapters" `
             api.py `
             2>&1 | Tee-Object -FilePath ../logs/pyinstaller.log
 
