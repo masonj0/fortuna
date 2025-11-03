@@ -106,7 +106,8 @@ jobs:
           }
 
           foreach ($file in $sourceFiles) {
-            $rel = $file.FullName.Substring($source.Length + 1)
+            # Use the dynamic length of the source path for robustness
+            $rel = $file.FullName.Substring($source.PSPath.Length)
             $destFile = Join-Path $dest $rel
             if (-not (Test-Path $destFile)) {
               Write-Error "AGGRESSIVE COPY FAILED: Missing file in destination: $rel"
