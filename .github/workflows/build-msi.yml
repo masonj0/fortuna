@@ -230,6 +230,11 @@ jobs:
             --hidden-import=sqlite3 `
             --hidden-import=keyring `
             --hidden-import=keyring.backends.windows `
+            --hidden-import=bs4 `
+            --hidden-import=lxml `
+            --hidden-import=html5lib `
+            --hidden-import=dateutil `
+            --hidden-import=pandas `
             --collect-all=uvicorn `
             --collect-all=fastapi `
             --collect-all=pydantic `
@@ -237,6 +242,8 @@ jobs:
             --collect-all=aiosqlite `
             --collect-all=httpx `
             --collect-all=certifi `
+            --collect-all=bs4 `
+            --collect-all=pandas `
             --copy-metadata=pydantic `
             --copy-metadata=pydantic_core `
             --copy-metadata=fastapi `

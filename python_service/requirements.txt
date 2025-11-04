@@ -14,6 +14,11 @@ requests
 
 # --- HTML & Data Parsing ---
 selectolax
+beautifulsoup4
+lxml
+html5lib
+python-dateutil
+pandas
 
 # --- Logging & Configuration ---
 structlog==23.2.0
