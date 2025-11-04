@@ -7,8 +7,10 @@ import { RaceCard } from './RaceCard';
 import { RaceCardSkeleton } from './RaceCardSkeleton';
 import { EmptyState } from './EmptyState';
 import { Race, SourceInfo } from '../types/racing';
+import { useWebSocket } from '../hooks/useWebSocket';
 import { StatusDetailModal } from './StatusDetailModal';
 import ManualOverridePanel from './ManualOverridePanel';
+import { LiveModeToggle } from './LiveModeToggle';
 
 // Type for the API connection status
 type ConnectionStatus = 'connecting' | 'online' | 'offline';
@@ -53,6 +55,42 @@ export const LiveRaceDashboard = React.memo(() => {
   // Separate status for backend process and API connection
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting');
   const [backendStatus, setBackendStatus] = useState<BackendStatus>({ state: 'starting', logs: [] });
+  const [isLiveMode, setIsLiveMode] = useState(false);
+  const [apiKey, setApiKey] = useState<string | null>(null);
+
+  // Get API key on component mount
+  useEffect(() => {
+    const fetchApiKey = async () => {
+      try {
+        const key = window.electronAPI ? await window.electronAPI.getApiKey() : process.env.NEXT_PUBLIC_API_KEY;
+        if (key) {
+          setApiKey(key);
+        } else {
+          console.error('API key could not be retrieved.');
+        }
+      } catch (error) {
+        console.error('Error fetching API key:', error);
+      }
+    };
+    fetchApiKey();
+  }, []);
+
+  const { data: liveData, isConnected: isLiveConnected } = useWebSocket<{ races: Race[], source_info: SourceInfo[] }>(
+    isLiveMode && apiKey ? '/ws/live-updates' : '',
+    { apiKey }
+  );
+
+  // Effect to update state when new live data arrives
+  useEffect(() => {
+    if (isLiveMode && liveData) {
+      console.log('Received live data update:', liveData);
+      setRaces(liveData.races || []);
+      setFailedSources(liveData.source_info?.filter((s: SourceInfo) => s.status === 'FAILED' && s.attemptedUrl) || []);
+      setLastUpdate(new Date());
+      setConnectionStatus('online');
+      setIsInitialLoad(false);
+    }
+  }, [liveData, isLiveMode]);
 
   const [errorDetails, setErrorDetails] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
@@ -166,13 +204,16 @@ export const LiveRaceDashboard = React.memo(() => {
 
   // Effect for periodic data refresh
   useEffect(() => {
+    if (isLiveMode) {
+      return; // Don't poll when in live mode
+    }
     const interval = setInterval(() => {
       if (backendStatus.state === 'running' && connectionStatus === 'online') {
         fetchQualifiedRaces();
       }
     }, 30000); // 30-second refresh
     return () => clearInterval(interval);
-  }, [backendStatus.state, connectionStatus, fetchQualifiedRaces]);
+  }, [backendStatus.state, connectionStatus, fetchQualifiedRaces, isLiveMode]);
 
 
   const handleParamsChange = useCallback((newParams: RaceFilterParams) => {
@@ -225,6 +266,11 @@ export const LiveRaceDashboard = React.memo(() => {
     if (backendStatus.state === 'starting') {
       return { color: 'bg-yellow-500', text: 'Backend Starting...' };
     }
+    if (isLiveMode) {
+      return isLiveConnected
+        ? { color: 'bg-cyan-500', text: 'Live' }
+        : { color: 'bg-yellow-500', text: 'Live Connecting...' };
+    }
     switch (connectionStatus) {
       case 'online': return { color: 'bg-green-500', text: 'Online' };
       case 'offline': return { color: 'bg-orange-500', text: 'API Offline' };
@@ -252,9 +298,14 @@ export const LiveRaceDashboard = React.memo(() => {
                     <span className={`w-2.5 h-2.5 rounded-full bg-white ${connectionStatus === 'online' ? 'animate-pulse' : ''}`}></span>
                     {statusText}
                 </button>
+                <LiveModeToggle
+                  isLive={isLiveMode}
+                  onToggle={setIsLiveMode}
+                  isDisabled={backendStatus.state !== 'running' || connectionStatus === 'offline'}
+                />
                 <button
                     onClick={fetchQualifiedRaces}
-                    disabled={connectionStatus === 'connecting' || backendStatus.state !== 'running'}
+                    disabled={isLiveMode || connectionStatus === 'connecting' || backendStatus.state !== 'running'}
                     className="px-4 py-2 bg-slate-700 text-white rounded hover:bg-slate-600 disabled:bg-slate-800 disabled:text-slate-500"
                 >
                     Refresh

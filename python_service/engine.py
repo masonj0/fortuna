@@ -22,9 +22,15 @@ log = structlog.get_logger(__name__)
 
 
 class OddsEngine:
-    def __init__(self, config=None, manual_override_manager: ManualOverrideManager = None):
+    def __init__(
+        self,
+        config=None,
+        manual_override_manager: ManualOverrideManager = None,
+        connection_manager=None,
+    ):
         self.logger = structlog.get_logger(__name__)
         self.logger.info("Initializing FortunaEngine...")
+        self.connection_manager = connection_manager
 
         try:
             try:
@@ -221,13 +227,18 @@ class OddsEngine:
 
         return list(race_map.values())
 
+    async def _broadcast_update(self, data: Dict[str, Any]):
+        """Helper to broadcast data if the connection manager is available."""
+        if self.connection_manager:
+            await self.connection_manager.broadcast(data)
+
     @cache_async_result(ttl_seconds=300, key_prefix="fortuna_engine_races")
     async def fetch_all_odds(
         self, date: str, source_filter: str = None
     ) -> Dict[str, Any]:
         """
         Fetches and aggregates race data from all configured adapters.
-        The result of this method is cached.
+        The result of this method is cached and broadcasted via WebSocket.
         """
         target_adapters = self.adapters
         if source_filter:
@@ -272,4 +283,7 @@ class OddsEngine:
                 "total_races": len(deduped_races),
             },
         )
-        return response_obj.model_dump(by_alias=True)
+
+        response_data = response_obj.model_dump(by_alias=True)
+        await self._broadcast_update(response_data)
+        return response_data
