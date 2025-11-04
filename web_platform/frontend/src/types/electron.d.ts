@@ -16,11 +16,22 @@ declare global {
        */
       getApiKey: () => Promise<string | null>;
       /**
-       * Registers a callback to be invoked when the backend status changes.
-       * @param {Function} callback - The function to call with the status object.
-       *                              It receives an object like { status: 'online' | 'offline', error?: string }.
+       * Registers a callback for backend status updates from the main process.
+       * @param callback The function to execute. Receives an object with state and logs.
+       * @returns A function to unsubscribe the listener.
        */
-      onBackendStatus: (callback: (status: { status: 'online' | 'offline'; error?: string }) => void) => void;
+      onBackendStatusUpdate: (callback: (status: { state: 'starting' | 'running' | 'error' | 'stopped'; logs: string[] }) => void) => () => void;
+
+      /**
+       * Sends a command to the main process to restart the backend executable.
+       */
+      restartBackend: () => void;
+
+      /**
+       * Asynchronously fetches the current backend status from the main process.
+       * @returns {Promise<{ state: 'starting' | 'running' | 'error' | 'stopped'; logs: string[] }>}
+       */
+      getBackendStatus: () => Promise<{ state: 'starting' | 'running' | 'error' | 'stopped'; logs: string[] }>;
       generateApiKey: () => Promise<string>;
     };
   }
