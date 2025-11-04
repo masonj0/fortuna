@@ -17,7 +17,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
    * @param {Function} callback - The function to call with the status object.
    *                              It receives an object like { status: 'online' | 'offline', error?: string }.
    */
-  onBackendStatus: (callback) => ipcRenderer.on('backend-status', (_event, value) => callback(value)),
+  onBackendStatusUpdate: (callback) => {
+    const handler = (_event, value) => callback(value);
+    ipcRenderer.on('backend-status-update', handler);
+    // Return a cleanup function to remove the listener
+    return () => ipcRenderer.removeListener('backend-status-update', handler);
+  },
+  restartBackend: () => ipcRenderer.send('restart-backend'),
+  getBackendStatus: () => ipcRenderer.invoke('get-backend-status'),
   generateApiKey: () => ipcRenderer.invoke('generate-api-key'),
 });
 

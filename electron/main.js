@@ -1,5 +1,5 @@
 // electron/main.js - CORRECTED VERSION
-const { app, BrowserWindow, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -9,111 +9,107 @@ class FortunaDesktopApp {
     this.backendProcess = null;
     this.mainWindow = null;
     this.tray = null;
+    this.backendState = 'stopped'; // "stopped", "starting", "running", "error"
+    this.backendLogs = [];
   }
 
-  async startBackend() {
-    return new Promise((resolve, reject) => {
-      const isDev = !app.isPackaged;
+  sendBackendStatusUpdate() {
+    if (this.mainWindow) {
+      this.mainWindow.webContents.send('backend-status-update', {
+        state: this.backendState,
+        logs: this.backendLogs.slice(-20) // Send last 20 log entries
+      });
+    }
+  }
 
-      if (isDev) {
-        // Development: use Python venv
-        console.log('[DEV MODE] Starting backend from Python venv...');
-        const pythonPath = path.join(__dirname, '..', '.venv', 'Scripts', 'python.exe');
-        const apiPath = path.join(__dirname, '..', 'python_service', 'api.py');
+  startBackend() {
+    this.backendState = 'starting';
+    this.backendLogs = ['Attempting to start backend process...'];
+    this.sendBackendStatusUpdate();
 
-        if (!fs.existsSync(pythonPath)) {
-          console.error('FATAL: Python executable not found at:', pythonPath);
-          reject(new Error('Python venv not found. Run setup first.'));
-          return;
-        }
+    if (this.backendProcess && !this.backendProcess.killed) {
+      console.log('Backend process already running. Killing old process.');
+      this.backendProcess.kill();
+    }
 
-        this.backendProcess = spawn(pythonPath, [
-          '-m', 'uvicorn',
-          'api:app',
-          '--host', '127.0.0.1',
-          '--port', '8000'
-        ], {
-          cwd: path.join(__dirname, '..', 'python_service'),
-          env: process.env
-        });
-      } else {
-        // Production: use PyInstaller exe
-        console.log('[PROD MODE] Starting backend from packaged executable...');
-        const exePath = path.join(process.resourcesPath, 'fortuna-backend.exe');
+    const isDev = !app.isPackaged;
 
-        console.log('DEBUG: process.resourcesPath =', process.resourcesPath);
-        console.log('DEBUG: exePath =', exePath);
-        console.log('DEBUG: Checking if file exists:', fs.existsSync(exePath));
+    if (isDev) {
+      // Development: use Python venv
+      console.log('[DEV MODE] Starting backend from Python venv...');
+      const pythonPath = path.join(__dirname, '..', '.venv', 'Scripts', 'python.exe');
 
-        if (!fs.existsSync(exePath)) {
-          console.error('FATAL: Backend executable not found at:', exePath);
-          console.error('process.resourcesPath:', process.resourcesPath);
-          console.error('Expected path:', exePath);
-
-          // List what's actually in resources
-          try {
-            const resourcesContents = fs.readdirSync(process.resourcesPath);
-            console.error('Contents of resources directory:', resourcesContents);
-          } catch (err) {
-            console.error('Could not list resources:', err);
-          }
-
-          reject(new Error('Backend executable missing from installation'));
-          return;
-        }
-
-        console.log('Launching backend from:', exePath);
-        const exeSize = fs.statSync(exePath).size / (1024 * 1024);
-        console.log(`Backend executable size: ${exeSize.toFixed(2)} MB`);
-
-        this.backendProcess = spawn(exePath, [], {
-          env: {
-            ...process.env,
-            HOST: '127.0.0.1',
-            PORT: '8000'
-          }
-        });
+      if (!fs.existsSync(pythonPath)) {
+        const errorMsg = 'FATAL: Python executable not found. Run setup first.';
+        console.error(errorMsg, { path: pythonPath });
+        this.backendState = 'error';
+        this.backendLogs.push(errorMsg);
+        this.sendBackendStatusUpdate();
+        return;
       }
 
-      // Handle stdout
-      this.backendProcess.stdout.on('data', (data) => {
-        const output = data.toString();
-        console.log(`[Backend] ${output}`);
-
-        // Resolve when server is ready
-        if (output.includes('Uvicorn running') ||
-            output.includes('Application startup complete') ||
-            output.includes('Started server process')) {
-          console.log('✅ Backend is ready!');
-          resolve();
-        }
+      this.backendProcess = spawn(pythonPath, ['-m', 'uvicorn', 'api:app', '--host', '127.0.0.1', '--port', '8000'], {
+        cwd: path.join(__dirname, '..', 'python_service'),
+        env: process.env
       });
+    } else {
+      // Production: use PyInstaller exe
+      console.log('[PROD MODE] Starting backend from packaged executable...');
+      const exePath = path.join(process.resourcesPath, 'fortuna-backend.exe');
 
-      // Handle stderr
-      this.backendProcess.stderr.on('data', (data) => {
-        console.error(`[Backend ERROR] ${data}`);
+      if (!fs.existsSync(exePath)) {
+        const errorMsg = 'FATAL: Backend executable missing from installation.';
+        console.error(errorMsg, { path: exePath });
+        this.backendState = 'error';
+        this.backendLogs.push(errorMsg, `Expected at: ${exePath}`);
+        this.sendBackendStatusUpdate();
+        return;
+      }
+
+      console.log('Launching backend from:', exePath);
+      this.backendProcess = spawn(exePath, [], {
+        env: { ...process.env, HOST: '127.0.0.1', PORT: '8000' }
       });
+    }
 
-      // Handle process errors
-      this.backendProcess.on('error', (err) => {
-        console.error('Failed to start backend process:', err);
-        reject(err);
-      });
+    // Common event handlers for the backend process
+    this.backendProcess.stdout.on('data', (data) => {
+      const output = data.toString().trim();
+      console.log(`[Backend] ${output}`);
+      this.backendLogs.push(output);
 
-      // Handle unexpected exit
-      this.backendProcess.on('exit', (code, signal) => {
-        if (code !== 0) {
-          console.error(`Backend process exited with code ${code}, signal ${signal}`);
-        }
-      });
+      if (this.backendState !== 'running' && (output.includes('Uvicorn running') || output.includes('Application startup complete'))) {
+        console.log('✅ Backend is ready!');
+        this.backendState = 'running';
+      }
+      this.sendBackendStatusUpdate();
+    });
 
-      // Timeout fallback (in case startup message is missed)
-      setTimeout(() => {
-        if (this.backendProcess && !this.backendProcess.killed) {
-          console.log('⚠️ Backend startup timeout - assuming it started successfully');
-          resolve();
-        }
-      }, 10000); // 10 second timeout
+    this.backendProcess.stderr.on('data', (data) => {
+      const errorOutput = data.toString().trim();
+      console.error(`[Backend ERROR] ${errorOutput}`);
+      this.backendLogs.push(`ERROR: ${errorOutput}`);
+      this.backendState = 'error';
+      this.sendBackendStatusUpdate();
+    });
+
+    this.backendProcess.on('error', (err) => {
+      const errorMsg = `FATAL: Failed to start backend process: ${err.message}`;
+      console.error(errorMsg);
+      this.backendLogs.push(errorMsg);
+      this.backendState = 'error';
+      this.sendBackendStatusUpdate();
+    });
+
+    this.backendProcess.on('exit', (code) => {
+      // Only flag as an error if it wasn't a clean shutdown or a planned restart
+      if (code !== 0 && this.backendState !== 'stopped') {
+        const errorMsg = `Backend process exited unexpectedly with code ${code}`;
+        console.error(errorMsg);
+        this.backendLogs.push(errorMsg);
+        this.backendState = 'error';
+        this.sendBackendStatusUpdate();
+      }
     });
   }
 
@@ -272,34 +268,33 @@ class FortunaDesktopApp {
     });
   }
 
-  async initialize() {
-    try {
-      console.log('=== Fortuna Faucet Starting ===');
-      console.log('Mode:', !app.isPackaged ? 'Development' : 'Production');
-      console.log('Platform:', process.platform);
-      console.log('Electron version:', process.versions.electron);
+  initialize() {
+    console.log('=== Fortuna Faucet Initializing ===');
 
-      console.log('\n[1/3] Starting backend...');
-      await this.startBackend();
+    // Create the window immediately
+    this.createMainWindow();
+    this.createSystemTray();
 
-      console.log('\n[2/3] Creating main window...');
-      this.createMainWindow();
+    // Start the backend in parallel
+    this.startBackend();
 
-      console.log('\n[3/3] Creating system tray...');
-      this.createSystemTray();
+    // Set up IPC listener for restart command
+    ipcMain.on('restart-backend', (event) => {
+      console.log('Received restart-backend command from frontend.');
+      this.backendLogs.push('Restart command received. Attempting to restart backend...');
+      this.startBackend(); // This will kill the old process and start a new one
+    });
 
-      console.log('\n✅ Fortuna Faucet initialized successfully!');
-    } catch (error) {
-      console.error('FATAL ERROR during initialization:', error);
+    // Add a handler for the frontend to request the current status on load
+    ipcMain.handle('get-backend-status', async (event) => {
+      console.log('Received get-backend-status request from frontend.');
+      return {
+        state: this.backendState,
+        logs: this.backendLogs.slice(-20)
+      };
+    });
 
-      const { dialog } = require('electron');
-      dialog.showErrorBox(
-        'Startup Error',
-        `Fortuna Faucet failed to start:\n\n${error.message}\n\nPlease check the logs and try again.`
-      );
-
-      app.quit();
-    }
+    console.log('✅ Fortuna Faucet UI initialized. Backend starting in background...');
   }
 
   cleanup() {
