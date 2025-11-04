@@ -211,6 +211,7 @@ jobs:
             --hidden-import=_sqlite3 `
             --collect-all=uvicorn `
             --collect-all=fastapi `
+            --collect-all=aiosqlite `
             --add-data $addDataArg `
             api.py `
             2>&1 | Tee-Object -FilePath ../logs/pyinstaller.log
