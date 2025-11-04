@@ -242,7 +242,7 @@ jobs:
             --copy-metadata=fastapi `
             --copy-metadata=uvicorn `
             --add-data $addDataArg `
-            api.py `
+            ../run_backend.py `
             2>&1 | Tee-Object -FilePath ../logs/pyinstaller.log
 
           if ($LASTEXITCODE -ne 0) {
