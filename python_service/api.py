@@ -7,7 +7,7 @@ from typing import List, Optional
 
 import aiosqlite
 import structlog
-from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, WebSocket
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -15,6 +15,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.websockets import WebSocketDisconnect
 from typing import Callable
 from pydantic import BaseModel
 
@@ -41,6 +42,35 @@ from .adapters import *
 log = structlog.get_logger()
 
 
+class ConnectionManager:
+    """Manages active WebSocket connections."""
+
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+        log.info("WebSocket ConnectionManager initialized.")
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+        log.info("New WebSocket connection established.")
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+        log.info("WebSocket connection closed.")
+
+    async def broadcast(self, message: dict):
+        """Broadcasts a message to all connected clients."""
+        if not self.active_connections:
+            return
+
+        log.info("Broadcasting message to connected clients", client_count=len(self.active_connections))
+        for connection in self.active_connections:
+            try:
+                await connection.send_json(message)
+            except Exception:
+                log.error("Error sending message to a WebSocket client.", exc_info=True)
+
+
 # Lifespan context manager
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -49,25 +79,26 @@ async def lifespan(app: FastAPI):
     try:
         settings = get_settings()
 
+        # Initialize WebSocket connection manager
+        connection_manager = ConnectionManager()
+
         # Initialize manual override manager
         manual_override_manager = ManualOverrideManager()
 
-        # Initialize engine with manual override support
-        engine = OddsEngine(config=settings)
-        for adapter in engine.adapters:
-            if (
-                hasattr(adapter, "supports_manual_override")
-                and adapter.supports_manual_override
-                and hasattr(adapter, "enable_manual_override")
-            ):
-                adapter.enable_manual_override(manual_override_manager)
+        # Initialize engine with manual override and WebSocket support
+        engine = OddsEngine(
+            config=settings,
+            manual_override_manager=manual_override_manager,
+            connection_manager=connection_manager,
+        )
 
         app.state.engine = engine
         app.state.analyzer_engine = AnalyzerEngine()
         app.state.manual_override_manager = manual_override_manager
+        app.state.connection_manager = connection_manager
 
         log.info(
-            "Server startup: Configuration validated and OddsEngine initialized successfully."
+            "Server startup: All components initialized successfully."
         )
     except Exception as e:
         log.critical(
@@ -330,72 +361,28 @@ async def cleanup_old_overrides(
     return {"status": "success", "message": "Old requests cleaned"}
 
 
-# API Models
-class ManualDataSubmission(BaseModel):
-    request_id: str
-    content: str
-    content_type: str = "html"
+@app.websocket("/ws/live-updates")
+async def websocket_endpoint(websocket: WebSocket, api_key: str = Query(...)):
+    """WebSocket endpoint for live race updates."""
+    try:
+        # Use the existing API key verification logic
+        # This is a synchronous call, which is fine for auth at the start.
+        # In a real-world scenario with high connection rates, you might
+        # want to make this check asynchronous if it involved I/O.
+        verify_api_key(api_key)
+    except HTTPException as e:
+        log.warning("WebSocket connection rejected due to invalid API key.")
+        await websocket.close(code=4001, reason=f"Authentication failed: {e.detail}")
+        return
 
-
-# New endpoints
-@app.get("/api/manual-overrides/pending")
-@limiter.limit("60/minute")
-async def get_pending_overrides(
-    request: Request,
-    api_key: str = Depends(verify_api_key),
-    manager: ManualOverrideManager = Depends(lambda: app.state.manual_override_manager),
-):
-    """Get all pending manual override requests"""
-    pending = manager.get_pending_requests()
-    return {"pending_requests": [req.model_dump() for req in pending]}
-
-
-@app.post("/api/manual-overrides/submit")
-@limiter.limit("30/minute")
-async def submit_manual_data(
-    request: Request,
-    submission: ManualDataSubmission,
-    api_key: str = Depends(verify_api_key),
-    manager: ManualOverrideManager = Depends(lambda: app.state.manual_override_manager),
-):
-    """Submit manually-provided data for a failed fetch"""
-    success = manager.submit_manual_data(
-        request_id=submission.request_id,
-        raw_content=submission.content,
-        content_type=submission.content_type,
-    )
-
-    if success:
-        return {"status": "success", "message": "Manual data submitted"}
-    else:
-        raise HTTPException(status_code=404, detail="Request not found")
-
-
-@app.post("/api/manual-overrides/skip/{request_id}")
-@limiter.limit("60/minute")
-async def skip_manual_override(
-    request: Request,
-    request_id: str,
-    api_key: str = Depends(verify_api_key),
-    manager: ManualOverrideManager = Depends(lambda: app.state.manual_override_manager),
-):
-    """Skip a manual override request"""
-    success = manager.skip_request(request_id)
-
-    if success:
-        return {"status": "success", "message": "Request skipped"}
-    else:
-        raise HTTPException(status_code=404, detail="Request not found")
-
-
-@app.post("/api/manual-overrides/cleanup")
-@limiter.limit("60/minute")
-async def cleanup_old_overrides(
-    request: Request,
-    max_age_hours: int = 24,
-    api_key: str = Depends(verify_api_key),
-    manager: ManualOverrideManager = Depends(lambda: app.state.manual_override_manager),
-):
-    """Clean up old manual override requests"""
-    manager.clear_old_requests(max_age_hours)
-    return {"status": "success", "message": "Old requests cleaned"}
+    manager = websocket.app.state.connection_manager
+    await manager.connect(websocket)
+    try:
+        # Keep the connection alive, listening for messages (if any)
+        while True:
+            # You could implement logic here to handle incoming messages if needed
+            # For now, it's just a broadcast-only connection
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+        log.info("Client disconnected from WebSocket.")
