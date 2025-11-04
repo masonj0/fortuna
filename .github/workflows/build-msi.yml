@@ -154,14 +154,13 @@ jobs:
       - name: Backend - Install Dependencies
         shell: pwsh
         run: |
-          Write-Host "`n=== BACKEND: Installing Dependencies ===" -ForegroundColor Cyan
-          cd python_service
+          Write-Host "`n=== BACKEND: Installing Dependencies (from root) ===" -ForegroundColor Cyan
 
           # Upgrade build tools to latest versions
-          pip install --upgrade pip setuptools wheel 2>&1 | Tee-Object -FilePath ../logs/pip-upgrade.log
+          pip install --upgrade pip setuptools wheel 2>&1 | Tee-Object -FilePath logs/pip-upgrade.log
 
           # Install requirements
-          pip install -r requirements.txt --no-cache-dir 2>&1 | Tee-Object -FilePath ../logs/pip-install.log
+          pip install -r python_service/requirements.txt --no-cache-dir 2>&1 | Tee-Object -FilePath logs/pip-install.log
 
           if ($LASTEXITCODE -ne 0) {
             Write-Host "Pip install failed!" -ForegroundColor Red
@@ -176,12 +175,11 @@ jobs:
       - name: Backend - Build with PyInstaller
         shell: pwsh
         run: |
-          Write-Host "`n=== BACKEND: Building Executable ===" -ForegroundColor Cyan
-          cd python_service
+          Write-Host "`n=== BACKEND: Building Executable (from root) ===" -ForegroundColor Cyan
 
           # Construct the absolute path for the --add-data argument
-          $adaptersPath = (Resolve-Path -Path "./adapters").Path
-          $addDataArg = "$adaptersPath;adapters"
+          $adaptersPath = (Resolve-Path -Path "python_service/adapters").Path
+          $addDataArg = "$adaptersPath;python_service/adapters"
           Write-Host "  → Using --add-data arg: $addDataArg"
 
           pyinstaller --onefile `
@@ -189,9 +187,9 @@ jobs:
             --console `
             --clean `
             --noconfirm `
-            --distpath ../electron/resources `
-            --workpath ./build-pyinstaller `
-            --specpath ./spec-pyinstaller `
+            --distpath electron/resources `
+            --workpath python_service/build-pyinstaller `
+            --specpath python_service/spec-pyinstaller `
             --hidden-import=uvicorn `
             --hidden-import=uvicorn.logging `
             --hidden-import=uvicorn.loops `
@@ -242,12 +240,12 @@ jobs:
             --copy-metadata=fastapi `
             --copy-metadata=uvicorn `
             --add-data $addDataArg `
-            ../run_backend.py `
-            2>&1 | Tee-Object -FilePath ../logs/pyinstaller.log
+            run_backend.py `
+            2>&1 | Tee-Object -FilePath logs/pyinstaller.log
 
           if ($LASTEXITCODE -ne 0) {
             Write-Host "PyInstaller failed!" -ForegroundColor Red
-            Get-Content ../logs/pyinstaller.log | Select-Object -Last 50
+            Get-Content logs/pyinstaller.log | Select-Object -Last 50
             throw "PyInstaller build failed"
           }
           Write-Host "✅ Backend executable built" -ForegroundColor Green

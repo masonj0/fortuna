@@ -2,6 +2,7 @@
 import uvicorn
 import sys
 import os
+import python_service.api  # Explicit import for PyInstaller's analysis
 
 # This script serves as the main entry point for the PyInstaller-packaged backend.
 # By running from the project root, it ensures that the 'python_service'
