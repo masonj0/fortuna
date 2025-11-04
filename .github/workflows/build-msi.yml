@@ -208,6 +208,7 @@ jobs:
             --hidden-import=redis.asyncio.client `
             --hidden-import=redis.asyncio.connection `
             --hidden-import=aiosqlite `
+            --hidden-import=_sqlite3 `
             --collect-all=uvicorn `
             --collect-all=fastapi `
             --add-data $addDataArg `
