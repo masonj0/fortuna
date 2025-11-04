@@ -41,6 +41,7 @@ tabula-py
 psutil==5.9.6; sys_platform == 'win32'
 pywin32==306; sys_platform == 'win32'
 windows-toasts; sys_platform == 'win32'
+keyring; sys_platform == 'win32'
 
 # --- Testing ---
 pytest==7.4.3

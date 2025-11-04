@@ -179,7 +179,7 @@ jobs:
 
           # Construct the absolute path for the --add-data argument
           $adaptersPath = (Resolve-Path -Path "python_service/adapters").Path
-          $addDataArg = "$adaptersPath;python_service/adapters"
+          $addDataArg = "$adaptersPath;adapters"
           Write-Host "  → Using --add-data arg: $addDataArg"
 
           pyinstaller --onefile `
@@ -228,6 +228,8 @@ jobs:
             --hidden-import=aiosqlite `
             --hidden-import=_sqlite3 `
             --hidden-import=sqlite3 `
+            --hidden-import=keyring `
+            --hidden-import=keyring.backends.windows `
             --collect-all=uvicorn `
             --collect-all=fastapi `
             --collect-all=pydantic `
