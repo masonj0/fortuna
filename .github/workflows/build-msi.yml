@@ -156,13 +156,21 @@ jobs:
         run: |
           Write-Host "`n=== BACKEND: Installing Dependencies ===" -ForegroundColor Cyan
           cd python_service
-          pip install --upgrade pip setuptools wheel 2>&1 | Out-Null
+
+          # Upgrade build tools to latest versions
+          pip install --upgrade pip setuptools wheel 2>&1 | Tee-Object -FilePath ../logs/pip-upgrade.log
+
+          # Install requirements
           pip install -r requirements.txt --no-cache-dir 2>&1 | Tee-Object -FilePath ../logs/pip-install.log
 
           if ($LASTEXITCODE -ne 0) {
             Write-Host "Pip install failed!" -ForegroundColor Red
             throw "Backend pip install failed"
           }
+
+          # Install additional runtime dependencies that might be missing
+          pip install certifi typing_extensions 2>&1 | Out-Null
+
           Write-Host "✅ Backend dependencies installed" -ForegroundColor Green
 
       - name: Backend - Build with PyInstaller
@@ -192,23 +200,47 @@ jobs:
             --hidden-import=uvicorn.protocols.http `
             --hidden-import=uvicorn.protocols.http.auto `
             --hidden-import=uvicorn.protocols.http.httptools_impl `
+            --hidden-import=uvicorn.protocols.http.h11_impl `
             --hidden-import=uvicorn.protocols.websockets `
             --hidden-import=uvicorn.protocols.websockets.auto `
+            --hidden-import=uvicorn.protocols.websockets.wsproto_impl `
+            --hidden-import=uvicorn.protocols.websockets.websockets_impl `
             --hidden-import=uvicorn.lifespan `
             --hidden-import=uvicorn.lifespan.on `
             --hidden-import=fastapi `
             --hidden-import=fastapi.routing `
+            --hidden-import=fastapi.responses `
+            --hidden-import=fastapi.exceptions `
             --hidden-import=pydantic `
             --hidden-import=pydantic_core `
+            --hidden-import=pydantic_core._pydantic_core `
+            --hidden-import=typing_extensions `
             --hidden-import=httpx `
             --hidden-import=httpx._transports `
             --hidden-import=httpx._transports.default `
+            --hidden-import=httpcore `
+            --hidden-import=httpcore._sync `
+            --hidden-import=httpcore._async `
+            --hidden-import=h11 `
+            --hidden-import=certifi `
             --hidden-import=redis `
             --hidden-import=redis.asyncio `
             --hidden-import=redis.asyncio.client `
             --hidden-import=redis.asyncio.connection `
+            --hidden-import=aiosqlite `
+            --hidden-import=_sqlite3 `
+            --hidden-import=sqlite3 `
             --collect-all=uvicorn `
             --collect-all=fastapi `
+            --collect-all=pydantic `
+            --collect-all=pydantic_core `
+            --collect-all=aiosqlite `
+            --collect-all=httpx `
+            --collect-all=certifi `
+            --copy-metadata=pydantic `
+            --copy-metadata=pydantic_core `
+            --copy-metadata=fastapi `
+            --copy-metadata=uvicorn `
             --add-data $addDataArg `
             api.py `
             2>&1 | Tee-Object -FilePath ../logs/pyinstaller.log
@@ -233,6 +265,33 @@ jobs:
 
           $size = (Get-Item $exe).Length / 1MB
           Write-Host "✅ Backend executable verified: $([math]::Round($size, 2)) MB" -ForegroundColor Green
+
+      - name: Backend - Test Executable (Quick Smoke Test)
+        shell: pwsh
+        continue-on-error: true
+        timeout-minutes: 2
+        run: |
+          Write-Host "`n=== BACKEND: Quick Smoke Test ===" -ForegroundColor Cyan
+
+          $exe = "electron/resources/fortuna-backend.exe"
+
+          # Start the process in the background
+          $process = Start-Process -FilePath $exe -PassThru -NoNewWindow -RedirectStandardOutput "logs/backend-test-stdout.log" -RedirectStandardError "logs/backend-test-stderr.log"
+
+          # Wait 5 seconds for startup
+          Start-Sleep -Seconds 5
+
+          # Check if it's still running
+          if ($process.HasExited) {
+            Write-Host "⚠️  Backend exited immediately. Exit code: $($process.ExitCode)" -ForegroundColor Yellow
+            if (Test-Path "logs/backend-test-stderr.log") {
+              Write-Host "`nError output:" -ForegroundColor Yellow
+              Get-Content "logs/backend-test-stderr.log"
+            }
+          } else {
+            Write-Host "✅ Backend started successfully (smoke test passed)" -ForegroundColor Green
+            Stop-Process -Id $process.Id -Force
+          }
 
       # ===== ELECTRON BUILD =====
       - name: Electron - Install Dependencies
