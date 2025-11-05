@@ -12,7 +12,7 @@ on:
 env:
   NODE_VERSION: '20'
   PYTHON_VERSION: '3.12'
-  CACHE_BUST: ${{ github.run_id }}
+  CACHE_BUST: "2025-11-05-v2" # Forcibly invalidate all caches
   # Test API key that meets Pydantic validation requirements (16+ chars)
   API_KEY: "test_api_key_min16chars_secure_string"
 
@@ -231,7 +231,7 @@ jobs:
             --hidden-import=_sqlite3 `
             --hidden-import=sqlite3 `
             --hidden-import=keyring `
-            --hidden-import=keyring.backends.windows `
+            --hidden-import=keyring.backends.Windows `
             --hidden-import=bs4 `
             --hidden-import=lxml `
             --hidden-import=html5lib `
