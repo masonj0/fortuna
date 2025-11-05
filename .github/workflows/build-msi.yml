@@ -630,36 +630,34 @@ jobs:
               Write-Host "✅ Playwright ready" -ForegroundColor Green
 
               Write-Host "`n✍️  Running E2E screenshot test..." -ForegroundColor Cyan
-              Set-Content -Path "run_e2e_test.py" -Value @"
-from playwright.sync_api import sync_playwright
-import sys
-import json
-
-def run(playwright):
-    browser = playwright.chromium.launch()
-    page = browser.new_page()
-    try:
-        url = f"http://127.0.0.1:$frontendPort"
-        print(f"[E2E] Navigating to {url}")
-        page.goto(url, timeout=20000)
-
-        print("[E2E] Waiting for body element")
-        page.wait_for_selector("body", timeout=10000)
-
-        print("[E2E] Page loaded successfully")
-        page.screenshot(path="e2e-screenshot.png", full_page=True)
-
-        print("[E2E] ✅ E2E TEST PASSED")
-    except Exception as e:
-        print(f"[E2E] ❌ E2E TEST FAILED: {e}", file=sys.stderr)
-        page.screenshot(path="e2e-screenshot-failed.png", full_page=True)
-        raise
-    finally:
-        browser.close()
-
-with sync_playwright() as playwright:
-    run(playwright)
-"@
+              $pyScript = @(
+                  "from playwright.sync_api import sync_playwright",
+                  "import sys",
+                  "import json",
+                  "",
+                  "def run(playwright):",
+                  "    browser = playwright.chromium.launch()",
+                  "    page = browser.new_page()",
+                  "    try:",
+                  "        url = f'http://127.0.0.1:$frontendPort'",
+                  "        print(f'[E2E] Navigating to {url}')",
+                  "        page.goto(url, timeout=20000)",
+                  "        print('[E2E] Waiting for body element')",
+                  "        page.wait_for_selector('body', timeout=10000)",
+                  "        print('[E2E] Page loaded successfully')",
+                  "        page.screenshot(path='e2e-screenshot.png', full_page=True)",
+                  "        print('[E2E] ✅ E2E TEST PASSED')",
+                  "    except Exception as e:",
+                  "        print(f'[E2E] ❌ E2E TEST FAILED: {e}', file=sys.stderr)",
+                  "        page.screenshot(path='e2e-screenshot-failed.png', full_page=True)",
+                  "        raise",
+                  "    finally:",
+                  "        browser.close()",
+                  "",
+                  "with sync_playwright() as playwright:",
+                  "    run(playwright)"
+              ) -join "`n"
+              Set-Content -Path "run_e2e_test.py" -Value $pyScript
 
               py run_e2e_test.py 2>&1 | Tee-Object -FilePath "$testDir/playwright.log"
               if ($LASTEXITCODE -ne 0) { throw "E2E test failed" }
