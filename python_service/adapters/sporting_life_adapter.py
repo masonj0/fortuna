@@ -2,11 +2,16 @@
 
 import asyncio
 from datetime import datetime
-from typing import Any, List, Optional
+from typing import Any
+from typing import List
+from typing import Optional
 
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup
+from bs4 import Tag
 
-from ..models import OddsData, Race, Runner
+from ..models import OddsData
+from ..models import Race
+from ..models import Runner
 from ..utils.odds import parse_odds_to_decimal
 from ..utils.text import clean_text
 from .base_v3 import BaseAdapterV3
@@ -21,9 +26,7 @@ class SportingLifeAdapter(BaseAdapterV3):
     BASE_URL = "https://www.sportinglife.com"
 
     def __init__(self, config=None):
-        super().__init__(
-            source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
-        )
+        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
 
     async def _fetch_data(self, date: str) -> Optional[dict]:
         """
@@ -33,16 +36,11 @@ class SportingLifeAdapter(BaseAdapterV3):
         index_url = f"/horse-racing/racecards/{date}"
         index_response = await self.make_request(self.http_client, "GET", index_url)
         if not index_response:
-            self.logger.warning(
-                "Failed to fetch SportingLife index page", url=index_url
-            )
+            self.logger.warning("Failed to fetch SportingLife index page", url=index_url)
             return None
 
         index_soup = BeautifulSoup(index_response.text, "html.parser")
-        links = {
-            a["href"]
-            for a in index_soup.select("a.hr-race-card-meeting__race-link[href]")
-        }
+        links = {a["href"] for a in index_soup.select("a.hr-race-card-meeting__race-link[href]")}
 
         async def fetch_single_html(url_path: str):
             response = await self.make_request(self.http_client, "GET", url_path)
@@ -83,25 +81,18 @@ class SportingLifeAdapter(BaseAdapterV3):
                     continue
                 race_time_str = clean_text(race_time_node.get_text())
 
-                start_time = datetime.combine(
-                    race_date, datetime.strptime(race_time_str, "%H:%M").time()
-                )
+                start_time = datetime.combine(race_date, datetime.strptime(race_time_str, "%H:%M").time())
 
-                active_link = soup.select_one(
-                    "a.hr-race-header-navigation-link--active"
-                )
+                active_link = soup.select_one("a.hr-race-header-navigation-link--active")
                 race_number = 1
                 if active_link:
                     all_links = soup.select("a.hr-race-header-navigation-link")
                     try:
                         race_number = all_links.index(active_link) + 1
                     except ValueError:
-                        pass # Keep default race number if active link not in all links
+                        pass  # Keep default race number if active link not in all links
 
-                runners = [
-                    self._parse_runner(row)
-                    for row in soup.select("div.hr-racing-runner-card")
-                ]
+                runners = [self._parse_runner(row) for row in soup.select("div.hr-racing-runner-card")]
 
                 race = Race(
                     id=f"sl_{track_name.replace(' ', '')}_{start_time.strftime('%Y%m%d')}_R{race_number}",
@@ -150,7 +141,5 @@ class SportingLifeAdapter(BaseAdapterV3):
             )
             return Runner(number=number, name=name, odds=odds_data)
         except (AttributeError, ValueError):
-            self.logger.warning(
-                "Failed to parse a runner on SportingLife, skipping runner."
-            )
+            self.logger.warning("Failed to parse a runner on SportingLife, skipping runner.")
             return None

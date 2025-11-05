@@ -45,9 +45,7 @@ class ScribesArchivesETL:
 
     def _validate_and_transform(self, race: dict) -> tuple:
         """Validates a race dictionary and transforms it for insertion."""
-        if not all(
-            k in race for k in ["id", "venue", "race_number", "start_time", "runners"]
-        ):
+        if not all(k in race for k in ["id", "venue", "race_number", "start_time", "runners"]):
             return (
                 None,
                 "Missing core fields (id, venue, race_number, start_time, runners)",
@@ -113,9 +111,7 @@ class ScribesArchivesETL:
                         """
                         )
                         connection.execute(stmt, clean_records)
-                        logger.info(
-                            f"Inserted/updated {len(clean_records)} records into historical_races."
-                        )
+                        logger.info(f"Inserted/updated {len(clean_records)} records into historical_races.")
 
                     if quarantined_records:
                         stmt = text(
@@ -125,9 +121,7 @@ class ScribesArchivesETL:
                         """
                         )
                         connection.execute(stmt, quarantined_records)
-                        logger.warning(
-                            f"Moved {len(quarantined_records)} records to quarantine."
-                        )
+                        logger.warning(f"Moved {len(quarantined_records)} records to quarantine.")
             except SQLAlchemyError as e:
                 logger.error(f"Database transaction failed: {e}", exc_info=True)
 

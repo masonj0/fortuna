@@ -1,6 +1,6 @@
 # python_service/adapters/twinspires_adapter.py
-from datetime import datetime
-from typing import Any, List
+from typing import Any
+from typing import List
 
 from ..models import Race
 from .base_v3 import BaseAdapterV3
@@ -16,9 +16,7 @@ class TwinSpiresAdapter(BaseAdapterV3):
     BASE_URL = "https://www.twinspires.com"
 
     def __init__(self, config=None):
-        super().__init__(
-            source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
-        )
+        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
 
     async def _fetch_data(self, date: str) -> Any:
         """

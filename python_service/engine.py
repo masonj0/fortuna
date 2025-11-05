@@ -3,20 +3,24 @@
 import asyncio
 from copy import deepcopy
 from datetime import datetime
-from decimal import Decimal
-from typing import Any, Dict, List, Tuple
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Tuple
 
 import httpx
 import structlog
+from pydantic import ValidationError
 
-from .adapters.base_v3 import BaseAdapterV3  # Import V3 base class
 from .adapters import *  # Import all adapter classes
-from .core.exceptions import AdapterConfigError, AdapterHttpError
+from .adapters.base_v3 import BaseAdapterV3  # Import V3 base class
 from .cache_manager import cache_async_result
 from .config import get_settings
+from .core.exceptions import AdapterConfigError
+from .core.exceptions import AdapterHttpError
 from .manual_override_manager import ManualOverrideManager
-from .models import AggregatedResponse, Race, Runner
-from pydantic import ValidationError
+from .models import AggregatedResponse
+from .models import Race
 
 log = structlog.get_logger(__name__)
 
@@ -44,9 +48,7 @@ class OddsEngine:
                 # Create a default/mock config or re-raise if not in a test context
                 from .config import Settings
 
-                self.config = Settings(
-                    API_KEY="a_secure_test_api_key_that_is_long_enough"
-                )
+                self.config = Settings(API_KEY="a_secure_test_api_key_that_is_long_enough")
 
             self.logger.info("Initializing adapters...")
             self.adapters: List[BaseAdapterV3] = []
@@ -82,7 +84,7 @@ class OddsEngine:
             for adapter_cls in adapter_classes:
                 try:
                     adapter_instance = adapter_cls(config=self.config)
-                    if manual_override_manager and getattr(adapter_instance, 'supports_manual_override', False):
+                    if manual_override_manager and getattr(adapter_instance, "supports_manual_override", False):
                         adapter_instance.enable_manual_override(manual_override_manager)
                     self.adapters.append(adapter_instance)
                 except AdapterConfigError as e:
@@ -104,7 +106,7 @@ class OddsEngine:
                     url="https://betfair-data-supplier-prod.herokuapp.com/api/widgets/kvs-ratings/datasets",
                     config=self.config,
                 )
-                if manual_override_manager and getattr(bds_adapter, 'supports_manual_override', False):
+                if manual_override_manager and getattr(bds_adapter, "supports_manual_override", False):
                     bds_adapter.enable_manual_override(manual_override_manager)
                 self.adapters.append(bds_adapter)
             except Exception:
@@ -137,9 +139,7 @@ class OddsEngine:
             self.logger.info("FortunaEngine initialization complete.")
 
         except Exception:
-            self.logger.critical(
-                "CRITICAL FAILURE during FortunaEngine initialization.", exc_info=True
-            )
+            self.logger.critical("CRITICAL FAILURE during FortunaEngine initialization.", exc_info=True)
             raise
 
     async def close(self):
@@ -153,9 +153,7 @@ class OddsEngine:
         async with self.semaphore:
             return await self._time_adapter_fetch(adapter, date)
 
-    async def _time_adapter_fetch(
-        self, adapter: BaseAdapterV3, date: str
-    ) -> Tuple[str, Dict[str, Any], float]:
+    async def _time_adapter_fetch(self, adapter: BaseAdapterV3, date: str) -> Tuple[str, Dict[str, Any], float]:
         """
         Wraps a V3 adapter's fetch call for safe, non-blocking execution,
         and returns a consistent payload with timing information.
@@ -233,9 +231,7 @@ class OddsEngine:
             await self.connection_manager.broadcast(data)
 
     @cache_async_result(ttl_seconds=300, key_prefix="fortuna_engine_races")
-    async def fetch_all_odds(
-        self, date: str, source_filter: str = None
-    ) -> Dict[str, Any]:
+    async def fetch_all_odds(self, date: str, source_filter: str = None) -> Dict[str, Any]:
         """
         Fetches and aggregates race data from all configured adapters.
         The result of this method is cached and broadcasted via WebSocket.
@@ -243,15 +239,9 @@ class OddsEngine:
         target_adapters = self.adapters
         if source_filter:
             log.info("Applying source filter", source=source_filter)
-            target_adapters = [
-                a
-                for a in self.adapters
-                if a.source_name.lower() == source_filter.lower()
-            ]
+            target_adapters = [a for a in self.adapters if a.source_name.lower() == source_filter.lower()]
 
-        tasks = [
-            self._fetch_with_semaphore(adapter, date) for adapter in target_adapters
-        ]
+        tasks = [self._fetch_with_semaphore(adapter, date) for adapter in target_adapters]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         source_infos = []
@@ -277,9 +267,7 @@ class OddsEngine:
             metadata={
                 "fetch_time": datetime.now(),
                 "sources_queried": [a.source_name for a in target_adapters],
-                "sources_successful": len(
-                    [s for s in source_infos if s["status"] == "SUCCESS"]
-                ),
+                "sources_successful": len([s for s in source_infos if s["status"] == "SUCCESS"]),
                 "total_races": len(deduped_races),
             },
         )

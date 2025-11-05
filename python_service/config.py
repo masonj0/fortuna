@@ -6,7 +6,8 @@ from typing import List
 from typing import Optional
 
 import structlog
-from pydantic import Field, model_validator, ValidationError
+from pydantic import Field
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
 from .credentials_manager import SecureCredentialsManager
@@ -67,9 +68,7 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
 
     # --- Optional Adapter Keys ---
-    NEXT_PUBLIC_API_KEY: Optional[str] = (
-        None  # Allow frontend key to be present in .env
-    )
+    NEXT_PUBLIC_API_KEY: Optional[str] = None  # Allow frontend key to be present in .env
     TVG_API_KEY: Optional[str] = None
     RACING_AND_SPORTS_TOKEN: Optional[str] = None
     POINTSBET_API_KEY: Optional[str] = None
@@ -89,7 +88,11 @@ class Settings(BaseSettings):
         1. If API_KEY is missing, it falls back to the SecureCredentialsManager.
         2. It decrypts any fields that were loaded from the .env file.
         """
-        # 1. Security validation for API_KEY
+        # 1. Fallback for API_KEY
+        if not self.API_KEY:
+            self.API_KEY = SecureCredentialsManager.get_credential("api_key") or "MISSING"
+
+        # 2. Security validation for API_KEY
         insecure_keys = {"test", "changeme", "default", "secret", "password", "admin"}
         if self.API_KEY in insecure_keys:
             raise ValueError(

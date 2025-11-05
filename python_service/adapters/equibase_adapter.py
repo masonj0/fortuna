@@ -1,11 +1,16 @@
 # python_service/adapters/equibase_adapter.py
 import asyncio
 from datetime import datetime
-from typing import Any, List, Optional
+from typing import Any
+from typing import List
+from typing import Optional
 
-from selectolax.parser import HTMLParser, Node
+from selectolax.parser import HTMLParser
+from selectolax.parser import Node
 
-from ..models import OddsData, Race, Runner
+from ..models import OddsData
+from ..models import Race
+from ..models import Runner
 from ..utils.odds import parse_odds_to_decimal
 from ..utils.text import clean_text
 from .base_v3 import BaseAdapterV3
@@ -20,21 +25,15 @@ class EquibaseAdapter(BaseAdapterV3):
     BASE_URL = "https://www.equibase.com"
 
     def __init__(self, config=None):
-        super().__init__(
-            source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
-        )
+        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
 
     async def _fetch_data(self, date: str) -> Optional[dict]:
         """
         Fetches the raw HTML for all race pages for a given date.
         """
         d = datetime.strptime(date, "%Y-%m-%d").date()
-        index_url = (
-            f"/entries/Entries.cfm?ELEC_DATE={d.month}/{d.day}/{d.year}&STYLE=EQB"
-        )
-        index_response = await self.make_request(
-            self.http_client, "GET", index_url, headers=self._get_headers()
-        )
+        index_url = f"/entries/Entries.cfm?ELEC_DATE={d.month}/{d.day}/{d.year}&STYLE=EQB"
+        index_response = await self.make_request(self.http_client, "GET", index_url, headers=self._get_headers())
         if not index_response:
             self.logger.warning("Failed to fetch Equibase index page", url=index_url)
             return None
@@ -47,26 +46,18 @@ class EquibaseAdapter(BaseAdapterV3):
         ]
 
         async def get_race_links_from_track(track_url: str):
-            response = await self.make_request(
-                self.http_client, "GET", track_url, headers=self._get_headers()
-            )
+            response = await self.make_request(self.http_client, "GET", track_url, headers=self._get_headers())
             if not response:
                 return []
             parser = HTMLParser(response.text)
-            return [
-                link.attributes["href"] for link in parser.css("a.program-race-link")
-            ]
+            return [link.attributes["href"] for link in parser.css("a.program-race-link")]
 
         tasks = [get_race_links_from_track(link) for link in track_links]
         results = await asyncio.gather(*tasks)
-        race_links = [
-            f"{self.base_url}{link}" for sublist in results for link in sublist
-        ]
+        race_links = [f"{self.base_url}{link}" for sublist in results for link in sublist]
 
         async def fetch_single_html(race_url: str):
-            response = await self.make_request(
-                self.http_client, "GET", race_url, headers=self._get_headers()
-            )
+            response = await self.make_request(self.http_client, "GET", race_url, headers=self._get_headers())
             return response.text if response else ""
 
         tasks = [fetch_single_html(link) for link in race_links]

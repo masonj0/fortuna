@@ -1,13 +1,14 @@
 # run_backend.py
-import uvicorn
-import sys
 import os
-import python_service.api  # Explicit import for PyInstaller's analysis
+import sys
+
+import uvicorn
 
 # This script serves as the main entry point for the PyInstaller-packaged backend.
 # By running from the project root, it ensures that the 'python_service'
 # directory is correctly interpreted as a Python package, resolving the
 # "attempted relative import with no known parent package" error.
+
 
 def main():
     """
@@ -18,13 +19,8 @@ def main():
     # This configuration is for the packaged application, so reload is False.
     host = os.environ.get("HOST", "127.0.0.1")
     port = int(os.environ.get("PORT", 8000))
-    uvicorn.run(
-        "python_service.api:app",
-        host=host,
-        port=port,
-        reload=False,
-        log_level="info"
-    )
+    uvicorn.run("python_service.api:app", host=host, port=port, reload=False, log_level="info")
+
 
 if __name__ == "__main__":
     # When PyInstaller creates the executable, this __name__ == "__main__"

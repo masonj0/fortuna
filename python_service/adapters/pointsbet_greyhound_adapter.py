@@ -1,9 +1,15 @@
 # python_service/adapters/pointsbet_greyhound_adapter.py
-from typing import Any, List, Optional, Dict
-from ..models import Race, Runner, OddsData
-from .base_v3 import BaseAdapterV3
 from datetime import datetime
 from decimal import Decimal
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Optional
+
+from ..models import OddsData
+from ..models import Race
+from ..models import Runner
+from .base_v3 import BaseAdapterV3
 
 # NOTE: This is a hypothetical implementation based on a potential API structure.
 
@@ -15,9 +21,7 @@ class PointsBetGreyhoundAdapter(BaseAdapterV3):
     BASE_URL = "https://api.pointsbet.com/api/v2/"
 
     def __init__(self, config=None):
-        super().__init__(
-            source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
-        )
+        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
 
     async def _fetch_data(self, date: str) -> Optional[List[Dict[str, Any]]]:
         """Fetches all greyhound events for a given date."""

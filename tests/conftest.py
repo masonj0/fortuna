@@ -1,11 +1,15 @@
 # tests/conftest.py
-import pytest
-from unittest.mock import patch, Mock
-from fastapi.testclient import TestClient
-import httpx
+from unittest.mock import Mock
+from unittest.mock import patch
 
+import httpx
+import pytest
+from fastapi.testclient import TestClient
+
+from python_service.api import app
+from python_service.api import get_settings
 from python_service.config import Settings
-from python_service.api import app, get_settings
+
 
 def get_test_settings():
     """
@@ -24,8 +28,9 @@ def get_test_settings():
         # Required by RacingAndSports adapters
         RACING_AND_SPORTS_TOKEN="test_ras_token",
         # Required by GreyhoundAdapter
-        GREYHOUND_API_URL="https://api.example.com/greyhound"
+        GREYHOUND_API_URL="https://api.example.com/greyhound",
     )
+
 
 @pytest.fixture(scope="module")
 def client():

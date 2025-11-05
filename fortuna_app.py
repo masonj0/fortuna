@@ -1,19 +1,23 @@
-import tkinter as tk
-from tkinter import ttk, messagebox, scrolledtext, font
+import os
+import socket
 import subprocess
+import sys
 import threading
 import time
-import requests
-import psutil
-import socket
-import sys
-import os
+import tkinter as tk
 from pathlib import Path
+from tkinter import messagebox
+from tkinter import scrolledtext
+from tkinter import ttk
+
+import psutil
+import requests
+
 
 # --- Control Panel Tab (from former launcher_gui.py) ---
 class ControlPanelTab(tk.Frame):
     def __init__(self, parent, master_app):
-        super().__init__(parent, bg='#1a1a2e')
+        super().__init__(parent, bg="#1a1a2e")
         self.master_app = master_app
         self.backend_proc = None
         self.frontend_proc = None
@@ -32,7 +36,10 @@ class ControlPanelTab(tk.Frame):
 
     def smart_start(self):
         """On first launch, run verification, create shortcuts, and then start."""
-        if messagebox.askokcancel("First-Time Setup", "Welcome to Fortuna Faucet!\n\nThis first launch will verify your system and create a desktop shortcut for easy access. Proceed?"):
+        if messagebox.askokcancel(
+            "First-Time Setup",
+            "Welcome to Fortuna Faucet!\n\nThis first launch will verify your system and create a desktop shortcut for easy access. Proceed?",
+        ):
             # Steal and run the logic from the System Tools Tab
             self.master_app.notebook.select(self.master_app.system_tools_tab)
             self.master_app.system_tools_tab.run_verification()
@@ -40,39 +47,67 @@ class ControlPanelTab(tk.Frame):
 
             # Once done, revert to a normal start button
             messagebox.showinfo("Setup Complete", "Setup is complete! The main services will now start.")
-            self.launch_btn.config(text="▶ START FORTUNA", bg='#00ff88', command=self.launch_services)
+            self.launch_btn.config(text="▶ START FORTUNA", bg="#00ff88", command=self.launch_services)
             self.launch_services()
 
     def _create_ui(self):
-        title = tk.Label(self, text="🐴 System Control Panel", font=("Segoe UI", 16, "bold"), bg='#1a1a2e', fg='#00ff88')
+        title = tk.Label(
+            self, text="🐴 System Control Panel", font=("Segoe UI", 16, "bold"), bg="#1a1a2e", fg="#00ff88"
+        )
         title.pack(pady=20)
 
-        status_frame = tk.Frame(self, bg='#1a1a2e')
+        status_frame = tk.Frame(self, bg="#1a1a2e")
         status_frame.pack(fill=tk.X, padx=40, pady=10)
 
-        tk.Label(status_frame, text="Backend Service (API)", font=("Segoe UI", 10), bg='#1a1a2e', fg='#ffffff').pack(anchor="w")
-        self.backend_status_canvas = tk.Canvas(status_frame, width=300, height=40, bg='#0f3460', highlightthickness=0)
+        tk.Label(status_frame, text="Backend Service (API)", font=("Segoe UI", 10), bg="#1a1a2e", fg="#ffffff").pack(
+            anchor="w"
+        )
+        self.backend_status_canvas = tk.Canvas(status_frame, width=300, height=40, bg="#0f3460", highlightthickness=0)
         self.backend_status_canvas.pack(fill=tk.X, pady=(0, 10))
-        self.backend_indicator = self.backend_status_canvas.create_oval(15, 10, 35, 30, fill='#ff4444', outline='')
-        self.backend_text = self.backend_status_canvas.create_text(55, 20, text="Stopped", fill='#ffffff', anchor="w", font=("Segoe UI", 9))
+        self.backend_indicator = self.backend_status_canvas.create_oval(15, 10, 35, 30, fill="#ff4444", outline="")
+        self.backend_text = self.backend_status_canvas.create_text(
+            55, 20, text="Stopped", fill="#ffffff", anchor="w", font=("Segoe UI", 9)
+        )
 
-        tk.Label(status_frame, text="Frontend Dashboard (UI)", font=("Segoe UI", 10), bg='#1a1a2e', fg='#ffffff').pack(anchor="w")
-        self.frontend_status_canvas = tk.Canvas(status_frame, width=300, height=40, bg='#0f3460', highlightthickness=0)
+        tk.Label(status_frame, text="Frontend Dashboard (UI)", font=("Segoe UI", 10), bg="#1a1a2e", fg="#ffffff").pack(
+            anchor="w"
+        )
+        self.frontend_status_canvas = tk.Canvas(status_frame, width=300, height=40, bg="#0f3460", highlightthickness=0)
         self.frontend_status_canvas.pack(fill=tk.X)
-        self.frontend_indicator = self.frontend_status_canvas.create_oval(15, 10, 35, 30, fill='#ff4444', outline='')
-        self.frontend_text = self.frontend_status_canvas.create_text(55, 20, text="Stopped", fill='#ffffff', anchor="w", font=("Segoe UI", 9))
+        self.frontend_indicator = self.frontend_status_canvas.create_oval(15, 10, 35, 30, fill="#ff4444", outline="")
+        self.frontend_text = self.frontend_status_canvas.create_text(
+            55, 20, text="Stopped", fill="#ffffff", anchor="w", font=("Segoe UI", 9)
+        )
 
-        button_frame = tk.Frame(self, bg='#1a1a2e')
+        button_frame = tk.Frame(self, bg="#1a1a2e")
         button_frame.pack(fill=tk.X, padx=40, pady=20)
 
-        self.launch_btn = tk.Button(button_frame, text="▶ START FORTUNA", font=("Segoe UI", 14, "bold"), bg='#00ff88', fg='#000000', height=2, relief=tk.FLAT)
+        self.launch_btn = tk.Button(
+            button_frame,
+            text="▶ START FORTUNA",
+            font=("Segoe UI", 14, "bold"),
+            bg="#00ff88",
+            fg="#000000",
+            height=2,
+            relief=tk.FLAT,
+        )
         if self.first_launch:
             self.launch_btn.config(text="▶ FIRST-TIME START & SETUP", bg="#ff9900", command=self.smart_start)
         else:
             self.launch_btn.config(command=self.launch_services)
         self.launch_btn.pack(fill=tk.X, pady=(0, 10))
 
-        self.stop_btn = tk.Button(button_frame, text="⏹ STOP SERVICES", font=("Segoe UI", 12), bg='#ff4444', fg='#ffffff', command=self.stop_services, state=tk.DISABLED, height=1, relief=tk.FLAT)
+        self.stop_btn = tk.Button(
+            button_frame,
+            text="⏹ STOP SERVICES",
+            font=("Segoe UI", 12),
+            bg="#ff4444",
+            fg="#ffffff",
+            command=self.stop_services,
+            state=tk.DISABLED,
+            height=1,
+            relief=tk.FLAT,
+        )
         self.stop_btn.pack(fill=tk.X)
 
         self.log_text = scrolledtext.ScrolledText(self, height=5, bg="#000000", fg="#00ff88", state=tk.DISABLED)
@@ -82,14 +117,17 @@ class ControlPanelTab(tk.Frame):
         unavailable_ports = []
         for port in ports:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                if s.connect_ex(('127.0.0.1', port)) == 0:
+                if s.connect_ex(("127.0.0.1", port)) == 0:
                     unavailable_ports.append(port)
         return unavailable_ports
 
     def launch_services(self):
         unavailable = self.check_ports()
         if unavailable:
-            messagebox.showerror("Port Conflict", f"Cannot launch. Port(s) {', '.join(map(str, unavailable))} are already in use by another application.")
+            messagebox.showerror(
+                "Port Conflict",
+                f"Cannot launch. Port(s) {', '.join(map(str, unavailable))} are already in use by another application.",
+            )
             return
 
         self.launch_btn.config(state=tk.DISABLED)
@@ -100,7 +138,10 @@ class ControlPanelTab(tk.Frame):
             venv_python = Path(".venv/Scripts/python.exe")
             self.backend_proc = subprocess.Popen(
                 [str(venv_python), "-m", "uvicorn", "python_service.api:app", "--host", "127.0.0.1", "--port", "8000"],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=Path(__file__).parent, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                cwd=Path(__file__).parent,
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
             )
         except Exception as e:
             self.update_status("backend", "error", f"Launch Error: {str(e)[:40]}")
@@ -109,8 +150,12 @@ class ControlPanelTab(tk.Frame):
 
         try:
             self.frontend_proc = subprocess.Popen(
-                ["npm", "run", "dev"], shell=True,
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd="web_platform/frontend", creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+                ["npm", "run", "dev"],
+                shell=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                cwd="web_platform/frontend",
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
             )
         except Exception as e:
             self.update_status("frontend", "error", f"Launch Error: {str(e)[:40]}")
@@ -159,13 +204,29 @@ class ControlPanelTab(tk.Frame):
             if service_name == "backend":
                 venv_python = Path(".venv/Scripts/python.exe")
                 new_proc = subprocess.Popen(
-                    [str(venv_python), "-m", "uvicorn", "python_service.api:app", "--host", "127.0.0.1", "--port", "8000"],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=Path(__file__).parent.parent, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+                    [
+                        str(venv_python),
+                        "-m",
+                        "uvicorn",
+                        "python_service.api:app",
+                        "--host",
+                        "127.0.0.1",
+                        "--port",
+                        "8000",
+                    ],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    cwd=Path(__file__).parent.parent,
+                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
                 )
-            else: # frontend
+            else:  # frontend
                 new_proc = subprocess.Popen(
-                    ["npm", "run", "dev"], shell=True,
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd="web_platform/frontend", creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+                    ["npm", "run", "dev"],
+                    shell=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    cwd="web_platform/frontend",
+                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
                 )
             setattr(self, proc_attr, new_proc)
         except Exception as e:
@@ -179,16 +240,16 @@ class ControlPanelTab(tk.Frame):
                     r = requests.get("http://localhost:8000/health", timeout=2)
                     if r.status_code == 200:
                         self.update_status("backend", "ok", "Healthy (200 OK)")
-                        self.backend_unresponsive_count = 0 # Reset counter on success
+                        self.backend_unresponsive_count = 0  # Reset counter on success
                     else:
                         self.update_status("backend", "error", f"Error ({r.status_code})")
                 except requests.RequestException:
                     self.update_status("backend", "unresponsive", "Unresponsive")
                     self.backend_unresponsive_count += 1
-                    if self.backend_unresponsive_count >= 3: # If unresponsive for 3 cycles (15s)
+                    if self.backend_unresponsive_count >= 3:  # If unresponsive for 3 cycles (15s)
                         self.log_output("Backend unresponsive. Attempting automatic restart...")
                         self.restart_service("backend")
-                        self.backend_unresponsive_count = 0 # Reset after attempt
+                        self.backend_unresponsive_count = 0  # Reset after attempt
             else:
                 self.update_status("backend", "stopped", "Stopped")
 
@@ -213,7 +274,13 @@ class ControlPanelTab(tk.Frame):
             time.sleep(5)
 
     def update_status(self, service: str, status: str, message: str):
-        colors = {"ok": "#00ff88", "unresponsive": "#ffcc00", "error": "#ff4444", "stopped": "#ff4444", "starting": "#0f6cbd"}
+        colors = {
+            "ok": "#00ff88",
+            "unresponsive": "#ffcc00",
+            "error": "#ff4444",
+            "stopped": "#ff4444",
+            "starting": "#0f6cbd",
+        }
         canvas = getattr(self, f"{service}_status_canvas")
         indicator = getattr(self, f"{service}_indicator")
         text = getattr(self, f"{service}_text")
@@ -221,64 +288,113 @@ class ControlPanelTab(tk.Frame):
         canvas.itemconfig(indicator, fill=colors.get(status, "#404060"))
         canvas.itemconfig(text, text=message)
 
+
 # --- Setup Wizard Tab (from former setup_wizard_gui.py) ---
 class SetupWizardTab(tk.Frame):
     def __init__(self, parent):
-        super().__init__(parent, bg='#1a1a2e')
+        super().__init__(parent, bg="#1a1a2e")
         self.current_step = 0
         self.settings = {}
         self._create_widgets()
         self.show_step(0)
 
     def _create_widgets(self):
-        header = tk.Label(self, text="🔧 First-Time Setup & Configuration", font=("Segoe UI", 16, "bold"), bg='#1a1a2e', fg='#ffffff')
+        header = tk.Label(
+            self, text="🔧 First-Time Setup & Configuration", font=("Segoe UI", 16, "bold"), bg="#1a1a2e", fg="#ffffff"
+        )
         header.pack(pady=20)
-        self.step_label = tk.Label(self, text="Step 1 of 4: Generate API Key", font=("Segoe UI", 11), bg='#1a1a2e', fg='#ffffff')
+        self.step_label = tk.Label(
+            self, text="Step 1 of 4: Generate API Key", font=("Segoe UI", 11), bg="#1a1a2e", fg="#ffffff"
+        )
         self.step_label.pack(pady=10)
-        self.content_frame = tk.Frame(self, bg='#1a1a2e')
+        self.content_frame = tk.Frame(self, bg="#1a1a2e")
         self.content_frame.pack(fill=tk.BOTH, expand=True, padx=30, pady=20)
-        button_frame = tk.Frame(self, bg='#1a1a2e')
+        button_frame = tk.Frame(self, bg="#1a1a2e")
         button_frame.pack(fill=tk.X, padx=30, pady=20)
-        self.prev_btn = tk.Button(button_frame, text="< Back", command=self.previous_step, state=tk.DISABLED, bg='#404060', fg='#ffffff', padx=20)
+        self.prev_btn = tk.Button(
+            button_frame,
+            text="< Back",
+            command=self.previous_step,
+            state=tk.DISABLED,
+            bg="#404060",
+            fg="#ffffff",
+            padx=20,
+        )
         self.prev_btn.pack(side=tk.LEFT)
-        self.next_btn = tk.Button(button_frame, text="Next >", command=self.next_step, bg='#00ff88', fg='#000000', font=("Segoe UI", 11, "bold"), padx=20)
+        self.next_btn = tk.Button(
+            button_frame,
+            text="Next >",
+            command=self.next_step,
+            bg="#00ff88",
+            fg="#000000",
+            font=("Segoe UI", 11, "bold"),
+            padx=20,
+        )
         self.next_btn.pack(side=tk.RIGHT)
 
     def show_step(self, step_index):
         self._clear_content()
         self.current_step = step_index
-        if step_index == 0: self._show_step_1()
-        elif step_index == 1: self._show_step_2()
-        elif step_index == 2: self._show_step_3()
-        elif step_index == 3: self._show_step_4()
+        if step_index == 0:
+            self._show_step_1()
+        elif step_index == 1:
+            self._show_step_2()
+        elif step_index == 2:
+            self._show_step_3()
+        elif step_index == 3:
+            self._show_step_4()
         self.update_buttons()
 
     def _show_step_1(self):
-        tk.Label(self.content_frame, text="🔐 Secure API Key", font=("Segoe UI", 12, "bold"), bg='#1a1a2e', fg='#ffffff').pack(anchor="w")
-        tk.Label(self.content_frame, text="A secure API key will be generated and stored.", wraplength=600, justify=tk.LEFT, bg='#1a1a2e', fg='#cccccc').pack(anchor="w", pady=10)
+        tk.Label(
+            self.content_frame, text="🔐 Secure API Key", font=("Segoe UI", 12, "bold"), bg="#1a1a2e", fg="#ffffff"
+        ).pack(anchor="w")
+        tk.Label(
+            self.content_frame,
+            text="A secure API key will be generated and stored.",
+            wraplength=600,
+            justify=tk.LEFT,
+            bg="#1a1a2e",
+            fg="#cccccc",
+        ).pack(anchor="w", pady=10)
         # ... Add API key generation logic and display ...
 
     def _show_step_2(self):
-        tk.Label(self.content_frame, text="🏇 Betfair Exchange (Optional)", font=("Segoe UI", 12, "bold"), bg='#1a1a2e', fg='#ffffff').pack(anchor="w")
+        tk.Label(
+            self.content_frame,
+            text="🏇 Betfair Exchange (Optional)",
+            font=("Segoe UI", 12, "bold"),
+            bg="#1a1a2e",
+            fg="#ffffff",
+        ).pack(anchor="w")
         # ... Add Betfair configuration form ...
 
     def _show_step_3(self):
-        tk.Label(self.content_frame, text="✓ Verifying Setup", font=("Segoe UI", 12, "bold"), bg='#1a1a2e', fg='#00ff88').pack(anchor="w")
+        tk.Label(
+            self.content_frame, text="✓ Verifying Setup", font=("Segoe UI", 12, "bold"), bg="#1a1a2e", fg="#00ff88"
+        ).pack(anchor="w")
         # ... Add verification checks logic ...
 
     def _show_step_4(self):
-        tk.Label(self.content_frame, text="🎉 Setup Complete!", font=("Segoe UI", 14, "bold"), bg='#1a1a2e', fg='#00ff88').pack(pady=20)
+        tk.Label(
+            self.content_frame, text="🎉 Setup Complete!", font=("Segoe UI", 14, "bold"), bg="#1a1a2e", fg="#00ff88"
+        ).pack(pady=20)
         self.next_btn.config(text="✓ Finish", command=self.finish_setup)
 
     def next_step(self):
-        if self.current_step < 3: self.show_step(self.current_step + 1)
+        if self.current_step < 3:
+            self.show_step(self.current_step + 1)
+
     def previous_step(self):
-        if self.current_step > 0: self.show_step(self.current_step - 1)
+        if self.current_step > 0:
+            self.show_step(self.current_step - 1)
+
     def finish_setup(self):
         messagebox.showinfo("Setup Complete", "Your configuration has been saved.")
 
     def _clear_content(self):
-        for widget in self.content_frame.winfo_children(): widget.destroy()
+        for widget in self.content_frame.winfo_children():
+            widget.destroy()
 
     def update_buttons(self):
         self.prev_btn.config(state=tk.NORMAL if self.current_step > 0 else tk.DISABLED)
@@ -287,17 +403,22 @@ class SetupWizardTab(tk.Frame):
         else:
             self.next_btn.config(text="Next >", command=self.next_step)
 
+
 # --- System Tools Tab ---
 class SystemToolsTab(tk.Frame):
     def __init__(self, parent):
-        super().__init__(parent, bg='#1a1a2e')
+        super().__init__(parent, bg="#1a1a2e")
         self._create_ui()
 
     def _create_ui(self):
-        title = tk.Label(self, text="⚙️ System Tools", font=("Segoe UI", 16, "bold"), bg='#1a1a2e', fg='#ffffff')
+        title = tk.Label(self, text="⚙️ System Tools", font=("Segoe UI", 16, "bold"), bg="#1a1a2e", fg="#ffffff")
         title.pack(pady=20)
-        tk.Button(self, text="Create Desktop Shortcuts", command=self.run_create_shortcuts, font=("Segoe UI", 12)).pack(pady=10, padx=40, fill=tk.X)
-        tk.Button(self, text="Verify Installation", command=self.run_verification, font=("Segoe UI", 12)).pack(pady=10, padx=40, fill=tk.X)
+        tk.Button(self, text="Create Desktop Shortcuts", command=self.run_create_shortcuts, font=("Segoe UI", 12)).pack(
+            pady=10, padx=40, fill=tk.X
+        )
+        tk.Button(self, text="Verify Installation", command=self.run_verification, font=("Segoe UI", 12)).pack(
+            pady=10, padx=40, fill=tk.X
+        )
         self.output_box = scrolledtext.ScrolledText(self, height=10, bg="#0f3460", fg="#ffffff", state=tk.DISABLED)
         self.output_box.pack(pady=10, padx=40, fill=tk.BOTH, expand=True)
 
@@ -311,6 +432,7 @@ class SystemToolsTab(tk.Frame):
         self.log_output("--- Creating Desktop Shortcut ---")
         try:
             from win32com.client import Dispatch
+
             desktop = Path(os.environ["USERPROFILE"]) / "Desktop"
             app_path = Path(__file__).resolve()
             shortcut_path = desktop / "🐴 Launch Fortuna Faucet.lnk"
@@ -342,7 +464,10 @@ class SystemToolsTab(tk.Frame):
         self.log_output("\n--- Verifying System Setup ---")
         verifications = [
             ("Python 3.11+", lambda: sys.version_info >= (3, 11)),
-            ("Python Virtual Env (.venv)", lambda: Path(".venv").exists() and Path(".venv/Scripts/python.exe").exists()),
+            (
+                "Python Virtual Env (.venv)",
+                lambda: Path(".venv").exists() and Path(".venv/Scripts/python.exe").exists(),
+            ),
             ("Node.js (npm)", lambda: subprocess.run("npm -v", shell=True, capture_output=True).returncode == 0),
             ("Frontend Dependencies (node_modules)", lambda: Path("web_platform/frontend/node_modules").exists()),
         ]
@@ -359,17 +484,18 @@ class SystemToolsTab(tk.Frame):
         else:
             self.log_output("\n❌ Some checks failed. Please review the log.")
 
+
 # --- Main Application Window ---
 class FortunaApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("🐴 Fortuna Faucet")
         self.geometry("700x550")
-        self.configure(bg='#1a1a2e')
+        self.configure(bg="#1a1a2e")
 
         style = ttk.Style()
-        style.theme_use('clam')
-        style.configure("TNotebook", background='#1a1a2e', borderwidth=0)
+        style.theme_use("clam")
+        style.configure("TNotebook", background="#1a1a2e", borderwidth=0)
         style.configure("TNotebook.Tab", background="#404060", foreground="#ffffff", padding=[10, 5])
         style.map("TNotebook.Tab", background=[("selected", "#0f6cbd")])
 
@@ -379,11 +505,11 @@ class FortunaApp(tk.Tk):
         self.setup_wizard_tab = SetupWizardTab(self.notebook)
         self.system_tools_tab = SystemToolsTab(self.notebook)
 
-        self.notebook.add(self.control_panel_tab, text='Control Panel')
-        self.notebook.add(self.setup_wizard_tab, text='Setup & Config')
-        self.notebook.add(self.system_tools_tab, text='System Tools')
+        self.notebook.add(self.control_panel_tab, text="Control Panel")
+        self.notebook.add(self.setup_wizard_tab, text="Setup & Config")
+        self.notebook.add(self.system_tools_tab, text="System Tools")
 
-        self.notebook.pack(expand=True, fill='both', padx=10, pady=10)
+        self.notebook.pack(expand=True, fill="both", padx=10, pady=10)
 
     def on_closing(self):
         if self.control_panel_tab.backend_proc or self.control_panel_tab.frontend_proc:
@@ -393,13 +519,14 @@ class FortunaApp(tk.Tk):
         else:
             self.destroy()
 
+
 # --- NEW: Self-Setup UI and Logic ---
 class SetupApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Fortuna Faucet - First-Time Setup")
         self.geometry("700x500")
-        self.configure(bg='#1a1a2e')
+        self.configure(bg="#1a1a2e")
 
         self.protocol("WM_DELETE_WINDOW", self.quit)
 
@@ -407,16 +534,36 @@ class SetupApp(tk.Tk):
         body_font = tk.font.Font(family="Segoe UI", size=10)
         button_font = tk.font.Font(family="Segoe UI", size=12, weight="bold")
 
-        tk.Label(self, text="📦 Welcome to Fortuna Faucet", font=header_font, bg='#1a1a2e', fg='#00ff88').pack(pady=(20, 10))
-        tk.Label(self, text="The necessary dependencies are not installed. Click 'Start Installation' to begin.", font=body_font, bg='#1a1a2e', fg='#ffffff').pack(pady=(0, 20))
+        tk.Label(self, text="📦 Welcome to Fortuna Faucet", font=header_font, bg="#1a1a2e", fg="#00ff88").pack(
+            pady=(20, 10)
+        )
+        tk.Label(
+            self,
+            text="The necessary dependencies are not installed. Click 'Start Installation' to begin.",
+            font=body_font,
+            bg="#1a1a2e",
+            fg="#ffffff",
+        ).pack(pady=(0, 20))
 
-        self.install_button = tk.Button(self, text="▶️ Start Installation", font=button_font, bg='#00ff88', fg='#000000', command=self.start_installation, relief=tk.FLAT, padx=20, pady=10)
+        self.install_button = tk.Button(
+            self,
+            text="▶️ Start Installation",
+            font=button_font,
+            bg="#00ff88",
+            fg="#000000",
+            command=self.start_installation,
+            relief=tk.FLAT,
+            padx=20,
+            pady=10,
+        )
         self.install_button.pack(pady=10)
 
-        self.output_box = scrolledtext.ScrolledText(self, height=15, bg="#0f3460", fg="#cccccc", state=tk.DISABLED, relief=tk.FLAT, bd=0, padx=10, pady=10)
+        self.output_box = scrolledtext.ScrolledText(
+            self, height=15, bg="#0f3460", fg="#cccccc", state=tk.DISABLED, relief=tk.FLAT, bd=0, padx=10, pady=10
+        )
         self.output_box.pack(pady=10, padx=40, fill=tk.BOTH, expand=True)
 
-        self.status_label = tk.Label(self, text="Waiting to start...", font=body_font, bg='#1a1a2e', fg='#ffffff')
+        self.status_label = tk.Label(self, text="Waiting to start...", font=body_font, bg="#1a1a2e", fg="#ffffff")
         self.status_label.pack(pady=10)
 
     def log(self, message):
@@ -433,24 +580,35 @@ class SetupApp(tk.Tk):
         threading.Thread(target=self.run_install_commands, daemon=True).start()
 
     def run_command(self, command):
-        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace', shell=True)
-        for line in iter(process.stdout.readline, ''):
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            shell=True,
+        )
+        for line in iter(process.stdout.readline, ""):
             self.log(line.strip())
         process.wait()
         return process.returncode
 
     def run_install_commands(self):
         commands = [
-            ("1/3: Creating Python virtual environment...", f'{sys.executable} -m venv .venv'),
-            ("2/3: Installing Python dependencies...", '\"' + str(Path(".venv/Scripts/python.exe")) + '\" -m pip install -r requirements.txt'),
-            ("3/3: Installing Node.js dependencies...", 'npm install --prefix web_platform/frontend')
+            ("1/3: Creating Python virtual environment...", f"{sys.executable} -m venv .venv"),
+            (
+                "2/3: Installing Python dependencies...",
+                '"' + str(Path(".venv/Scripts/python.exe")) + '" -m pip install -r requirements.txt',
+            ),
+            ("3/3: Installing Node.js dependencies...", "npm install --prefix web_platform/frontend"),
         ]
 
         for i, (msg, cmd) in enumerate(commands):
-            self.log(f'\\n--- STEP {msg} ---')
+            self.log(f"\\n--- STEP {msg} ---")
             return_code = self.run_command(cmd)
             if return_code != 0:
-                self.log(f'\\n--- ERROR: Step {i+1} failed with code {return_code}. ---')
+                self.log(f"\\n--- ERROR: Step {i + 1} failed with code {return_code}. ---")
                 self.status_label.config(text="Installation Failed. Please see log for details.", fg="#ff4444")
                 self.install_button.config(state=tk.NORMAL, text="Retry Installation")
                 return
@@ -458,13 +616,24 @@ class SetupApp(tk.Tk):
         self.log("\\n--- ✅ INSTALLATION COMPLETE! ---")
         self.status_label.config(text="Setup successful! You can now launch the application.", fg="#00ff88")
         self.install_button.destroy()
-        launch_button = tk.Button(self, text="🚀 Launch Fortuna", font=tk.font.Font(family="Segoe UI", size=12, weight="bold"), bg='#00ff88', fg='#000000', command=self.launch_app, relief=tk.FLAT, padx=20, pady=10)
+        launch_button = tk.Button(
+            self,
+            text="🚀 Launch Fortuna",
+            font=tk.font.Font(family="Segoe UI", size=12, weight="bold"),
+            bg="#00ff88",
+            fg="#000000",
+            command=self.launch_app,
+            relief=tk.FLAT,
+            padx=20,
+            pady=10,
+        )
         launch_button.pack(pady=10)
 
     def launch_app(self):
         self.destroy()
         # Relaunch the script to start the main app
         subprocess.Popen([sys.executable, __file__])
+
 
 # --- NEW: Main Execution Block ---
 if __name__ == "__main__":

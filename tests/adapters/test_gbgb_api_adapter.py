@@ -1,17 +1,20 @@
 # tests/adapters/test_gbgb_api_adapter.py
 
-import pytest
 from datetime import date
 from decimal import Decimal
 from unittest.mock import AsyncMock
 
-from tests.conftest import get_test_settings
+import pytest
+
 from python_service.adapters.gbgb_api_adapter import GbgbApiAdapter
+from tests.conftest import get_test_settings
+
 
 @pytest.fixture
 def gbgb_adapter():
     """Returns a GbgbApiAdapter instance for testing."""
     return GbgbApiAdapter(config=get_test_settings())
+
 
 @pytest.mark.asyncio
 async def test_get_gbgb_races_successfully(gbgb_adapter):
@@ -20,7 +23,7 @@ async def test_get_gbgb_races_successfully(gbgb_adapter):
     creating Race and Runner objects with the correct data, including fractional odds.
     """
     # ARRANGE
-    mock_date = date.today().strftime('%Y-%m-%d')
+    mock_date = date.today().strftime("%Y-%m-%d")
     mock_api_response = [
         {
             "trackName": "Towcester",
@@ -56,15 +59,16 @@ async def test_get_gbgb_races_successfully(gbgb_adapter):
 
     runner1 = next(r for r in race.runners if r.number == 1)
     assert runner1.name == "Rapid Rover"
-    assert runner1.odds['GBGB'].win == Decimal("3.5")
+    assert runner1.odds["GBGB"].win == Decimal("3.5")
 
     runner2 = next(r for r in race.runners if r.number == 2)
     assert runner2.name == "Speedy Sue"
-    assert runner2.odds['GBGB'].win == Decimal("2.0")
+    assert runner2.odds["GBGB"].win == Decimal("2.0")
 
     runner3 = next(r for r in race.runners if r.number == 3)
     assert runner3.name == "Lazy Larry"
-    assert runner3.odds['GBGB'].win == Decimal("11.0")
+    assert runner3.odds["GBGB"].win == Decimal("11.0")
+
 
 @pytest.mark.asyncio
 async def test_get_races_handles_fetch_failure(gbgb_adapter):
@@ -72,7 +76,7 @@ async def test_get_races_handles_fetch_failure(gbgb_adapter):
     Tests that get_races returns an empty list when _fetch_data returns None.
     """
     # ARRANGE
-    mock_date = date.today().strftime('%Y-%m-%d')
+    mock_date = date.today().strftime("%Y-%m-%d")
     gbgb_adapter._fetch_data = AsyncMock(return_value=None)
 
     # ACT
