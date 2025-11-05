@@ -13,7 +13,8 @@ env:
   NODE_VERSION: '20'
   PYTHON_VERSION: '3.12'
   CACHE_BUST: ${{ github.run_id }}
-  API_KEY: "a_secure_test_api_key_that_is_long_enough"
+  # Test API key that meets Pydantic validation requirements (16+ chars)
+  API_KEY: "test_api_key_min16chars_secure_string"
 
 jobs:
   build-installer:
@@ -274,31 +275,239 @@ jobs:
           $size = (Get-Item $exe).Length / 1MB
           Write-Host "✅ Backend executable verified: $([math]::Round($size, 2)) MB" -ForegroundColor Green
 
-      - name: Backend - Test Executable (Quick Smoke Test)
+      - name: Backend - Deep Integration Test
         shell: pwsh
-        continue-on-error: true
-        timeout-minutes: 2
+        timeout-minutes: 3
         run: |
-          Write-Host "`n=== BACKEND: Quick Smoke Test ===" -ForegroundColor Cyan
+          Write-Host "`n=== BACKEND: Deep Integration Test ===" -ForegroundColor Cyan
 
           $exe = "electron/resources/fortuna-backend.exe"
+          $testDir = "backend-test-env"
 
-          # Start the process in the background
-          $process = Start-Process -FilePath $exe -PassThru -NoNewWindow -RedirectStandardOutput "logs/backend-test-stdout.log" -RedirectStandardError "logs/backend-test-stderr.log"
+          # Create isolated test directory
+          if (Test-Path $testDir) { Remove-Item -Recurse -Force $testDir }
+          New-Item -ItemType Directory -Path $testDir -Force | Out-Null
 
-          # Wait 5 seconds for startup
-          Start-Sleep -Seconds 5
+          # Set environment variables for the test
+          $env:API_KEY = "${{ env.API_KEY }}"
+          $env:PORT = "8765"
+          $env:HOST = "127.0.0.1"
 
-          # Check if it's still running
-          if ($process.HasExited) {
-            Write-Host "⚠️  Backend exited immediately. Exit code: $($process.ExitCode)" -ForegroundColor Yellow
-            if (Test-Path "logs/backend-test-stderr.log") {
-              Write-Host "`nError output:" -ForegroundColor Yellow
-              Get-Content "logs/backend-test-stderr.log"
+          Write-Host "Starting backend with API_KEY length: $($env:API_KEY.Length) chars" -ForegroundColor Yellow
+
+          # Start the backend
+          $process = Start-Process -FilePath $exe `
+            -WorkingDirectory $testDir `
+            -PassThru `
+            -NoNewWindow `
+            -RedirectStandardOutput "$testDir/stdout.log" `
+            -RedirectStandardError "$testDir/stderr.log"
+
+          Write-Host "Process started (PID: $($process.Id)), waiting for initialization..."
+
+          # Wait up to 60 seconds for the server to start
+          $maxAttempts = 60
+          $serverReady = $false
+
+          for ($i = 1; $i -le $maxAttempts; $i++) {
+            Start-Sleep -Seconds 1
+
+            # Check if process crashed
+            if ($process.HasExited) {
+              Write-Host "❌ Backend crashed during startup!" -ForegroundColor Red
+              Write-Host "Exit code: $($process.ExitCode)" -ForegroundColor Red
+
+              if (Test-Path "$testDir/stderr.log") {
+                Write-Host "`n=== STDERR Output ===" -ForegroundColor Yellow
+                Get-Content "$testDir/stderr.log" | Write-Host
+              }
+
+              if (Test-Path "$testDir/stdout.log") {
+                Write-Host "`n=== STDOUT Output ===" -ForegroundColor Yellow
+                Get-Content "$testDir/stdout.log" | Write-Host
+              }
+
+              # Copy logs for artifact upload
+              Copy-Item "$testDir/stderr.log" "logs/backend-crash-stderr.log" -ErrorAction SilentlyContinue
+              Copy-Item "$testDir/stdout.log" "logs/backend-crash-stdout.log" -ErrorAction SilentlyContinue
+
+              throw "Backend executable crashed during initialization"
             }
-          } else {
-            Write-Host "✅ Backend started successfully (smoke test passed)" -ForegroundColor Green
-            Stop-Process -Id $process.Id -Force
+
+            # Try to connect to the health endpoint
+            try {
+              $response = Invoke-WebRequest -Uri "http://127.0.0.1:8765/health" -TimeoutSec 2 -ErrorAction Stop
+              if ($response.StatusCode -eq 200) {
+                $serverReady = $true
+                Write-Host "✅ Server responded to health check (attempt $i)" -ForegroundColor Green
+                break
+              }
+            } catch {
+              # Server not ready yet, continue waiting
+              Write-Host "." -NoNewline
+            }
+          }
+
+          if (-not $serverReady) {
+            Write-Host "`n⚠️  Server didn't respond to health checks after $maxAttempts seconds" -ForegroundColor Yellow
+
+            Write-Host "`n=== DIAGNOSTICS: Network Status (Port 8765) ===" -ForegroundColor Yellow
+            netstat -an | findstr "8765" | Write-Host -ForegroundColor Cyan
+
+            # Show logs even if server didn't crash
+            if (Test-Path "$testDir/stderr.log") {
+              Write-Host "`n=== STDERR Output (Last 50 lines) ===" -ForegroundColor Yellow
+              Get-Content "$testDir/stderr.log" -Tail 50 | Write-Host
+            }
+
+            if (Test-Path "$testDir/stdout.log") {
+              Write-Host "`n=== STDOUT Output (Last 50 lines) ===" -ForegroundColor Yellow
+              Get-Content "$testDir/stdout.log" -Tail 50 | Write-Host
+            }
+
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            throw "Backend failed to respond to health checks"
+          }
+
+          # Test critical endpoints
+          Write-Host "`n=== Testing Critical Endpoints ===" -ForegroundColor Cyan
+
+          $endpoints = @(
+            @{ Path = "/health"; Name = "Health Check" },
+            @{ Path = "/api/status"; Name = "API Status" },
+            @{ Path = "/docs"; Name = "OpenAPI Docs" }
+          )
+
+          $allTestsPassed = $true
+
+          foreach ($endpoint in $endpoints) {
+            try {
+              $response = Invoke-WebRequest -Uri "http://127.0.0.1:8765$($endpoint.Path)" -TimeoutSec 5 -ErrorAction Stop
+              Write-Host "✅ $($endpoint.Name): $($response.StatusCode)" -ForegroundColor Green
+            } catch {
+              Write-Host "❌ $($endpoint.Name): FAILED - $($_.Exception.Message)" -ForegroundColor Red
+              $allTestsPassed = $false
+            }
+          }
+
+          # Cleanup
+          Write-Host "`nStopping backend process..." -ForegroundColor Cyan
+          Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+          Start-Sleep -Seconds 2
+
+          # Save final logs
+          Copy-Item "$testDir/stderr.log" "logs/backend-integration-stderr.log" -ErrorAction SilentlyContinue
+          Copy-Item "$testDir/stdout.log" "logs/backend-integration-stdout.log" -ErrorAction SilentlyContinue
+
+          if (-not $allTestsPassed) {
+            throw "Some endpoint tests failed"
+          }
+
+          Write-Host "`n✅ All integration tests passed!" -ForegroundColor Green
+
+      - name: '📸 End-to-End UI Test'
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          Write-Host "`n=== E2E UI TEST: Verifying Live Application ===" -ForegroundColor Magenta
+
+          $backendExe = "electron/resources/fortuna-backend.exe"
+          $frontendDir = "electron/web-ui-build/out"
+          $backendPort = "8999"
+          $frontendPort = "8998"
+          $testDir = "e2e-test-env"
+          $screenshotPath = "e2e-screenshot.png"
+
+          if (Test-Path $testDir) { Remove-Item -Recurse -Force $testDir }
+          New-Item -ItemType Directory -Path $testDir -Force | Out-Null
+
+          $env:API_KEY = "${{ env.API_KEY }}"
+          $env:PORT = $backendPort
+          $env:HOST = "127.0.0.1"
+          $env:ALLOWED_ORIGINS = "http://127.0.0.1:$frontendPort"
+
+          $backendProcess = $null
+          $frontendProcess = $null
+
+          try {
+              Write-Host "`n🚀 Starting backend server..." -ForegroundColor Cyan
+              $backendProcess = Start-Process -FilePath $backendExe `
+                -WorkingDirectory $testDir `
+                -PassThru -NoNewWindow `
+                -RedirectStandardOutput "$testDir/backend-stdout.log" `
+                -RedirectStandardError "$testDir/backend-stderr.log"
+
+              $maxAttempts = 60
+              $serverReady = $false
+              for ($i = 1; $i -le $maxAttempts; $i++) {
+                Start-Sleep -Seconds 1
+                if ($backendProcess.HasExited) {
+                  Write-Host "❌ Backend crashed during startup!" -ForegroundColor Red
+                  Get-Content "$testDir/backend-stderr.log" | Write-Host
+                  throw "Backend crashed!"
+                }
+                try {
+                  $response = Invoke-WebRequest -Uri "http://127.0.0.1:$backendPort/health" -TimeoutSec 2 -ErrorAction Stop
+                  if ($response.StatusCode -eq 200) {
+                    $serverReady = $true
+                    Write-Host "✅ Backend is healthy (attempt $i)" -ForegroundColor Green
+                    break
+                  }
+                } catch { Write-Host "." -NoNewline }
+              }
+              if (-not $serverReady) { throw "Backend failed to respond to health checks" }
+
+              Write-Host "`n🚀 Starting frontend server..." -ForegroundColor Cyan
+              $frontendProcess = Start-Process python -ArgumentList "-m http.server $frontendPort --directory $frontendDir" `
+                -PassThru -NoNewWindow `
+                -RedirectStandardOutput "$testDir/frontend-stdout.log" `
+                -RedirectStandardError "$testDir/frontend-stderr.log"
+              Start-Sleep -Seconds 5
+
+              Write-Host "`n🎭 Installing Playwright..." -ForegroundColor Cyan
+              pip install playwright 2>&1 | Out-Null
+              playwright install --with-deps chromium 2>&1 | Out-Null
+              Write-Host "✅ Playwright installed" -ForegroundColor Green
+
+              Write-Host "`n✍️  Generating Playwright script..." -ForegroundColor Cyan
+              $playwrightScript = @"
+from playwright.sync_api import sync_playwright, TimeoutError
+import sys
+
+def run(playwright):
+    browser = playwright.chromium.launch()
+    page = browser.new_page()
+    try:
+        print("Navigating to frontend URL: http://127.0.0.1:$frontendPort")
+        page.goto(f"http://127.0.0.1:$frontendPort", timeout=20000)
+        print("Waiting for dashboard to render...")
+        page.wait_for_selector("body", timeout=10000)
+        print("Page loaded. Taking screenshot...")
+        page.screenshot(path="$screenshotPath", full_page=True)
+        print("✅ Screenshot captured successfully to $screenshotPath!")
+    except TimeoutError as e:
+        print(f"❌ Playwright timed out: {e}", file=sys.stderr)
+        page.screenshot(path="e2e-screenshot-failed.png", full_page=True)
+        raise
+    finally:
+        browser.close()
+
+with sync_playwright() as playwright:
+    run(playwright)
+"@
+              $playwrightScript | Out-File -FilePath "run_e2e_test.py" -Encoding utf8 -Force
+
+              Write-Host "`n▶️  Executing Playwright test..." -ForegroundColor Cyan
+              py run_e2e_test.py 2>&1 | Tee-Object -FilePath "$testDir/playwright.log"
+              if ($LASTEXITCODE -ne 0) { throw "Playwright script failed" }
+
+              Write-Host "`n✅ E2E UI Test Passed!" -ForegroundColor Green
+
+          } finally {
+              Write-Host "`n🧹 Cleaning up processes..." -ForegroundColor Cyan
+              if ($backendProcess -and -not $backendProcess.HasExited) { Stop-Process -Id $backendProcess.Id -Force -ErrorAction SilentlyContinue }
+              if ($frontendProcess -and -not $frontendProcess.HasExited) { Stop-Process -Id $frontendProcess.Id -Force -ErrorAction SilentlyContinue }
+              Copy-Item "$testDir/*.log" "logs/" -ErrorAction SilentlyContinue -Force
           }
 
       # ===== ELECTRON BUILD =====
@@ -418,6 +627,17 @@ jobs:
           name: build-logs-${{ github.ref_name }}
           path: logs/
           retention-days: 7
+          if-no-files-found: warn
+
+      - name: Upload E2E Screenshot
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-screenshot-${{ github.ref_name }}
+          path: |
+            e2e-screenshot.png
+            e2e-screenshot-failed.png
+          retention-days: 30
           if-no-files-found: warn
 
       # ===== RELEASE (Tags Only) =====
