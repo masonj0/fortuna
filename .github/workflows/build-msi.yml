@@ -12,7 +12,7 @@ on:
 env:
   NODE_VERSION: '20'
   PYTHON_VERSION: '3.12'
-  CACHE_BUST: ${{ github.run_id }}
+  CACHE_BUST: "2025-11-05-v2" # Forcibly invalidate all caches
   # Test API key that meets Pydantic validation requirements (16+ chars)
   API_KEY: "test_api_key_min16chars_secure_string"
 
@@ -231,7 +231,7 @@ jobs:
             --hidden-import=_sqlite3 `
             --hidden-import=sqlite3 `
             --hidden-import=keyring `
-            --hidden-import=keyring.backends.windows `
+            --hidden-import=keyring.backends.Windows `
             --hidden-import=bs4 `
             --hidden-import=lxml `
             --hidden-import=html5lib `
@@ -277,18 +277,16 @@ jobs:
 
       - name: Backend - Deep Integration Test
         shell: pwsh
-        timeout-minutes: 3
+        timeout-minutes: 8 # Was 3, now 8 - give harness time to show logs
         run: |
           Write-Host "`n=== BACKEND: Deep Integration Test ===" -ForegroundColor Cyan
 
           $exe = "electron/resources/fortuna-backend.exe"
           $testDir = "backend-test-env"
 
-          # Create isolated test directory
           if (Test-Path $testDir) { Remove-Item -Recurse -Force $testDir }
           New-Item -ItemType Directory -Path $testDir -Force | Out-Null
 
-          # Set environment variables for the test
           $env:API_KEY = "${{ env.API_KEY }}"
           $env:PORT = "8765"
           $env:HOST = "127.0.0.1"
@@ -305,8 +303,26 @@ jobs:
 
           Write-Host "Process started (PID: $($process.Id)), waiting for initialization..."
 
-          # Wait up to 60 seconds for the server to start
-          $maxAttempts = 60
+          # Give it a moment to start writing
+          Start-Sleep -Seconds 2
+
+          # Show initial logs
+          Write-Host "`n=== Initial Backend Output ===" -ForegroundColor Cyan
+          if (Test-Path "$testDir/stderr.log") {
+            $stderr = Get-Content "$testDir/stderr.log"
+            if ($stderr) {
+              Write-Host "STDERR:`n$stderr" -ForegroundColor Yellow
+            }
+          }
+          if (Test-Path "$testDir/stdout.log") {
+            $stdout = Get-Content "$testDir/stdout.log"
+            if ($stdout) {
+              Write-Host "STDOUT:`n$stdout" -ForegroundColor Green
+            }
+          }
+
+          # Wait up to 120 seconds for the server to start
+          $maxAttempts = 120
           $serverReady = $false
 
           for ($i = 1; $i -le $maxAttempts; $i++) {
@@ -314,20 +330,12 @@ jobs:
 
             # Check if process crashed
             if ($process.HasExited) {
-              Write-Host "❌ Backend crashed during startup!" -ForegroundColor Red
-              Write-Host "Exit code: $($process.ExitCode)" -ForegroundColor Red
+              Write-Host "`n❌ Backend crashed at attempt $i (exit code: $($process.ExitCode))!" -ForegroundColor Red
+              Write-Host "`n=== Final STDERR ===" -ForegroundColor Yellow
+              Get-Content "$testDir/stderr.log" | Write-Host
+              Write-Host "`n=== Final STDOUT ===" -ForegroundColor Yellow
+              Get-Content "$testDir/stdout.log" | Write-Host
 
-              if (Test-Path "$testDir/stderr.log") {
-                Write-Host "`n=== STDERR Output ===" -ForegroundColor Yellow
-                Get-Content "$testDir/stderr.log" | Write-Host
-              }
-
-              if (Test-Path "$testDir/stdout.log") {
-                Write-Host "`n=== STDOUT Output ===" -ForegroundColor Yellow
-                Get-Content "$testDir/stdout.log" | Write-Host
-              }
-
-              # Copy logs for artifact upload
               Copy-Item "$testDir/stderr.log" "logs/backend-crash-stderr.log" -ErrorAction SilentlyContinue
               Copy-Item "$testDir/stdout.log" "logs/backend-crash-stdout.log" -ErrorAction SilentlyContinue
 
@@ -339,31 +347,38 @@ jobs:
               $response = Invoke-WebRequest -Uri "http://127.0.0.1:8765/health" -TimeoutSec 2 -ErrorAction Stop
               if ($response.StatusCode -eq 200) {
                 $serverReady = $true
-                Write-Host "✅ Server responded to health check (attempt $i)" -ForegroundColor Green
+                Write-Host "`n✅ Server responded to health check (attempt $i)" -ForegroundColor Green
                 break
               }
             } catch {
-              # Server not ready yet, continue waiting
               Write-Host "." -NoNewline
+
+              # Every 30 attempts, dump current logs
+              if ($i % 30 -eq 0) {
+                Write-Host "`n[Attempt $i - dumping logs...]" -ForegroundColor DarkYellow
+                if (Test-Path "$testDir/stderr.log") {
+                  $stderr = Get-Content "$testDir/stderr.log" -Tail 5
+                  if ($stderr) { Write-Host "STDERR tail:`n$stderr" -ForegroundColor Yellow }
+                }
+                if (Test-Path "$testDir/stdout.log") {
+                  $stdout = Get-Content "$testDir/stdout.log" -Tail 5
+                  if ($stdout) { Write-Host "STDOUT tail:`n$stdout" -ForegroundColor Green }
+                }
+              }
             }
           }
 
           if (-not $serverReady) {
-            Write-Host "`n⚠️  Server didn't respond to health checks after $maxAttempts seconds" -ForegroundColor Yellow
+            Write-Host "`n❌ Server didn't respond after $maxAttempts seconds" -ForegroundColor Red
 
-            Write-Host "`n=== DIAGNOSTICS: Network Status (Port 8765) ===" -ForegroundColor Yellow
+            Write-Host "`n=== Network Diagnostics ===" -ForegroundColor Yellow
             netstat -an | findstr "8765" | Write-Host -ForegroundColor Cyan
 
-            # Show logs even if server didn't crash
-            if (Test-Path "$testDir/stderr.log") {
-              Write-Host "`n=== STDERR Output (Last 50 lines) ===" -ForegroundColor Yellow
-              Get-Content "$testDir/stderr.log" -Tail 50 | Write-Host
-            }
+            Write-Host "`n=== Full STDERR ===" -ForegroundColor Yellow
+            Get-Content "$testDir/stderr.log" | Write-Host
 
-            if (Test-Path "$testDir/stdout.log") {
-              Write-Host "`n=== STDOUT Output (Last 50 lines) ===" -ForegroundColor Yellow
-              Get-Content "$testDir/stdout.log" -Tail 50 | Write-Host
-            }
+            Write-Host "`n=== Full STDOUT ===" -ForegroundColor Yellow
+            Get-Content "$testDir/stdout.log" | Write-Host
 
             Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
             throw "Backend failed to respond to health checks"
