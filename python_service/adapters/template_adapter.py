@@ -1,5 +1,6 @@
 # python_service/adapters/template_adapter.py
-from typing import Any, List
+from typing import Any
+from typing import List
 
 from ..models import Race
 from .base_v3 import BaseAdapterV3
@@ -15,9 +16,7 @@ class TemplateAdapter(BaseAdapterV3):
     BASE_URL = "https://api.example.com"
 
     def __init__(self, config=None):
-        super().__init__(
-            source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
-        )
+        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
         # self.api_key = config.EXAMPLE_API_KEY # Uncomment if needed
 
     async def _fetch_data(self, date: str) -> Any:

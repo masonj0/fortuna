@@ -2,10 +2,15 @@
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Optional
 
 from ..core.exceptions import AdapterConfigError
-from ..models import OddsData, Race, Runner
+from ..models import OddsData
+from ..models import Race
+from ..models import Runner
 from .base_v3 import BaseAdapterV3
 
 
@@ -18,22 +23,16 @@ class TheRacingApiAdapter(BaseAdapterV3):
     BASE_URL = "https://api.theracingapi.com/v1/"
 
     def __init__(self, config=None):
-        super().__init__(
-            source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
-        )
+        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
         if not hasattr(config, "THE_RACING_API_KEY") or not config.THE_RACING_API_KEY:
-            raise AdapterConfigError(
-                self.source_name, "THE_RACING_API_KEY is not configured."
-            )
+            raise AdapterConfigError(self.source_name, "THE_RACING_API_KEY is not configured.")
         self.api_key = config.THE_RACING_API_KEY
 
     async def _fetch_data(self, date: str) -> Optional[Dict[str, Any]]:
         """Fetches the raw racecard data from The Racing API."""
         endpoint = f"racecards?date={date}&course=all&region=gb,ire"
         headers = {"Authorization": f"Bearer {self.api_key}"}
-        response = await self.make_request(
-            self.http_client, "GET", endpoint, headers=headers
-        )
+        response = await self.make_request(self.http_client, "GET", endpoint, headers=headers)
         return response.json() if response else None
 
     def _parse_races(self, raw_data: Optional[Dict[str, Any]]) -> List[Race]:

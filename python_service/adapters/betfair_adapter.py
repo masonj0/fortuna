@@ -1,9 +1,12 @@
 # python_service/adapters/betfair_adapter.py
-from datetime import datetime, timedelta
-from typing import Any, List
 import re
+from datetime import datetime
+from datetime import timedelta
+from typing import Any
+from typing import List
 
-from ..models import Race, Runner
+from ..models import Race
+from ..models import Runner
 from .base_v3 import BaseAdapterV3
 from .betfair_auth_mixin import BetfairAuthMixin
 
@@ -15,9 +18,7 @@ class BetfairAdapter(BetfairAuthMixin, BaseAdapterV3):
     BASE_URL = "https://api.betfair.com/exchange/betting/rest/v1.0/"
 
     def __init__(self, config=None):
-        super().__init__(
-            source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
-        )
+        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
 
     async def _fetch_data(self, date: str) -> Any:
         """Fetches the raw market catalogue for a given date."""
@@ -59,9 +60,7 @@ class BetfairAdapter(BetfairAuthMixin, BaseAdapterV3):
                 if race := self._parse_race(market):
                     races.append(race)
             except (KeyError, TypeError):
-                self.logger.warning(
-                    "Failed to parse a Betfair market.", exc_info=True, market=market
-                )
+                self.logger.warning("Failed to parse a Betfair market.", exc_info=True, market=market)
                 continue
         return races
 
