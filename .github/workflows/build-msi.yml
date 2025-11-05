@@ -470,32 +470,29 @@ jobs:
               Write-Host "✅ Playwright installed" -ForegroundColor Green
 
               Write-Host "`n✍️  Generating Playwright script..." -ForegroundColor Cyan
-              $playwrightScript = @'
-from playwright.sync_api import sync_playwright, TimeoutError
-import sys
-
-def run(playwright):
-    browser = playwright.chromium.launch()
-    page = browser.new_page()
-    try:
-        print("Navigating to frontend URL: http://127.0.0.1:{0}")
-        page.goto(f"http://127.0.0.1:{0}", timeout=20000)
-        print("Waiting for dashboard to render...")
-        page.wait_for_selector("body", timeout=10000)
-        print("Page loaded. Taking screenshot...")
-        page.screenshot(path="{1}", full_page=True)
-        print("✅ Screenshot captured successfully to {1}!")
-    except TimeoutError as e:
-        print(f"❌ Playwright timed out: {e}", file=sys.stderr)
-        page.screenshot(path="e2e-screenshot-failed.png", full_page=True)
-        raise
-    finally:
-        browser.close()
-
-with sync_playwright() as playwright:
-    run(playwright)
-'@ -f $frontendPort, $screenshotPath
-              $playwrightScript | Out-File -FilePath "run_e2e_test.py" -Encoding utf8 -Force
+              Set-Content -Path "run_e2e_test.py" -Value "from playwright.sync_api import sync_playwright, TimeoutError"
+              Add-Content -Path "run_e2e_test.py" -Value "import sys"
+              Add-Content -Path "run_e2e_test.py" -Value ""
+              Add-Content -Path "run_e2e_test.py" -Value "def run(playwright):"
+              Add-Content -Path "run_e2e_test.py" -Value "    browser = playwright.chromium.launch()"
+              Add-Content -Path "run_e2e_test.py" -Value "    page = browser.new_page()"
+              Add-Content -Path "run_e2e_test.py" -Value "    try:"
+              Add-Content -Path "run_e2e_test.py" -Value "        print(f`"Navigating to frontend URL: http://127.0.0.1:$($frontendPort)`")"
+              Add-Content -Path "run_e2e_test.py" -Value "        page.goto(f`"http://127.0.0.1:$($frontendPort)`", timeout=20000)"
+              Add-Content -Path "run_e2e_test.py" -Value "        print(`"Waiting for dashboard to render...`")"
+              Add-Content -Path "run_e2e_test.py" -Value "        page.wait_for_selector(`"body`", timeout=10000)"
+              Add-Content -Path "run_e2e_test.py" -Value "        print(`"Page loaded. Taking screenshot...`")"
+              Add-Content -Path "run_e2e_test.py" -Value "        page.screenshot(path=`"$($screenshotPath)`", full_page=True)"
+              Add-Content -Path "run_e2e_test.py" -Value "        print(f`"✅ Screenshot captured successfully to $($screenshotPath)!`")"
+              Add-Content -Path "run_e2e_test.py" -Value "    except TimeoutError as e:"
+              Add-Content -Path "run_e2e_test.py" -Value "        print(f`"❌ Playwright timed out: {e}`", file=sys.stderr)"
+              Add-Content -Path "run_e2e_test.py" -Value "        page.screenshot(path=`"e2e-screenshot-failed.png`", full_page=True)"
+              Add-Content -Path "run_e2e_test.py" -Value "        raise"
+              Add-Content -Path "run_e2e_test.py" -Value "    finally:"
+              Add-Content -Path "run_e2e_test.py" -Value "        browser.close()"
+              Add-Content -Path "run_e2e_test.py" -Value ""
+              Add-Content -Path "run_e2e_test.py" -Value "with sync_playwright() as playwright:"
+              Add-Content -Path "run_e2e_test.py" -Value "    run(playwright)"
 
               Write-Host "`n▶️  Executing Playwright test..." -ForegroundColor Cyan
               py run_e2e_test.py 2>&1 | Tee-Object -FilePath "$testDir/playwright.log"
