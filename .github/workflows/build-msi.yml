@@ -507,6 +507,8 @@ jobs:
               Copy-Item "$testDir/*.log" "logs/" -ErrorAction SilentlyContinue -Force
           }
 
+          Write-Host "`n✅ All integration tests passed!" -ForegroundColor Green
+
       # ===== ELECTRON BUILD =====
       - name: Electron - Install Dependencies
         shell: pwsh
