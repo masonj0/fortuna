@@ -99,7 +99,7 @@ class Settings(BaseSettings):
                 f"The provided API_KEY '{self.API_KEY}' is on the list of insecure default values and is not allowed."
             )
 
-        # 3. Decrypt sensitive fields
+        # 2. Decrypt sensitive fields
         self.BETFAIR_APP_KEY = decrypt_value(self.BETFAIR_APP_KEY)
 
         return self
