@@ -288,7 +288,7 @@ jobs:
           New-Item -ItemType Directory -Path $testDir -Force | Out-Null
 
           $env:API_KEY = "${{ env.API_KEY }}"
-          $env:PORT = "8765"
+          $env:PORT = "8000"
           $env:HOST = "127.0.0.1"
 
           Write-Host "Starting backend with API_KEY length: $($env:API_KEY.Length) chars" -ForegroundColor Yellow
@@ -344,7 +344,7 @@ jobs:
 
             # Try to connect to the health endpoint
             try {
-              $response = Invoke-WebRequest -Uri "http://127.0.0.1:8765/health" -TimeoutSec 2 -ErrorAction Stop
+              $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/health" -TimeoutSec 2 -ErrorAction Stop
               if ($response.StatusCode -eq 200) {
                 $serverReady = $true
                 Write-Host "`n✅ Server responded to health check (attempt $i)" -ForegroundColor Green
@@ -372,7 +372,7 @@ jobs:
             Write-Host "`n❌ Server didn't respond after $maxAttempts seconds" -ForegroundColor Red
 
             Write-Host "`n=== Network Diagnostics ===" -ForegroundColor Yellow
-            netstat -an | findstr "8765" | Write-Host -ForegroundColor Cyan
+            netstat -an | findstr "8000" | Write-Host -ForegroundColor Cyan
 
             Write-Host "`n=== Full STDERR ===" -ForegroundColor Yellow
             Get-Content "$testDir/stderr.log" | Write-Host
@@ -397,7 +397,7 @@ jobs:
 
           foreach ($endpoint in $endpoints) {
             try {
-              $response = Invoke-WebRequest -Uri "http://127.0.0.1:8765$($endpoint.Path)" -TimeoutSec 5 -ErrorAction Stop
+              $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000$($endpoint.Path)" -TimeoutSec 5 -ErrorAction Stop
               Write-Host "✅ $($endpoint.Name): $($response.StatusCode)" -ForegroundColor Green
             } catch {
               Write-Host "❌ $($endpoint.Name): FAILED - $($_.Exception.Message)" -ForegroundColor Red
