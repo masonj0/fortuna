@@ -266,9 +266,14 @@ jobs:
 
           # Verify critical packages
           $criticalPkgs = @("fastapi", "uvicorn", "pydantic")
-          $output = pip list 2>&1
+          $installedPkgs = pip list --format=freeze 2>&1
+
           foreach ($pkg in $criticalPkgs) {
-            if ($output -notmatch $pkg) {
+            $found = $installedPkgs | Select-String -Pattern "^$($pkg.ToLower())==" -Quiet -CaseSensitive
+            if (-not $found) {
+              Write-Host "❌ FATAL: Critical package '$pkg' not found in pip list." -ForegroundColor Red
+              Write-Host "--- Installed Packages ---"
+              $installedPkgs | Write-Host
               throw "❌ FATAL: Critical package '$pkg' not installed"
             }
             Write-Host "  ✓ Verified: $pkg" -ForegroundColor Green
