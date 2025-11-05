@@ -89,24 +89,14 @@ class Settings(BaseSettings):
         1. If API_KEY is missing, it falls back to the SecureCredentialsManager.
         2. It decrypts any fields that were loaded from the .env file.
         """
-        # 1. Fallback for API_KEY (and CI/CD safety)
-        if not self.API_KEY:
-            # In a CI environment, we MUST have the API_KEY set via env vars.
-            # Fallback to keyring is disallowed to prevent hangs.
-            if os.getenv("CI"):
-                raise ValueError("API_KEY must be set in the CI environment.")
-            self.API_KEY = (
-                SecureCredentialsManager.get_credential("api_key") or "MISSING"
-            )
-
-        # 2. Security validation for API_KEY
+        # 1. Security validation for API_KEY
         insecure_keys = {"test", "changeme", "default", "secret", "password", "admin"}
         if self.API_KEY in insecure_keys:
             raise ValueError(
                 f"The provided API_KEY '{self.API_KEY}' is on the list of insecure default values and is not allowed."
             )
 
-        # 3. Decrypt sensitive fields
+        # 2. Decrypt sensitive fields
         self.BETFAIR_APP_KEY = decrypt_value(self.BETFAIR_APP_KEY)
 
         return self
