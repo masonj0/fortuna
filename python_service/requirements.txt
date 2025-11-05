@@ -22,7 +22,7 @@ pandas
 
 # --- Logging & Configuration ---
 structlog==23.2.0
-python-dotenv==1.0.0
+python-dotenv==1.2.1
 
 # --- Caching ---
 redis==5.0.1
