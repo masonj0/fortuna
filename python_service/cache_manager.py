@@ -2,14 +2,17 @@
 import hashlib
 import json
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
+from datetime import timedelta
 from functools import wraps
-from typing import Any, Callable
+from typing import Any
+from typing import Callable
 
 import structlog
 
 try:
     import redis
+
     REDIS_AVAILABLE = True
 except ImportError:
     REDIS_AVAILABLE = False
@@ -29,10 +32,8 @@ class CacheManager:
                 self.is_configured = True
                 log.info("Redis cache connected successfully.")
             except redis.exceptions.ConnectionError as e:
-                log.warning(
-                    f"Failed to connect to Redis: {e}. Falling back to in-memory cache."
-                )
-                self.redis_client = None # Ensure client is None on failure
+                log.warning(f"Failed to connect to Redis: {e}. Falling back to in-memory cache.")
+                self.redis_client = None  # Ensure client is None on failure
 
         if not self.is_configured:
             log.info("CacheManager initialized with in-memory cache.")
@@ -82,12 +83,8 @@ def cache_async_result(ttl_seconds: int = 300, key_prefix: str = "cache"):
     def decorator(func: Callable):
         @wraps(func)
         async def wrapper(*args, **kwargs):
-            instance_args = (
-                args[1:] if args and hasattr(args[0], func.__name__) else args
-            )
-            cache_key = cache_manager._generate_key(
-                f"{key_prefix}:{func.__name__}", *instance_args, **kwargs
-            )
+            instance_args = args[1:] if args and hasattr(args[0], func.__name__) else args
+            cache_key = cache_manager._generate_key(f"{key_prefix}:{func.__name__}", *instance_args, **kwargs)
 
             cached_result = cache_manager.get(cache_key)
             if cached_result is not None:

@@ -1,10 +1,17 @@
 # python_service/adapters/fanduel_adapter.py
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
+from datetime import timedelta
+from datetime import timezone
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Optional
 
-from ..models import OddsData, Race, Runner
+from ..models import OddsData
+from ..models import Race
+from ..models import Runner
 from .base_v3 import BaseAdapterV3
 
 
@@ -17,9 +24,7 @@ class FanDuelAdapter(BaseAdapterV3):
     BASE_URL = "https://sb-api.nj.sportsbook.fanduel.com/api/"
 
     def __init__(self, config=None):
-        super().__init__(
-            source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
-        )
+        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
 
     async def _fetch_data(self, date: str) -> Optional[Dict[str, Any]]:
         """Fetches the raw market data from the FanDuel API."""
@@ -60,9 +65,7 @@ class FanDuelAdapter(BaseAdapterV3):
 
         parts = market_name.split(" - ")
         if len(parts) < 2:
-            self.logger.warning(
-                f"Could not parse race and track from FanDuel market name: {market_name}"
-            )
+            self.logger.warning(f"Could not parse race and track from FanDuel market name: {market_name}")
             return None
 
         race_number_str = parts[0].replace("Race ", "").strip()
@@ -103,11 +106,7 @@ class FanDuelAdapter(BaseAdapterV3):
                 runners.append(
                     Runner(
                         name=horse_name,
-                        number=(
-                            int(program_number_str)
-                            if program_number_str.isdigit()
-                            else 0
-                        ),
+                        number=(int(program_number_str) if program_number_str.isdigit() else 0),
                         odds={self.source_name: odds},
                     )
                 )

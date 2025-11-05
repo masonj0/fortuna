@@ -1,18 +1,21 @@
-import pytest
-from unittest.mock import AsyncMock
-from datetime import date, datetime, timezone
+from datetime import date
+from datetime import datetime
+from datetime import timezone
 from decimal import Decimal
+from unittest.mock import AsyncMock
+
+import pytest
 
 from python_service.adapters.the_racing_api_adapter import TheRacingApiAdapter
 from python_service.core.exceptions import AdapterConfigError
-from python_service.config import Settings
-
 from tests.conftest import get_test_settings
+
 
 @pytest.fixture
 def test_settings():
     """Provides a valid Settings object for testing."""
     return get_test_settings()
+
 
 def test_init_raises_config_error_if_no_key():
     """
@@ -24,6 +27,7 @@ def test_init_raises_config_error_if_no_key():
         TheRacingApiAdapter(config=settings_no_key)
     assert "THE_RACING_API_KEY is not configured" in str(excinfo.value)
 
+
 @pytest.mark.asyncio
 async def test_get_races_parses_correctly(test_settings):
     """
@@ -31,15 +35,36 @@ async def test_get_races_parses_correctly(test_settings):
     """
     # ARRANGE
     adapter = TheRacingApiAdapter(config=test_settings)
-    today = date.today().strftime('%Y-%m-%d')
+    today = date.today().strftime("%Y-%m-%d")
     off_time = datetime.now(timezone.utc)
 
     mock_api_response = {
-        "racecards": [{"race_id": "12345", "course": "Newbury", "race_no": 3, "off_time": off_time.isoformat().replace('+00:00', 'Z'),
-                       "race_name": "The Great Race", "distance_f": "1m 2f", "runners": [
-                           {"horse": "Speedy Steed", "number": 1, "jockey": "T. Rider", "trainer": "A. Trainer", "odds": [{"odds_decimal": "5.50"}]},
-                           {"horse": "Gallant Gus", "number": 2, "jockey": "J. Jockey", "trainer": "B. Builder", "odds": [{"odds_decimal": "3.25"}]}
-                       ]}]
+        "racecards": [
+            {
+                "race_id": "12345",
+                "course": "Newbury",
+                "race_no": 3,
+                "off_time": off_time.isoformat().replace("+00:00", "Z"),
+                "race_name": "The Great Race",
+                "distance_f": "1m 2f",
+                "runners": [
+                    {
+                        "horse": "Speedy Steed",
+                        "number": 1,
+                        "jockey": "T. Rider",
+                        "trainer": "A. Trainer",
+                        "odds": [{"odds_decimal": "5.50"}],
+                    },
+                    {
+                        "horse": "Gallant Gus",
+                        "number": 2,
+                        "jockey": "J. Jockey",
+                        "trainer": "B. Builder",
+                        "odds": [{"odds_decimal": "3.25"}],
+                    },
+                ],
+            }
+        ]
     }
 
     # Patch the internal _fetch_data method
@@ -51,12 +76,13 @@ async def test_get_races_parses_correctly(test_settings):
     # ASSERT
     assert len(races) == 1
     race = races[0]
-    assert race.id == 'tra_12345'
+    assert race.id == "tra_12345"
     assert race.venue == "Newbury"
     assert len(race.runners) == 2
     runner1 = race.runners[0]
     assert runner1.name == "Speedy Steed"
     assert runner1.odds[adapter.source_name].win == Decimal("5.50")
+
 
 @pytest.mark.asyncio
 async def test_get_races_handles_empty_response(test_settings):
@@ -65,7 +91,7 @@ async def test_get_races_handles_empty_response(test_settings):
     """
     # ARRANGE
     adapter = TheRacingApiAdapter(config=test_settings)
-    today = date.today().strftime('%Y-%m-%d')
+    today = date.today().strftime("%Y-%m-%d")
     adapter._fetch_data = AsyncMock(return_value={"racecards": []})
 
     # ACT
@@ -73,6 +99,7 @@ async def test_get_races_handles_empty_response(test_settings):
 
     # ASSERT
     assert races == []
+
 
 @pytest.mark.asyncio
 async def test_get_races_raises_exception_on_api_failure(test_settings):
@@ -82,7 +109,7 @@ async def test_get_races_raises_exception_on_api_failure(test_settings):
     """
     # ARRANGE
     adapter = TheRacingApiAdapter(config=test_settings)
-    today = date.today().strftime('%Y-%m-%d')
+    today = date.today().strftime("%Y-%m-%d")
     adapter._fetch_data = AsyncMock(side_effect=Exception("API is down"))
 
     # ACT & ASSERT

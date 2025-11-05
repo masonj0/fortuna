@@ -1,13 +1,19 @@
 # python_service/adapters/racingpost_adapter.py
 import asyncio
 from datetime import datetime
-from typing import Any, List, Optional
+from typing import Any
+from typing import List
+from typing import Optional
 
-from selectolax.parser import HTMLParser, Node
+from selectolax.parser import HTMLParser
+from selectolax.parser import Node
 
-from ..models import OddsData, Race, Runner
+from ..models import OddsData
+from ..models import Race
+from ..models import Runner
 from ..utils.odds import parse_odds_to_decimal
-from ..utils.text import clean_text, normalize_venue_name
+from ..utils.text import clean_text
+from ..utils.text import normalize_venue_name
 from .base_v3 import BaseAdapterV3
 
 
@@ -20,18 +26,14 @@ class RacingPostAdapter(BaseAdapterV3):
     BASE_URL = "https://www.racingpost.com"
 
     def __init__(self, config=None):
-        super().__init__(
-            source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
-        )
+        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
 
     async def _fetch_data(self, date: str) -> Any:
         """
         Fetches the raw HTML content for all races on a given date.
         """
         index_url = f"/racecards/{date}"
-        index_response = await self.make_request(
-            self.http_client, "GET", index_url, headers=self._get_headers()
-        )
+        index_response = await self.make_request(self.http_client, "GET", index_url, headers=self._get_headers())
         if not index_response:
             self.logger.warning("Failed to fetch RacingPost index page", url=index_url)
             return None
@@ -41,9 +43,7 @@ class RacingPostAdapter(BaseAdapterV3):
         race_card_urls = [link.attributes["href"] for link in links]
 
         async def fetch_single_html(url: str):
-            response = await self.make_request(
-                self.http_client, "GET", url, headers=self._get_headers()
-            )
+            response = await self.make_request(self.http_client, "GET", url, headers=self._get_headers())
             return response.text if response else ""
 
         tasks = [fetch_single_html(url) for url in race_card_urls]
@@ -93,9 +93,7 @@ class RacingPostAdapter(BaseAdapterV3):
                     )
                     all_races.append(race)
             except (AttributeError, ValueError):
-                self.logger.error(
-                    "Failed to parse RacingPost race from HTML content.", exc_info=True
-                )
+                self.logger.error("Failed to parse RacingPost race from HTML content.", exc_info=True)
                 continue
         return all_races
 

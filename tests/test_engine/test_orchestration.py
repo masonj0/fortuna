@@ -1,5 +1,6 @@
 from python_service.engine import OddsEngine
 
+
 def test_engine_instantiation():
     """Tests that the core OddsEngine can be instantiated without errors."""
     try:
