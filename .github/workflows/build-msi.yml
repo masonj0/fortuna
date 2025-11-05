@@ -222,6 +222,7 @@ jobs:
             --hidden-import=httpcore._sync `
             --hidden-import=httpcore._async `
             --hidden-import=h11 `
+            --hidden-import=h2 `
             --hidden-import=certifi `
             --hidden-import=redis `
             --hidden-import=redis.asyncio `
@@ -346,6 +347,165 @@ jobs:
               # Server not ready yet, continue waiting
               Write-Host "." -NoNewline
             }
+          }
+
+          if (-not $serverReady) {
+            Write-Host "`n⚠️  Server didn't respond to health checks after $maxAttempts seconds" -ForegroundColor Yellow
+
+            # Show logs even if server didn't crash
+            if (Test-Path "$testDir/stderr.log") {
+              Write-Host "`n=== STDERR Output ===" -ForegroundColor Yellow
+              Get-Content "$testDir/stderr.log" | Write-Host
+            }
+
+            if (Test-Path "$testDir/stdout.log") {
+              Write-Host "`n=== STDOUT Output ===" -ForegroundColor Yellow
+              Get-Content "$testDir/stdout.log" | Write-Host
+            }
+
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            throw "Backend failed to respond to health checks"
+          }
+
+          # Test critical endpoints
+          Write-Host "`n=== Testing Critical Endpoints ===" -ForegroundColor Cyan
+
+          $endpoints = @(
+            @{ Path = "/health"; Name = "Health Check" },
+            @{ Path = "/api/status"; Name = "API Status" },
+            @{ Path = "/docs"; Name = "OpenAPI Docs" }
+          )
+
+          $allTestsPassed = $true
+
+          foreach ($endpoint in $endpoints) {
+            try {
+              $response = Invoke-WebRequest -Uri "http://127.0.0.1:8765$($endpoint.Path)" -TimeoutSec 5 -ErrorAction Stop
+              Write-Host "✅ $($endpoint.Name): $($response.StatusCode)" -ForegroundColor Green
+            } catch {
+              Write-Host "❌ $($endpoint.Name): FAILED - $($_.Exception.Message)" -ForegroundColor Red
+              $allTestsPassed = $false
+            }
+          }
+
+          # Cleanup
+          Write-Host "`nStopping backend process..." -ForegroundColor Cyan
+          Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+          Start-Sleep -Seconds 2
+
+          # Save final logs
+          Copy-Item "$testDir/stderr.log" "logs/backend-integration-stderr.log" -ErrorAction SilentlyContinue
+          Copy-Item "$testDir/stdout.log" "logs/backend-integration-stdout.log" -ErrorAction SilentlyContinue
+
+          if (-not $allTestsPassed) {
+            throw "Some endpoint tests failed"
+          }
+
+          Write-Host "`n✅ All integration tests passed!" -ForegroundColor Green
+
+      - name: '📸 End-to-End UI Test'
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          Write-Host "`n=== E2E UI TEST: Verifying Live Application ===" -ForegroundColor Magenta
+
+          $backendExe = "electron/resources/fortuna-backend.exe"
+          $frontendDir = "electron/web-ui-build/out"
+          $backendPort = "8999"
+          $frontendPort = "8998"
+          $testDir = "e2e-test-env"
+          $screenshotPath = "e2e-screenshot.png"
+
+          if (Test-Path $testDir) { Remove-Item -Recurse -Force $testDir }
+          New-Item -ItemType Directory -Path $testDir -Force | Out-Null
+
+          $env:API_KEY = "${{ env.API_KEY }}"
+          $env:PORT = $backendPort
+          $env:HOST = "127.0.0.1"
+          $env:ALLOWED_ORIGINS = "http://127.0.0.1:$frontendPort"
+
+          $backendProcess = $null
+          $frontendProcess = $null
+
+          try {
+              Write-Host "`n🚀 Starting backend server..." -ForegroundColor Cyan
+              $backendProcess = Start-Process -FilePath $backendExe `
+                -WorkingDirectory $testDir `
+                -PassThru -NoNewWindow `
+                -RedirectStandardOutput "$testDir/backend-stdout.log" `
+                -RedirectStandardError "$testDir/backend-stderr.log"
+
+              $maxAttempts = 30
+              $serverReady = $false
+              for ($i = 1; $i -le $maxAttempts; $i++) {
+                Start-Sleep -Seconds 1
+                if ($backendProcess.HasExited) {
+                  Write-Host "❌ Backend crashed during startup!" -ForegroundColor Red
+                  Get-Content "$testDir/backend-stderr.log" | Write-Host
+                  throw "Backend crashed!"
+                }
+                try {
+                  $response = Invoke-WebRequest -Uri "http://127.0.0.1:$backendPort/health" -TimeoutSec 2 -ErrorAction Stop
+                  if ($response.StatusCode -eq 200) {
+                    $serverReady = $true
+                    Write-Host "✅ Backend is healthy (attempt $i)" -ForegroundColor Green
+                    break
+                  }
+                } catch { Write-Host "." -NoNewline }
+              }
+              if (-not $serverReady) { throw "Backend failed to respond to health checks" }
+
+              Write-Host "`n🚀 Starting frontend server..." -ForegroundColor Cyan
+              $frontendProcess = Start-Process python -ArgumentList "-m http.server $frontendPort --directory $frontendDir" `
+                -PassThru -NoNewWindow `
+                -RedirectStandardOutput "$testDir/frontend-stdout.log" `
+                -RedirectStandardError "$testDir/frontend-stderr.log"
+              Start-Sleep -Seconds 3 # Give it a moment to start
+
+              Write-Host "`n🎭 Installing Playwright..." -ForegroundColor Cyan
+              pip install playwright 2>&1 | Out-Null
+              playwright install --with-deps chromium 2>&1 | Out-Null
+              Write-Host "✅ Playwright installed" -ForegroundColor Green
+
+              Write-Host "`n✍️  Generating Playwright script..." -ForegroundColor Cyan
+              $playwrightScript = @"
+          from playwright.sync_api import sync_playwright, TimeoutError
+          import sys
+
+          def run(playwright):
+              browser = playwright.chromium.launch()
+              page = browser.new_page()
+              try:
+                  print("Navigating to frontend URL: http://127.0.0.1:$frontendPort")
+                  page.goto(f"http://127.0.0.1:$frontendPort", timeout=15000)
+                  print("Waiting for dashboard to render...")
+                  page.wait_for_selector("div:has-text('Adapter Status')", timeout=30000)
+                  print("Dashboard detected. Taking screenshot...")
+                  page.screenshot(path="$screenshotPath")
+                  print("✅ Screenshot captured successfully to $screenshotPath!")
+              except TimeoutError as e:
+                  print(f"❌ Playwright timed out waiting for element: {e}", file=sys.stderr)
+                  page.screenshot(path="e2e-screenshot-failed.png")
+                  raise
+              finally:
+                  browser.close()
+
+          with sync_playwright() as playwright:
+              run(playwright)
+          "@
+              $playwrightScript | Out-File -FilePath "run_e2e_test.py" -Encoding utf8 -Force
+
+              Write-Host "`n▶️  Executing Playwright test..." -ForegroundColor Cyan
+              py run_e2e_test.py 2>&1 | Tee-Object -FilePath "$testDir/playwright.log"
+              if ($LASTEXITCODE -ne 0) { throw "Playwright script failed" }
+
+              Write-Host "`n✅ E2E UI Test Passed!" -ForegroundColor Green
+
+          } finally {
+              Write-Host "`n🧹 Cleaning up processes..." -ForegroundColor Cyan
+              if ($backendProcess -and -not $backendProcess.HasExited) { Stop-Process -Id $backendProcess.Id -Force -ErrorAction SilentlyContinue }
+              if ($frontendProcess -and -not $frontendProcess.HasExited) { Stop-Process -Id $frontendProcess.Id -Force -ErrorAction SilentlyContinue }
+              Copy-Item "$testDir/*.log" "logs/" -ErrorAction SilentlyContinue -Force
           }
 
           if (-not $serverReady) {
