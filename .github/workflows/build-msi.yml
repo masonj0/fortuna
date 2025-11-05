@@ -54,7 +54,7 @@ jobs:
           $checks = @{
             "PowerShell Version" = $PSVersionTable.PSVersion
             "Windows Version" = [System.Environment]::OSVersion
-            "Total Memory" = "$(([System.Diagnostics.ProcessInfo]::CurrentProcess.WorkingSet64 / 1GB).ToString('F2')) GB available"
+            "Total Memory" = "$(([System.Diagnostics.Process]::GetCurrentProcess().WorkingSet64 / 1GB).ToString('F2')) GB available"
             "Disk Space (C:)" = "$(([System.IO.DriveInfo]::GetDrives()[0].AvailableFreeSpace / 1GB).ToString('F2')) GB free"
             "Git Version" = "$(git --version)"
             "Node Version" = "$(node --version)"
