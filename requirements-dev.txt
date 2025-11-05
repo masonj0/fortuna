@@ -17,7 +17,7 @@ cryptography==46.0.3
 cycler==0.12.1
 Deprecated==1.2.18
 distro==1.9.0
-fastapi==0.104.1
+fastapi==0.121.0
 fonttools==4.60.1
 gitdb==4.0.12
 GitPython==3.1.45
