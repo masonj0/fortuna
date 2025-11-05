@@ -69,7 +69,7 @@ jobs:
           # Verify no processes are locking ports we'll use
           $blockedPorts = @(8000, 8998, 8999)
           foreach ($port in $blockedPorts) {
-            $existing = netstat -ano 2>/dev/null | Select-String ":$port\s+LISTENING"
+            $existing = netstat -ano 2>$null | Select-String ":$port\s+LISTENING"
             if ($existing) {
               Write-Host "  ⚠️  WARNING: Port $port is already in use!" -ForegroundColor Yellow
               Write-Host "      $existing"
