@@ -11,7 +11,6 @@ from datetime import datetime
 from datetime import timezone
 from typing import List
 
-import httpx
 import structlog
 
 from python_service.analyzer import AnalyzerEngine
@@ -37,9 +36,7 @@ class Watchman:
         today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         try:
             background_tasks = set()  # Create a dummy set for background tasks
-            aggregated_data = await self.odds_engine.fetch_all_odds(
-                today_str, background_tasks
-            )
+            aggregated_data = await self.odds_engine.fetch_all_odds(today_str, background_tasks)
             all_races = aggregated_data.get("races", [])
             if not all_races:
                 log.warning("Watchman: No races returned from OddsEngine.")
@@ -64,9 +61,7 @@ class Watchman:
                 )
             return qualified_races_list
         except Exception as e:
-            log.error(
-                "Watchman: Failed to get initial targets", error=str(e), exc_info=True
-            )
+            log.error("Watchman: Failed to get initial targets", error=str(e), exc_info=True)
             return []
 
     async def run_tactical_monitoring(self, targets: List[Race]):
@@ -106,9 +101,7 @@ class Watchman:
 
         #             await asyncio.sleep(30) # Check for upcoming races every 30 seconds
 
-        log.info(
-            "Watchman: All targets for the day have been monitored. Mission complete."
-        )
+        log.info("Watchman: All targets for the day have been monitored. Mission complete.")
 
     async def execute_daily_protocol(self):
         """The main, end-to-end orchestration method."""
@@ -118,9 +111,7 @@ class Watchman:
             if initial_targets:
                 await self.run_tactical_monitoring(initial_targets)
             else:
-                log.info(
-                    "Watchman: No initial targets found. Shutting down for the day."
-                )
+                log.info("Watchman: No initial targets found. Shutting down for the day.")
         finally:
             await self.odds_engine.close()
 

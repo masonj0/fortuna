@@ -1,24 +1,30 @@
 # tests/adapters/test_twinspires_adapter.py
-import pytest
 from datetime import datetime
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
+from unittest.mock import MagicMock
+
+import pytest
+
 from python_service.adapters.twinspires_adapter import TwinSpiresAdapter
+
 
 @pytest.fixture
 def twinspires_adapter():
     mock_config = MagicMock()
     return TwinSpiresAdapter(config=mock_config)
 
+
 def read_fixture(file_path):
-    with open(file_path, 'r') as f:
+    with open(file_path, "r") as f:
         return f.read()
+
 
 @pytest.mark.skip(reason="Twinspires adapter is a placeholder and not yet implemented.")
 @pytest.mark.asyncio
 async def test_twinspires_adapter_get_races_successfully(twinspires_adapter):
     """Verify adapter correctly fetches and parses data via get_races."""
-    mock_html = read_fixture('tests/fixtures/twinspires_sample.html')
+    mock_html = read_fixture("tests/fixtures/twinspires_sample.html")
     race_date = "2025-10-26"
 
     # Patch the internal _fetch_data method to return the mock HTML
@@ -33,16 +39,17 @@ async def test_twinspires_adapter_get_races_successfully(twinspires_adapter):
     assert race.race_number == 5
     assert len(race.runners) == 3  # One runner is scratched
 
-    braveheart = next((r for r in race.runners if r.name == 'Braveheart'), None)
+    braveheart = next((r for r in race.runners if r.name == "Braveheart"), None)
     assert braveheart is not None
-    assert braveheart.odds['TwinSpires'].win == Decimal('3.5')
+    assert braveheart.odds["TwinSpires"].win == Decimal("3.5")
 
-    gallant_gus = next((r for r in race.runners if r.name == 'Gallant Gus'), None)
+    gallant_gus = next((r for r in race.runners if r.name == "Gallant Gus"), None)
     assert gallant_gus is not None
-    assert gallant_gus.odds['TwinSpires'].win == Decimal('4.0')
+    assert gallant_gus.odds["TwinSpires"].win == Decimal("4.0")
 
     # Check that the start time was parsed correctly
     assert race.start_time == datetime(2025, 10, 26, 16, 30)
+
 
 @pytest.mark.skip(reason="Twinspires adapter is a placeholder and not yet implemented.")
 @pytest.mark.asyncio

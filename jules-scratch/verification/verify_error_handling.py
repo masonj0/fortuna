@@ -1,5 +1,7 @@
 # jules-scratch/verification/verify_error_handling.py
-from playwright.sync_api import sync_playwright, expect
+from playwright.sync_api import expect
+from playwright.sync_api import sync_playwright
+
 
 def run(playwright):
     browser = playwright.chromium.launch(headless=True)
@@ -14,10 +16,10 @@ def run(playwright):
                 "error": {
                     "message": "A data source is currently unavailable.",
                     "suggestion": "This is usually temporary. Please try again in a few minutes.",
-                    "details": "AdapterHttpError: HTTP Error 503 for https://example.com"
+                    "details": "AdapterHttpError: HTTP Error 503 for https://example.com",
                 }
-            }
-        )
+            },
+        ),
     )
 
     page.goto("http://localhost:3000")
@@ -32,6 +34,7 @@ def run(playwright):
 
     page.screenshot(path="jules-scratch/verification/error_handling.png")
     browser.close()
+
 
 with sync_playwright() as playwright:
     run(playwright)

@@ -1,9 +1,16 @@
 # python_service/adapters/base_v3.py
-from abc import ABC, abstractmethod
-from typing import AsyncGenerator, Any, List
+from abc import ABC
+from abc import abstractmethod
+from typing import Any
+from typing import AsyncGenerator
+from typing import List
+
 import httpx
 import structlog
-from tenacity import retry, stop_after_attempt, wait_exponential, RetryError
+from tenacity import RetryError
+from tenacity import retry
+from tenacity import stop_after_attempt
+from tenacity import wait_exponential
 
 from ..core.exceptions import AdapterHttpError
 from ..manual_override_manager import ManualOverrideManager
@@ -82,24 +89,16 @@ class BaseAdapterV3(ABC):
         stop=stop_after_attempt(3),
         reraise=True,  # Reraise the final exception to be caught by get_races
     )
-    async def make_request(
-        self, http_client: httpx.AsyncClient, method: str, url: str, **kwargs
-    ) -> httpx.Response:
+    async def make_request(self, http_client: httpx.AsyncClient, method: str, url: str, **kwargs) -> httpx.Response:
         """
         Makes a resilient HTTP request with built-in retry logic using tenacity.
         """
         # Ensure the URL is correctly formed, whether it's relative or absolute
-        full_url = (
-            url
-            if url.startswith("http")
-            else f"{self.base_url.rstrip('/')}/{url.lstrip('/')}"
-        )
+        full_url = url if url.startswith("http") else f"{self.base_url.rstrip('/')}/{url.lstrip('/')}"
 
         try:
-            self.logger.info(f"Making request", method=method.upper(), url=full_url)
-            response = await http_client.request(
-                method, full_url, timeout=self.timeout, **kwargs
-            )
+            self.logger.info("Making request", method=method.upper(), url=full_url)
+            response = await http_client.request(method, full_url, timeout=self.timeout, **kwargs)
             response.raise_for_status()  # Raise an exception for 4xx/5xx responses
             return response
         except httpx.HTTPStatusError as e:

@@ -1,9 +1,14 @@
 # python_service/adapters/harness_adapter.py
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Optional
 from zoneinfo import ZoneInfo
 
-from ..models import OddsData, Race, Runner
+from ..models import OddsData
+from ..models import Race
+from ..models import Runner
 from ..utils.odds import parse_odds_to_decimal
 from .base_v3 import BaseAdapterV3
 
@@ -15,9 +20,7 @@ class HarnessAdapter(BaseAdapterV3):
     BASE_URL = "https://data.ustrotting.com/api/racenet/racing/"
 
     def __init__(self, config=None):
-        super().__init__(
-            source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
-        )
+        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
 
     async def _fetch_data(self, date: str) -> Optional[Dict[str, Any]]:
         """Fetches all harness races for a given date."""
@@ -31,11 +34,7 @@ class HarnessAdapter(BaseAdapterV3):
 
     def _parse_races(self, raw_data: Optional[Dict[str, Any]]) -> List[Race]:
         """Parses the raw card data into a list of Race objects."""
-        if (
-            not raw_data
-            or not raw_data.get("data")
-            or not raw_data.get("data", {}).get("meetings")
-        ):
+        if not raw_data or not raw_data.get("data") or not raw_data.get("data", {}).get("meetings"):
             self.logger.warning("No meetings found in harness data response.")
             return []
 
