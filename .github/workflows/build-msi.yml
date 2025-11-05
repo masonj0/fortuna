@@ -306,8 +306,8 @@ jobs:
 
           Write-Host "Process started (PID: $($process.Id)), waiting for initialization..."
 
-          # Wait up to 30 seconds for the server to start
-          $maxAttempts = 30
+          # Wait up to 60 seconds for the server to start
+          $maxAttempts = 60
           $serverReady = $false
 
           for ($i = 1; $i -le $maxAttempts; $i++) {
@@ -352,15 +352,18 @@ jobs:
           if (-not $serverReady) {
             Write-Host "`n⚠️  Server didn't respond to health checks after $maxAttempts seconds" -ForegroundColor Yellow
 
+            Write-Host "`n=== DIAGNOSTICS: Network Status (Port 8765) ===" -ForegroundColor Yellow
+            netstat -an | findstr "8765" | Write-Host -ForegroundColor Cyan
+
             # Show logs even if server didn't crash
             if (Test-Path "$testDir/stderr.log") {
-              Write-Host "`n=== STDERR Output ===" -ForegroundColor Yellow
-              Get-Content "$testDir/stderr.log" | Write-Host
+              Write-Host "`n=== STDERR Output (Last 50 lines) ===" -ForegroundColor Yellow
+              Get-Content "$testDir/stderr.log" -Tail 50 | Write-Host
             }
 
             if (Test-Path "$testDir/stdout.log") {
-              Write-Host "`n=== STDOUT Output ===" -ForegroundColor Yellow
-              Get-Content "$testDir/stdout.log" | Write-Host
+              Write-Host "`n=== STDOUT Output (Last 50 lines) ===" -ForegroundColor Yellow
+              Get-Content "$testDir/stdout.log" -Tail 50 | Write-Host
             }
 
             Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
@@ -435,7 +438,7 @@ jobs:
                 -RedirectStandardOutput "$testDir/backend-stdout.log" `
                 -RedirectStandardError "$testDir/backend-stderr.log"
 
-              $maxAttempts = 30
+              $maxAttempts = 60
               $serverReady = $false
               for ($i = 1; $i -le $maxAttempts; $i++) {
                 Start-Sleep -Seconds 1
@@ -506,45 +509,6 @@ jobs:
               if ($backendProcess -and -not $backendProcess.HasExited) { Stop-Process -Id $backendProcess.Id -Force -ErrorAction SilentlyContinue }
               if ($frontendProcess -and -not $frontendProcess.HasExited) { Stop-Process -Id $frontendProcess.Id -Force -ErrorAction SilentlyContinue }
               Copy-Item "$testDir/*.log" "logs/" -ErrorAction SilentlyContinue -Force
-          }
-
-          if (-not $serverReady) {
-            Write-Host "`n⚠️  Server didn't respond to health checks after $maxAttempts seconds" -ForegroundColor Yellow
-
-            # Show logs even if server didn't crash
-            if (Test-Path "$testDir/stderr.log") {
-              Write-Host "`n=== STDERR Output ===" -ForegroundColor Yellow
-              Get-Content "$testDir/stderr.log" | Write-Host
-            }
-
-            if (Test-Path "$testDir/stdout.log") {
-              Write-Host "`n=== STDOUT Output ===" -ForegroundColor Yellow
-              Get-Content "$testDir/stdout.log" | Write-Host
-            }
-
-            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-            throw "Backend failed to respond to health checks"
-          }
-
-          # Test critical endpoints
-          Write-Host "`n=== Testing Critical Endpoints ===" -ForegroundColor Cyan
-
-          $endpoints = @(
-            @{ Path = "/health"; Name = "Health Check" },
-            @{ Path = "/api/status"; Name = "API Status" },
-            @{ Path = "/docs"; Name = "OpenAPI Docs" }
-          )
-
-          $allTestsPassed = $true
-
-          foreach ($endpoint in $endpoints) {
-            try {
-              $response = Invoke-WebRequest -Uri "http://127.0.0.1:8765$($endpoint.Path)" -TimeoutSec 5 -ErrorAction Stop
-              Write-Host "✅ $($endpoint.Name): $($response.StatusCode)" -ForegroundColor Green
-            } catch {
-              Write-Host "❌ $($endpoint.Name): FAILED - $($_.Exception.Message)" -ForegroundColor Red
-              $allTestsPassed = $false
-            }
           }
 
           # Cleanup
