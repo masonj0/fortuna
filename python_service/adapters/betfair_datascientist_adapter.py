@@ -1,12 +1,15 @@
 # python_service/adapters/betfair_datascientist_adapter.py
 
-import asyncio
 from datetime import datetime
 from io import StringIO
-from typing import Any, List, Optional
+from typing import List
+from typing import Optional
 
 import pandas as pd
-from ..models import Race, Runner, OddsData
+
+from ..models import OddsData
+from ..models import Race
+from ..models import Runner
 from ..utils.text import normalize_venue_name
 from .base_v3 import BaseAdapterV3
 
@@ -86,7 +89,5 @@ class BetfairDataScientistAdapter(BaseAdapterV3):
             self.logger.info(f"Normalized {len(races)} races from {self.model_name}.")
             return races
         except (pd.errors.ParserError, KeyError) as e:
-            self.logger.error(
-                "Failed to parse Betfair Data Scientist CSV.", exc_info=True, error=str(e)
-            )
+            self.logger.error("Failed to parse Betfair Data Scientist CSV.", exc_info=True, error=str(e))
             return []

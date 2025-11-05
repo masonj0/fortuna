@@ -1,6 +1,8 @@
 # tests/adapters/test_racingtv_adapter.py
 import pytest
+
 from python_service.adapters.racingtv_adapter import RacingTVAdapter
+
 
 @pytest.mark.asyncio
 async def test_racingtv_adapter_is_stub():

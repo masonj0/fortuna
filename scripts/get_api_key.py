@@ -1,6 +1,6 @@
 # scripts/get_api_key.py
-import sys
 import os
+import sys
 
 # This is a workaround to ensure the script can find the python_service module,
 # especially when run from the packaged Electron app.
@@ -18,6 +18,7 @@ except ImportError as e:
     print(f"Error: Failed to import SecureCredentialsManager. Details: {e}", file=sys.stderr)
     sys.exit(1)
 
+
 def retrieve_and_print_key():
     """
     Retrieves the API key using the SecureCredentialsManager and prints it to stdout.
@@ -27,12 +28,13 @@ def retrieve_and_print_key():
     try:
         api_key = SecureCredentialsManager.get_api_key()
         if api_key:
-            print(api_key, end='') # Print the key directly to stdout
+            print(api_key, end="")  # Print the key directly to stdout
         else:
-            print("", end='') # Print empty string if no key is found
+            print("", end="")  # Print empty string if no key is found
     except Exception as e:
         print(f"An error occurred while retrieving the API key: {e}", file=sys.stderr)
         sys.exit(1)
+
 
 if __name__ == "__main__":
     retrieve_and_print_key()
