@@ -16,10 +16,12 @@ def main():
     package context to be established.
     """
     # This configuration is for the packaged application, so reload is False.
+    host = os.environ.get("HOST", "127.0.0.1")
+    port = int(os.environ.get("PORT", 8000))
     uvicorn.run(
         "python_service.api:app",
-        host="127.0.0.1",
-        port=8000,
+        host=host,
+        port=port,
         reload=False,
         log_level="info"
     )
