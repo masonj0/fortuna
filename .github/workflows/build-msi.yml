@@ -13,6 +13,7 @@ env:
   NODE_VERSION: '20'
   PYTHON_VERSION: '3.12'
   CACHE_BUST: ${{ github.run_id }}
+  API_KEY: "a_secure_test_api_key_that_is_long_enough"
 
 jobs:
   build-installer:
@@ -157,7 +158,7 @@ jobs:
           Write-Host "`n=== BACKEND: Installing Dependencies (from root) ===" -ForegroundColor Cyan
 
           # Upgrade build tools to latest versions
-          pip install --upgrade pip setuptools wheel 2>&1 | Tee-Object -FilePath logs/pip-upgrade.log
+          pip install --upgrade pip wheel 2>&1 | Tee-Object -FilePath logs/pip-upgrade.log
 
           # Install requirements
           pip install -r python_service/requirements.txt --no-cache-dir 2>&1 | Tee-Object -FilePath logs/pip-install.log
