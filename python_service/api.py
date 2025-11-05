@@ -1,41 +1,48 @@
 # python_service/api.py
 
-import os
 from contextlib import asynccontextmanager
-from datetime import date, datetime, timedelta
-from typing import List, Optional
+from datetime import date
+from datetime import datetime
+from datetime import timedelta
+from typing import List
+from typing import Optional
 
 import aiosqlite
 import structlog
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, WebSocket
+from fastapi import Depends
+from fastapi import FastAPI
+from fastapi import HTTPException
+from fastapi import Query
+from fastapi import Request
+from fastapi import WebSocket
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from pydantic import BaseModel
+from slowapi import Limiter
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
-from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.websockets import WebSocketDisconnect
-from typing import Callable
-from pydantic import BaseModel
-
-from .analyzer import AnalyzerEngine
-from .config import get_settings
-from .core.exceptions import AdapterHttpError, AdapterConfigError
-from .engine import OddsEngine
-from .health import router as health_router
-from .logging_config import configure_logging
-from .middleware.error_handler import (
-    validation_exception_handler,
-    user_friendly_exception_handler,
-    UserFriendlyException,
-)
-from .models import AggregatedResponse, QualifiedRacesResponse, Race, TipsheetRace
-from .security import verify_api_key
-from .manual_override_manager import ManualOverrideManager
 
 # --- PyInstaller Explicit Imports ---
 from .adapters import *
+from .analyzer import AnalyzerEngine
+from .config import get_settings
+from .core.exceptions import AdapterConfigError
+from .core.exceptions import AdapterHttpError
+from .engine import OddsEngine
+from .health import router as health_router
+from .logging_config import configure_logging
+from .manual_override_manager import ManualOverrideManager
+from .middleware.error_handler import UserFriendlyException
+from .middleware.error_handler import user_friendly_exception_handler
+from .middleware.error_handler import validation_exception_handler
+from .models import AggregatedResponse
+from .models import QualifiedRacesResponse
+from .models import Race
+from .models import TipsheetRace
+from .security import verify_api_key
 
 # ------------------------------------
 
@@ -97,9 +104,7 @@ async def lifespan(app: FastAPI):
         app.state.manual_override_manager = manual_override_manager
         app.state.connection_manager = connection_manager
 
-        log.info(
-            "Server startup: All components initialized successfully."
-        )
+        log.info("Server startup: All components initialized successfully.")
     except Exception as e:
         log.critical(
             "FATAL: Failed to initialize OddsEngine during server startup.",
@@ -228,11 +233,7 @@ async def get_filter_suggestions(engine: OddsEngine = Depends(get_engine)):
                     second_favorite_odds.append(odds_list[1])
         return {
             "suggestions": {
-                "max_field_size": {
-                    "recommended": (
-                        int(sum(field_sizes) / len(field_sizes)) if field_sizes else 10
-                    )
-                },
+                "max_field_size": {"recommended": (int(sum(field_sizes) / len(field_sizes)) if field_sizes else 10)},
                 "min_favorite_odds": {"recommended": 2.5},
                 "min_second_favorite_odds": {"recommended": 4.0},
             }
@@ -274,9 +275,7 @@ def get_current_date() -> date:
 
 @app.get("/api/tipsheet", response_model=List[TipsheetRace])
 @limiter.limit("30/minute")
-async def get_tipsheet_endpoint(
-    request: Request, date: date = Depends(get_current_date)
-):
+async def get_tipsheet_endpoint(request: Request, date: date = Depends(get_current_date)):
     results = []
     try:
         async with aiosqlite.connect(DB_PATH) as db:

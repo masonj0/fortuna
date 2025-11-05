@@ -1,7 +1,6 @@
 # ARCHIVE_PROJECT.py - The Manifest-Driven Scribe
 # This script generates the FORTUNA_ALL JSON archives based on the new JSON manifests.
 
-import os
 import json
 from pathlib import Path
 
@@ -15,8 +14,9 @@ MANIFEST_MAP = {
     "MANIFEST_PART2_FRONTEND.json": 2,
     "MANIFEST_PART3_SUPPORT.json": 3,
     "MANIFEST_PART4_ROOT.json": 4,
-    "MANIFEST_SCRIPTS.json": 5
+    "MANIFEST_SCRIPTS.json": 5,
 }
+
 
 def run_archiver():
     print("--- Fortuna Faucet Manifest-Driven Scribe ---")
@@ -29,7 +29,7 @@ def run_archiver():
         manifest_path = PROJECT_ROOT / manifest_file
 
         try:
-            with open(manifest_path, 'r', encoding='utf-8') as f:
+            with open(manifest_path, "r", encoding="utf-8") as f:
                 file_list = json.load(f)
         except FileNotFoundError:
             print(f"[ERROR] Manifest file not found: {manifest_file}. Skipping.")
@@ -42,7 +42,7 @@ def run_archiver():
         for relative_path in file_list:
             file_path = PROJECT_ROOT / relative_path
             try:
-                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                     content = f.read()
                 archives[part_num][relative_path] = content
                 total_files_archived += 1
@@ -61,13 +61,14 @@ def run_archiver():
 
         output_path = PROJECT_ROOT / OUTPUT_FILENAME_TEMPLATE.format(part_num)
         try:
-            with open(output_path, 'w', encoding='utf-8') as f:
+            with open(output_path, "w", encoding="utf-8") as f:
                 json.dump(content_dict, f, indent=4)
             print(f"✅ Successfully wrote {len(content_dict)} files to {output_path.name}")
         except Exception as e:
             print(f"[FATAL] Failed to write {output_path.name}: {e}")
 
     print("\n[SUCCESS] All manifest-driven archives are complete!")
+
 
 if __name__ == "__main__":
     run_archiver()
