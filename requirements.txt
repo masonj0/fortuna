@@ -33,7 +33,7 @@ pillow==10.1.0; sys_platform == 'win32'
 
 # --- Data Warehouse & ETL (Optional) ---
 SQLAlchemy==2.0.23
-psycopg2-binary==2.9.9
+psycopg2-binary==2.9.11
 
 # --- Historical Data Parsing (ChartScraper) ---
 pikepdf==8.13.0
