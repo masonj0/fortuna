@@ -5,13 +5,15 @@ import json
 import os
 import re
 import sys
-from multiprocessing import Process, Queue
+from multiprocessing import Process
+from multiprocessing import Queue
 
 # --- Configuration ---
-MANIFEST_FILES = ['MANIFEST2.md', 'MANIFEST3.md']
-OUTPUT_DIR = 'ReviewableJSON'
+MANIFEST_FILES = ["MANIFEST2.md", "MANIFEST3.md"]
+OUTPUT_DIR = "ReviewableJSON"
 FILE_PROCESSING_TIMEOUT = 10
-EXCLUDED_FILES = ['package-lock.json']
+EXCLUDED_FILES = ["package-lock.json"]
+
 
 # --- ENLIGHTENED PARSING LOGIC (V2) ---
 def extract_and_normalize_path(line: str) -> str | None:
@@ -23,44 +25,46 @@ def extract_and_normalize_path(line: str) -> str | None:
     - Plain paths with list markers: `- path/to/file.py`
     """
     line = line.strip()
-    if not line or line.startswith('#'):
+    if not line or line.startswith("#"):
         return None
 
     # 1. Check for Markdown link format
-    md_match = re.search(r'\[.*\]\((https?://[^\)]+)\)', line)
+    md_match = re.search(r"\[.*\]\((https?://[^\)]+)\)", line)
     if md_match:
         path = md_match.group(1)
     else:
         # 2. Check for paths in backticks
-        bt_match = re.search(r'`([^`]+)`', line)
+        bt_match = re.search(r"`([^`]+)`", line)
         if bt_match:
             path = bt_match.group(1)
         else:
             # 3. Assume plain path, stripping list markers
-            path = re.sub(r'^[*-]\s*', '', line).split(' ')[0]
+            path = re.sub(r"^[*-]\s*", "", line).split(" ")[0]
 
     # --- Path Standardization ---
-    if not path or not ('.' in path or '/' in path):
-        return None # Not a valid path
+    if not path or not ("." in path or "/" in path):
+        return None  # Not a valid path
 
     # If it's a full raw GitHub URL, extract the local path
-    if path.startswith('https://raw.githubusercontent.com/'):
-        path = '/'.join(path.split('/main/')[1:])
+    if path.startswith("https://raw.githubusercontent.com/"):
+        path = "/".join(path.split("/main/")[1:])
 
     # Final check for valid file extensions or structure
-    if not re.search(r'(\.[a-zA-Z0-9]+$)|(^[\w/]+$)', path):
+    if not re.search(r"(\.[a-zA-Z0-9]+$)|(^[\w/]+$)", path):
         return None
 
     return path.strip()
 
+
 # --- SANDBOXED FILE READ (Unchanged) ---
 def _sandboxed_file_read(file_path, q):
     try:
-        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
             content = f.read()
         q.put({"file_path": file_path, "content": content})
     except Exception as e:
         q.put({"error": str(e)})
+
 
 def convert_file_to_json_sandboxed(file_path):
     q = Queue()
@@ -75,9 +79,10 @@ def convert_file_to_json_sandboxed(file_path):
         return q.get()
     return {"error": "Unknown error in sandboxed read process."}
 
+
 # --- Main Orchestrator ---
 def main():
-    print(f"\n{'='*60}\nStarting IRONCLAD JSON backup process... (Enlightened Scribe Edition)\n{'='*60}")
+    print(f"\n{'=' * 60}\nStarting IRONCLAD JSON backup process... (Enlightened Scribe Edition)\n{'=' * 60}")
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     all_local_paths = []
@@ -87,7 +92,7 @@ def main():
             print(f"    [WARNING] Manifest not found: {manifest}")
             continue
 
-        with open(manifest, 'r', encoding='utf-8') as f:
+        with open(manifest, "r", encoding="utf-8") as f:
             lines = f.readlines()
 
         paths_found = 0
@@ -110,9 +115,9 @@ def main():
         print(f"\nProcessing: {local_path}")
         json_data = convert_file_to_json_sandboxed(local_path)
         if json_data and "error" not in json_data:
-            output_path = os.path.join(OUTPUT_DIR, local_path + '.json')
+            output_path = os.path.join(OUTPUT_DIR, local_path + ".json")
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
-            with open(output_path, 'w', encoding='utf-8') as f:
+            with open(output_path, "w", encoding="utf-8") as f:
                 json.dump(json_data, f, indent=4)
             print(f"    [SUCCESS] Saved backup to {output_path}")
             processed_count += 1
@@ -121,10 +126,13 @@ def main():
             print(f"    [ERROR] Failed to process {local_path}: {error_msg}")
             failed_count += 1
 
-    print(f"\n{'='*60}\nBackup process complete.\nSuccessfully processed: {processed_count}/{len(unique_local_paths)}\nFailed/Skipped: {failed_count}\n{'='*60}")
+    print(
+        f"\n{'=' * 60}\nBackup process complete.\nSuccessfully processed: {processed_count}/{len(unique_local_paths)}\nFailed/Skipped: {failed_count}\n{'=' * 60}"
+    )
 
     if failed_count > 0:
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

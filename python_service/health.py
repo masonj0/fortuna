@@ -17,9 +17,7 @@ class HealthMonitor:
         self.system_metrics: List[Dict] = []
         self.max_metrics_history = 100
 
-    def record_adapter_response(
-        self, adapter_name: str, success: bool, duration: float
-    ):
+    def record_adapter_response(self, adapter_name: str, success: bool, duration: float):
         if adapter_name not in self.adapter_health:
             self.adapter_health[adapter_name] = {
                 "total_requests": 0,
@@ -78,11 +76,7 @@ class HealthMonitor:
         if not self.system_metrics:
             return True
         latest = self.system_metrics[-1]
-        return (
-            latest["cpu_percent"] < 80
-            and latest["memory_percent"] < 85
-            and latest["disk_percent"] < 90
-        )
+        return latest["cpu_percent"] < 80 and latest["memory_percent"] < 85 and latest["disk_percent"] < 90
 
 
 # Global instance for the application to use

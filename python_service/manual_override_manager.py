@@ -1,10 +1,14 @@
 # python_service/manual_override_manager.py
 import hashlib
-import time
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple
+from datetime import datetime
+from datetime import timedelta
+from typing import Dict
+from typing import List
+from typing import Optional
+from typing import Tuple
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
+from pydantic import Field
 
 
 class ManualOverrideRequest(BaseModel):
@@ -31,9 +35,7 @@ class ManualOverrideManager:
         """
         request_id = self._generate_id(adapter_name, url)
         if request_id not in self._requests or self._requests[request_id].status != "pending":
-            request = ManualOverrideRequest(
-                request_id=request_id, adapter_name=adapter_name, url=url
-            )
+            request = ManualOverrideRequest(request_id=request_id, adapter_name=adapter_name, url=url)
             self._requests[request_id] = request
         return request_id
 
@@ -70,11 +72,7 @@ class ManualOverrideManager:
     def clear_old_requests(self, max_age_hours: int = 24):
         """Removes requests and associated data older than a specified age."""
         cutoff = datetime.now() - timedelta(hours=max_age_hours)
-        old_request_ids = [
-            req_id
-            for req_id, req in self._requests.items()
-            if req.timestamp < cutoff
-        ]
+        old_request_ids = [req_id for req_id, req in self._requests.items() if req.timestamp < cutoff]
         for req_id in old_request_ids:
             self._requests.pop(req_id, None)
             self._data.pop(req_id, None)
