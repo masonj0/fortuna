@@ -649,7 +649,7 @@ def run(playwright):
         print("[E2E] Page loaded successfully")
         page.screenshot(path="e2e-screenshot.png", full_page=True)
 
-                      print("[E2E] ✅ E2E TEST PASSED")
+        print("[E2E] ✅ E2E TEST PASSED")
     except Exception as e:
         print(f"[E2E] ❌ E2E TEST FAILED: {e}", file=sys.stderr)
         page.screenshot(path="e2e-screenshot-failed.png", full_page=True)
