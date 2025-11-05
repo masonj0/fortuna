@@ -64,7 +64,7 @@ psycopg2-binary==2.9.11
 pyarrow==21.0.0
 pycparser==2.23
 pydantic==2.5.0
-pydantic-settings==2.1.0
+pydantic-settings==2.11.0
 pydantic_core==2.14.1
 pydeck==0.9.1
 pyee==13.0.0
