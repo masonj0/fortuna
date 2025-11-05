@@ -188,8 +188,8 @@ jobs:
           cd web_platform/frontend
 
           # Pre-build verification
-          if (-not (Test-Path "next.config.js")) {
-            throw "❌ FATAL: next.config.js missing"
+          if (-not (Test-Path "next.config.mjs")) {
+            throw "❌ FATAL: next.config.mjs missing"
           }
 
           npm run build 2>&1 | Tee-Object -FilePath ../../logs/frontend-build.log
