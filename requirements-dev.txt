@@ -95,7 +95,7 @@ soupsieve==2.8
 SQLAlchemy==2.0.44
 starlette==0.27.0
 streamlit==1.50.0
-structlog==23.2.0
+structlog==25.5.0
 tabula-py==2.10.0
 tenacity==8.2.3
 toml==0.10.2

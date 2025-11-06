@@ -23,7 +23,7 @@ python-dateutil
 pandas
 
 # --- Logging & Configuration ---
-structlog==23.2.0
+structlog==25.5.0
 python-dotenv==1.0.0
 
 # --- Caching ---

@@ -10,7 +10,7 @@ pydantic==2.5.2
 pydantic-settings==2.1.0
 httpx[http2]==0.27.0
 slowapi==0.1.9
-structlog==24.1.0
+structlog==25.5.0
 python-dotenv==1.0.0
 
 # --- Data Processing & Utilities ---
