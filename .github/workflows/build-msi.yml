@@ -286,7 +286,7 @@ jobs:
             throw "❌ FATAL: requirements.txt not found"
           }
 
-          pip install --upgrade pip wheel setuptools 2>&1 | Tee-Object -FilePath logs/pip-upgrade.log
+          pip install --upgrade pip wheel "setuptools<81" 2>&1 | Tee-Object -FilePath logs/pip-upgrade.log
 
           $maxRetries = 3
           $retryDelay = 10
@@ -353,7 +353,7 @@ jobs:
               "datas = [('__ADAPTERS_PATH__', 'adapters')]",
               "hiddenimports = []",
               "binaries = []",
-              "for pkg in ['uvicorn', 'fastapi', 'pydantic', 'pydantic_core', 'httpx', 'certifi', 'bs4', 'pandas', 'aiosqlite']:",
+              "for pkg in ['uvicorn', 'fastapi', 'pydantic', 'pydantic_core', 'httpx', 'certifi', 'bs4', 'pandas', 'aiosqlite', 'keyring', 'structlog']:",
               "    tmp_datas, tmp_binaries, tmp_hiddenimports = collect_all(pkg)",
               "    datas += tmp_datas",
               "    binaries += tmp_binaries",
@@ -368,7 +368,8 @@ jobs:
               "    'pydantic.deprecated', 'email.mime.multipart', 'email.mime.text',",
               "    '_sqlite3', 'sqlite3', 'win32api', 'win32con', 'pywintypes',",
               "    'structlog', 'pynput.keyboard._win32', 'PIL.ImageWin',",
-              "    '_ssl',",
+              "    '_ssl', 'cryptography', 'keyring', 'keyring.backends.windows',",
+              "    'dateutil', 'lxml', 'html5lib',",
               "]",
               "datas += copy_metadata('psutil')",
               "datas += copy_metadata('pywin32')",
@@ -401,6 +402,20 @@ jobs:
             Get-Content logs/pyinstaller.log | Select-Object -Last 100 | Write-Host
             throw "PyInstaller build failed"
           }
+
+      - name: Backend - PyInstaller Output Inspection
+        shell: pwsh
+        run: |
+          Write-Host "`n=== BACKEND: PyInstaller Output Inspection ===" -ForegroundColor Cyan
+          $outputDir = "electron/resources/fortuna-backend"
+          $fileCount = @(Get-ChildItem -Path $outputDir -Recurse -File).Count
+          Write-Host "✅ Total files/directories in '$outputDir': $fileCount" -ForegroundColor Green
+          Write-Host "---"
+          Get-ChildItem -Path $outputDir -Recurse | ForEach-Object {
+            $indent = "  " * ($_.FullName.Split('\').Length - $outputDir.Split('\').Length)
+            Write-Host "$($indent)$($_.Name)"
+          }
+          Write-Host "---"
 
       - name: Backend - Verify Executable
         shell: pwsh
@@ -996,11 +1011,18 @@ jobs:
           Write-Host "`n" -ForegroundColor Magenta
 
       # ===== ARTIFACT UPLOAD =====
+      - name: Sanitize Ref Name
+        id: sanitize
+        shell: pwsh
+        run: |
+          $ref = "${{ github.ref_name }}" -replace '/', '-'
+          "ref_name=$ref" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
       - name: Upload MSI Artifact
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: fortuna-installer-${{ github.ref_name }}
+          name: fortuna-installer-${{ steps.sanitize.outputs.ref_name }}
           path: electron/dist/**/*.msi
           retention-days: 30
           if-no-files-found: error
