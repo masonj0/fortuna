@@ -45,6 +45,66 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: '📚 Restore Authoritative Source from Archives'
+        shell: pwsh
+        run: |
+          Write-Host "`n=== RESTORING AUTHORITATIVE SOURCE CODE ===" -ForegroundColor Magenta
+
+          $baseUri = "https://raw.githubusercontent.com/masonj0/fortuna/main/"
+          $jsonFiles = @(
+            "FORTUNA_ALL_PART1.JSON",
+            "FORTUNA_ALL_PART2.JSON",
+            "FORTUNA_ALL_PART3.JSON",
+            "FORTUNA_ALL_PART4.JSON"
+          )
+
+          $allFiles = [ordered]@{}
+
+          foreach ($file in $jsonFiles) {
+            $uri = $baseUri + $file
+            Write-Host "  → Downloading archive: $file" -ForegroundColor Cyan
+            try {
+              $jsonContent = Invoke-WebRequest -Uri $uri -UseBasicParsing -ErrorAction Stop
+              $fileData = $jsonContent.Content | ConvertFrom-Json
+
+              foreach ($property in $fileData.PSObject.Properties) {
+                $allFiles[$property.Name] = $property.Value
+              }
+              Write-Host "    ✓ Merged $($fileData.PSObject.Properties.Count) files" -ForegroundColor Green
+            } catch {
+              Write-Host "❌ FAILED to download or parse $uri" -ForegroundColor Red
+              Write-Host $_.Exception.Message
+              throw "Failed to retrieve authoritative source files."
+            }
+          }
+
+          Write-Host "`nTotal files to restore: $($allFiles.Count)" -ForegroundColor Yellow
+
+          foreach ($filePath in $allFiles.Keys) {
+            $content = $allFiles[$filePath]
+            $fullPath = Join-Path -Path $env:GITHUB_WORKSPACE -ChildPath $filePath
+
+            $directory = [System.IO.Path]::GetDirectoryName($fullPath)
+            if (-not (Test-Path $directory)) {
+              New-Item -ItemType Directory -Path $directory -Force | Out-Null
+            }
+
+            try {
+              [System.IO.File]::WriteAllText($fullPath, $content, [System.Text.Encoding]::UTF8)
+            } catch {
+              Write-Host "❌ FAILED to write file: $fullPath" -ForegroundColor Red
+              Write-Host $_.Exception.Message
+              throw "Failed to write restored file."
+            }
+          }
+
+          Write-Host "✅ Authoritative source code restored successfully." -ForegroundColor Green
+          if (-not (Test-Path "python_service/main.py")) {
+              throw "❌ FATAL: Sanity check failed. python_service/main.py still missing after restore."
+          } else {
+              Write-Host "  ✓ Sanity check passed: python_service/main.py is present." -ForegroundColor Green
+          }
+
       # ===== SYSTEM VERIFICATION =====
       - name: 🔍 System Health Check
         shell: pwsh
