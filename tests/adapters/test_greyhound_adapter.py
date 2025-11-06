@@ -1,14 +1,18 @@
-import pytest
+from datetime import date
+from datetime import datetime
 from unittest.mock import AsyncMock
-from datetime import date, datetime
+
+import pytest
+
 from python_service.adapters.greyhound_adapter import GreyhoundAdapter
-from python_service.config import Settings
 from tests.conftest import get_test_settings
+
 
 @pytest.fixture
 def test_settings():
     """Provides a valid Settings object for testing."""
     return get_test_settings()
+
 
 @pytest.mark.asyncio
 async def test_get_races_parses_correctly(test_settings):
@@ -17,7 +21,7 @@ async def test_get_races_parses_correctly(test_settings):
     """
     # ARRANGE
     adapter = GreyhoundAdapter(config=test_settings)
-    today = date.today().strftime('%Y-%m-%d')
+    today = date.today().strftime("%Y-%m-%d")
 
     mock_api_response = {
         "cards": [
@@ -46,14 +50,15 @@ async def test_get_races_parses_correctly(test_settings):
     # ASSERT
     assert len(races) == 1
     race = races[0]
-    assert race.id == 'greyhound_test_race_123'
-    assert race.venue == 'Test Track'
+    assert race.id == "greyhound_test_race_123"
+    assert race.venue == "Test Track"
     assert len(race.runners) == 2  # One was scratched
 
     runner1 = race.runners[0]
-    assert runner1.name == 'Rapid Rover'
+    assert runner1.name == "Rapid Rover"
     assert runner1.number == 1
-    assert runner1.odds['Greyhound Racing'].win == 2.5
+    assert runner1.odds["Greyhound Racing"].win == 2.5
+
 
 @pytest.mark.asyncio
 async def test_get_races_handles_empty_response(test_settings):
@@ -62,7 +67,7 @@ async def test_get_races_handles_empty_response(test_settings):
     """
     # ARRANGE
     adapter = GreyhoundAdapter(config=test_settings)
-    today = date.today().strftime('%Y-%m-%d')
+    today = date.today().strftime("%Y-%m-%d")
     adapter._fetch_data = AsyncMock(return_value={"cards": []})
 
     # ACT
@@ -71,6 +76,7 @@ async def test_get_races_handles_empty_response(test_settings):
     # ASSERT
     assert races == []
 
+
 @pytest.mark.asyncio
 async def test_get_races_handles_fetch_failure(test_settings):
     """
@@ -78,7 +84,7 @@ async def test_get_races_handles_fetch_failure(test_settings):
     """
     # ARRANGE
     adapter = GreyhoundAdapter(config=test_settings)
-    today = date.today().strftime('%Y-%m-%d')
+    today = date.today().strftime("%Y-%m-%d")
     adapter._fetch_data = AsyncMock(return_value=None)
 
     # ACT

@@ -1,6 +1,7 @@
 # python_service/db/init.py
-import sqlite3
 import os
+import sqlite3
+
 from ..config import get_settings
 
 

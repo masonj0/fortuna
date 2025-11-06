@@ -1,7 +1,8 @@
 # configure_startup.py
-import winreg
 import sys
+import winreg
 from pathlib import Path
+
 
 class StartupManager:
     """Manage Windows startup registry entries for the current user."""
@@ -39,10 +40,14 @@ class StartupManager:
         except FileNotFoundError:
             print("Already disabled.")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     if len(sys.argv) > 1:
-        if sys.argv[1] == 'enable': StartupManager.enable()
-        elif sys.argv[1] == 'disable': StartupManager.disable()
-        elif sys.argv[1] == 'status': print(f"Startup is currently {'enabled' if StartupManager.is_enabled() else 'disabled'}")
+        if sys.argv[1] == "enable":
+            StartupManager.enable()
+        elif sys.argv[1] == "disable":
+            StartupManager.disable()
+        elif sys.argv[1] == "status":
+            print(f"Startup is currently {'enabled' if StartupManager.is_enabled() else 'disabled'}")
     else:
         print("Usage: python configure_startup.py [enable|disable|status]")

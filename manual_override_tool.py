@@ -1,5 +1,6 @@
 import argparse
 
+
 def main():
     parser = argparse.ArgumentParser(description="Manual Override Tool for Checkmate Data Warehouse.")
     parser.add_argument("--file", required=True, help="Path to the CSV file for ingestion.")
@@ -22,6 +23,7 @@ def main():
     # race_df.to_sql('historical_races', engine, if_exists='append', index=False)
 
     print("Manual override completed successfully.")
+
 
 if __name__ == "__main__":
     main()

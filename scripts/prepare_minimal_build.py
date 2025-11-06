@@ -16,6 +16,7 @@ ADAPTERS_TO_KEEP = [
     "racing_post_adapter.py",
 ]
 
+
 def main():
     """
     Removes non-essential adapter files from the python_service/adapters
@@ -45,6 +46,7 @@ def main():
                 exit(1)
 
     print(f"\nMinimal build preparation complete. Removed {removed_count} non-essential adapter(s).")
+
 
 if __name__ == "__main__":
     main()
