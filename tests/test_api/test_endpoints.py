@@ -1,7 +1,9 @@
 from fastapi.testclient import TestClient
+
 from python_service.api import app
 
 client = TestClient(app)
+
 
 def test_health_check():
     """Tests the unauthenticated /health endpoint."""

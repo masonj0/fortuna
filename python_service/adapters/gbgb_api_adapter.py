@@ -1,9 +1,14 @@
 # python_service/adapters/gbgb_api_adapter.py
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Optional
 
-from ..models import OddsData, Race, Runner
+from ..models import OddsData
+from ..models import Race
+from ..models import Runner
 from ..utils.odds import parse_odds_to_decimal
 from .base_v3 import BaseAdapterV3
 
@@ -17,9 +22,7 @@ class GbgbApiAdapter(BaseAdapterV3):
     BASE_URL = "https://api.gbgb.org.uk/api/"
 
     def __init__(self, config=None):
-        super().__init__(
-            source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
-        )
+        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
 
     async def _fetch_data(self, date: str) -> Optional[List[Dict[str, Any]]]:
         """Fetches the raw meeting data from the GBGB API."""

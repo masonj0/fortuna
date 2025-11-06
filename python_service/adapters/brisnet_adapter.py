@@ -1,10 +1,14 @@
 # python_service/adapters/brisnet_adapter.py
 from datetime import datetime
-from typing import Any, List, Optional
-from bs4 import BeautifulSoup, Tag
+from typing import List
+from typing import Optional
+
+from bs4 import BeautifulSoup
 from dateutil.parser import parse
 
-from ..models import OddsData, Race, Runner
+from ..models import OddsData
+from ..models import Race
+from ..models import Runner
 from ..utils.odds import parse_odds_to_decimal
 from ..utils.text import normalize_venue_name
 from .base_v3 import BaseAdapterV3
@@ -19,9 +23,7 @@ class BrisnetAdapter(BaseAdapterV3):
     BASE_URL = "https://www.brisnet.com"
 
     def __init__(self, config=None):
-        super().__init__(
-            source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
-        )
+        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
 
     async def _fetch_data(self, date: str) -> Optional[dict]:
         """Fetches the raw HTML from the Brisnet race page."""
@@ -105,9 +107,7 @@ class BrisnetAdapter(BaseAdapterV3):
                 )
                 races.append(race)
             except (ValueError, IndexError, TypeError):
-                self.logger.warning(
-                    "Failed to parse a race on Brisnet, skipping.", exc_info=True
-                )
+                self.logger.warning("Failed to parse a race on Brisnet, skipping.", exc_info=True)
                 continue
 
         return races

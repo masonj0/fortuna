@@ -1,13 +1,15 @@
 # windows_service.py
-import win32serviceutil
-import win32service
-import win32event
-import servicemanager
-import socket
-import sys
 import os
+import socket
 import subprocess
+import sys
 from pathlib import Path
+
+import servicemanager
+import win32event
+import win32service
+import win32serviceutil
+
 
 class FortunaBackendService(win32serviceutil.ServiceFramework):
     _svc_name_ = "FortunaFaucetBackend"
@@ -27,7 +29,9 @@ class FortunaBackendService(win32serviceutil.ServiceFramework):
             self.backend_process.terminate()
 
     def SvcDoRun(self):
-        servicemanager.LogMsg(servicemanager.EVENTLOG_INFORMATION_TYPE, servicemanager.PYS_SERVICE_STARTED, (self._svc_name_, ''))
+        servicemanager.LogMsg(
+            servicemanager.EVENTLOG_INFORMATION_TYPE, servicemanager.PYS_SERVICE_STARTED, (self._svc_name_, "")
+        )
         self.main()
 
     def main(self):
@@ -40,19 +44,20 @@ class FortunaBackendService(win32serviceutil.ServiceFramework):
         if env_file.exists():
             with open(env_file) as f:
                 for line in f:
-                    if '=' in line and not line.startswith('#'):
-                        key, value = line.strip().split('=', 1)
-                        env[key] = value.strip('\"')
+                    if "=" in line and not line.startswith("#"):
+                        key, value = line.strip().split("=", 1)
+                        env[key] = value.strip('"')
 
         self.backend_process = subprocess.Popen(
             [str(venv_python), "-m", "uvicorn", "api:app", "--host", "127.0.0.1", "--port", "8000"],
             cwd=str(api_module_dir),
-            env=env
+            env=env,
         )
 
         win32event.WaitForSingleObject(self.stop_event, win32event.INFINITE)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     if len(sys.argv) == 1:
         servicemanager.Initialize()
         servicemanager.PrepareToHostSingle(FortunaBackendService)

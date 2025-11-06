@@ -14,8 +14,6 @@ def is_port_available(port=8000):
 
 if __name__ == "__main__":
     if not is_port_available(8000):
-        print(
-            "ERROR: Port 8000 already in use. Kill existing process or use different port."
-        )
+        print("ERROR: Port 8000 already in use. Kill existing process or use different port.")
         sys.exit(1)
     print("Port 8000 available ✓")

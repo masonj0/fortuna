@@ -1,12 +1,16 @@
 # python_service/adapters/greyhound_adapter.py
 from datetime import datetime
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import Any
+from typing import Dict
+from typing import List
 
 from pydantic import ValidationError
 
 from ..core.exceptions import AdapterConfigError
-from ..models import OddsData, Race, Runner
+from ..models import OddsData
+from ..models import Race
+from ..models import Runner
 from .base_v3 import BaseAdapterV3
 
 
@@ -20,9 +24,7 @@ class GreyhoundAdapter(BaseAdapterV3):
 
     def __init__(self, config=None):
         if not hasattr(config, "GREYHOUND_API_URL") or not config.GREYHOUND_API_URL:
-            raise AdapterConfigError(
-                self.SOURCE_NAME, "GREYHOUND_API_URL is not configured."
-            )
+            raise AdapterConfigError(self.SOURCE_NAME, "GREYHOUND_API_URL is not configured.")
         super().__init__(
             source_name=self.SOURCE_NAME,
             base_url=config.GREYHOUND_API_URL,
@@ -106,8 +108,6 @@ class GreyhoundAdapter(BaseAdapterV3):
                     )
                 )
             except (KeyError, ValidationError):
-                self.logger.warning(
-                    "Error parsing greyhound runner, skipping.", runner_data=runner_data
-                )
+                self.logger.warning("Error parsing greyhound runner, skipping.", runner_data=runner_data)
                 continue
         return runners
