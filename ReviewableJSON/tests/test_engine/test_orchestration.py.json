@@ -1,4 +1,4 @@
 {
     "file_path": "tests/test_engine/test_orchestration.py",
-    "content": "from python_service.engine import OddsEngine\n\ndef test_engine_instantiation():\n    \"\"\"Tests that the core OddsEngine can be instantiated without errors.\"\"\"\n    try:\n        engine = OddsEngine()\n        assert engine is not None\n        assert isinstance(engine, OddsEngine)\n    except Exception as e:\n        assert False, f\"OddsEngine instantiation failed with an exception: {e}\"\n"
+    "content": "from python_service.engine import OddsEngine\n\n\ndef test_engine_instantiation():\n    \"\"\"Tests that the core OddsEngine can be instantiated without errors.\"\"\"\n    try:\n        engine = OddsEngine()\n        assert engine is not None\n        assert isinstance(engine, OddsEngine)\n    except Exception as e:\n        assert False, f\"OddsEngine instantiation failed with an exception: {e}\"\n"
 }
