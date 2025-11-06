@@ -21,7 +21,9 @@ class PointsBetGreyhoundAdapter(BaseAdapterV3):
     BASE_URL = "https://api.pointsbet.com/api/v2/"
 
     def __init__(self, config=None):
-        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
+        super().__init__(
+            source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
+        )
 
     async def _fetch_data(self, date: str) -> Optional[List[Dict[str, Any]]]:
         """Fetches all greyhound events for a given date."""

@@ -26,7 +26,9 @@ class TimeformAdapter(BaseAdapterV3):
     BASE_URL = "https://www.timeform.com"
 
     def __init__(self, config=None):
-        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
+        super().__init__(
+            source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
+        )
 
     async def _fetch_data(self, date: str) -> Optional[dict]:
         """
@@ -80,10 +82,19 @@ class TimeformAdapter(BaseAdapterV3):
                     continue
                 race_time_str = clean_text(race_time_node.get_text())
 
-                start_time = datetime.combine(race_date, datetime.strptime(race_time_str, "%H:%M").time())
+                start_time = datetime.combine(
+                    race_date, datetime.strptime(race_time_str, "%H:%M").time()
+                )
 
-                all_times = [clean_text(a.get_text()) for a in soup.select("a.rp-racecard-off-link")]
-                race_number = all_times.index(race_time_str) + 1 if race_time_str in all_times else 1
+                all_times = [
+                    clean_text(a.get_text())
+                    for a in soup.select("a.rp-racecard-off-link")
+                ]
+                race_number = (
+                    all_times.index(race_time_str) + 1
+                    if race_time_str in all_times
+                    else 1
+                )
 
                 runner_rows = soup.select("div.rp-horseTable_mainRow")
                 if not runner_rows:
@@ -100,7 +111,9 @@ class TimeformAdapter(BaseAdapterV3):
                 )
                 all_races.append(race)
             except (AttributeError, ValueError, TypeError):
-                self.logger.warning("Error parsing a race from Timeform, skipping race.", exc_info=True)
+                self.logger.warning(
+                    "Error parsing a race from Timeform, skipping race.", exc_info=True
+                )
                 continue
         return all_races
 
@@ -133,5 +146,7 @@ class TimeformAdapter(BaseAdapterV3):
 
             return Runner(number=number, name=name, odds=odds_data)
         except (AttributeError, ValueError, TypeError):
-            self.logger.warning("Failed to parse a runner from Timeform, skipping runner.")
+            self.logger.warning(
+                "Failed to parse a runner from Timeform, skipping runner."
+            )
             return None

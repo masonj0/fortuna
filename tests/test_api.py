@@ -53,7 +53,8 @@ async def test_get_tipsheet_endpoint_success(tmp_path, client):
 
     with patch("python_service.api.DB_PATH", db_path):
         async with aiosqlite.connect(db_path) as db:
-            await db.execute("""
+            await db.execute(
+                """
                 CREATE TABLE tipsheet (
                     race_id TEXT PRIMARY KEY,
                     track_name TEXT,
@@ -62,7 +63,8 @@ async def test_get_tipsheet_endpoint_success(tmp_path, client):
                     score REAL,
                     factors TEXT
                 )
-            """)
+            """
+            )
             await db.execute(
                 "INSERT INTO tipsheet VALUES (?, ?, ?, ?, ?, ?)",
                 ("test_race_1", "Test Park", 1, post_time.isoformat(), 85.5, "{}"),
@@ -92,7 +94,9 @@ def test_health_check_unauthenticated(client):
 
 def test_api_key_authentication_failure(client):
     """Ensures that endpoints are protected and fail with an invalid API key."""
-    response = client.get("/api/races/qualified/trifecta", headers={"X-API-KEY": "invalid_key"})
+    response = client.get(
+        "/api/races/qualified/trifecta", headers={"X-API-KEY": "invalid_key"}
+    )
     assert response.status_code == 403
     assert "Invalid or missing API Key" in response.json()["detail"]
 

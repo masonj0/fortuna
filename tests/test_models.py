@@ -15,7 +15,11 @@ def test_runner_model_creation():
 
     from python_service.models import OddsData
 
-    odds_data = {"TestOdds": OddsData(win=Decimal("6.0"), source="TestOdds", last_updated=datetime.now())}
+    odds_data = {
+        "TestOdds": OddsData(
+            win=Decimal("6.0"), source="TestOdds", last_updated=datetime.now()
+        )
+    }
     runner = Runner(number=5, name="Test Horse", odds=odds_data, scratched=False)
     assert runner.number == 5
     assert runner.name == "Test Horse"
@@ -29,8 +33,16 @@ def test_race_model_with_valid_runners():
 
     from python_service.models import OddsData
 
-    odds1 = {"TestOdds": OddsData(win=Decimal("3.0"), source="TestOdds", last_updated=datetime.now())}
-    odds2 = {"TestOdds": OddsData(win=Decimal("4.0"), source="TestOdds", last_updated=datetime.now())}
+    odds1 = {
+        "TestOdds": OddsData(
+            win=Decimal("3.0"), source="TestOdds", last_updated=datetime.now()
+        )
+    }
+    odds2 = {
+        "TestOdds": OddsData(
+            win=Decimal("4.0"), source="TestOdds", last_updated=datetime.now()
+        )
+    }
     runner1 = Runner(number=1, name="A", odds=odds1, scratched=False)
     runner2 = Runner(number=2, name="B", odds=odds2, scratched=False)
     race = Race(
@@ -53,4 +65,10 @@ def test_model_validation_fails_on_missing_required_field():
 
     with pytest.raises(ValidationError):
         # 'venue' is a required field for a Race
-        Race(id="test-race-2", race_number=2, start_time=datetime.datetime.now(), runners=[], source="test")
+        Race(
+            id="test-race-2",
+            race_number=2,
+            start_time=datetime.datetime.now(),
+            runners=[],
+            source="test",
+        )

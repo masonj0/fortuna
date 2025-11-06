@@ -23,7 +23,9 @@ class OddscheckerAdapter(BaseAdapterV3):
     BASE_URL = "https://www.oddschecker.com"
 
     def __init__(self, config=None):
-        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
+        super().__init__(
+            source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
+        )
 
     async def _fetch_data(self, date: str) -> Optional[dict]:
         """
@@ -101,8 +103,14 @@ class OddscheckerAdapter(BaseAdapterV3):
             except ValueError:
                 pass  # Keep default race number if active link not in all links
 
-        start_time = datetime.combine(race_date, datetime.strptime(race_time_str, "%H:%M").time())
-        runners = [runner for row in soup.select("tr.race-card-row") if (runner := self._parse_runner_row(row))]
+        start_time = datetime.combine(
+            race_date, datetime.strptime(race_time_str, "%H:%M").time()
+        )
+        runners = [
+            runner
+            for row in soup.select("tr.race-card-row")
+            if (runner := self._parse_runner_row(row))
+        ]
 
         if not runners:
             return None
@@ -145,5 +153,7 @@ class OddscheckerAdapter(BaseAdapterV3):
 
             return Runner(number=number, name=name, odds=odds_dict)
         except (AttributeError, ValueError):
-            self.logger.warning("Failed to parse a runner on Oddschecker, skipping runner.")
+            self.logger.warning(
+                "Failed to parse a runner on Oddschecker, skipping runner."
+            )
             return None

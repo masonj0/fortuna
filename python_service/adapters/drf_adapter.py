@@ -23,13 +23,19 @@ class DRFAdapter(BaseAdapterV3):
     BASE_URL = "https://www.drf.com"
 
     def __init__(self, config=None):
-        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
+        super().__init__(
+            source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
+        )
 
     async def _fetch_data(self, date: str) -> Optional[dict]:
         """Fetches the raw HTML from the DRF entries page."""
         url = f"/entries/{date}/USA"
         response = await self.make_request(self.http_client, "GET", url)
-        return {"html": response.text, "date": date} if response and response.text else None
+        return (
+            {"html": response.text, "date": date}
+            if response and response.text
+            else None
+        )
 
     def _parse_races(self, raw_data: Optional[dict]) -> List[Race]:
         """Parses the raw HTML into a list of Race objects."""
@@ -46,7 +52,9 @@ class DRFAdapter(BaseAdapterV3):
             return []
 
         venue_text = venue_node.text
-        venue = normalize_venue_name(venue_text.split(" - ")[0].replace("Entries for ", ""))
+        venue = normalize_venue_name(
+            venue_text.split(" - ")[0].replace("Entries for ", "")
+        )
 
         races = []
         for race_entry in soup.select("div.race-entries"):
@@ -105,6 +113,8 @@ class DRFAdapter(BaseAdapterV3):
                 )
                 races.append(race)
             except (ValueError, KeyError, TypeError):
-                self.logger.warning("Failed to parse a race on DRF, skipping.", exc_info=True)
+                self.logger.warning(
+                    "Failed to parse a race on DRF, skipping.", exc_info=True
+                )
                 continue
         return races

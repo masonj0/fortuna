@@ -41,7 +41,10 @@ def client():
     original_get_settings = app.dependency_overrides.get(get_settings)
     app.dependency_overrides[get_settings] = get_test_settings
 
-    with patch("python_service.credentials_manager.keyring.get_password", side_effect=lambda s, u: f"test_{u}"):
+    with patch(
+        "python_service.credentials_manager.keyring.get_password",
+        side_effect=lambda s, u: f"test_{u}",
+    ):
         with TestClient(app) as c:
             yield c
 

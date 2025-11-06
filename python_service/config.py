@@ -68,7 +68,9 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
 
     # --- Optional Adapter Keys ---
-    NEXT_PUBLIC_API_KEY: Optional[str] = None  # Allow frontend key to be present in .env
+    NEXT_PUBLIC_API_KEY: Optional[
+        str
+    ] = None  # Allow frontend key to be present in .env
     TVG_API_KEY: Optional[str] = None
     RACING_AND_SPORTS_TOKEN: Optional[str] = None
     POINTSBET_API_KEY: Optional[str] = None
@@ -90,7 +92,9 @@ class Settings(BaseSettings):
         """
         # 1. Fallback for API_KEY
         if not self.API_KEY:
-            self.API_KEY = SecureCredentialsManager.get_credential("api_key") or "MISSING"
+            self.API_KEY = (
+                SecureCredentialsManager.get_credential("api_key") or "MISSING"
+            )
 
         # 2. Security validation for API_KEY
         insecure_keys = {"test", "changeme", "default", "secret", "password", "admin"}

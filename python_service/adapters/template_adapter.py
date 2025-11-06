@@ -16,7 +16,9 @@ class TemplateAdapter(BaseAdapterV3):
     BASE_URL = "https://api.example.com"
 
     def __init__(self, config=None):
-        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
+        super().__init__(
+            source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
+        )
         # self.api_key = config.EXAMPLE_API_KEY # Uncomment if needed
 
     async def _fetch_data(self, date: str) -> Any:

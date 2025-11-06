@@ -30,7 +30,9 @@ class FortunaBackendService(win32serviceutil.ServiceFramework):
 
     def SvcDoRun(self):
         servicemanager.LogMsg(
-            servicemanager.EVENTLOG_INFORMATION_TYPE, servicemanager.PYS_SERVICE_STARTED, (self._svc_name_, "")
+            servicemanager.EVENTLOG_INFORMATION_TYPE,
+            servicemanager.PYS_SERVICE_STARTED,
+            (self._svc_name_, ""),
         )
         self.main()
 
@@ -49,7 +51,16 @@ class FortunaBackendService(win32serviceutil.ServiceFramework):
                         env[key] = value.strip('"')
 
         self.backend_process = subprocess.Popen(
-            [str(venv_python), "-m", "uvicorn", "api:app", "--host", "127.0.0.1", "--port", "8000"],
+            [
+                str(venv_python),
+                "-m",
+                "uvicorn",
+                "api:app",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "8000",
+            ],
             cwd=str(api_module_dir),
             env=env,
         )

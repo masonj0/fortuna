@@ -23,7 +23,9 @@ class BrisnetAdapter(BaseAdapterV3):
     BASE_URL = "https://www.brisnet.com"
 
     def __init__(self, config=None):
-        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
+        super().__init__(
+            source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
+        )
 
     async def _fetch_data(self, date: str) -> Optional[dict]:
         """Fetches the raw HTML from the Brisnet race page."""
@@ -32,7 +34,11 @@ class BrisnetAdapter(BaseAdapterV3):
         # For now, it is hardcoded to Churchill Downs as a placeholder.
         url = f"/race/{date}/CD"
         response = await self.make_request(self.http_client, "GET", url)
-        return {"html": response.text, "date": date} if response and response.text else None
+        return (
+            {"html": response.text, "date": date}
+            if response and response.text
+            else None
+        )
 
     def _parse_races(self, raw_data: Optional[dict]) -> List[Race]:
         """Parses the raw HTML into a list of Race objects."""
@@ -107,7 +113,9 @@ class BrisnetAdapter(BaseAdapterV3):
                 )
                 races.append(race)
             except (ValueError, IndexError, TypeError):
-                self.logger.warning("Failed to parse a race on Brisnet, skipping.", exc_info=True)
+                self.logger.warning(
+                    "Failed to parse a race on Brisnet, skipping.", exc_info=True
+                )
                 continue
 
         return races

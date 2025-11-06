@@ -31,7 +31,9 @@ class DatabaseHandler:
             # Correctly resolve paths from the service's location
             base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
             schema_path = os.path.join(base_dir, "shared_database", "schema.sql")
-            web_schema_path = os.path.join(base_dir, "shared_database", "web_schema.sql")
+            web_schema_path = os.path.join(
+                base_dir, "shared_database", "web_schema.sql"
+            )
 
             # Read both schema files
             with open(schema_path, "r") as f:
@@ -45,7 +47,9 @@ class DatabaseHandler:
                 cursor.executescript(schema)
                 cursor.executescript(web_schema)
                 conn.commit()
-            self.logger.info("CRITICAL SUCCESS: All database schemas (base + web) applied successfully.")
+            self.logger.info(
+                "CRITICAL SUCCESS: All database schemas (base + web) applied successfully."
+            )
         except Exception as e:
             self.logger.critical(
                 f"FATAL: Database setup failed. Other platforms will fail. Error: {e}",
@@ -103,7 +107,9 @@ class DatabaseHandler:
                 )
 
             conn.commit()
-        self.logger.info(f"Database updated with {len(races)} races and {len(statuses)} adapter statuses.")
+        self.logger.info(
+            f"Database updated with {len(races)} races and {len(statuses)} adapter statuses."
+        )
 
 
 class FortunaBackgroundService:
@@ -116,7 +122,9 @@ class FortunaBackgroundService:
 
         db_path = os.getenv("FORTUNA_DB_PATH")
         if not db_path:
-            self.logger.critical("FATAL: FORTUNA_DB_PATH environment variable not set. Service cannot start.")
+            self.logger.critical(
+                "FATAL: FORTUNA_DB_PATH environment variable not set. Service cannot start."
+            )
             raise ValueError("FORTUNA_DB_PATH is not configured.")
 
         self.logger.info(f"Database path loaded from environment: {db_path}")
@@ -158,14 +166,18 @@ class FortunaBackgroundService:
                     race.trifecta_factors_json = json.dumps(res.get("trifecta_factors"))
             return races
         except FileNotFoundError:
-            self.logger.warning("Rust engine not found. Falling back to Python analyzer.")
+            self.logger.warning(
+                "Rust engine not found. Falling back to Python analyzer."
+            )
             return None
         except (
             subprocess.CalledProcessError,
             json.JSONDecodeError,
             subprocess.TimeoutExpired,
         ) as e:
-            self.logger.error(f"Rust engine execution failed: {e}. Falling back to Python analyzer.")
+            self.logger.error(
+                f"Rust engine execution failed: {e}. Falling back to Python analyzer."
+            )
             return None
 
     def _analyze_with_python(self, races: List[Race]) -> List[Race]:
@@ -191,9 +203,13 @@ class FortunaBackgroundService:
                     self.db_handler.update_races_and_status(analyzed_races, statuses)
 
             except Exception as e:
-                self.logger.critical(f"Unhandled exception in service loop: {e}", exc_info=True)
+                self.logger.critical(
+                    f"Unhandled exception in service loop: {e}", exc_info=True
+                )
 
-            self.logger.info(f"Cycle complete. Sleeping for {interval_seconds} seconds.")
+            self.logger.info(
+                f"Cycle complete. Sleeping for {interval_seconds} seconds."
+            )
             self.stop_event.wait(interval_seconds)
         self.logger.info("Background service run loop has terminated.")
 
