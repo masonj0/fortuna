@@ -672,7 +672,7 @@ jobs:
         timeout-minutes: 10
         run: |
           Write-Host "`n=== E2E UI TEST: FORTRESS MODE ===" -ForegroundColor Magenta
-          $backendExe = "electron/resources/fortuna-backend.exe"
+          $backendExe = "electron/resources/fortuna-backend/fortuna-backend.exe"
           $frontendDir = "electron/web-ui-build/out"
           $backendPort = "8999"
           $frontendPort = "8998"
@@ -800,7 +800,7 @@ jobs:
             "package.json" = "electron/package.json"
             "electron-builder-config.yml" = "electron/electron-builder-config.yml"
             "icon.ico" = "electron/assets/icon.ico"
-            "backend.exe" = "electron/resources/fortuna-backend.exe"
+            "backend.exe" = "electron/resources/fortuna-backend/fortuna-backend.exe"
             "frontend/index.html" = "electron/web-ui-build/out/index.html"
             "frontend/_next" = "electron/web-ui-build/out/_next"
           }
