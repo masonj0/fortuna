@@ -9,51 +9,24 @@ from multiprocessing import Process
 from multiprocessing import Queue
 
 # --- Configuration ---
-MANIFEST_FILES = ["MANIFEST2.md", "MANIFEST3.md"]
+MANIFEST_FILES = [
+    "MANIFEST_PART1_BACKEND.json",
+    "MANIFEST_PART2_FRONTEND.json",
+    "MANIFEST_PART3_SUPPORT.json",
+    "MANIFEST_PART4_ROOT.json",
+]
 OUTPUT_DIR = "ReviewableJSON"
 FILE_PROCESSING_TIMEOUT = 10
 EXCLUDED_FILES = ["package-lock.json"]
 
 
-# --- ENLIGHTENED PARSING LOGIC (V2) ---
-def extract_and_normalize_path(line: str) -> str | None:
-    """
-    Extracts a file path from a line, handling multiple formats, and normalizes it.
-    Handles:
-    - Markdown links: `* [display](path)`
-    - Plain paths in backticks: ``- `path.py` - description``
-    - Plain paths with list markers: `- path/to/file.py`
-    """
-    line = line.strip()
-    if not line or line.startswith("#"):
-        return None
-
-    # 1. Check for Markdown link format
-    md_match = re.search(r"\[.*\]\((https?://[^\)]+)\)", line)
-    if md_match:
-        path = md_match.group(1)
-    else:
-        # 2. Check for paths in backticks
-        bt_match = re.search(r"`([^`]+)`", line)
-        if bt_match:
-            path = bt_match.group(1)
-        else:
-            # 3. Assume plain path, stripping list markers
-            path = re.sub(r"^[*-]\s*", "", line).split(" ")[0]
-
-    # --- Path Standardization ---
-    if not path or not ("." in path or "/" in path):
-        return None  # Not a valid path
-
-    # If it's a full raw GitHub URL, extract the local path
-    if path.startswith("https://raw.githubusercontent.com/"):
-        path = "/".join(path.split("/main/")[1:])
-
-    # Final check for valid file extensions or structure
-    if not re.search(r"(\.[a-zA-Z0-9]+$)|(^[\w/]+$)", path):
-        return None
-
-    return path.strip()
+def read_json_manifest(manifest_path: str) -> list[str]:
+    """Reads a JSON manifest file and returns a list of file paths."""
+    try:
+        with open(manifest_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, FileNotFoundError):
+        return []
 
 
 # --- SANDBOXED FILE READ (Unchanged) ---
@@ -92,20 +65,12 @@ def main():
     all_local_paths = []
     for manifest in MANIFEST_FILES:
         print(f"--> Parsing manifest: {manifest}")
-        if not os.path.exists(manifest):
-            print(f"    [WARNING] Manifest not found: {manifest}")
-            continue
-
-        with open(manifest, "r", encoding="utf-8") as f:
-            lines = f.readlines()
-
-        paths_found = 0
-        for line in lines:
-            path = extract_and_normalize_path(line)
-            if path:
-                all_local_paths.append(path)
-                paths_found += 1
-        print(f"    --> Found {paths_found} valid file paths.")
+        paths = read_json_manifest(manifest)
+        if paths:
+            all_local_paths.extend(paths)
+            print(f"    --> Found {len(paths)} valid file paths.")
+        else:
+            print(f"    [WARNING] Manifest not found or is empty: {manifest}")
 
     if not all_local_paths:
         print("\n[FATAL] No valid file paths found in any manifest. Aborting.")

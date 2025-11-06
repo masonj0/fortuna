@@ -35,7 +35,6 @@ EXCLUDE_FILES = {
     "FORTUNA_ALL_PART4.JSON",
     "generate_manifests.py",
     ".env",
-    ".env.example",
     ".env.local.example",
     "env",
     "api.spec",

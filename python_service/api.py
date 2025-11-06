@@ -7,6 +7,9 @@ from datetime import timedelta
 from typing import List
 from typing import Optional
 
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+
 import aiosqlite
 import structlog
 from fastapi import Depends
@@ -49,6 +52,45 @@ from .security import verify_api_key
 
 log = structlog.get_logger()
 
+# Create a fixed thread pool for blocking calls at the module level
+executor = ThreadPoolExecutor(max_workers=1)
+
+
+def _initialize_heavy_resources_sync(app: FastAPI):
+    """
+    This synchronous function contains the blocking I/O and CPU-intensive
+    initialization of the OddsEngine and its ~25 adapters. By isolating it,
+    we can run it in a background thread without stalling the main Uvicorn event loop.
+    """
+    log.info("Background initialization of heavy resources started.")
+    try:
+        settings = get_settings()
+
+        # Initialize WebSocket connection manager
+        connection_manager = ConnectionManager()
+
+        # Initialize manual override manager
+        manual_override_manager = ManualOverrideManager()
+
+        # Initialize engine with manual override and WebSocket support
+        engine = OddsEngine(
+            config=settings,
+            manual_override_manager=manual_override_manager,
+            connection_manager=connection_manager,
+        )
+
+        # Store the initialized components on the app state
+        app.state.engine = engine
+        app.state.analyzer_engine = AnalyzerEngine()
+        app.state.manual_override_manager = manual_override_manager
+        app.state.connection_manager = connection_manager
+        log.info("Background initialization of heavy resources completed successfully.")
+    except Exception:
+        log.critical("CRITICAL: Background initialization failed.", exc_info=True)
+        # In a real-world scenario, you might want a more robust way
+        # to signal this failure to the main application.
+        app.state.engine = None
+
 
 class ConnectionManager:
     """Manages active WebSocket connections."""
@@ -86,46 +128,30 @@ class ConnectionManager:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     configure_logging()
-    log.info("Server startup sequence initiated.")
-    try:
-        settings = get_settings()
+    log.info("Uvicorn is online, starting lifespan hook.")
 
-        # Asynchronously connect to Redis
-        await cache_manager.connect(settings.REDIS_URL)
+    # 1. Perform lightweight, non-blocking startup tasks
+    settings = get_settings()
+    await cache_manager.connect(settings.REDIS_URL)
+    log.info("Fast, non-blocking startup tasks complete (Redis connected).")
 
-        # Initialize WebSocket connection manager
-        connection_manager = ConnectionManager()
+    # 2. Schedule the heavy, synchronous initialization to run in a background thread
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(executor, _initialize_heavy_resources_sync, app)
+    log.info("Heavy resource initialization has been scheduled in a background thread.")
 
-        # Initialize manual override manager
-        manual_override_manager = ManualOverrideManager()
-
-        # Initialize engine with manual override and WebSocket support
-        engine = OddsEngine(
-            config=settings,
-            manual_override_manager=manual_override_manager,
-            connection_manager=connection_manager,
-        )
-
-        app.state.engine = engine
-        app.state.analyzer_engine = AnalyzerEngine()
-        app.state.manual_override_manager = manual_override_manager
-        app.state.connection_manager = connection_manager
-
-        log.info("Server startup: All components initialized successfully.")
-    except Exception as e:
-        log.critical(
-            "FATAL: Failed to initialize application components during server startup.",
-            exc_info=True,
-        )
-        raise e
+    # 3. Yield control back to Uvicorn immediately. The server is now ready to accept requests
+    #    while the OddsEngine initializes in the background.
     yield
+
+    # --- Shutdown Sequence ---
     log.info("Server shutdown sequence initiated.")
     if hasattr(app.state, "engine") and app.state.engine:
         log.info("Closing HTTP client resources.")
         await app.state.engine.close()
 
-    # Disconnect from Redis
     await cache_manager.disconnect()
+    executor.shutdown(wait=False)
     log.info("Server shutdown sequence complete.")
 
 

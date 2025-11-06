@@ -45,3 +45,6 @@ web_platform/frontend/.next/
 
 # Security
 .key
+
+# Review artifacts
+ReviewableJSON/
