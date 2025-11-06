@@ -374,7 +374,7 @@ jobs:
               "datas += copy_metadata('psutil')",
               "datas += copy_metadata('pywin32')",
               "a = Analysis(",
-              "    ['run_backend.py'], pathex=[], binaries=binaries, datas=datas,",
+              "    ['python_service/main.py'], pathex=[], binaries=binaries, datas=datas,",
               "    hiddenimports=hiddenimports, hookspath=[], hooksconfig={}, runtime_hooks=[],",
               "    excludes=['matplotlib', 'tkinter', 'pytest', 'IPython'],",
               "    win_no_prefer_redirects=False, win_private_assemblies=False, cipher=block_cipher,",
