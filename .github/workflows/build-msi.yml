@@ -368,6 +368,7 @@ jobs:
               "    'pydantic.deprecated', 'email.mime.multipart', 'email.mime.text',",
               "    '_sqlite3', 'sqlite3', 'win32api', 'win32con', 'pywintypes',",
               "    'structlog', 'pynput.keyboard._win32', 'PIL.ImageWin',",
+              "    '_ssl',",
               "]",
               "datas += copy_metadata('psutil')",
               "datas += copy_metadata('pywin32')",
@@ -390,7 +391,7 @@ jobs:
           $specContent = ($specLines -join "`n").Replace('__ADAPTERS_PATH__', $adaptersPath.Replace('\', '/'))
           Set-Content -Path "fortuna-backend.spec" -Value $specContent -Encoding UTF8
           pyinstaller fortuna-backend.spec `
-            --distpath electron/resources `
+            --distpath electron/resources/fortuna-backend `
             --workpath python_service/build-pyinstaller `
             --clean --noconfirm `
             2>&1 | Tee-Object -FilePath logs/pyinstaller.log
@@ -406,7 +407,7 @@ jobs:
         run: |
           Write-Host "`n=== BACKEND: Executable Verification ===" -ForegroundColor Cyan
 
-          $exe = "electron/resources/fortuna-backend.exe"
+          $exe = "electron/resources/fortuna-backend/fortuna-backend.exe"
 
           if (-not (Test-Path $exe)) {
             throw "❌ FATAL: Backend executable not found at: $exe"
@@ -436,7 +437,7 @@ jobs:
         run: |
           Write-Host "`n=== BACKEND: FORTRESS INTEGRATION TEST ===" -ForegroundColor Cyan
 
-          $exe = "electron/resources/fortuna-backend.exe"
+          $exe = "electron/resources/fortuna-backend/fortuna-backend.exe"
           $testDir = "backend-test-env"
           $testPort = "8000"
 
@@ -445,7 +446,7 @@ jobs:
 
           # Create .env file for the backend process
           $envLines = @(
-            "API_KEY=${{ env.API_KEY }}",
+            "API_KEY=fortuna-test-key-1234567890abcdefghijklmnopqrstuvwxyz",
             "PORT=$testPort",
             "HOST=0.0.0.0"
           )
