@@ -444,12 +444,15 @@ jobs:
           $envLines = @(
             "API_KEY=${{ env.API_KEY }}",
             "PORT=$testPort",
-            "HOST=127.0.0.1"
+            "HOST=0.0.0.0"
           )
           Set-Content -Path (Join-Path $testDir ".env") -Value ($envLines -join "`n") -Encoding UTF8
 
-          Write-Host "Starting executable test..." -ForegroundColor Yellow
-          Write-Host "  Port: $testPort | API_KEY length: ${{ env.API_KEY.Length }}" -ForegroundColor DarkYellow
+          Write-Host "✅ .env created. Content Check (API_KEY Exists?):" -ForegroundColor Green
+          (Get-Content (Join-Path $testDir ".env") -Raw) | Select-String "API_KEY" | Write-Host -ForegroundColor Yellow
+
+          Write-Host "Starting executable test (Checking ENV file: .env) ..." -ForegroundColor Yellow
+          Write-Host "  Port: $testPort | API_KEY length: $(($envLines | Select-String -Pattern "API_KEY=").ToString().Length - 8)" -ForegroundColor DarkYellow
 
           $process = Start-Process -FilePath $exe `
             -WorkingDirectory $testDir `
@@ -469,36 +472,35 @@ jobs:
             Get-Content "$testDir/stderr.log" | Write-Host -ForegroundColor Yellow
           }
 
-          $maxAttempts = 60
+          # Resilient Health-Check Polling Loop
+          $maxTotalTimeout = 90 # Total seconds allowed for Uvicorn startup
+          $checkInterval = 1
+          $timeElapsed = 0
           $serverReady = $false
-          $backoffSeconds = 1
-          for ($i = 1; $i -le $maxAttempts; $i++) {
+
+          while ($timeElapsed -lt $maxTotalTimeout) {
             if ($process.HasExited) {
               Write-Host "`n❌ PROCESS CRASHED (exit code: $($process.ExitCode))" -ForegroundColor Red
               throw "❌ FATAL: Backend process crashed during startup"
             }
-            Start-Sleep -Seconds $backoffSeconds
+
             try {
-              $response = Invoke-WebRequest -Uri "http://127.0.0.1:$testPort/health" -TimeoutSec 2 -UseBasicParsing -ErrorAction Stop
+              $response = Invoke-WebRequest -Uri "http://127.0.0.1:$testPort/health" -TimeoutSec 1 -UseBasicParsing -ErrorAction Stop
               if ($response.StatusCode -eq 200) {
                 $serverReady = $true
-                Write-Host "`n✅ HEALTH CHECK PASSED (attempt $i, ${backoffSeconds}s interval)" -ForegroundColor Green
+                Write-Host "`n✅ HEALTH CHECK PASSED (Total time: ${timeElapsed}s)" -ForegroundColor Green
                 break
               }
             } catch {
-              if ($i -gt 10 -and $backoffSeconds -lt 5) {
-                $backoffSeconds = [Math]::Min($backoffSeconds * 1.5, 5)
-              }
-              if ($i % 10 -eq 0) {
-                Write-Host "`n[Attempt $i/$maxAttempts - backoff: ${backoffSeconds}s]" -ForegroundColor DarkYellow
-              } else {
-                Write-Host "." -NoNewline
-              }
+              if ($timeElapsed % 5 -eq 0) { Write-Host "[$timeElapsed/${maxTotalTimeout}s] Server connecting..." -ForegroundColor DarkYellow }
             }
+
+            Start-Sleep -Seconds $checkInterval
+            $timeElapsed += $checkInterval
           }
 
           if (-not $serverReady) {
-            Write-Host "`n❌ HEALTH CHECK FAILED AFTER $maxAttempts SECONDS" -ForegroundColor Red
+            Write-Host "`n❌ HEALTH CHECK FAILED AFTER $maxTotalTimeout SECONDS" -ForegroundColor Red
 
             Write-Host "`n=== FULL DIAGNOSTICS ===" -ForegroundColor Red
 
@@ -575,10 +577,13 @@ jobs:
           $envLines = @(
             "API_KEY=${{ env.API_KEY }}",
             "PORT=$backendPort",
-            "HOST=127.0.0.1",
+            "HOST=0.0.0.0",
             "ALLOWED_ORIGINS=http://127.0.0.1:$frontendPort"
           )
           Set-Content -Path (Join-Path $testDir ".env") -Value ($envLines -join "`n") -Encoding UTF8
+
+          Write-Host "✅ E2E .env created. Content Check (API_KEY Exists?):" -ForegroundColor Green
+          (Get-Content (Join-Path $testDir ".env") -Raw) | Select-String "API_KEY" | Write-Host -ForegroundColor Yellow
 
           $backendProcess = $null
           $frontendProcess = $null
