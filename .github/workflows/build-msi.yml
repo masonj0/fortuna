@@ -381,7 +381,7 @@ jobs:
               "pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)",
               "exe = EXE(",
               "    pyz, a.scripts, a.binaries, a.zipfiles, a.datas, [],",
-              "    name='fortuna-backend', debug=False, bootloader_ignore_signals=False,",
+              "    name='fortuna-backend', debug=True, bootloader_ignore_signals=False,",
               "    strip=False, upx=True, upx_exclude=[], runtime_tmpdir=None, console=True,",
               "    disable_windowed_traceback=False, argv_emulation=False, target_arch=None,",
               "    codesign_identity=None, entitlements_file=None",
@@ -445,7 +445,7 @@ jobs:
 
           # Create .env file for the backend process
           $envLines = @(
-            "API_KEY=${{ env.API_KEY }}",
+            "API_KEY=fortuna-test-key-1234567890abcdefghijklmnopqrstuvwxyz",
             "PORT=$testPort",
             "HOST=0.0.0.0"
           )
