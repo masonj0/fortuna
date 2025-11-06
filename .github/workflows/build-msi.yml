@@ -550,7 +550,8 @@ jobs:
           $envLines = @(
             "API_KEY=fortuna-test-key-1234567890abcdefghijklmnopqrstuvwxyz",
             "PORT=$testPort",
-            "HOST=0.0.0.0"
+            "HOST=0.0.0.0",
+            "CI_FORTRESS_DEBUG_DELAY=2"
           )
           Set-Content -Path (Join-Path $testDir ".env") -Value ($envLines -join "`n") -Encoding UTF8
 
