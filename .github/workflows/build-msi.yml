@@ -445,7 +445,7 @@ jobs:
 
           # Create .env file for the backend process
           $envLines = @(
-            "API_KEY=${{ env.API_KEY }}",
+            "API_KEY=fortuna-test-key-1234567890abcdefghijklmnopqrstuvwxyz",
             "PORT=$testPort",
             "HOST=0.0.0.0"
           )
