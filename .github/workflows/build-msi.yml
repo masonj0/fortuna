@@ -381,7 +381,7 @@ jobs:
               "pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)",
               "exe = EXE(",
               "    pyz, a.scripts, a.binaries, a.zipfiles, a.datas, [],",
-              "    name='fortuna-backend', debug=False, bootloader_ignore_signals=False,",
+              "    name='fortuna-backend', debug=True, bootloader_ignore_signals=False,",
               "    strip=False, upx=True, upx_exclude=[], runtime_tmpdir=None, console=True,",
               "    disable_windowed_traceback=False, argv_emulation=False, target_arch=None,",
               "    codesign_identity=None, entitlements_file=None",
@@ -430,6 +430,108 @@ jobs:
           $versionInfo = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($exe)
           Write-Host "  ✓ Executable is valid PE file" -ForegroundColor Green
 
+      - name: 📊 DISK SPACE MONITOR
+        shell: pwsh
+        run: |
+          Write-Host "`n=== SYSTEM MONITORING (Pre-Test Baseline) ===" -ForegroundColor DarkYellow
+          Write-Host "`n📊 DISK SPACE:" -ForegroundColor DarkYellow
+          Get-Volume | Where-Object { $_.DriveLetter -eq 'C' } | ForEach-Object {
+            $free = $_.SizeRemaining / 1GB
+            $total = $_.Size / 1GB
+            $percent = ($_.SizeRemaining / $_.Size) * 100
+            Write-Host "  C: Drive - $([math]::Round($free, 2)) GB / $([math]::Round($total, 2)) GB free ($([math]::Round($percent, 1))%)" -ForegroundColor Yellow
+            if ($free -lt 5) {
+              Write-Host "  ⚠️  WARNING: Low disk space!" -ForegroundColor Red
+            }
+          }
+      - name: 🔌 PORT AVAILABILITY MONITOR
+        shell: pwsh
+        run: |
+          Write-Host "`n🔌 PORT AVAILABILITY:" -ForegroundColor DarkYellow
+          $portStatus = netstat -ano 2>$null | Select-String ":8000\s+"
+          if ($portStatus) {
+            Write-Host "  ❌ Port 8000 is ALREADY IN USE!" -ForegroundColor Red
+            Write-Host "     $portStatus" -ForegroundColor Red
+            $portStatus -match '(\d+)$' | Out-Null
+            if ($Matches[1]) {
+              Write-Host "  Attempting to kill process $($Matches[1])..." -ForegroundColor Yellow
+              Stop-Process -Id $Matches[1] -Force -ErrorAction SilentlyContinue
+              Start-Sleep -Seconds 2
+            }
+          } else {
+            Write-Host "  ✅ Port 8000 is available" -ForegroundColor Green
+          }
+      - name: 📁 EXECUTABLE VERIFICATION MONITOR
+        shell: pwsh
+        run: |
+          Write-Host "`n📁 EXECUTABLE VERIFICATION:" -ForegroundColor DarkYellow
+          $exe = "electron/resources/fortuna-backend.exe"
+          if (-not (Test-Path $exe)) {
+            Write-Host "  ❌ FATAL: Executable NOT FOUND at: $exe" -ForegroundColor Red
+            Write-Host "`n  Directory contents of electron/resources:" -ForegroundColor Red
+            if (Test-Path "electron/resources") {
+              Get-ChildItem -Path "electron/resources" -Recurse | ForEach-Object { Write-Host "    $_" }
+            } else {
+              Write-Host "    (Directory does not exist!)" -ForegroundColor Red
+            }
+            throw "Backend executable missing"
+          }
+          $exeInfo = Get-Item $exe
+          Write-Host "  ✅ Found: $($exeInfo.Name)" -ForegroundColor Green
+          Write-Host "     Size: $([math]::Round($exeInfo.Length / 1MB, 2)) MB" -ForegroundColor Green
+          Write-Host "     Last Modified: $($exeInfo.LastWriteTime)" -ForegroundColor Green
+          try {
+            $versionInfo = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($exe)
+            Write-Host "     ✓ Valid PE executable" -ForegroundColor Green
+          } catch {
+            Write-Host "     ❌ WARNING: Not a valid PE executable - may not run!" -ForegroundColor Red
+          }
+      - name: 💾 MEMORY STATUS MONITOR
+        shell: pwsh
+        run: |
+          Write-Host "`n💾 MEMORY STATUS:" -ForegroundColor DarkYellow
+          $memStats = Get-WmiObject Win32_OperatingSystem
+          $totalMem = $memStats.TotalVisibleMemorySize / 1MB
+          $freeMem = $memStats.FreePhysicalMemory / 1MB
+          $usedMem = $totalMem - $freeMem
+          $memPercent = ($usedMem / $totalMem) * 100
+          Write-Host "  Total: $([math]::Round($totalMem, 2)) GB | Free: $([math]::Round($freeMem, 2)) GB | Used: $([math]::Round($usedMem / 1024, 2))% | CPU Pressure: $([math]::Round($memPercent, 1))%" -ForegroundColor Yellow
+          if ($memPercent -gt 85) {
+            Write-Host "  ⚠️  WARNING: High memory pressure!" -ForegroundColor Red
+          }
+      - name: 🔐 PYTHON RUNTIME DEPENDENCY CHECK
+        shell: pwsh
+        run: |
+          Write-Host "`n🔐 DEPENDENCY CHECK (Python Runtime):" -ForegroundColor DarkYellow
+          try {
+            $pythonCheck = & python --version 2>&1
+            Write-Host "  ✅ Python available: $pythonCheck" -ForegroundColor Green
+          } catch {
+            Write-Host "  ⚠️  Python not in PATH (might be bundled in exe)" -ForegroundColor Yellow
+          }
+      - name: 🌐 FIREWALL CHECK
+        shell: pwsh
+        run: |
+          Write-Host "`n🌐 FIREWALL CHECK:" -ForegroundColor DarkYellow
+          try {
+            $firewall = Get-NetFirewallProfile -ErrorAction SilentlyContinue | Where-Object { $_.Enabled -eq $true }
+            if ($firewall) {
+              Write-Host "  ⚠️  Windows Firewall is ENABLED (may block ports)" -ForegroundColor Yellow
+              Write-Host "     Firewall will not block localhost (127.0.0.1)" -ForegroundColor DarkYellow
+            } else {
+              Write-Host "  ✅ Firewall not blocking (or disabled)" -ForegroundColor Green
+            }
+          } catch {
+            Write-Host "  ℹ️  Could not determine firewall status" -ForegroundColor DarkYellow
+          }
+      - name: 📋 TEST ENVIRONMENT SETUP VERIFICATION
+        shell: pwsh
+        run: |
+          Write-Host "`n📋 TEST ENVIRONMENT SETUP:" -ForegroundColor DarkYellow
+          $testDir = "backend-test-env"
+          if (Test-Path $testDir) { Remove-Item -Recurse -Force $testDir }
+          New-Item -ItemType Directory -Path $testDir -Force | Out-Null
+          Write-Host "  ✅ Test directory created: $testDir" -ForegroundColor Green
       - name: Backend - Deep Integration Test
         shell: pwsh
         timeout-minutes: 10
@@ -445,7 +547,7 @@ jobs:
 
           # Create .env file for the backend process
           $envLines = @(
-            "API_KEY=${{ env.API_KEY }}",
+            "API_KEY=fortuna-test-key-1234567890abcdefghijklmnopqrstuvwxyz",
             "PORT=$testPort",
             "HOST=0.0.0.0"
           )
