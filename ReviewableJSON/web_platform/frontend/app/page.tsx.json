@@ -1,4 +1,4 @@
 {
     "file_path": "web_platform/frontend/app/page.tsx",
-    "content": "'use client';\n\nimport dynamic from 'next/dynamic';\nimport React from 'react';\n\nconst LiveRaceDashboard = dynamic(\n  () => import('../src/components/LiveRaceDashboard').then((mod) => mod.LiveRaceDashboard),\n  {\n    ssr: false,\n    loading: () => <p className=\"text-center text-xl mt-8\">Loading Dashboard...</p>\n  }\n);\n\nexport default function Home() {\n  return (\n    <LiveRaceDashboard />\n  );\n}"
+    "content": "'use client';\nimport dynamic from 'next/dynamic';\nimport React from 'react';\n\nconst LiveRaceDashboard = dynamic(\n  () => import('../src/components/LiveRaceDashboard').then((mod) => mod.LiveRaceDashboard),\n  {\n    ssr: false,\n    loading: () => <p className=\"text-center text-xl mt-8\">Loading Dashboard...</p>\n  }\n);\n\nexport default function Home() {\n  return (\n    <main className=\"min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-8\">\n      <div className=\"max-w-7xl mx-auto space-y-8\">\n        <LiveRaceDashboard />\n      </div>\n    </main>\n  );\n}\n"
 }
