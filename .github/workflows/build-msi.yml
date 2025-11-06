@@ -384,8 +384,8 @@ jobs:
               "    codesign_identity=None, entitlements_file=None",
               ")"
           )
-          $specContent = ($specLines -join "`n") -replace '__ADAPTERS_PATH__', $($adaptersPath.Replace('\', '/'))
-          Set-Content -Path "fortuna-backend.spec" -Value $specContent
+          $specContent = ($specLines -join "`n").Replace('__ADAPTERS_PATH__', $adaptersPath.Replace('\', '/'))
+          Set-Content -Path "fortuna-backend.spec" -Value $specContent -Encoding UTF8
           pyinstaller fortuna-backend.spec `
             --distpath electron/resources `
             --workpath python_service/build-pyinstaller `
@@ -440,13 +440,16 @@ jobs:
           if (Test-Path $testDir) { Remove-Item -Recurse -Force $testDir }
           New-Item -ItemType Directory -Path $testDir -Force | Out-Null
 
-          # Set environment
-          $env:API_KEY = "${{ env.API_KEY }}"
-          $env:PORT = $testPort
-          $env:HOST = "127.0.0.1"
+          # Create .env file for the backend process
+          $envLines = @(
+            "API_KEY=${{ env.API_KEY }}",
+            "PORT=$testPort",
+            "HOST=127.0.0.1"
+          )
+          Set-Content -Path (Join-Path $testDir ".env") -Value ($envLines -join "`n") -Encoding UTF8
 
           Write-Host "Starting executable test..." -ForegroundColor Yellow
-          Write-Host "  Port: $testPort | API_KEY length: $($env:API_KEY.Length)" -ForegroundColor DarkYellow
+          Write-Host "  Port: $testPort | API_KEY length: ${{ env.API_KEY.Length }}" -ForegroundColor DarkYellow
 
           $process = Start-Process -FilePath $exe `
             -WorkingDirectory $testDir `
@@ -567,10 +570,16 @@ jobs:
           $testDir = "e2e-test-env"
           if (Test-Path $testDir) { Remove-Item -Recurse -Force $testDir }
           New-Item -ItemType Directory -Path $testDir -Force | Out-Null
-          $env:API_KEY = "${{ env.API_KEY }}"
-          $env:PORT = $backendPort
-          $env:HOST = "127.0.0.1"
-          $env:ALLOWED_ORIGINS = "http://127.0.0.1:$frontendPort"
+
+          # Create .env file for the backend process
+          $envLines = @(
+            "API_KEY=${{ env.API_KEY }}",
+            "PORT=$backendPort",
+            "HOST=127.0.0.1",
+            "ALLOWED_ORIGINS=http://127.0.0.1:$frontendPort"
+          )
+          Set-Content -Path (Join-Path $testDir ".env") -Value ($envLines -join "`n") -Encoding UTF8
+
           $backendProcess = $null
           $frontendProcess = $null
           try {
