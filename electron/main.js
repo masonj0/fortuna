@@ -55,7 +55,7 @@ class FortunaDesktopApp {
     } else {
       // Production: use PyInstaller exe
       console.log('[PROD MODE] Starting backend from packaged executable...');
-      const exePath = path.join(process.resourcesPath, 'fortuna-backend.exe');
+      const exePath = path.join(process.resourcesPath, 'fortuna-backend', 'fortuna-backend.exe');
 
       if (!fs.existsSync(exePath)) {
         const errorMsg = 'FATAL: Backend executable missing from installation.';
