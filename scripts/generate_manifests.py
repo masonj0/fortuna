@@ -53,7 +53,11 @@ MANIFESTS_CONFIG = {
 
 def is_excluded(path, entry_name):
     """Check if a file or directory should be excluded."""
-    if entry_name.startswith("PREV_") or entry_name in EXCLUDE_DIRS or entry_name in EXCLUDE_FILES:
+    if (
+        entry_name.startswith("PREV_")
+        or entry_name in EXCLUDE_DIRS
+        or entry_name in EXCLUDE_FILES
+    ):
         return True
     # Exclude files in the root `dist` directory that might be created by PyInstaller
     if path.parent == ROOT_DIR and path.name == "dist":

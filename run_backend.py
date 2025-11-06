@@ -28,11 +28,15 @@ def main():
     port = int(os.environ.get("PORT", 8000))
 
     # CRITICAL DEBUG TRACE: Helps diagnose startup hangs.
-    print(f"[{datetime.now().isoformat()}] INFO: Uvicorn startup sequence initiated (PID {os.getpid()})")
+    print(
+        f"[{datetime.now().isoformat()}] INFO: Uvicorn startup sequence initiated (PID {os.getpid()})"
+    )
     print(f"[{datetime.now().isoformat()}] INFO: Attempting to bind to {host}:{port}")
     sys.stdout.flush()  # Force the line out of the buffer immediately.
 
-    uvicorn.run("python_service.api:app", host=host, port=port, reload=False, log_level="info")
+    uvicorn.run(
+        "python_service.api:app", host=host, port=port, reload=False, log_level="info"
+    )
 
 
 if __name__ == "__main__":

@@ -89,5 +89,9 @@ class BetfairDataScientistAdapter(BaseAdapterV3):
             self.logger.info(f"Normalized {len(races)} races from {self.model_name}.")
             return races
         except (pd.errors.ParserError, KeyError) as e:
-            self.logger.error("Failed to parse Betfair Data Scientist CSV.", exc_info=True, error=str(e))
+            self.logger.error(
+                "Failed to parse Betfair Data Scientist CSV.",
+                exc_info=True,
+                error=str(e),
+            )
             return []

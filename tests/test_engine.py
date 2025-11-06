@@ -16,11 +16,17 @@ from python_service.models import Runner
 from tests.conftest import get_test_settings
 
 
-def create_mock_race(source: str, venue: str, race_number: int, start_time: datetime, runners_data: list) -> Race:
+def create_mock_race(
+    source: str, venue: str, race_number: int, start_time: datetime, runners_data: list
+) -> Race:
     """Helper function to create a Race object for testing."""
     runners = []
     for r_data in runners_data:
-        odds = {source: OddsData(win=Decimal(r_data["odds"]), source=source, last_updated=datetime.now())}
+        odds = {
+            source: OddsData(
+                win=Decimal(r_data["odds"]), source=source, last_updated=datetime.now()
+            )
+        }
         runners.append(Runner(number=r_data["number"], name=r_data["name"], odds=odds))
 
     return Race(
@@ -41,7 +47,9 @@ def mock_engine() -> OddsEngine:
 
 @pytest.mark.asyncio
 @patch("python_service.engine.OddsEngine._time_adapter_fetch", new_callable=AsyncMock)
-async def test_engine_deduplicates_races_and_merges_odds(mock_time_adapter_fetch, mock_engine):
+async def test_engine_deduplicates_races_and_merges_odds(
+    mock_time_adapter_fetch, mock_engine
+):
     """
     SPEC: The OddsEngine's fetch_all_odds method should identify duplicate races
     from different sources and merge their runner data, stacking the odds.
@@ -70,7 +78,11 @@ async def test_engine_deduplicates_races_and_merges_odds(mock_time_adapter_fetch
         ],
     )
     other_race = create_mock_race(
-        "SourceC", "Another Place", 2, test_time, [{"number": 1, "name": "Solo", "odds": "3.0"}]
+        "SourceC",
+        "Another Place",
+        2,
+        test_time,
+        [{"number": 1, "name": "Solo", "odds": "3.0"}],
     )
 
     mock_time_adapter_fetch.side_effect = [
@@ -131,20 +143,28 @@ async def test_engine_deduplicates_races_and_merges_odds(mock_time_adapter_fetch
 
     merged_race = next((r for r in result["races"] if r["venue"] == "Test Park"), None)
     assert merged_race is not None, "Merged race should be present in the results."
-    assert len(merged_race["runners"]) == 3, "Merged race should contain all unique runners."
+    assert (
+        len(merged_race["runners"]) == 3
+    ), "Merged race should contain all unique runners."
 
-    runner1 = next((r for r in merged_race["runners"] if r["saddleClothNumber"] == 1), None)
+    runner1 = next(
+        (r for r in merged_race["runners"] if r["saddleClothNumber"] == 1), None
+    )
     assert runner1 is not None
     assert "SourceA" in runner1["odds"]
     assert "SourceB" in runner1["odds"]
     assert runner1["odds"]["SourceA"]["win"] == Decimal("5.0")
     assert runner1["odds"]["SourceB"]["win"] == Decimal("5.5")
 
-    runner2 = next((r for r in merged_race["runners"] if r["saddleClothNumber"] == 2), None)
+    runner2 = next(
+        (r for r in merged_race["runners"] if r["saddleClothNumber"] == 2), None
+    )
     assert runner2 is not None
     assert "SourceA" in runner2["odds"] and "SourceB" not in runner2["odds"]
 
-    runner3 = next((r for r in merged_race["runners"] if r["saddleClothNumber"] == 3), None)
+    runner3 = next(
+        (r for r in merged_race["runners"] if r["saddleClothNumber"] == 3), None
+    )
     assert runner3 is not None
     assert "SourceB" in runner3["odds"] and "SourceA" not in runner3["odds"]
 
@@ -164,7 +184,9 @@ async def test_engine_caching_logic():
         from python_service.cache_manager import cache_manager
 
         # Re-initialize the client on the singleton to use the patched sync version
-        cache_manager.redis_client = redis.from_url("redis://fake", decode_responses=True)
+        cache_manager.redis_client = redis.from_url(
+            "redis://fake", decode_responses=True
+        )
         assert cache_manager.redis_client is not None, "Failed to patch redis_client"
 
         engine = OddsEngine(config=get_test_settings())
@@ -172,7 +194,11 @@ async def test_engine_caching_logic():
         today_str = date.today().strftime("%Y-%m-%d")
         test_time = datetime(2025, 10, 9, 15, 0)
         mock_race = create_mock_race(
-            "TestSource", "Cache Park", 1, test_time, [{"number": 1, "name": "Cachedy", "odds": "4.0"}]
+            "TestSource",
+            "Cache Park",
+            1,
+            test_time,
+            [{"number": 1, "name": "Cachedy", "odds": "4.0"}],
         )
 
         mock_adapter = AsyncMock(spec=BaseAdapterV3)
@@ -181,7 +207,9 @@ async def test_engine_caching_logic():
 
         cache_manager.redis_client.flushdb()
 
-        with patch.object(engine, "_time_adapter_fetch", new_callable=AsyncMock) as mock_fetch:
+        with patch.object(
+            engine, "_time_adapter_fetch", new_callable=AsyncMock
+        ) as mock_fetch:
             source_info_payload = {
                 "name": "TestSource",
                 "status": "SUCCESS",
@@ -190,7 +218,10 @@ async def test_engine_caching_logic():
                 "fetch_duration": 0.1,
                 "attempted_url": None,
             }
-            adapter_result_payload = {"races": [mock_race], "source_info": source_info_payload}
+            adapter_result_payload = {
+                "races": [mock_race],
+                "source_info": source_info_payload,
+            }
             mock_fetch.return_value = ("TestSource", adapter_result_payload, 0.1)
 
             # --- ACT 1: Cache Miss ---

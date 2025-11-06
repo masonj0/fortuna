@@ -33,9 +33,21 @@ async def test_get_races_parses_correctly(test_settings):
                         "race_number": 1,
                         "start_time": int(datetime.now().timestamp()),
                         "runners": [
-                            {"dog_name": "Rapid Rover", "trap_number": 1, "odds": {"win": "2.5"}},
-                            {"dog_name": "Swift Sprint", "trap_number": 2, "scratched": True},
-                            {"dog_name": "Lazy Larry", "trap_number": 3, "odds": {"win": "10.0"}},
+                            {
+                                "dog_name": "Rapid Rover",
+                                "trap_number": 1,
+                                "odds": {"win": "2.5"},
+                            },
+                            {
+                                "dog_name": "Swift Sprint",
+                                "trap_number": 2,
+                                "scratched": True,
+                            },
+                            {
+                                "dog_name": "Lazy Larry",
+                                "trap_number": 3,
+                                "odds": {"win": "10.0"},
+                            },
                         ],
                     }
                 ],

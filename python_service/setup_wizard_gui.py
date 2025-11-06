@@ -94,7 +94,9 @@ class FortunaSetupWizard(tk.Tk):
             fg="#cccccc",
         ).pack(anchor="w", pady=10)
 
-        self.api_key_display = tk.Entry(self.content_frame, font=("Courier", 10), width=60, state=tk.DISABLED)
+        self.api_key_display = tk.Entry(
+            self.content_frame, font=("Courier", 10), width=60, state=tk.DISABLED
+        )
         self.api_key_display.pack(pady=10, fill=tk.X)
 
         gen_btn = tk.Button(
@@ -129,15 +131,21 @@ class FortunaSetupWizard(tk.Tk):
         ).pack(anchor="w", pady=10)
 
         # Betfair form
-        tk.Label(self.content_frame, text="App Key:", bg="#1a1a2e", fg="#ffffff").pack(anchor="w")
+        tk.Label(self.content_frame, text="App Key:", bg="#1a1a2e", fg="#ffffff").pack(
+            anchor="w"
+        )
         self.betfair_appkey = tk.Entry(self.content_frame, width=60, show="*")
         self.betfair_appkey.pack(fill=tk.X, pady=(0, 10))
 
-        tk.Label(self.content_frame, text="Username:", bg="#1a1a2e", fg="#ffffff").pack(anchor="w")
+        tk.Label(self.content_frame, text="Username:", bg="#1a1a2e", fg="#ffffff").pack(
+            anchor="w"
+        )
         self.betfair_user = tk.Entry(self.content_frame, width=60)
         self.betfair_user.pack(fill=tk.X, pady=(0, 10))
 
-        tk.Label(self.content_frame, text="Password:", bg="#1a1a2e", fg="#ffffff").pack(anchor="w")
+        tk.Label(self.content_frame, text="Password:", bg="#1a1a2e", fg="#ffffff").pack(
+            anchor="w"
+        )
         self.betfair_pass = tk.Entry(self.content_frame, width=60, show="*")
         self.betfair_pass.pack(fill=tk.X, pady=(0, 10))
 
@@ -222,7 +230,9 @@ class FortunaSetupWizard(tk.Tk):
         """Enable/disable navigation buttons"""
         self.prev_btn.config(state=tk.NORMAL if self.current_step > 0 else tk.DISABLED)
         step_titles = ["API Key", "Betfair (Optional)", "Verification", "Complete"]
-        self.step_label.config(text=f"Step {self.current_step + 1} of 4: {step_titles[self.current_step]}")
+        self.step_label.config(
+            text=f"Step {self.current_step + 1} of 4: {step_titles[self.current_step]}"
+        )
 
     def next_step(self):
         if self.current_step == 0:

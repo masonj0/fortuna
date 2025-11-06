@@ -10,7 +10,15 @@ import os
 
 # --- CONFIGURATION ---
 TARGET_TERMS = ["checkmate", "solo"]
-EXCLUDED_DIRS = [".git", ".venv", "node_modules", "build", "dist", "__pycache__", "ReviewableJSON"]
+EXCLUDED_DIRS = [
+    ".git",
+    ".venv",
+    "node_modules",
+    "build",
+    "dist",
+    "__pycache__",
+    "ReviewableJSON",
+]
 EXCLUDED_FILES = ["audit_rebranding.py", "REBRANDING_AUDIT.md"]
 OUTPUT_FILE = "REBRANDING_AUDIT.md"
 # -------------------
@@ -58,7 +66,9 @@ def main():
 
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
         f.write("# Fortuna Faucet: Rebranding Audit Report\n\n")
-        f.write("This report lists all files containing legacy branding terms (`checkmate`, `solo`).\n\n---\n\n")
+        f.write(
+            "This report lists all files containing legacy branding terms (`checkmate`, `solo`).\n\n---\n\n"
+        )
         if affected_files:
             for file_path in sorted(affected_files):
                 f.write(f"- `{file_path.replace(os.sep, '/')}`\n")

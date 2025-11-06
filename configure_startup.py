@@ -13,7 +13,9 @@ class StartupManager:
     @classmethod
     def is_enabled(cls) -> bool:
         try:
-            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, cls.REGISTRY_PATH, 0, winreg.KEY_READ)
+            key = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER, cls.REGISTRY_PATH, 0, winreg.KEY_READ
+            )
             winreg.QueryValueEx(key, cls.APP_NAME)
             winreg.CloseKey(key)
             return True
@@ -25,7 +27,9 @@ class StartupManager:
         launcher_path = Path(__file__).parent / "launcher.ps1"
         cmd = f'powershell.exe -WindowStyle Hidden -File "{launcher_path}"'
 
-        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, cls.REGISTRY_PATH, 0, winreg.KEY_WRITE)
+        key = winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER, cls.REGISTRY_PATH, 0, winreg.KEY_WRITE
+        )
         winreg.SetValueEx(key, cls.APP_NAME, 0, winreg.REG_SZ, cmd)
         winreg.CloseKey(key)
         print("Startup enabled.")
@@ -33,7 +37,9 @@ class StartupManager:
     @classmethod
     def disable(cls):
         try:
-            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, cls.REGISTRY_PATH, 0, winreg.KEY_WRITE)
+            key = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER, cls.REGISTRY_PATH, 0, winreg.KEY_WRITE
+            )
             winreg.DeleteValue(key, cls.APP_NAME)
             winreg.CloseKey(key)
             print("Startup disabled.")
@@ -48,6 +54,8 @@ if __name__ == "__main__":
         elif sys.argv[1] == "disable":
             StartupManager.disable()
         elif sys.argv[1] == "status":
-            print(f"Startup is currently {'enabled' if StartupManager.is_enabled() else 'disabled'}")
+            print(
+                f"Startup is currently {'enabled' if StartupManager.is_enabled() else 'disabled'}"
+            )
     else:
         print("Usage: python configure_startup.py [enable|disable|status]")

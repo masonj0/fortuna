@@ -64,9 +64,13 @@ class BaseAdapterV3(ABC):
             # This is not a full URL, but a representative key for the fetch operation
             # Subclasses might need to override get_races to provide a more specific URL if needed
             lookup_key = f"{self.base_url}/racecards/{date}"
-            manual_data = self.manual_override_manager.get_manual_data(self.source_name, lookup_key)
+            manual_data = self.manual_override_manager.get_manual_data(
+                self.source_name, lookup_key
+            )
             if manual_data:
-                self.logger.info("Using manually submitted data for request", url=lookup_key)
+                self.logger.info(
+                    "Using manually submitted data for request", url=lookup_key
+                )
                 # Reconstruct a dictionary similar to what _fetch_data would return
                 # This may need adjustment based on adapter specifics
                 raw_data = {"pages": [manual_data[0]], "date": date}
@@ -76,7 +80,9 @@ class BaseAdapterV3(ABC):
                 raw_data = await self._fetch_data(date)
             except AdapterHttpError as e:
                 if self.manual_override_manager and self.supports_manual_override:
-                    self.manual_override_manager.register_failure(self.source_name, e.url)
+                    self.manual_override_manager.register_failure(
+                        self.source_name, e.url
+                    )
                 raise  # Reraise the exception to be handled by the OddsEngine
 
         if raw_data is not None:
@@ -89,16 +95,24 @@ class BaseAdapterV3(ABC):
         stop=stop_after_attempt(3),
         reraise=True,  # Reraise the final exception to be caught by get_races
     )
-    async def make_request(self, http_client: httpx.AsyncClient, method: str, url: str, **kwargs) -> httpx.Response:
+    async def make_request(
+        self, http_client: httpx.AsyncClient, method: str, url: str, **kwargs
+    ) -> httpx.Response:
         """
         Makes a resilient HTTP request with built-in retry logic using tenacity.
         """
         # Ensure the URL is correctly formed, whether it's relative or absolute
-        full_url = url if url.startswith("http") else f"{self.base_url.rstrip('/')}/{url.lstrip('/')}"
+        full_url = (
+            url
+            if url.startswith("http")
+            else f"{self.base_url.rstrip('/')}/{url.lstrip('/')}"
+        )
 
         try:
             self.logger.info("Making request", method=method.upper(), url=full_url)
-            response = await http_client.request(method, full_url, timeout=self.timeout, **kwargs)
+            response = await http_client.request(
+                method, full_url, timeout=self.timeout, **kwargs
+            )
             response.raise_for_status()  # Raise an exception for 4xx/5xx responses
             return response
         except httpx.HTTPStatusError as e:

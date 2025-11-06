@@ -28,6 +28,7 @@ from starlette.websockets import WebSocketDisconnect
 # --- PyInstaller Explicit Imports ---
 from .adapters import *
 from .analyzer import AnalyzerEngine
+from .cache_manager import cache_manager
 from .config import get_settings
 from .core.exceptions import AdapterConfigError
 from .core.exceptions import AdapterHttpError
@@ -70,7 +71,10 @@ class ConnectionManager:
         if not self.active_connections:
             return
 
-        log.info("Broadcasting message to connected clients", client_count=len(self.active_connections))
+        log.info(
+            "Broadcasting message to connected clients",
+            client_count=len(self.active_connections),
+        )
         for connection in self.active_connections:
             try:
                 await connection.send_json(message)
@@ -85,6 +89,9 @@ async def lifespan(app: FastAPI):
     log.info("Server startup sequence initiated.")
     try:
         settings = get_settings()
+
+        # Asynchronously connect to Redis
+        await cache_manager.connect(settings.REDIS_URL)
 
         # Initialize WebSocket connection manager
         connection_manager = ConnectionManager()
@@ -107,14 +114,18 @@ async def lifespan(app: FastAPI):
         log.info("Server startup: All components initialized successfully.")
     except Exception as e:
         log.critical(
-            "FATAL: Failed to initialize OddsEngine during server startup.",
+            "FATAL: Failed to initialize application components during server startup.",
             exc_info=True,
         )
         raise e
     yield
+    log.info("Server shutdown sequence initiated.")
     if hasattr(app.state, "engine") and app.state.engine:
-        log.info("Server shutdown: Closing HTTP client resources.")
+        log.info("Closing HTTP client resources.")
         await app.state.engine.close()
+
+    # Disconnect from Redis
+    await cache_manager.disconnect()
     log.info("Server shutdown sequence complete.")
 
 
@@ -233,7 +244,11 @@ async def get_filter_suggestions(engine: OddsEngine = Depends(get_engine)):
                     second_favorite_odds.append(odds_list[1])
         return {
             "suggestions": {
-                "max_field_size": {"recommended": (int(sum(field_sizes) / len(field_sizes)) if field_sizes else 10)},
+                "max_field_size": {
+                    "recommended": (
+                        int(sum(field_sizes) / len(field_sizes)) if field_sizes else 10
+                    )
+                },
                 "min_favorite_odds": {"recommended": 2.5},
                 "min_second_favorite_odds": {"recommended": 4.0},
             }
@@ -275,7 +290,9 @@ def get_current_date() -> date:
 
 @app.get("/api/tipsheet", response_model=List[TipsheetRace])
 @limiter.limit("30/minute")
-async def get_tipsheet_endpoint(request: Request, date: date = Depends(get_current_date)):
+async def get_tipsheet_endpoint(
+    request: Request, date: date = Depends(get_current_date)
+):
     results = []
     try:
         async with aiosqlite.connect(DB_PATH) as db:

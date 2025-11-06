@@ -15,8 +15,12 @@ from python_service.models import Runner
 def create_runner(number, odds_val=None, scratched=False):
     odds_data = {}
     if odds_val:
-        odds_data["TestOdds"] = OddsData(win=Decimal(str(odds_val)), source="TestOdds", last_updated=datetime.now())
-    return Runner(number=number, name=f"Runner {number}", odds=odds_data, scratched=scratched)
+        odds_data["TestOdds"] = OddsData(
+            win=Decimal(str(odds_val)), source="TestOdds", last_updated=datetime.now()
+        )
+    return Runner(
+        number=number, name=f"Runner {number}", odds=odds_data, scratched=scratched
+    )
 
 
 @pytest.fixture
@@ -129,8 +133,12 @@ def test_trifecta_analyzer_plugin_logic(sample_races_for_true_trifecta):
     assert isinstance(qualified_races[0].qualification_score, float)
 
     # 4. Check that the races are sorted by score in descending order
-    assert qualified_races[0].qualification_score > qualified_races[1].qualification_score
-    assert qualified_races[0].id == "race_pass_2"  # This race should have the higher score
+    assert (
+        qualified_races[0].qualification_score > qualified_races[1].qualification_score
+    )
+    assert (
+        qualified_races[0].id == "race_pass_2"
+    )  # This race should have the higher score
     assert qualified_races[1].id == "race_pass_1"
 
 
@@ -138,8 +146,12 @@ def test_get_best_win_odds_helper():
     """Tests the helper function for finding the best odds."""
     runner_with_odds = create_runner(1)
     runner_with_odds.odds = {
-        "SourceA": OddsData(win=Decimal("3.0"), source="A", last_updated=datetime.now()),
-        "SourceB": OddsData(win=Decimal("2.5"), source="B", last_updated=datetime.now()),
+        "SourceA": OddsData(
+            win=Decimal("3.0"), source="A", last_updated=datetime.now()
+        ),
+        "SourceB": OddsData(
+            win=Decimal("2.5"), source="B", last_updated=datetime.now()
+        ),
     }
     assert _get_best_win_odds(runner_with_odds) == Decimal("2.5")
 
@@ -147,7 +159,9 @@ def test_get_best_win_odds_helper():
     assert _get_best_win_odds(runner_no_odds) is None
 
     runner_no_win = create_runner(3)
-    runner_no_win.odds = {"SourceA": OddsData(win=None, source="A", last_updated=datetime.now())}
+    runner_no_win.odds = {
+        "SourceA": OddsData(win=None, source="A", last_updated=datetime.now())
+    }
     assert _get_best_win_odds(runner_no_win) is None
 
 
@@ -170,4 +184,6 @@ def test_trifecta_analyzer_rejects_races_with_too_few_runners(trifecta_analyzer)
     )
 
     qualified = trifecta_analyzer.is_race_qualified(race_with_two_runners)
-    assert not qualified, "Trifecta analyzer should not qualify a race with only two runners."
+    assert (
+        not qualified
+    ), "Trifecta analyzer should not qualify a race with only two runners."

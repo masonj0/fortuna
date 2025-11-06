@@ -19,9 +19,16 @@ class RacingAndSportsGreyhoundAdapter(BaseAdapterV3):
     BASE_URL = "https://api.racingandsports.com.au/"
 
     def __init__(self, config=None):
-        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
-        if not hasattr(config, "RACING_AND_SPORTS_TOKEN") or not config.RACING_AND_SPORTS_TOKEN:
-            raise AdapterConfigError(self.source_name, "RACING_AND_SPORTS_TOKEN is not configured.")
+        super().__init__(
+            source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
+        )
+        if (
+            not hasattr(config, "RACING_AND_SPORTS_TOKEN")
+            or not config.RACING_AND_SPORTS_TOKEN
+        ):
+            raise AdapterConfigError(
+                self.source_name, "RACING_AND_SPORTS_TOKEN is not configured."
+            )
         self.api_token = config.RACING_AND_SPORTS_TOKEN
 
     async def _fetch_data(self, date: str) -> Optional[Dict[str, Any]]:
@@ -44,7 +51,9 @@ class RacingAndSportsGreyhoundAdapter(BaseAdapterV3):
         """Parses the raw meetings data into a list of Race objects."""
         all_races = []
         if not raw_data or not isinstance(raw_data.get("meetings"), list):
-            self.logger.warning("No 'meetings' in RacingAndSportsGreyhound response or invalid format.")
+            self.logger.warning(
+                "No 'meetings' in RacingAndSportsGreyhound response or invalid format."
+            )
             return all_races
 
         for meeting in raw_data.get("meetings", []):
@@ -65,7 +74,9 @@ class RacingAndSportsGreyhoundAdapter(BaseAdapterV3):
                     )
         return all_races
 
-    def _parse_ras_race(self, meeting: Dict[str, Any], race: Dict[str, Any]) -> Optional[Race]:
+    def _parse_ras_race(
+        self, meeting: Dict[str, Any], race: Dict[str, Any]
+    ) -> Optional[Race]:
         """Parses a single race object from the API response."""
         race_id = race.get("raceId")
         start_time_str = race.get("startTime")

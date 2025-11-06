@@ -15,7 +15,10 @@ try:
 except ImportError as e:
     # If the import fails, write the error to stderr and exit.
     # This helps in debugging path issues in the production environment.
-    print(f"Error: Failed to import SecureCredentialsManager. Details: {e}", file=sys.stderr)
+    print(
+        f"Error: Failed to import SecureCredentialsManager. Details: {e}",
+        file=sys.stderr,
+    )
     sys.exit(1)
 
 

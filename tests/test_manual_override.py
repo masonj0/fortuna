@@ -55,7 +55,9 @@ def test_get_pending_overrides_endpoint():
     # This test will rely on the app's global manager state
     manager = app.state.manual_override_manager
     manager.register_failure("EndpointAdapter", "http://endpoint.com/data")
-    response = client.get("/api/manual-overrides/pending", headers={"X-API-Key": API_KEY})
+    response = client.get(
+        "/api/manual-overrides/pending", headers={"X-API-Key": API_KEY}
+    )
     assert response.status_code == 200
     data = response.json()
     assert "pending_requests" in data
@@ -86,7 +88,9 @@ def test_submit_manual_data_endpoint():
 def test_skip_manual_override_endpoint():
     manager = app.state.manual_override_manager
     request_id = manager.register_failure("SkipAdapter", "http://skip.com/data")
-    response = client.post(f"/api/manual-overrides/skip/{request_id}", headers={"X-API-Key": API_KEY})
+    response = client.post(
+        f"/api/manual-overrides/skip/{request_id}", headers={"X-API-Key": API_KEY}
+    )
     assert response.status_code == 200
     assert response.json()["status"] == "success"
     # Verify the request is no longer pending

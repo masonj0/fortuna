@@ -13,13 +13,14 @@ def configure_logging(log_level: str = "INFO"):
         stream=sys.stdout,
     )
 
+    # Keep the processor chain simple for maximum reliability in bundled executables.
+    # More complex processors like StackInfoRenderer can cause issues in
+    # constrained environments.
     structlog.configure(
         processors=[
             structlog.stdlib.filter_by_level,
-            structlog.stdlib.add_logger_name,
             structlog.stdlib.add_log_level,
             structlog.processors.TimeStamper(fmt="iso"),
-            structlog.processors.StackInfoRenderer(),
             structlog.processors.format_exc_info,
             structlog.processors.JSONRenderer(),
         ],
