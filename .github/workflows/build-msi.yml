@@ -13,13 +13,13 @@ env:
   NODE_VERSION: '20'
   PYTHON_VERSION: '3.12'
   CACHE_BUST: "2025-11-05-v3-fortress"
-  API_KEY: "${{ secrets.API_KEY }}"
+  TEST_API_KEY: "fortress-integration-test-key-${{ github.run_id }}"
 
 jobs:
   build-installer:
     name: 🏆 Build MSI Installer (Fortress Mode)
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       # ===== TELEMETRY & DIAGNOSTICS =====
@@ -286,7 +286,7 @@ jobs:
             throw "❌ FATAL: requirements.txt not found"
           }
 
-          pip install --upgrade pip wheel "setuptools<81" 2>&1 | Tee-Object -FilePath logs/pip-upgrade.log
+          pip install --upgrade pip==25.3 wheel "setuptools<81" 2>&1 | Tee-Object -FilePath logs/pip-upgrade.log
 
           $maxRetries = 3
           $retryDelay = 10
@@ -353,7 +353,7 @@ jobs:
               "datas = [('__ADAPTERS_PATH__', 'adapters')]",
               "hiddenimports = []",
               "binaries = []",
-              "for pkg in ['uvicorn', 'fastapi', 'pydantic', 'pydantic_core', 'httpx', 'certifi', 'bs4', 'pandas', 'aiosqlite', 'keyring', 'structlog']:",
+              "for pkg in ['uvicorn', 'fastapi', 'pydantic', 'pydantic_core', 'httpx', 'certifi', 'bs4', 'pandas', 'aiosqlite', 'structlog']:",
               "    tmp_datas, tmp_binaries, tmp_hiddenimports = collect_all(pkg)",
               "    datas += tmp_datas",
               "    binaries += tmp_binaries",
@@ -368,7 +368,7 @@ jobs:
               "    'pydantic.deprecated', 'email.mime.multipart', 'email.mime.text',",
               "    '_sqlite3', 'sqlite3', 'win32api', 'win32con', 'pywintypes',",
               "    'structlog', 'pynput.keyboard._win32', 'PIL.ImageWin',",
-              "    '_ssl', 'cryptography', 'keyring', 'keyring.backends.windows',",
+              "    '_ssl', 'cryptography', 'keyring.backends.fail',",
               "    'dateutil', 'lxml', 'html5lib',",
               "]",
               "datas += copy_metadata('psutil')",
@@ -461,7 +461,7 @@ jobs:
 
           # Create .env file for the backend process
           $envLines = @(
-            "API_KEY=fortuna-test-key-1234567890abcdefghijklmnopqrstuvwxyz",
+            "API_KEY=${{ env.TEST_API_KEY }}",
             "PORT=$testPort",
             "HOST=0.0.0.0",
             "CI_FORTRESS_DEBUG_DELAY=2"
@@ -595,7 +595,7 @@ jobs:
 
           # Create .env file for the backend process
           $envLines = @(
-            "API_KEY=${{ env.API_KEY }}",
+            "API_KEY=${{ env.TEST_API_KEY }}",
             "PORT=$backendPort",
             "HOST=0.0.0.0",
             "ALLOWED_ORIGINS=http://127.0.0.1:$frontendPort"
