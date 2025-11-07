@@ -2,9 +2,9 @@
 # This is the 'golden' manifest, combining the blueprint's pinned versions with all feature requirements.
 
 # --- Core Backend (FastAPI & Async) ---
-fastapi==0.109.1
-starlette==0.47.2
-uvicorn==0.24.0
+fastapi==0.111.0
+starlette==0.37.2
+uvicorn==0.29.0
 httptools==0.6.1
 websockets==12.0
 pydantic==2.5.0
