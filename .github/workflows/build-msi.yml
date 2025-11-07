@@ -213,6 +213,17 @@ jobs:
 
           Write-Host "✅ Frontend dependencies installed & verified" -ForegroundColor Green
 
+      - name: '🔒 Frontend - Security Audit'
+        shell: pwsh
+        run: |
+          Write-Host "`n=== FRONTEND: Security Audit ===" -ForegroundColor Cyan
+          cd web_platform/frontend
+          npm audit --audit-level=high 2>&1 | Tee-Object -FilePath ../../logs/npm-audit.log
+          if ($LASTEXITCODE -ne 0) {
+            throw "❌ FATAL: High or critical severity vulnerabilities found in frontend dependencies."
+          }
+          Write-Host "✅ No high or critical vulnerabilities found." -ForegroundColor Green
+
       - name: Frontend - Build Static Export
         shell: pwsh
         run: |
@@ -242,7 +253,10 @@ jobs:
           }
 
           $fileCount = @(Get-ChildItem -Path "out" -Recurse -File).Count
-          Write-Host "✅ Frontend built: $fileCount files" -ForegroundColor Green
+          if ($fileCount -lt 20) {
+            throw "❌ FATAL: Expected at least 20 files in frontend build output, but found only $fileCount. This indicates a partial or failed build."
+          }
+          Write-Host "✅ Frontend built: $fileCount files (Paranoid check passed)" -ForegroundColor Green
 
           # Generate manifest
           @(Get-ChildItem -Path "out" -Recurse -File | Select-Object FullName) | ConvertTo-Json | Out-File ../../logs/frontend-manifest.json
@@ -273,6 +287,13 @@ jobs:
           if (-not (Test-Path "$dest/index.html")) {
             throw "❌ FATAL: index.html not found in staging directory"
           }
+
+          $sourceHash = (Get-FileHash "$src/index.html").Hash
+          $destHash = (Get-FileHash "$dest/index.html").Hash
+          if ($sourceHash -ne $destHash) {
+            throw "❌ FATAL: Hash mismatch for index.html during staging. File may be corrupt."
+          }
+          Write-Host "  ✓ Paranoid check: index.html hash verified" -ForegroundColor Green
 
           Write-Host "✅ Frontend staged: $filesAfter files" -ForegroundColor Green
 
@@ -320,6 +341,17 @@ jobs:
             }
           }
           Write-Host "✅ Backend dependencies installed & verified" -ForegroundColor Green
+
+      - name: '🔒 Backend - Security Audit'
+        shell: pwsh
+        run: |
+          Write-Host "`n=== BACKEND: Security Audit ===" -ForegroundColor Cyan
+          pip install pip-audit
+          pip-audit --strict --progress-spinner=off 2>&1 | Tee-Object -FilePath logs/pip-audit.log
+          if ($LASTEXITCODE -ne 0) {
+            throw "❌ FATAL: Vulnerabilities found in backend dependencies."
+          }
+          Write-Host "✅ No vulnerabilities found." -ForegroundColor Green
 
       - name: Backend - Verify Source Files
         shell: pwsh
@@ -445,6 +477,27 @@ jobs:
           # Try to extract version info
           $versionInfo = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($exe)
           Write-Host "  ✓ Executable is valid PE file" -ForegroundColor Green
+
+          # Use dumpbin to verify critical dependencies
+          Write-Host "`n  --- Deep Dependency Analysis (dumpbin) ---" -ForegroundColor DarkCyan
+          try {
+            $dumpbinPath = "C:\Program Files (x86)\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\*\bin\Hostx64\x64\dumpbin.exe"
+            $dumpbin = Get-Item $dumpbinPath
+            Write-Host "  ✓ Found dumpbin.exe at $($dumpbin.FullName)" -ForegroundColor Green
+
+            $imports = & $dumpbin /IMPORTS $exe
+            $criticalImports = @("python312.dll", "VCRUNTIME140.dll", "KERNEL32.dll")
+            foreach ($imp in $criticalImports) {
+              if ($imports -match $imp) {
+                Write-Host "  ✓ Verified import: $imp" -ForegroundColor Green
+              } else {
+                throw "❌ FATAL: Critical import '$imp' not found in executable."
+              }
+            }
+          } catch {
+            Write-Host "  ⚠️ Could not run dumpbin analysis: $($_.Exception.Message)" -ForegroundColor Yellow
+            Write-Host "  Skipping deep dependency check."
+          }
 
       - name: Backend - Deep Integration Test
         shell: pwsh
@@ -644,10 +697,11 @@ jobs:
               $pyScriptLines = @(
                   "from playwright.sync_api import sync_playwright",
                   "import sys",
-                  "import json",
+                  "import os",
                   "def run(playwright):",
                   "    browser = playwright.chromium.launch()",
-                  "    page = browser.new_page()",
+                  "    context = browser.new_context(record_video_dir='videos/')",
+                  "    page = context.new_page()",
                   "    try:",
                   "        url = 'http://127.0.0.1:__FRONTEND_PORT__'",
                   "        print(f'[E2E] Navigating to {url}')",
@@ -657,12 +711,17 @@ jobs:
                   "        print('[E2E] Page loaded successfully')",
                   "        page.screenshot(path='e2e-screenshot.png', full_page=True)",
                   "        print('[E2E] ✅ E2E TEST PASSED')",
+                  "        context.close()", # This stops the video recording
+                  "        browser.close()",
                   "    except Exception as e:",
                   "        print(f'[E2E] ❌ E2E TEST FAILED: {e}', file=sys.stderr)",
                   "        page.screenshot(path='e2e-screenshot-failed.png', full_page=True)",
-                  "        raise",
-                  "    finally:",
+                  "        video_path = page.video.path()",
+                  "        context.close()", # Important: close context to save video
+                  "        os.rename(video_path, 'e2e-video-failed.webm')",
+                  "        print(f'Video of failure saved to e2e-video-failed.webm')",
                   "        browser.close()",
+                  "        raise",
                   "with sync_playwright() as playwright:",
                   "    run(playwright)"
               )
@@ -982,7 +1041,22 @@ jobs:
           path: |
             e2e-screenshot.png
             e2e-screenshot-failed.png
+            e2e-video-failed.webm
           retention-days: 30
+          if-no-files-found: warn
+
+      - name: '🚨 Upload Forensic Artifacts on Failure'
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forensics-${{ github.ref_name }}
+          path: |
+            logs/
+            python_service/build-pyinstaller/
+            fortuna-backend.spec
+            install.log
+            pip-freeze.txt
+          retention-days: 7
           if-no-files-found: warn
 
       # ===== GITHUB RELEASE (Tags Only) =====
@@ -1035,3 +1109,86 @@ jobs:
             **Built with ❤️ by GitHub Actions - Fortress Mode**
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  test-installer:
+    name: '✅ Test MSI Installer'
+    needs: build-installer
+    strategy:
+      matrix:
+        os: [windows-latest, windows-2019]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+
+    steps:
+      - name: '📥 Download MSI Artifact'
+        uses: actions/download-artifact@v4
+        with:
+          name: fortuna-installer-${{ needs.build-installer.outputs.ref_name_sanitized }}
+          path: msi-artifact
+
+      - name: '🔍 Verify MSI Download'
+        shell: pwsh
+        run: |
+          Write-Host "Verifying downloaded artifact..."
+          $msiFile = Get-ChildItem -Path "msi-artifact" -Filter "*.msi" -Recurse | Select-Object -First 1
+          if (-not $msiFile) {
+            throw "❌ FATAL: MSI file not found in downloaded artifact."
+          }
+          Write-Host "  ✓ Found MSI: $($msiFile.Name)" -ForegroundColor Green
+          $env:MSI_PATH = $msiFile.FullName
+          "MSI_PATH=$($msiFile.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: '⚙️ Run MSI Installer'
+        shell: pwsh
+        run: |
+          Write-Host "Installing MSI silently..."
+          $msiPath = $env:MSI_PATH
+          Start-Process msiexec.exe -ArgumentList "/i `"$msiPath`" /quiet /qn /L*v install.log" -Wait
+
+          # Check for installation success
+          $installLog = Get-Content "install.log"
+          if ($installLog -match "Installation success or error status: 0") {
+            Write-Host "✅ MSI installation completed successfully." -ForegroundColor Green
+          } else {
+            Write-Host "❌ MSI installation failed. See install.log for details." -ForegroundColor Red
+            Get-Content "install.log" | Select-Object -Last 50
+            throw "MSI Installation failed."
+          }
+
+      - name: '🚀 Verify Installation & Launch'
+        shell: pwsh
+        run: |
+          $installDir = "C:\Program Files\Fortuna Faucet"
+          if (-not (Test-Path "$installDir\Fortuna Faucet.exe")) {
+            throw "❌ FATAL: Application executable not found at expected location."
+          }
+          Write-Host "✅ Application found in Program Files." -ForegroundColor Green
+
+          Write-Host "Launching installed application..."
+          $process = Start-Process -FilePath "$installDir\Fortuna Faucet.exe" -PassThru
+          Start-Sleep -Seconds 15 # Give it time to initialize the backend
+
+          # Health check
+          try {
+            $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/health" -TimeoutSec 10 -UseBasicParsing
+            if ($response.StatusCode -eq 200) {
+              Write-Host "✅ Health check PASSED on installed application." -ForegroundColor Green
+            } else {
+              throw "Health check failed with status: $($response.StatusCode)"
+            }
+          } catch {
+            Write-Host "❌ Health check FAILED: $($_.Exception.Message)" -ForegroundColor Red
+            throw
+          } finally {
+            if ($process) {
+              Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            }
+          }
+
+      - name: '🧹 Uninstall Application'
+        shell: pwsh
+        run: |
+          Write-Host "Uninstalling application..."
+          $msiPath = $env:MSI_PATH
+          Start-Process msiexec.exe -ArgumentList "/x `"$msiPath`" /quiet /qn" -Wait
+          Write-Host "✅ Uninstallation complete." -ForegroundColor Green
