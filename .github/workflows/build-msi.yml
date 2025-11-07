@@ -368,7 +368,7 @@ jobs:
               "    'pydantic.deprecated', 'email.mime.multipart', 'email.mime.text',",
               "    '_sqlite3', 'sqlite3', 'win32api', 'win32con', 'pywintypes',",
               "    'structlog', 'pynput.keyboard._win32', 'PIL.ImageWin',",
-              "    '_ssl', 'cryptography', 'keyring.backends.fail.Keyring',",
+              "    '_ssl', 'cryptography', 'keyring', 'keyring.backends.windows', 'keyring.backends.fail', 'keyring.backends.SecretService', 'keyring.backends.chainer',",
               "    'dateutil', 'lxml', 'html5lib',",
               "]",
               "datas += copy_metadata('psutil')",
