@@ -177,13 +177,13 @@ async def test_engine_caching_logic():
     2. On a cache hit, it should return data from the cache without fetching from adapters.
     """
     # ARRANGE
-    # Use the synchronous FakeRedis for the synchronous CacheManager
-    with patch("redis.from_url", fakeredis.FakeRedis.from_url):
-        import redis
+    # Use the asynchronous FakeRedis for the asynchronous CacheManager
+    with patch("redis.from_url", fakeredis.aioredis.FakeRedis.from_url):
+        import redis.asyncio as redis
 
         from python_service.cache_manager import cache_manager
 
-        # Re-initialize the client on the singleton to use the patched sync version
+        # Re-initialize the client on the singleton to use the patched async version
         cache_manager.redis_client = redis.from_url(
             "redis://fake", decode_responses=True
         )
@@ -205,7 +205,7 @@ async def test_engine_caching_logic():
         mock_adapter.source_name = "TestSource"
         engine.adapters = [mock_adapter]  # Isolate to one mock adapter
 
-        cache_manager.redis_client.flushdb()
+        await cache_manager.redis_client.flushdb()
 
         with patch.object(
             engine, "_time_adapter_fetch", new_callable=AsyncMock
