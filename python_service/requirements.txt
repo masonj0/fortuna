@@ -3,6 +3,7 @@
 
 # --- Core Backend (FastAPI & Async) ---
 fastapi==0.109.1
+starlette==0.47.2
 uvicorn==0.24.0
 httptools==0.6.1
 websockets==12.0
