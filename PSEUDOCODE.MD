@@ -1,22 +1,21 @@
 # 🐎 Fortuna Faucet - Complete Pseudocode Blueprint
 
-**Status:** Comprehensive System Specification
-**Version:** 2.1.0
-**Last Updated:** November 1, 2025
+**Status:** Comprehensive System Specification (Revised & Corrected)
+**Version:** 2.2.0
+**Last Updated:** November 7, 2025
 
 ---
 
 ## TABLE OF CONTENTS
 
-1. System Overview
-2. Architecture Pillars
-3. Backend Engine (Python)
-4. Frontend Interface (TypeScript/React)
-5. Electron Wrapper & Windows Integration
-6. Data Models & Contracts
-7. API Specification
-8. Deployment & Automation
-9. End-to-End Workflows
+1.  System Overview
+2.  Architecture Pillars
+3.  Backend Engine (Python) - Detailed
+4.  Frontend Interface (TypeScript/React) - Detailed
+5.  Electron Wrapper & Windows Integration - Detailed
+6.  Data Models & API Specification
+7.  Deployment & Automation (CI/CD)
+8.  End-to-End Workflows
 
 ---
 
@@ -29,21 +28,22 @@
 ╚════════════════════════════════════════════════════════════════╝
 
 MISSION:
-  • Acquire race data from 20+ global sources (APIs + web scraping)
-  • Normalize and deduplicate into a canonical Race format
-  • Apply analytical filters (TrifectaAnalyzer) to surface opportunities
-  • Serve results via a secure REST API to an interactive web dashboard
-  • Operate as a professional, standalone, native Windows application
+  • Acquire race data from 20+ global sources (APIs + web scraping).
+  • Normalize and deduplicate data into a canonical Race format.
+  • Apply analytical filters to surface high-value betting opportunities.
+  • Serve results via a secure, local REST API to an interactive dashboard.
+  • Operate as a professional, standalone, native Windows application.
 
 CORE TENETS:
-  • Resilience: Each adapter failure is isolated; others continue fetching
-  • Standardization: All adapters follow the BaseAdapterV3 pattern
-  • Clarity: Every component has a single, well-defined responsibility
-  • Automation: Development and deployment are streamlined via scripts and CI/CD
+  • UI-First Experience: The user interface is always responsive, even during backend startup or restarts.
+  • Resilient Process Management: The backend executable's lifecycle is robustly managed, with timeouts and crash detection.
+  • Asynchronous Initialization: The backend server starts instantly, deferring heavy, blocking I/O to background threads.
+  • Secure by Design: Communication between the frontend and the privileged main process is secured via a context-aware preload script.
+  • Automated & Repeatable Builds: The entire application is built, tested, and packaged via a deterministic CI/CD pipeline.
 
 STAKEHOLDERS:
-  • End User: Receives a professional MSI installer for one-click launch
-  • Developer: Works with clean, separated Python and TypeScript stacks
+  • End User: Receives a professional MSI installer for a one-click, dependency-free launch.
+  • Developer: Works with clean, separated Python and TypeScript stacks, governed by this specification.
 ```
 
 ---
@@ -54,38 +54,27 @@ STAKEHOLDERS:
 
 ```
 PYTHON_BACKEND:
+  ├─ main.py
+  │  └─ Entry point for PyInstaller executable; starts the Uvicorn server.
+  │
   ├─ api.py
-  │  └─ FastAPI HTTP server
-  │     ├─ GET /health (unauthenticated)
-  │     ├─ GET /api/adapters/status (rate: 60/min)
-  │     ├─ GET /api/races (aggregated data, rate: 30/min)
-  │     └─ GET /api/races/qualified/{analyzer} (filtered, rate: 120/min)
+  │  └─ FastAPI application definition.
+  │     ├─ Lifespan Hook: Manages async startup/shutdown logic.
+  │     ├─ API Routes: /health, /api/status, /api/races, etc.
+  │     └─ Dependency Injection: Provides engine and security dependencies.
   │
   ├─ engine.py
-  │  └─ OddsEngine orchestrator
-  │     ├─ Manages adapter fleet (instantiation, lifecycle)
-  │     ├─ Parallel fetch coordination via asyncio.gather with Semaphore
-  │     ├─ Race deduplication & odds merging logic
-  │     └─ Shares a single httpx.AsyncClient with all adapters
-  │
-  ├─ cache_manager.py
-  │  └─ Redis caching layer via @cache_async_result decorator
-  │
-  ├─ models.py
-  │  └─ Pydantic data contracts (Race, Runner, OddsData)
-  │
-  ├─ analyzer.py
-  │  └─ Analysis framework (BaseAnalyzer, TrifectaAnalyzer)
+  │  └─ OddsEngine: Orchestrates all data fetching and processing.
   │
   ├─ adapters/
-  │  ├─ base_v3.py (BaseAdapterV3 abstract pattern: _fetch_data, _parse_races)
+  │  ├─ base_v3.py (Abstract Base Class for all data sources)
   │  └─ [20+ specific adapter implementations]
   │
   ├─ config.py
-  │  └─ Pydantic settings management from environment variables
+  │  └─ Pydantic settings management from .env file.
   │
   └─ requirements.txt
-     └─ Dependencies: fastapi, uvicorn, httpx, pydantic, redis, structlog
+     └─ Clean, de-duplicated, and conflict-free list of all Python dependencies.
 ```
 
 ### Pillar 2: Frontend Interface (TypeScript/React)
@@ -93,21 +82,19 @@ PYTHON_BACKEND:
 ```
 FRONTEND:
   ├─ next.config.mjs
-  │  └─ Next.js config with `output: 'export'` for static generation
+  │  └─ Next.js config with `output: 'export'` for 100% static generation.
   │
   ├─ app/page.tsx
-  │  └─ Main route, dynamically loads the main dashboard component
+  │  └─ Main application shell.
   │
   ├─ src/components/
-  │  ├─ LiveRaceDashboard.tsx (main interactive component)
-  │  │  ├─ State: races[], connectionStatus, errorDetails, filterParams
-  │  │  ├─ Effects: Listens for backend status via IPC, fetches data on 'online'
-  │  │  ├─ fetchQualifiedRaces() -> calls backend API with filter params
-  │  │  └─ Renders child components based on state (skeletons, race cards, error states)
+  │  ├─ LiveRaceDashboard.tsx (Main stateful component)
+  │  │  ├─ Manages connection state ('connecting', 'online', 'error').
+  │  │  ├─ Polls Electron main process for backend status via secure IPC.
+  │  │  └─ Fetches data from the local Python API when online.
   │  │
-  │  ├─ RaceCard.tsx (displays a single race)
-  │  ├─ RaceFilters.tsx (user controls for filtering)
-  │  └─ ManualOverridePanel.tsx (handles adapter failures)
+  │  ├─ RaceCard.tsx (Displays a single race)
+  │  └─ StatusIndicator.tsx (Shows backend connection status)
   │
   └─ src/types/
      └─ racing.ts (TypeScript interfaces matching backend Pydantic models)
@@ -118,198 +105,118 @@ FRONTEND:
 ```
 ELECTRON_WRAPPER:
   ├─ main.js (Electron main process)
-  │  ├─ Creates BrowserWindow, loads static frontend (`index.html`)
-  │  ├─ Spawns and manages the backend executable (`api.exe`) as a child process
-  │  ├─ Creates a system tray icon for background operation
-  │  ├─ Sends backend status ('online'/'offline') to frontend via IPC
-  │  └─ Exposes a secure API key retrieval mechanism via IPC
+  │  ├─ Creates the BrowserWindow and loads the static frontend.
+  │  ├─ Implements robust lifecycle management for the backend executable.
+  │  ├─ Provides secure IPC handlers for status checks and restarts.
+  │  └─ Creates a system tray icon for background operation.
   │
-  ├─ preload.js (Secure IPC bridge)
-  │  └─ Uses contextBridge to expose `window.electronAPI` to the frontend
+  ├─ preload.js (Secure IPC Bridge)
+  │  └─ Uses `contextBridge` to safely expose specific functions to the frontend.
   │
-  ├─ package.json (electron-builder configuration)
-  │  └─ Defines build settings for the MSI installer
+  ├─ package.json
+  │  └─ Defines Node.js dependencies and build scripts.
+  │
+  ├─ electron-builder-config.yml
+  │  └─ Defines the configuration for creating the final MSI installer.
   │
   └─ .github/workflows/build-msi.yml
-     └─ GitHub Actions CI/CD pipeline for automated MSI builds
+     └─ GitHub Actions pipeline that automates the entire build, test, and package process.
 ```
 
 ---
 
 ## 3. BACKEND ENGINE (PYTHON) - DETAILED
 
-### 3.1 Configuration & Environment
+### 3.1 Entry Point & Server Startup (`main.py`)
 
-```
-PSEUDOCODE get_settings():
-  IMPORT Settings from pydantic_settings
+```pseudocode
+// This is the script executed by fortuna-backend.exe
 
-  DEFINE Settings class:
-    - API_KEY: str (no default; must exist, min_length=16)
-    - BETFAIR_USERNAME, BETFAIR_PASSWORD: Optional[str]
-    - TVG_API_KEY: Optional[str]
-    - REDIS_URL: str (default: "redis://localhost:6379")
-    - ALLOWED_ORIGINS: List[str] (default: ["http://localhost:3000", "http://localhost:3001"])
-    - MAX_CONCURRENT_REQUESTS: int (default: 10)
-    - HTTP_POOL_CONNECTIONS: int (default: 100)
-    - HTTP_MAX_KEEPALIVE: int (default: 20)
+PROCEDURE Main_Python_Entry_Point
+  // Guard required for PyInstaller and multiprocessing on Windows
+  IF this script is the main entry point:
+    CALL multiprocessing.freeze_support()
 
-  RETURN Settings instance (uses lru_cache for singleton pattern)
-```
-
-### 3.2 Adapter Framework
-
-```
-ABSTRACT CLASS BaseAdapterV3(source_name, base_url):
-  INIT():
-    self.source_name ← source_name
-    self.base_url ← base_url
-    self.http_client ← None  // Injected by OddsEngine
-    self.logger ← structlog.get_logger()
-
-  ASYNC FUNCTION make_request(method, url, **kwargs):
-    // Simplified for brevity: performs an HTTP request with error handling
-    TRY:
-      response ← await self.http_client.request(method, full_url, **kwargs)
-      response.raise_for_status()
-      RETURN response
-    CATCH HTTPStatusError e:
-      RAISE AdapterHttpError(status_code=e.response.status_code, url=full_url)
-    CATCH RequestError e:
-      RAISE AdapterHttpError(url=full_url)
-
-  ASYNC ABSTRACT FUNCTION _fetch_data(date: str) → Any:
-    """Performs all network operations; returns raw data (e.g., HTML/JSON)."""
-    PASS
-
-  ABSTRACT FUNCTION _parse_races(raw_data: Any) → List[Race]:
-    """A pure function that parses raw data into Race objects; no side effects."""
-    PASS
-
-  ASYNC GENERATOR FUNCTION get_races(date: str):
-    """Public interface: orchestrates the fetch → parse pipeline."""
-    TRY:
-      raw_data ← await _fetch_data(date)
-      IF raw_data IS NOT None:
-        parsed_races ← _parse_races(raw_data)
-        FOR race IN parsed_races:
-          YIELD race
-    CATCH Exception e:
-      logger.error(f"Pipeline error for {source_name}", exc_info=True)
-      // Exception is caught and logged by the OddsEngine
-      RAISE
+    // Programmatically launch the FastAPI application using Uvicorn
+    // This call blocks and runs the server until the process is terminated
+    CALL uvicorn.run(
+      app="python_service.api:app",
+      host="0.0.0.0",
+      port=8000
+    )
+END PROCEDURE
 ```
 
-### 3.3 Engine Orchestration
+### 3.2 Asynchronous Application Lifecycle (`api.py`)
 
-```
-CLASS OddsEngine:
-  INIT(config):
-    self.config ← config
-    self.adapters ← [List of all adapter instances]
-    self.http_client ← httpx.AsyncClient(...)
-    self.semaphore ← asyncio.Semaphore(config.MAX_CONCURRENT_REQUESTS)
+```pseudocode
+// --- Lifespan Management (The key to a non-blocking startup) ---
+ASYNC FUNCTION lifespan_manager(app: FastAPI):
+  // === ON STARTUP ===
+  LOG "Uvicorn server is online. Starting lifespan initialization."
 
-    // Inject shared HTTP client into each adapter
-    FOR adapter IN self.adapters:
-      adapter.http_client ← self.http_client
+  // 1. Perform immediate, non-blocking tasks
+  CONNECT to Redis cache
 
-  ASYNC FUNCTION close():
-    AWAIT self.http_client.aclose()
+  // 2. Defer slow, blocking tasks to a background thread
+  //    This allows the server to start accepting requests instantly.
+  SCHEDULE function "initialize_heavy_resources(app)" to run in a ThreadPoolExecutor
 
-  ASYNC FUNCTION _fetch_with_semaphore(adapter, date):
-    ASYNC WITH self.semaphore:
-      RETURN await _time_adapter_fetch(adapter, date)
+  LOG "Heavy resource initialization scheduled. Server is now responsive."
 
-  ASYNC FUNCTION _time_adapter_fetch(adapter, date) -> Tuple[str, dict, float]:
-    // Wraps adapter.get_races to handle errors and record performance
-    TRY:
-      races ← [race async for race in adapter.get_races(date)]
-      // Build success payload
-    CATCH Exception e:
-      // Build failure payload
-    RETURN (adapter.source_name, payload, duration)
-
-  FUNCTION _dedupe_races(races: List[Race]) → List[Race]:
-    // Merges races with the same key (venue|race_number|start_time)
-    // Aggregates runner odds from different sources for the same race
-    PASS
-
-  @cache_async_result(ttl_seconds=300)
-  ASYNC FUNCTION fetch_all_odds(date_str, source_filter=None):
-    // Determine which adapters to run based on source_filter
-    target_adapters ← ...
-
-    // Create concurrent fetching tasks
-    tasks ← [_fetch_with_semaphore(adapter, date_str) FOR adapter in target_adapters]
-    results ← AWAIT asyncio.gather(*tasks, return_exceptions=True)
-
-    // Process results: separate successful from failed, collect all races
-    all_races ← ...
-    source_infos ← ...
-
-    // Deduplicate and merge the collected races
-    deduped_races ← _dedupe_races(all_races)
-
-    // Build and return the final AggregatedResponse object
-    RETURN AggregatedResponse(...)
-```
-
-### 3.4 API Layer (FastAPI)
-
-```
-// --- Lifespan Management ---
-ASYNC FUNCTION lifespan(app):
-  // Startup:
-  configure_logging()
-  settings ← get_settings()
-  engine ← OddsEngine(config=settings)
-  app.state.engine ← engine
-  app.state.analyzer_engine ← AnalyzerEngine()
-  // ... other initializations
-
+  // 3. Yield control back to Uvicorn. The server is now live.
   YIELD
 
-  // Shutdown:
-  AWAIT app.state.engine.close()
+  // === ON SHUTDOWN ===
+  LOG "Shutdown signal received."
+  AWAIT app.state.engine.close() // Gracefully close HTTP client connections
+  DISCONNECT from Redis
+  SHUTDOWN ThreadPoolExecutor
 
+// --- Heavy Initialization (Runs in Background) ---
+FUNCTION initialize_heavy_resources(app: FastAPI):
+  TRY
+    LOG "Background initialization of OddsEngine has started."
+    settings <- get_settings_from_config()
+    engine <- create new OddsEngine(config=settings)
+    // This part is slow: it loads all ~25 adapters
+    app.state.engine <- engine
+    LOG "Background initialization complete. OddsEngine is now available."
+  CATCH Exception as e:
+    LOG_CRITICAL "Failed to initialize OddsEngine in the background.", error=e
+    app.state.engine <- null // Ensure the app knows initialization failed
+```
 
-// --- Main Application ---
-APP ← FastAPI(lifespan=lifespan)
-// Add middleware for CORS, Rate Limiting, Error Handling
+### 3.3 Engine Orchestration (`engine.py`)
 
+```pseudocode
+CLASS OddsEngine:
+  INIT(config):
+    self.config <- config
+    self.adapters <- [List of all adapter instances]
+    self.http_client <- httpx.AsyncClient(...)
+    self.semaphore <- asyncio.Semaphore(config.MAX_CONCURRENT_REQUESTS)
 
-// --- Dependencies ---
-FUNCTION verify_api_key(x_api_key: str = Header(...)):
-  // Compares provided key with settings.API_KEY using secrets.compare_digest
-  PASS
+    // Inject the shared, persistent HTTP client into each adapter
+    FOR adapter IN self.adapters:
+      adapter.http_client <- self.http_client
 
-DEPENDENCY get_engine(request):
-  RETURN request.app.state.engine
+  @cache_async_result(ttl_seconds=300)
+  ASYNC FUNCTION fetch_all_odds(date_str):
+    // Create a list of concurrent fetching tasks, wrapped in the semaphore
+    tasks <- [self._fetch_with_semaphore(adapter, date_str) FOR adapter in self.adapters]
+    results <- AWAIT asyncio.gather(*tasks, return_exceptions=True)
 
+    // Process results, separating successes from failures
+    all_races <- []
+    FOR result IN results:
+      IF result is a success:
+        all_races.extend(result.races)
 
-// --- Routes ---
-@app.get("/api/races/qualified/{analyzer_name}")
-ASYNC FUNCTION get_qualified_races(
-  analyzer_name: str,
-  race_date: Optional[date],
-  engine = Depends(get_engine),
-  verified = Depends(verify_api_key),
-  // Filter parameters from Query (max_field_size, etc.)
-):
-  date_str ← race_date or today
+    // Deduplicate and merge races from different sources
+    deduped_races <- self._dedupe_races(all_races)
 
-  // 1. Fetch data
-  aggregated_data ← AWAIT engine.fetch_all_odds(date_str)
-  races ← aggregated_data["races"]
-
-  // 2. Get and configure analyzer
-  analyzer_engine ← request.app.state.analyzer_engine
-  analyzer ← analyzer_engine.get_analyzer(analyzer_name, **custom_params)
-
-  // 3. Analyze and return results
-  result ← analyzer.qualify_races(races)
-  RETURN result
+    RETURN AggregatedResponse(races=deduped_races, source_statuses=...)
 ```
 
 ---
@@ -318,75 +225,71 @@ ASYNC FUNCTION get_qualified_races(
 
 ### 4.1 LiveRaceDashboard Component
 
-```
+```pseudocode
 COMPONENT LiveRaceDashboard (client-side):
 
   STATE:
-    races: Race[] ← []
-    connectionStatus: 'connecting' | 'online' | 'offline' ← 'connecting'
-    errorDetails: string | null ← null
-    params: RaceFilterParams ← { defaults }
+    races: Race[] <- []
+    backendStatus: 'connecting' | 'online' | 'error' <- 'connecting'
+    lastLogs: string[] <- []
 
   EFFECT on mount:
-    // Listen for backend status updates from the Electron main process
+    // Use the secure API exposed by preload.js
     IF window.electronAPI exists:
+      // Set up a listener for status updates from the main process
       window.electronAPI.onBackendStatus((update) => {
-        setConnectionStatus(update.status)
-        IF update.status === 'offline':
-          setErrorDetails(update.error)
-        ELSE IF update.status === 'online':
-          fetchQualifiedRaces() // Trigger fetch when backend comes online
+        setBackendStatus(update.state)
+        setLastLogs(update.logs)
       })
 
-    // Set up a periodic refresh interval
-    interval ← setInterval(() => {
-      IF connectionStatus === 'online':
-        fetchQualifiedRaces()
-    }, 30000)
+    // Immediately request the current status
+    window.electronAPI.getBackendStatus().then((status) => {
+      setBackendStatus(status.state)
+      setLastLogs(status.logs)
+    })
+
+    // Set up a polling interval to keep status fresh
+    interval <- setInterval(() => {
+      window.electronAPI.getBackendStatus().then((status) => {
+        setBackendStatus(status.state)
+        setLastLogs(status.logs)
+      })
+    }, 3000) // Poll every 3 seconds
 
     CLEANUP: clearInterval(interval)
 
+  EFFECT when backendStatus changes to 'online':
+    // Trigger data fetch only when the backend is confirmed to be running
+    fetchQualifiedRaces()
+
   ASYNC FUNCTION fetchQualifiedRaces():
-    setConnectionStatus('connecting')
-
     TRY:
-      // Securely get the API key via IPC call to the main process
-      apiKey ← AWAIT window.electronAPI.getApiKey()
-      IF NOT apiKey:
-        RAISE new Error("API key could not be retrieved.")
-
-      // Build query and fetch data from the backend API
-      queryParams ← new URLSearchParams(params)
-      response ← AWAIT fetch(`/api/races/qualified/trifecta?${queryParams}`, {
-        headers: { "X-API-Key": apiKey }
-      })
-
+      // Make a standard HTTP call to the local Python server
+      response <- AWAIT fetch("http://127.0.0.1:8000/api/races/qualified/trifecta")
       IF NOT response.ok:
-        RAISE new Error(`Backend returned status ${response.status}`)
+        RAISE new Error(`API returned status ${response.status}`)
 
-      data ← AWAIT response.json()
+      data <- AWAIT response.json()
       setRaces(data.races)
-      setConnectionStatus('online')
 
     CATCH e:
-      setErrorDetails(e.message)
-      setConnectionStatus('offline')
+      // If the API call fails, update the status
+      setBackendStatus('error')
+      setLastLogs([...lastLogs, `API Fetch Error: ${e.message}`])
 
   FUNCTION RENDER:
     <div className="dashboard">
-      <Header />
-      <RaceFilters onParamsChange={handleParamChange} />
+      <StatusIndicator status={backendStatus} />
+      <RaceFilters />
 
-      IF connectionStatus === 'offline':
-        <EmptyState message={errorDetails} />
-      ELSE IF connectionStatus === 'connecting':
-        <RaceCardSkeleton count={4} />
+      IF backendStatus === 'error':
+        <ErrorDisplay logs={lastLogs} />
+      ELSE IF backendStatus === 'connecting':
+        <LoadingSkeleton />
       ELSE IF races.length === 0:
         <EmptyState message="No races matched your filters." />
       ELSE:
-        <div className="race-grid">
-          {races.map(race => <RaceCard key={race.id} race={race} />)}
-        </div>
+        <RaceGrid races={races} />
     </div>
 ```
 
@@ -394,137 +297,208 @@ COMPONENT LiveRaceDashboard (client-side):
 
 ## 5. ELECTRON WRAPPER & WINDOWS INTEGRATION - DETAILED
 
-### 5.1 Main Process (`main.js`)
+### 5.1 Main Process (`main.js`) - With Robust Lifecycle Management
 
-```
+```pseudocode
 CLASS FortunaDesktopApp:
   INIT():
-    self.mainWindow ← null
-    self.backendProcess ← null
+    self.mainWindow <- null
+    self.backendState <- 'stopped'
+    self.backendLogs <- []
+    self.backendProcess <- null
 
   FUNCTION createMainWindow():
-    self.mainWindow ← new BrowserWindow({
-      // ... window settings ...
-      webPreferences: {
-        preload: path.join(__dirname, 'preload.js') // CRITICAL for security
-      }
+    // ... create BrowserWindow, load static frontend ...
+
+  FUNCTION startBackend():
+    IF self.backendProcess is not null:
+      self.backendProcess.kill()
+
+    self.backendState <- 'starting'
+    self.backendLogs <- ['Attempting to start backend...']
+    self.sendBackendStatusUpdate() // Notify UI
+
+    // Get path to the packaged executable
+    exePath <- path.join(process.resourcesPath, 'fortuna-backend', 'fortuna-backend.exe')
+
+    IF file at exePath does NOT exist:
+      self.backendState <- 'error'
+      self.backendLogs.push(`FATAL: Executable not found at ${exePath}`)
+      self.sendBackendStatusUpdate()
+      dialog.showErrorBox("Critical Error", "Backend is missing. Please reinstall.")
+      RETURN
+
+    // Spawn the process
+    self.backendProcess <- spawn(exePath, [], { stdio: ['ignore', 'pipe', 'pipe'] })
+
+    // --- CRITICAL: Resiliency Logic ---
+    startupTimeout <- setTimeout(() => {
+      IF self.backendState === 'starting':
+        self.backendState <- 'error'
+        self.backendLogs.push('Error: Backend startup timed out after 30 seconds.')
+        self.backendProcess.kill()
+        self.sendBackendStatusUpdate()
+    }, 30000) // 30-second timeout
+
+    self.backendProcess.stdout.on('data', (data) => {
+      self.backendLogs.push(data.toString())
+      // A more robust check would be a successful health check poll
+      IF data.toString().includes("Uvicorn running"):
+        self.backendState <- 'online'
+        clearTimeout(startupTimeout)
+        self.sendBackendStatusUpdate()
     })
 
-    // Load static frontend files in production
-    IF isDev:
-      mainWindow.loadURL('http://localhost:3000')
-    ELSE:
-      mainWindow.loadFile(path.join(__dirname, 'web-ui-build', 'out', 'index.html'))
-
-  ASYNC FUNCTION startBackend():
-    // Determine path to backend executable (api.exe in production)
-    backendExecutable ← isDev ? '.venv/Scripts/python.exe' : './api.exe'
-    backendArgs ← isDev ? ['run_backend.py'] : []
-
-    // Spawn the backend as a child process
-    self.backendProcess ← spawn(backendExecutable, backendArgs)
-
-    // Listen to stdout for the startup signal
-    backendProcess.stdout.on('data', (data) => {
-      IF data.toString().includes("Backend ready"):
-        // Notify frontend that the backend is online
-        mainWindow.webContents.send('backend-status', { status: 'online' })
+    self.backendProcess.stderr.on('data', (data) => {
+      self.backendLogs.push(`[STDERR] ${data.toString()}`)
     })
 
-    // Listen for errors or premature exit
-    backendProcess.on('error', (error) => {
-      mainWindow.webContents.send('backend-status', { status: 'offline', error: error.message })
+    self.backendProcess.on('exit', (code) => {
+      clearTimeout(startupTimeout)
+      IF self.backendState is not 'error': // Avoid duplicate error messages
+        self.backendState <- 'error'
+        self.backendLogs.push(`Backend process exited unexpectedly with code: ${code}`)
+        self.sendBackendStatusUpdate()
     })
-    backendProcess.on('close', (code) => {
-      IF processDidNotStartSuccessfully:
-        mainWindow.webContents.send('backend-status', { status: 'offline', error: `Process exited with code ${code}` })
-    })
 
-  FUNCTION initialize():
-    // UI-First: Create and show the window immediately
-    createMainWindow()
-    createSystemTray()
+  FUNCTION sendBackendStatusUpdate():
+    // Send the latest status to the frontend renderer process
+    IF self.mainWindow is not null:
+      self.mainWindow.webContents.send('backend-status-update', {
+        state: self.backendState,
+        logs: self.backendLogs.slice(-20) // Send last 20 log lines
+      })
 
-    // Asynchronously start the backend without blocking the UI
-    startBackend().catch(error => { /* Errors are handled by listeners */ })
+// --- IPC Handlers (Securely Defined) ---
+ipcMain.handle('get-backend-status', (event) => {
+  // SECURITY: Ensure the request is from our main window
+  IF event.sender is NOT self.mainWindow.webContents:
+    RETURN null
 
-// --- IPC Handlers (Main Process) ---
-app.whenReady().then(() => {
-  // Handler for the frontend's request for the API key
-  ipcMain.handle('get-api-key', async () => {
-    TRY:
-      // This logic would securely fetch the key (e.g., from Windows Credential Manager)
-      apiKey ← await getApiKeyFromCredentials()
-      RETURN apiKey
-    CATCH error:
-      RETURN null
-  })
+  RETURN { state: self.backendState, logs: self.backendLogs.slice(-20) }
+})
 
-  // Initialize and run the application
-  fortunaApp = new FortunaDesktopApp()
-  fortunaApp.initialize()
+ipcMain.on('restart-backend', (event) => {
+  // SECURITY: Ensure the request is from our main window
+  IF event.sender is NOT self.mainWindow.webContents:
+    RETURN
+
+  self.startBackend()
 })
 ```
 
 ### 5.2 Preload Script (`preload.js`)
 
-```
-// Expose specific, secure functions to the frontend (renderer process)
+```pseudocode
+// Expose a limited, secure API to the frontend renderer process
 contextBridge.exposeInMainWorld('electronAPI', {
-  // Function for the frontend to call to get the API key
-  getApiKey: () => ipcRenderer.invoke('get-api-key'),
-
-  // Function for the frontend to set up a listener for backend status updates
-  onBackendStatus: (callback) => ipcRenderer.on('backend-status', (_event, value) => callback(value))
+  getBackendStatus: () => ipcRenderer.invoke('get-backend-status'),
+  restartBackend: () => ipcRenderer.send('restart-backend'),
+  onBackendStatus: (callback) => ipcRenderer.on('backend-status-update', (_event, value) => callback(value))
 })
 ```
 
 ---
 
-## 6. END-TO-END WORKFLOWS
+## 6. DATA MODELS & API SPECIFICATION
 
-### 6.1 Production Startup Workflow
+### 6.1 Core Data Models (Pydantic/TypeScript)
 
 ```
-WORKFLOW user_launches_application:
-  STEP 1: User executes Fortuna Faucet.exe
-    - Electron main.js process starts
+MODEL Race:
+  id: str (unique identifier, e.g., "Betfair_USA_Aqueduct_2025-11-07_R1")
+  venue: str
+  race_number: int
+  start_time: datetime
+  runners: List[Runner]
+  source: str
 
-  STEP 2: UI Initialization (UI-First)
-    - A BrowserWindow is created immediately
-    - The window begins loading the static index.html file
-    - User sees the application window and loading state instantly
+MODEL Runner:
+  name: str
+  odds: Optional[float]
+```
 
-  STEP 3: Backend Startup (Asynchronous)
-    - The main process spawns the `api.exe` backend executable as a background child process
-    - The main process listens to the stdout of the `api.exe` process
+### 6.2 Primary API Endpoints
 
-  STEP 4: Frontend Waits for Backend
-    - The `LiveRaceDashboard` component mounts in the renderer process (the window)
-    - It uses the `window.electronAPI.onBackendStatus` listener to wait for a signal
+```
+ENDPOINT GET /health
+  Description: Simple health check, requires no authentication.
+  Response (200 OK): {"status": "ok"}
 
-  STEP 5: Backend Becomes Ready
-    - `api.exe` finishes its startup and prints "Backend ready" to stdout
-    - The main process detects this message
-    - The main process sends an IPC message `backend-status: { status: 'online' }` to the frontend
-
-  STEP 6: Data Fetch is Triggered
-    - The frontend's `onBackendStatus` listener receives the 'online' signal
-    - It calls the `fetchQualifiedRaces()` function
-
-  STEP 7: Secure API Key Retrieval
-    - `fetchQualifiedRaces()` calls `await window.electronAPI.getApiKey()`
-    - The preload script bridges this call to the `ipcMain.handle('get-api-key', ...)` handler in the main process
-    - The handler securely retrieves the key and returns it to the frontend
-
-  STEP 8: API Call and Render
-    - The frontend makes the `fetch` request to the backend API, including the retrieved key
-    - The backend processes the request and returns data
-    - The frontend renders the race cards
-
-  RESULT: User sees the live race dashboard populated with data. The entire process from launch to data display is orchestrated and secure.
+ENDPOINT GET /api/races/qualified/trifecta
+  Description: Fetches all race data, runs the Trifecta analyzer, and returns qualified races.
+  Headers:
+    - X-API-Key: (Required, not used in this local setup but good practice)
+  Query Params:
+    - max_field_size: int
+    - min_odds: float
+  Response (200 OK):
+    {
+      "qualified_races": List[Race],
+      "analysis_metadata": { ... }
+    }
 ```
 
 ---
 
-*This concludes the refined pseudocode blueprint, updated to reflect the true architecture and logic of the Fortuna Faucet application.*
+## 7. DEPLOYMENT & AUTOMATION (CI/CD)
+
+```pseudocode
+WORKFLOW Build_MSI_Installer_on_GitHub_Actions:
+  // Phase 1: Setup
+  SETUP Node.js and Python environments
+
+  // Phase 2: Build Frontend
+  RUN "npm ci" and "npm run build" in /web_platform/frontend
+  COPY static output to /electron/web-ui-build/out
+
+  // Phase 3: Build Backend
+  RUN "pip install -r python_service/requirements.txt"
+  // CRITICAL: Use PyInstaller with a spec file or CLI flags that include
+  // necessary hidden imports to prevent runtime crashes.
+  // e.g., --hidden-import=keyring.backends.fail.Keyring
+  EXECUTE PyInstaller to create fortuna-backend.exe
+  PLACE executable in /electron/resources/fortuna-backend
+
+  // Phase 4: Deep Integration Test
+  START fortuna-backend.exe in the background
+  POLL http://127.0.0.1:8000/health until it responds with 200 OK or times out
+  IF timeout or crash THEN FAIL the build
+
+  // Phase 5: Package
+  RUN "npm ci" in /electron
+  EXECUTE "npx electron-builder" to create the MSI installer
+
+  // Phase 6: Publish
+  UPLOAD MSI as a build artifact
+  IF build was triggered by a git tag THEN CREATE a new GitHub Release
+```
+
+---
+
+## 8. END-TO-END WORKFLOWS
+
+### 8.1 Production Startup Workflow (Resilient)
+
+```
+WORKFLOW user_launches_application:
+  STEP 1: User executes Fortuna Faucet.exe -> Electron main.js starts.
+  STEP 2: UI appears instantly. The main process creates the BrowserWindow and loads the static index.html. The UI shows a 'connecting' state.
+  STEP 3: Backend starts asynchronously. The main process calls the robust `startBackend()` function.
+  STEP 4: `startBackend()` spawns `fortuna-backend.exe` and starts a 30-second timeout.
+  STEP 5: The frontend UI polls for status every 3 seconds via the secure `window.electronAPI.getBackendStatus()`.
+  STEP 6: The backend `.exe` starts, its `lifespan` hook runs, and the Uvicorn server comes online within seconds.
+  STEP 7: The main process detects the "Uvicorn running" message (or a successful health poll) and updates its internal state to 'online'. The startup timeout is cleared.
+  STEP 8: On its next poll, the frontend receives the 'online' status.
+  STEP 9: The frontend's state changes, triggering the `fetchQualifiedRaces()` API call to `localhost:8000`.
+  STEP 10: Data is returned from the now fully-initialized backend and rendered in the UI.
+
+  FAILURE SCENARIO (Backend Crash):
+  STEP 6a: The backend `.exe` crashes on startup.
+  STEP 7a: The `on('exit')` handler in `main.js` fires. The state is set to 'error' with the exit code.
+  STEP 8a: On its next poll, the frontend receives the 'error' status and relevant logs.
+  STEP 9a: The UI renders an error message and a "Restart Backend" button.
+```
+
+---
+*This concludes the revised and definitive blueprint for the Fortuna Faucet application.*
