@@ -2,7 +2,7 @@
 # This is the 'golden' manifest, combining the blueprint's pinned versions with all feature requirements.
 
 # --- Core Backend (FastAPI & Async) ---
-fastapi==0.104.1
+fastapi==0.109.1
 uvicorn==0.24.0
 httptools==0.6.1
 websockets==12.0
@@ -49,14 +49,15 @@ psutil==5.9.6; sys_platform == 'win32'
 pywin32==306; sys_platform == 'win32'
 windows-toasts; sys_platform == 'win32'
 keyring; sys_platform == 'win32'
+pynput; sys_platform == 'win32'
 
 # --- Testing ---
 pytest==7.4.3
 pytest-asyncio==0.21.1
 
 # --- Development ---
-black==23.11.0
-cryptography
+black==24.3.0
+cryptography==44.0.1
 
 # --- Build Tools ---
 setuptools<81
