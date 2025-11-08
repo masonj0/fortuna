@@ -58,17 +58,44 @@ class FortunaDesktopApp {
       const exePath = path.join(process.resourcesPath, 'fortuna-backend', 'fortuna-backend.exe');
 
       if (!fs.existsSync(exePath)) {
-        const errorMsg = 'FATAL: Backend executable missing from installation.';
-        console.error(errorMsg, { path: exePath });
+        const errorMsg = `FATAL: Backend executable missing at ${exePath}`;
+        console.error(errorMsg);
         this.backendState = 'error';
-        this.backendLogs.push(errorMsg, `Expected at: ${exePath}`);
+        this.backendLogs.push(errorMsg);
         this.sendBackendStatusUpdate();
+        const { dialog } = require('electron');
+        dialog.showErrorBox(
+          'Backend Missing',
+          'The backend service is missing. Please reinstall Fortuna Faucet.'
+        );
         return;
       }
 
       console.log('Launching backend from:', exePath);
       this.backendProcess = spawn(exePath, [], {
-        env: { ...process.env, HOST: '127.0.0.1', PORT: '8000' }
+        env: { ...process.env, HOST: '127.0.0.1', PORT: '8000' },
+        stdio: ['ignore', 'pipe', 'pipe'] // Ensure proper stdio handling
+      });
+
+      // Add startup timeout
+      const startupTimeout = setTimeout(() => {
+        if (this.backendState === 'starting') {
+          const timeoutMsg = 'Backend startup timed out after 30 seconds';
+          console.error(timeoutMsg);
+          this.backendLogs.push(timeoutMsg);
+          this.backendState = 'error';
+          this.backendProcess?.kill();
+          this.sendBackendStatusUpdate();
+        }
+      }, 30000);
+
+      // Clear timeout on successful start or exit
+      this.backendProcess.on('spawn', () => {
+        // This is a good place to potentially clear the timeout if we get a health check pass
+      });
+
+      this.backendProcess.on('exit', () => {
+        clearTimeout(startupTimeout);
       });
     }
 
@@ -280,17 +307,29 @@ class FortunaDesktopApp {
 
     // Set up IPC listener for restart command
     ipcMain.on('restart-backend', (event) => {
-      console.log('Received restart-backend command from frontend.');
+      // Validate the request source
+      if (event.sender !== this.mainWindow?.webContents) {
+        console.warn('Unauthorized restart-backend request blocked');
+        return;
+      }
+
+      console.log('Received validated restart-backend command from frontend.');
       this.backendLogs.push('Restart command received. Attempting to restart backend...');
-      this.startBackend(); // This will kill the old process and start a new one
+      this.startBackend();
     });
 
     // Add a handler for the frontend to request the current status on load
     ipcMain.handle('get-backend-status', async (event) => {
-      console.log('Received get-backend-status request from frontend.');
+      // Validate request source
+      if (event.sender !== this.mainWindow?.webContents) {
+        console.error('Unauthorized status request blocked');
+        throw new Error('Unauthorized status request');
+      }
+
+      console.log('Received validated get-backend-status request from frontend.');
       return {
         state: this.backendState,
-        logs: this.backendLogs.slice(-20)
+        logs: this.backendLogs.slice(-20).map(log => log.substring(0, 1000)) // Limit log size
       };
     });
 
