@@ -28,7 +28,7 @@ packages_to_collect = [
     'uvicorn', 'fastapi', 'starlette', 'httpcore', 'anyio',
     'typing-extensions', 'pydantic', 'pydantic_core', 'httpx',
     'certifi', 'bs4', 'pandas', 'aiosqlite', 'keyring', 'structlog',
-    'cffi'  # Add this line to include the C-language interface backend
+    'cffi'  # The C-language interface backend for cryptography
 ]
 
 binaries = []
