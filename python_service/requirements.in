@@ -22,7 +22,7 @@ aiosqlite
 SQLAlchemy
 psycopg2-binary
 structlog
-cryptography
+cryptography==42.0.5
 
 # --- Desktop & UI Related ---
 psutil

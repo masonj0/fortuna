@@ -8,7 +8,11 @@ from typing import Dict
 from typing import List
 from typing import Tuple
 
+import json
+
 import httpx
+import redis
+import redis.asyncio as redis_async
 import structlog
 from pydantic import ValidationError
 
@@ -42,7 +46,6 @@ from .adapters.timeform_adapter import TimeformAdapter
 from .adapters.twinspires_adapter import TwinSpiresAdapter
 from .adapters.tvg_adapter import TVGAdapter
 from .adapters.xpressbet_adapter import XpressbetAdapter
-from .cache_manager import cache_async_result
 from .config import get_settings
 from .core.exceptions import AdapterConfigError
 from .core.exceptions import AdapterHttpError
@@ -63,6 +66,9 @@ class OddsEngine:
         self.logger = structlog.get_logger(__name__)
         self.logger.info("Initializing FortunaEngine...")
         self.connection_manager = connection_manager
+        self.redis_client = None
+        self.use_redis = False
+        self._memory_cache = {}  # The in-memory fallback cache
 
         try:
             try:
@@ -79,6 +85,28 @@ class OddsEngine:
                 self.config = Settings(
                     API_KEY="a_secure_test_api_key_that_is_long_enough"
                 )
+
+            # --- Redis Initialization with Fallback ---
+            try:
+                # Attempt to connect with a short timeout
+                self.redis_client = redis_async.from_url(
+                    self.config.REDIS_URL,
+                    decode_responses=True,
+                    socket_connect_timeout=2,
+                )
+                # Ping the server to confirm connectivity
+                # Note: This is a synchronous ping for startup validation
+                if redis.Redis.from_url(self.config.REDIS_URL).ping():
+                    self.use_redis = True
+                    self.logger.info("✅ Redis connection successful. Caching is enabled.")
+                else:
+                    raise ConnectionError("Redis ping failed.")
+            except Exception as e:
+                self.logger.warning(
+                    f"⚠️ Redis unavailable, falling back to in-memory cache. Reason: {e}"
+                )
+                self.redis_client = None
+                self.use_redis = False
 
             self.logger.info("Initializing adapters...")
             self.adapters: List[BaseAdapterV3] = []
@@ -184,6 +212,26 @@ class OddsEngine:
     def get_all_adapter_statuses(self) -> List[Dict[str, Any]]:
         return [adapter.get_status() for adapter in self.adapters]
 
+    async def get_from_cache(self, key):
+        if self.use_redis and self.redis_client:
+            try:
+                return await self.redis_client.get(key)
+            except Exception as e:
+                self.logger.error(f"Redis GET failed, returning None. Error: {e}")
+                return None
+        else:
+            return self._memory_cache.get(key)
+
+    async def set_in_cache(self, key, value, ttl=300):
+        if self.use_redis and self.redis_client:
+            try:
+                await self.redis_client.setex(key, ttl, value)
+            except Exception as e:
+                self.logger.error(f"Redis SET failed. Error: {e}")
+        else:
+            self._memory_cache[key] = value
+            # Note: In-memory cache does not have TTL here, but this is a simple fallback.
+
     async def _fetch_with_semaphore(self, adapter: BaseAdapterV3, date: str):
         """Acquires the semaphore before fetching data from an adapter."""
         async with self.semaphore:
@@ -268,7 +316,6 @@ class OddsEngine:
         if self.connection_manager:
             await self.connection_manager.broadcast(data)
 
-    @cache_async_result(ttl_seconds=300, key_prefix="fortuna_engine_races")
     async def fetch_all_odds(
         self, date: str, source_filter: str = None
     ) -> Dict[str, Any]:
@@ -276,6 +323,14 @@ class OddsEngine:
         Fetches and aggregates race data from all configured adapters.
         The result of this method is cached and broadcasted via WebSocket.
         """
+        # Construct a cache key
+        cache_key = f"fortuna_engine_races:{date}:{source_filter or 'all'}"
+        cached_data = await self.get_from_cache(cache_key)
+        if cached_data:
+            log.info("Cache hit for fetch_all_odds", key=cache_key)
+            return json.loads(cached_data)
+
+        log.info("Cache miss for fetch_all_odds", key=cache_key)
         target_adapters = self.adapters
         if source_filter:
             log.info("Applying source filter", source=source_filter)
@@ -321,5 +376,10 @@ class OddsEngine:
         )
 
         response_data = response_obj.model_dump(by_alias=True)
+
+        # Set the result in the cache
+        await self.set_in_cache(
+            cache_key, json.dumps(response_data, default=str), ttl=300
+        )
         await self._broadcast_update(response_data)
         return response_data

@@ -25,6 +25,7 @@
     "config.ini",
     "configure_startup.py",
     "create_fortuna_json.py",
+    "fortuna-backend.spec.template",
     "fortuna_app.py",
     "fortuna_monitor.py",
     "jules-scratch/verification/launch.png",
