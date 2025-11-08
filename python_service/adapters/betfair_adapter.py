@@ -7,7 +7,7 @@ from typing import List
 
 from ..models import Race
 from ..models import Runner
-from .base_v3 import BaseAdapterV3
+from .base_adapter_v3 import BaseAdapterV3
 from .betfair_auth_mixin import BetfairAuthMixin
 
 

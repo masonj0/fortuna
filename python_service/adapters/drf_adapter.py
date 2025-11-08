@@ -11,7 +11,7 @@ from ..models import Race
 from ..models import Runner
 from ..utils.odds import parse_odds_to_decimal
 from ..utils.text import normalize_venue_name
-from .base_v3 import BaseAdapterV3
+from .base_adapter_v3 import BaseAdapterV3
 
 
 class DRFAdapter(BaseAdapterV3):
