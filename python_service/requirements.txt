@@ -86,6 +86,8 @@ requests==2.32.3
     # via streamlit
 rich==13.7.1
     # via rich, streamlit
+redis==6.2.0
+selectolax==0.3.1
 setuptools==70.3.0
     # via -r python_service/requirements.in
 six==1.16.0
