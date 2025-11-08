@@ -4,72 +4,105 @@
 #
 #    pip-compile python_service/requirements.in
 #
+aiosqlite==0.21.0
+    # via -r python_service/requirements.in
+altgraph==0.17.4
+    # via pyinstaller
+annotated-types==0.7.0
+    # via pydantic
 anyio==4.4.0
-    # via starlette
-attrs==23.2.0
-    # via pytest
+    # via
+    #   httpx
+    #   starlette
+beautifulsoup4==4.14.2
+    # via -r python_service/requirements.in
 black==24.4.2
     # via -r python_service/requirements.in
-blinker==1.8.2
-    # via streamlit
-cachecontrol==0.14.0
-    # via streamlit
 certifi==2023.7.22
-    # via -r python_service/requirements.in, cachecontrol, httpx, requests, streamlit
+    # via
+    #   httpcore
+    #   httpx
 cffi==1.16.0
     # via cryptography
-charset-normalizer==3.3.2
-    # via requests
 click==8.1.7
-    # via black, fastapi, streamlit
+    # via
+    #   black
+    #   uvicorn
 cryptography==44.0.1
-    # via -r python_service/requirements.in
+    # via
+    #   -r python_service/requirements.in
+    #   secretstorage
+cython==3.2.0
+    # via selectolax
 fastapi==0.115.0
     # via -r python_service/requirements.in
-gitpython==3.1.43
-    # via streamlit
-gitdb==4.0.11
-    # via gitpython
+greenlet==3.2.4
+    # via sqlalchemy
 h11==0.14.0
-    # via uvicorn
+    # via
+    #   httpcore
+    #   uvicorn
+h2==4.3.0
+    # via httpx
+hpack==4.1.0
+    # via h2
+html5lib==1.1
+    # via -r python_service/requirements.in
 httpcore==1.0.5
     # via httpx
-httpx==0.27.0
+httpx[http2]==0.27.0
     # via -r python_service/requirements.in
+hyperframe==6.1.0
+    # via h2
 idna==3.7
-    # via requests
+    # via
+    #   anyio
+    #   httpx
 iniconfig==2.0.0
     # via pytest
 keyring==25.6.0
     # via -r python_service/requirements.in
-markdown-it-py==3.0.0
-    # via rich
-mdurl==0.1.2
-    # via markdown-it-py
-msgpack==1.0.8
-    # via cachecontrol
+lxml==6.0.2
+    # via -r python_service/requirements.in
+more-itertools==10.8.0
+    # via
+    #   jaraco-classes
+    #   jaraco-functools
 mypy-extensions==1.0.0
     # via black
+numpy==2.3.4
+    # via
+    #   -r python_service/requirements.in
+    #   pandas
+    #   scipy
 packaging==24.1
-    # via black, pyinstaller, streamlit
+    # via
+    #   black
+    #   pyinstaller
+    #   pyinstaller-hooks-contrib
+    #   pytest
+pandas==2.3.3
+    # via -r python_service/requirements.in
 pathspec==0.12.1
+    # via black
+platformdirs==4.5.0
     # via black
 pluggy==1.5.0
     # via pytest
-prometheus-client==0.20.0
-    # via streamlit
-pyarrow==16.1.0
-    # via streamlit
-pydeck==0.9.0
-    # via streamlit
+psutil==7.1.3
+    # via -r python_service/requirements.in
+psycopg2-binary==2.9.11
+    # via -r python_service/requirements.in
+pycparser==2.23
+    # via cffi
 pydantic==2.8.2
-    # via fastapi, pydantic-settings
+    # via
+    #   fastapi
+    #   pydantic-settings
+pydantic-core==2.20.1
+    # via pydantic
 pydantic-settings==2.3.4
     # via -r python_service/requirements.in
-pydantic_core==2.20.1
-    # via pydantic
-pygments==2.18.0
-    # via rich
 pyinstaller==6.1.0
     # via -r python_service/requirements.in
 pyinstaller-hooks-contrib==2024.8
@@ -79,46 +112,52 @@ pyjwt==2.8.0
 pyopenssl==24.1.0
     # via cryptography
 pytest==7.4.3
+    # via
+    #   -r python_service/requirements.in
+    #   pytest-asyncio
+pytest-asyncio==0.23.8
     # via -r python_service/requirements.in
-pywin32==306
-    # via -r python_service/requirements.in, keyring, pyinstaller, windows-toasts
-requests==2.32.3
-    # via streamlit
-rich==13.7.1
-    # via rich, streamlit
-redis==6.2.0
+python-dateutil==2.9.0.post0
+    # via pandas
+python-dotenv==1.2.1
+    # via pydantic-settings
+pytz==2025.2
+    # via pandas
+scipy==1.16.3
+    # via -r python_service/requirements.in
+secretstorage==3.4.0
+    # via keyring
 selectolax==0.3.1
-setuptools==70.3.0
     # via -r python_service/requirements.in
 six==1.16.0
-    # via python-dateutil
-smugmug-oauth==1.2.0
-    # via streamlit
+    # via
+    #   html5lib
+    #   python-dateutil
 sniffio==1.3.1
-    # via anyio, httpx
+    # via
+    #   anyio
+    #   httpx
+soupsieve==2.8
+    # via beautifulsoup4
+sqlalchemy==2.0.44
+    # via -r python_service/requirements.in
 starlette==0.38.2
     # via fastapi
-streamlit==1.36.0
-    # via streamlit
 structlog==24.1.0
     # via -r python_service/requirements.in
-tenacity==8.5.0
-    # via streamlit
-toolz==0.12.1
-    # via streamlit
-tornado==6.4
-    # via streamlit
 typing-extensions==4.12.2
-    # via anyio, black, pydantic, streamlit
+    # via
+    #   aiosqlite
+    #   beautifulsoup4
+    #   fastapi
+    #   pydantic
+    #   pydantic-core
+    #   sqlalchemy
 tzdata==2024.1
-    # via streamlit
-urllib3==2.2.2
-    # via requests, streamlit
+    # via pandas
 uvicorn==0.30.1
     # via -r python_service/requirements.in
-watchdog==4.0.1
-    # via streamlit
+webencodings==0.5.1
+    # via html5lib
 wheel==0.43.0
-    # via -r python_service/requirements.in
-windows-toasts==1.3.1
     # via -r python_service/requirements.in
