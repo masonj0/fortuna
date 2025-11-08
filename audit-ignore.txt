@@ -1,0 +1,10 @@
+# This file lists vulnerabilities that have been reviewed and accepted as
+# temporary technical debt. The security audit will not fail the build for these.
+
+# Vulnerability in starlette < 0.40.0 (via fastapi==0.115.0)
+# Tracked in [YOUR_TICKET_ID, e.g., FORTUNA-123]
+GHSA-f96h-pmfr-66vw
+
+# Vulnerability in starlette < 0.47.2 (via fastapi==0.115.0)
+# Tracked in [YOUR_TICKET_ID, e.g., FORTUNA-123]
+GHSA-2c2j-9gv5-cj73

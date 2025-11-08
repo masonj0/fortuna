@@ -1,0 +1,114 @@
+# -*- mode: python ; coding: utf-8 -*-
+#
+# This is a PyInstaller spec file template.
+# It is used by the CI/CD workflow to build the fortuna-backend executable.
+#
+
+import sys
+import os
+from PyInstaller.utils.hooks import collect_all, copy_metadata
+
+# --- Configuration ---
+block_cipher = None
+app_name = 'fortuna-backend'
+entry_point = 'python_service/main.py'
+
+# --- Data Files ---
+# The '__ADAPTERS_PATH__' placeholder will be replaced by the workflow.
+datas = [
+    ('__ADAPTERS_PATH__', 'adapters'),
+    ('python_service/data', 'data'),
+    ('python_service/json', 'json')
+]
+
+# --- Core Package Collection ---
+# This list contains the foundational libraries that require deep inspection
+# to find all their hidden imports and data files.
+packages_to_collect = [
+    'uvicorn', 'fastapi', 'starlette', 'httpcore', 'anyio',
+    'typing-extensions', 'pydantic', 'pydantic_core', 'httpx',
+    'certifi', 'bs4', 'pandas', 'aiosqlite', 'keyring', 'structlog',
+    'cffi'  # Add this line to include the C-language interface backend
+]
+
+binaries = []
+hiddenimports = []
+
+for pkg in packages_to_collect:
+    tmp_datas, tmp_binaries, tmp_hiddenimports = collect_all(pkg)
+    datas += tmp_datas
+    binaries += tmp_binaries
+    hiddenimports += tmp_hiddenimports
+
+# --- Metadata Collection ---
+# Ensures that package metadata (like version numbers) is included.
+for pkg in ['pydantic', 'pydantic_core', 'fastapi', 'uvicorn', 'httpx', 'psutil', 'pywin32']:
+    datas += copy_metadata(pkg)
+
+# --- Manual Hidden Imports ---
+# This list is for specific submodules that static analysis often misses.
+hiddenimports += [
+    'uvicorn.lifespan',
+    'uvicorn.logging',
+    'uvicorn.loops',
+    'uvicorn.protocols',
+    'uvicorn.protocols.http',
+    'uvicorn.protocols.websockets',
+    'anyio._backends._asyncio',
+    'h11',
+    'httptools',
+    'websockets',
+    'starlette.routing',
+    'pydantic._internal',
+    '_sqlite3',
+    'win32api',
+    'structlog',
+    '_ssl',
+    'cryptography',
+    'keyring.backends.fail', # CRITICAL: Only include the safe, non-GUI backend
+    'dateutil',
+    'lxml',
+    'html5lib',
+]
+
+# --- Analysis Object ---
+a = Analysis(
+    [entry_point],
+    pathex=[],
+    binaries=binaries,
+    datas=datas,
+    hiddenimports=hiddenimports,
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=['matplotlib', 'tkinter', 'pytest', 'IPython'],
+    win_no_prefer_redirects=False,
+    win_private_assemblies=False,
+    cipher=block_cipher,
+    noarchive=False
+)
+
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+
+# --- Executable Object ---
+exe = EXE(
+    pyz,
+    a.scripts,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    [],
+    name=app_name,
+    debug=True,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=True, # Keep console enabled for debugging in CI
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None
+)
