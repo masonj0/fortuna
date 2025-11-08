@@ -28,7 +28,7 @@ click==8.1.7
     # via
     #   black
     #   uvicorn
-cryptography==44.0.1
+cryptography==42.0.5
     # via
     #   -r python_service/requirements.in
     #   secretstorage
