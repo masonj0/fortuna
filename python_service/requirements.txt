@@ -4,7 +4,7 @@
 #
 #    pip-compile --output-file=python_service/requirements.txt python_service/requirements.in
 #
-aiosqlite==0.19.0
+aiosqlite==0.21.0
     # via -r python_service/requirements.in
 altgraph==0.17.4
     # via pyinstaller
@@ -16,7 +16,7 @@ anyio==4.11.0
     #   starlette
 beautifulsoup4==4.14.2
     # via -r python_service/requirements.in
-black==24.3.0
+black==25.9.0
     # via -r python_service/requirements.in
 certifi==2025.10.5
     # via
@@ -28,10 +28,12 @@ click==8.3.0
     # via
     #   black
     #   uvicorn
-cryptography==44.0.1
+cryptography==42.0.5
     # via
     #   -r python_service/requirements.in
     #   secretstorage
+deprecated==1.3.1
+    # via limits
 fastapi==0.115.0
     # via -r python_service/requirements.in
 greenlet==3.2.4
@@ -48,7 +50,7 @@ html5lib==1.1
     # via -r python_service/requirements.in
 httpcore==1.0.9
     # via httpx
-httpx[http2]==0.25.1
+httpx[http2]==0.28.1
     # via -r python_service/requirements.in
 hyperframe==6.1.0
     # via h2
@@ -70,6 +72,8 @@ jeepney==0.9.0
     #   secretstorage
 keyring==25.6.0
     # via -r python_service/requirements.in
+limits==5.6.0
+    # via slowapi
 lxml==6.0.2
     # via -r python_service/requirements.in
 more-itertools==10.8.0
@@ -86,6 +90,7 @@ numpy==2.3.4
 packaging==25.0
     # via
     #   black
+    #   limits
     #   pyinstaller
     #   pyinstaller-hooks-contrib
     #   pytest
@@ -103,30 +108,36 @@ psycopg2-binary==2.9.11
     # via -r python_service/requirements.in
 pycparser==2.23
     # via cffi
-pydantic==2.5.0
+pydantic==2.12.4
     # via
     #   fastapi
     #   pydantic-settings
-pydantic-core==2.14.1
+pydantic-core==2.41.5
     # via pydantic
-pydantic-settings==2.1.0
+pydantic-settings==2.11.0
     # via -r python_service/requirements.in
+pygments==2.19.2
+    # via pytest
 pyinstaller==6.1.0
     # via -r python_service/requirements.in
 pyinstaller-hooks-contrib==2025.9
     # via pyinstaller
-pytest==7.4.3
+pytest==8.4.2
     # via
     #   -r python_service/requirements.in
     #   pytest-asyncio
-pytest-asyncio==0.21.1
+pytest-asyncio==1.2.0
     # via -r python_service/requirements.in
 python-dateutil==2.9.0.post0
     # via pandas
-python-dotenv==1.0.0
+python-dotenv==1.2.1
     # via pydantic-settings
+pytokens==0.3.0
+    # via black
 pytz==2025.2
     # via pandas
+redis==7.0.1
+    # via -r python_service/requirements.in
 scipy==1.16.3
     # via -r python_service/requirements.in
 secretstorage==3.4.0
@@ -137,26 +148,36 @@ six==1.17.0
     # via
     #   html5lib
     #   python-dateutil
+slowapi==0.1.9
+    # via -r python_service/requirements.in
 sniffio==1.3.1
-    # via
-    #   anyio
-    #   httpx
+    # via anyio
 soupsieve==2.8
     # via beautifulsoup4
 sqlalchemy==2.0.44
     # via -r python_service/requirements.in
 starlette==0.38.6
     # via fastapi
-structlog==23.2.0
+structlog==25.5.0
+    # via -r python_service/requirements.in
+tenacity==9.1.2
     # via -r python_service/requirements.in
 typing-extensions==4.15.0
     # via
+    #   aiosqlite
     #   anyio
     #   beautifulsoup4
     #   fastapi
+    #   limits
     #   pydantic
     #   pydantic-core
+    #   pytest-asyncio
     #   sqlalchemy
+    #   typing-inspection
+typing-inspection==0.4.2
+    # via
+    #   pydantic
+    #   pydantic-settings
 tzdata==2025.2
     # via pandas
 uvicorn==0.30.1
@@ -165,6 +186,8 @@ webencodings==0.5.1
     # via html5lib
 wheel==0.45.1
     # via -r python_service/requirements.in
+wrapt==2.0.1
+    # via deprecated
 
 # The following packages are considered to be unsafe in a requirements file:
 # setuptools

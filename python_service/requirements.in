@@ -9,9 +9,10 @@ uvicorn==0.30.1
 # Note: starlette is a dependency of fastapi, so we don't list it here.
 # pip-compile will add the correct, compatible version for us.
 
+slowapi
 pydantic-settings
 httpx[http2]
-selectolax
+selectolax==0.4.0
 beautifulsoup4
 lxml
 html5lib
@@ -22,7 +23,9 @@ aiosqlite
 SQLAlchemy
 psycopg2-binary
 structlog
-cryptography
+redis
+tenacity
+cryptography==42.0.5
 
 # --- Desktop & UI Related ---
 psutil
