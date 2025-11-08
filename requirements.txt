@@ -36,7 +36,7 @@ SQLAlchemy==2.0.23
 psycopg2-binary==2.9.9
 
 # --- Historical Data Parsing (ChartScraper) ---
-pikepdf==8.13.0
+pikepdf==10.0.0
 tabula-py==2.7.0
 requests==2.31.0
 
