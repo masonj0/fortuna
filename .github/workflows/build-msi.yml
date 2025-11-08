@@ -58,8 +58,27 @@ jobs:
       - name: Backend - Security Audit
         shell: pwsh
         run: |
+          Write-Host "`n=== BACKEND: Security Audit ===" -ForegroundColor Cyan
           pip install pip-audit
-          pip-audit -r python_service/requirements.txt --ignore-vuln-id-file audit-ignore.txt
+
+          # Dynamically build the list of ignore flags from the audit-ignore.txt file.
+          $ignoreFlags = @()
+          if (Test-Path "audit-ignore.txt") {
+              Get-Content "audit-ignore.txt" | ForEach-Object {
+                  $line = $_.Trim()
+                  # Ignore comments and empty lines
+                  if ($line -and !$line.StartsWith("#")) {
+                      $ignoreFlags += "--ignore-vuln", $line
+                  }
+              }
+          }
+
+          Write-Host "Running pip-audit with the following dynamically generated flags: $($ignoreFlags -join ' ')"
+
+          # Run the audit with the constructed flags.
+          # The '@' symbol is PowerShell's 'splatting' operator, which passes the array
+          # elements as distinct arguments to the command.
+          pip-audit -r python_service/requirements.txt @ignoreFlags
       - name: Backend - Build with PyInstaller
         shell: pwsh
         run: |
