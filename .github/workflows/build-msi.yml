@@ -345,13 +345,17 @@ jobs:
 
       - name: Backend - Security Audit
         id: security_audit
+        shell: pwsh
         run: |
           Write-Host "`n=== BACKEND: Security Audit ===" -ForegroundColor Cyan
           pip install pip-audit
 
+          # Run the audit from within the python_service directory to avoid project path conflicts
+          cd python_service
+
           # Run the audit, ignoring known vulnerabilities.
           # The build will now FAIL if any NEW vulnerabilities are found.
-          pip-audit -r python_service/requirements.txt --ignore-vuln-id-file audit-ignore.txt
+          pip-audit -r requirements.txt --ignore-vuln-id-file ../audit-ignore.txt
 
       - name: Backend - Verify Source Files
         shell: pwsh
