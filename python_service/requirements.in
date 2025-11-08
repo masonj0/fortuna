@@ -1,21 +1,16 @@
 #
 # Fortuna Faucet - High-Level Backend Dependencies
-# Use 'pip-compile' to generate the full requirements.txt file from this.
+# This is the source of truth. Run 'pip-compile' to generate requirements.txt.
 #
 
 # --- Core Application Dependencies ---
 fastapi==0.115.0
 uvicorn==0.30.1
-# Note: starlette is a dependency of fastapi, so we don't list it here.
-# pip-compile will add the correct, compatible version for us.
+cryptography==42.0.5  # Pin to version compatible with pyopenssl < 43
 
-slowapi
 pydantic-settings
 httpx[http2]
-selectolax==0.4.0
-beautifulsoup4
-lxml
-html5lib
+selectolax==0.4.0      # Pin to modern version with pre-compiled wheels
 pandas
 numpy
 scipy
@@ -23,16 +18,14 @@ aiosqlite
 SQLAlchemy
 psycopg2-binary
 structlog
-redis
-tenacity
-cryptography==42.0.5
+certifi==2023.7.22      # Pin to resolve security vulnerability GHSA-xqr8-7jwr-rhp7
 
-# --- Desktop & UI Related ---
+# --- Desktop & OS Integration ---
 psutil
-pywin32; sys_platform == 'win32'
-windows-toasts; sys_platform == 'win32'
+pywin32
+windows-toasts
 keyring
-pynput; sys_platform == 'win32'
+pynput
 
 # --- Development & Testing Dependencies ---
 pytest
@@ -43,3 +36,4 @@ black
 pyinstaller==6.1.0
 wheel
 setuptools<81
+pip-tools

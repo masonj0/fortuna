@@ -12,11 +12,11 @@ block_cipher = None
 # --- Core Configuration ---
 app_name = 'fortuna-backend'
 entry_point = 'python_service/main.py' # CORRECT ENTRY POINT
-adapters_path = os.path.abspath('python_service/adapters').replace('\\', '/')
+adapters_path = os.path.abspath('python_service/adapters').replace('\\\\', '/')
 
 # --- Data Files ---
 datas = [
-    (adapters_path, 'adapters'),
+    ('__ADAPTERS_PATH__', 'adapters'),
     ('python_service/data', 'data'),
     ('python_service/json', 'json')
 ]
