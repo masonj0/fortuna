@@ -384,7 +384,7 @@ jobs:
               "datas = [('__ADAPTERS_PATH__', 'adapters')]",
               "hiddenimports = []",
               "binaries = []",
-              "for pkg in ['uvicorn', 'fastapi', 'starlette', 'httpcore', 'pydantic', 'pydantic_core', 'httpx', 'certifi', 'bs4', 'pandas', 'aiosqlite', 'keyring', 'structlog']:",
+              "for pkg in ['uvicorn', 'fastapi', 'starlette', 'httpcore', 'anyio', 'typing-extensions', 'pydantic', 'pydantic_core', 'httpx', 'certifi', 'bs4', 'pandas', 'aiosqlite', 'keyring', 'structlog']:",
               "    tmp_datas, tmp_binaries, tmp_hiddenimports = collect_all(pkg)",
               "    datas += tmp_datas",
               "    binaries += tmp_binaries",
