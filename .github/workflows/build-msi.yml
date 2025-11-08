@@ -58,6 +58,7 @@ jobs:
       - name: Backend - Security Audit
         shell: pwsh
         run: |
+          Write-Host "`n=== BACKEND: Security Audit ===" -ForegroundColor Cyan
           pip install pip-audit
           $ignoreFlags = @()
           if (Test-Path "audit-ignore.txt") {

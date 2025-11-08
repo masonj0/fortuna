@@ -9,7 +9,7 @@ from typing import Optional
 from ..core.exceptions import AdapterConfigError
 from ..models import Race
 from ..models import Runner
-from .base_v3 import BaseAdapterV3
+from .base_adapter_v3 import BaseAdapterV3
 
 
 class RacingAndSportsAdapter(BaseAdapterV3):

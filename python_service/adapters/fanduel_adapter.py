@@ -12,7 +12,7 @@ from typing import Optional
 from ..models import OddsData
 from ..models import Race
 from ..models import Runner
-from .base_v3 import BaseAdapterV3
+from .base_adapter_v3 import BaseAdapterV3
 
 
 class FanDuelAdapter(BaseAdapterV3):

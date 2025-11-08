@@ -6,7 +6,7 @@ from typing import List
 from bs4 import BeautifulSoup
 
 from ..models import Race
-from .base_v3 import BaseAdapterV3
+from .base_adapter_v3 import BaseAdapterV3
 
 
 class UniversalAdapter(BaseAdapterV3):
