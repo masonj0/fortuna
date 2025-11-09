@@ -5,8 +5,9 @@ if __name__ == "__main__":
     # Guard for Windows compatibility
     multiprocessing.freeze_support()
 
-    # Now that the sys.path is fixed in the spec file, this string
-    # will work correctly in both development and the packaged .exe.
+    # The pathex change in the .spec file ensures that the Python interpreter
+    # can find the 'python_service' package. Therefore, this string is now
+    # correct for both local development and the packaged executable.
     uvicorn.run(
         app_string,
         host="0.0.0.0",
