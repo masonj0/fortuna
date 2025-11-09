@@ -10,7 +10,7 @@ from ..models import OddsData
 from ..models import Race
 from ..models import Runner
 from ..utils.odds import parse_odds_to_decimal
-from .base_v3 import BaseAdapterV3
+from .base_adapter_v3 import BaseAdapterV3
 
 
 class HarnessAdapter(BaseAdapterV3):

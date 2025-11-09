@@ -17,7 +17,7 @@ import structlog
 from pydantic import ValidationError
 
 from .adapters.at_the_races_adapter import AtTheRacesAdapter
-from .adapters.base_v3 import BaseAdapterV3
+from .adapters.base_adapter_v3 import BaseAdapterV3
 from .adapters.betfair_adapter import BetfairAdapter
 from .adapters.betfair_datascientist_adapter import BetfairDataScientistAdapter
 from .adapters.betfair_greyhound_adapter import BetfairGreyhoundAdapter

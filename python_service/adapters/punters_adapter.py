@@ -3,7 +3,7 @@ from typing import Any
 from typing import List
 
 from ..models import Race
-from .base_v3 import BaseAdapterV3
+from .base_adapter_v3 import BaseAdapterV3
 
 
 class PuntersAdapter(BaseAdapterV3):
