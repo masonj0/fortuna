@@ -9,7 +9,7 @@ if __name__ == "__main__":
     # can find the 'python_service' package. Therefore, this string is now
     # correct for both local development and the packaged executable.
     uvicorn.run(
-        "python_service.api:app",
+        app_string,
         host="0.0.0.0",
         port=8000,
         reload=False,
