@@ -55,7 +55,7 @@ for pkg in all_packages_to_collect:
         hiddenimports += tmp_hiddenimports
         print(f"  ✓ Successfully collected {pkg}")
     except Exception as e:
-        print(f"  ⚠️ Warning: Could not collect {pkg}: {e}")
+        print(f"  !! WARNING: Could not collect {pkg}: {e}")
 
 # --- Metadata & Final Hidden Imports ---
 for pkg in ['pydantic', 'pydantic_core', 'fastapi', 'uvicorn', 'starlette', 'httpx']:

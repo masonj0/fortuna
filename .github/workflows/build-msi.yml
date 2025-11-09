@@ -2,7 +2,7 @@
 # Fortuna Faucet - Production MSI Installer Workflow
 # Version: 2.0 (Refactored to Multi-Job Architecture)
 #
-name: Build Fortuna Faucet MSI Installer - 🏆 PRODUCTION FORTRESS
+name: Build Fortuna Faucet MSI Installer - PRODUCTION FORTRESS
 
 on:
   push:
@@ -109,7 +109,7 @@ jobs:
   # JOB 3: Package the Installer and Run Integration Tests
   # ====================================================================
   package-and-test:
-    name: '🏆 Package & Test Installer'
+    name: 'Package & Test Installer'
     # This job will only start after both build jobs have succeeded.
     needs: [build-frontend, build-backend]
     runs-on: windows-latest
