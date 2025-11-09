@@ -8,7 +8,7 @@ if __name__ == "__main__":
     # Now that the sys.path is fixed in the spec file, this string
     # will work correctly in both development and the packaged .exe.
     uvicorn.run(
-        "python_service.api:app",
+        app_string,
         host="0.0.0.0",
         port=8000,
         reload=False,
