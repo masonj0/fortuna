@@ -2,15 +2,9 @@ import argparse
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Manual Override Tool for Checkmate Data Warehouse."
-    )
-    parser.add_argument(
-        "--file", required=True, help="Path to the CSV file for ingestion."
-    )
-    parser.add_argument(
-        "--user", required=True, help="The user ID performing the override."
-    )
+    parser = argparse.ArgumentParser(description="Manual Override Tool for Checkmate Data Warehouse.")
+    parser.add_argument("--file", required=True, help="Path to the CSV file for ingestion.")
+    parser.add_argument("--user", required=True, help="The user ID performing the override.")
     args = parser.parse_args()
 
     print(f"Executing manual override by '{args.user}' for file '{args.file}'...")

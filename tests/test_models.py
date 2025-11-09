@@ -15,11 +15,7 @@ def test_runner_model_creation():
 
     from python_service.models import OddsData
 
-    odds_data = {
-        "TestOdds": OddsData(
-            win=Decimal("6.0"), source="TestOdds", last_updated=datetime.now()
-        )
-    }
+    odds_data = {"TestOdds": OddsData(win=Decimal("6.0"), source="TestOdds", last_updated=datetime.now())}
     runner = Runner(number=5, name="Test Horse", odds=odds_data, scratched=False)
     assert runner.number == 5
     assert runner.name == "Test Horse"
@@ -33,16 +29,8 @@ def test_race_model_with_valid_runners():
 
     from python_service.models import OddsData
 
-    odds1 = {
-        "TestOdds": OddsData(
-            win=Decimal("3.0"), source="TestOdds", last_updated=datetime.now()
-        )
-    }
-    odds2 = {
-        "TestOdds": OddsData(
-            win=Decimal("4.0"), source="TestOdds", last_updated=datetime.now()
-        )
-    }
+    odds1 = {"TestOdds": OddsData(win=Decimal("3.0"), source="TestOdds", last_updated=datetime.now())}
+    odds2 = {"TestOdds": OddsData(win=Decimal("4.0"), source="TestOdds", last_updated=datetime.now())}
     runner1 = Runner(number=1, name="A", odds=odds1, scratched=False)
     runner2 = Runner(number=2, name="B", odds=odds2, scratched=False)
     race = Race(

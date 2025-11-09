@@ -25,14 +25,12 @@ def create_mock_race(
         odds_data = {}
         if "odds" in runner_info:
             odds_value = Decimal(str(runner_info["odds"]))
-            odds_data[source] = OddsData(
-                win=odds_value, source=source, last_updated=datetime.now()
-            )
+            odds_data[source] = OddsData(win=odds_value, source=source, last_updated=datetime.now())
 
         runners.append(
             Runner(
                 number=runner_info.get("number", i + 1),
-                name=runner_info.get("name", f"Runner {i+1}"),
+                name=runner_info.get("name", f"Runner {i + 1}"),
                 odds=odds_data,
                 scratched=runner_info.get("scratched", False),
             ).model_dump()

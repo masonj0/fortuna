@@ -8,11 +8,11 @@ from unittest.mock import MagicMock
 from unittest.mock import patch
 
 import fakeredis
+import httpx
 import pytest
+from python_service.adapters.base_v3 import BaseAdapterV3
 from tenacity import RetryError
 
-from python_service.adapters.base_v3 import BaseAdapterV3
-from python_service.cache_manager import cache_manager
 from python_service.core.exceptions import AdapterHttpError
 from python_service.engine import OddsEngine
 from python_service.models import Race
@@ -27,9 +27,7 @@ async def test_engine_initialization():
     """
     engine = OddsEngine(config=get_test_settings())
     assert len(engine.adapters) > 0, "Adapters should be loaded"
-    assert "betfair_adapter" in [
-        a.source_name for a in engine.adapters
-    ], "Betfair adapter should be loaded"
+    assert "betfair_adapter" in [a.source_name for a in engine.adapters], "Betfair adapter should be loaded"
 
 
 @pytest.mark.asyncio
@@ -40,9 +38,7 @@ async def test_fetch_all_odds_success():
     engine = OddsEngine(config=get_test_settings())
     mock_adapter = AsyncMock(spec=BaseAdapterV3)
     mock_adapter.source_name = "MockAdapter"
-    mock_adapter.get_races.return_value = [
-        create_mock_race("MockSource", "Race 1", 1, datetime.now(), [])
-    ]
+    mock_adapter.get_races.return_value = [create_mock_race("MockSource", "Race 1", 1, datetime.now(), [])]
     engine.adapters = [mock_adapter]
 
     today_str = date.today().strftime("%Y-%m-%d")
@@ -65,9 +61,7 @@ async def test_fetch_all_odds_resilience():
     successful_adapter = AsyncMock(spec=BaseAdapterV3)
     successful_adapter.source_name = "SuccessAdapter"
     successful_adapter.get_races.return_value = [
-        create_mock_race(
-            "SuccessSource", "Success Race", 1, datetime.now(), runners=[]
-        )
+        create_mock_race("SuccessSource", "Success Race", 1, datetime.now(), runners=[])
     ]
 
     failing_adapter = AsyncMock(spec=BaseAdapterV3)
@@ -88,13 +82,9 @@ async def test_fetch_all_odds_resilience():
 
     # Check that the failed adapter's status is correctly recorded
     adapter_statuses = engine.get_all_adapter_statuses()
-    failed_adapter_status = next(
-        (s for s in adapter_statuses if s["source_name"] == "FailAdapter"), None
-    )
+    failed_adapter_status = next((s for s in adapter_statuses if s["source_name"] == "FailAdapter"), None)
     assert failed_adapter_status is not None, "Failed adapter status should be present"
-    assert (
-        "Mock HTTP Error" in failed_adapter_status["error"]
-    ), "Error message should be recorded"
+    assert "Mock HTTP Error" in failed_adapter_status["error"], "Error message should be recorded"
 
 
 @pytest.mark.asyncio
@@ -108,17 +98,11 @@ async def test_race_aggregation_and_deduplication():
     now = datetime.now()
 
     # Create two identical races from different sources
-    race1_source1 = create_mock_race(
-        "Source1", "Pimlico", 1, now, [{"number": 1, "name": "Runner A", "odds": "2.5"}]
-    )
-    race1_source2 = create_mock_race(
-        "Source2", "Pimlico", 1, now, [{"number": 1, "name": "Runner A", "odds": "2.8"}]
-    )
+    race1_source1 = create_mock_race("Source1", "Pimlico", 1, now, [{"number": 1, "name": "Runner A", "odds": "2.5"}])
+    race1_source2 = create_mock_race("Source2", "Pimlico", 1, now, [{"number": 1, "name": "Runner A", "odds": "2.8"}])
 
     # Create a unique race
-    unique_race = create_mock_race(
-        "Source1", "Belmont", 2, now, [{"number": 2, "name": "Runner B", "odds": "5.0"}]
-    )
+    unique_race = create_mock_race("Source1", "Belmont", 2, now, [{"number": 2, "name": "Runner B", "odds": "5.0"}])
 
     adapter1 = AsyncMock(spec=BaseAdapterV3)
     adapter1.source_name = "Source1"
@@ -138,9 +122,7 @@ async def test_race_aggregation_and_deduplication():
     assert len(result["races"]) == 2, "Should have two unique races after deduplication"
 
     # Find the aggregated race for Pimlico
-    pimlico_race_data = next(
-        (r for r in result["races"] if r["trackName"] == "Pimlico"), None
-    )
+    pimlico_race_data = next((r for r in result["races"] if r["trackName"] == "Pimlico"), None)
     assert pimlico_race_data is not None, "Pimlico race should be in the result"
 
     # Convert to Pydantic model for easier validation
@@ -172,9 +154,7 @@ async def test_engine_caching_logic():
         from python_service.cache_manager import cache_manager
 
         # Re-initialize the client on the singleton to use the patched async version
-        cache_manager.redis_client = redis.from_url(
-            "redis://fake", decode_responses=True
-        )
+        cache_manager.redis_client = redis.from_url("redis://fake", decode_responses=True)
         assert cache_manager.redis_client is not None, "Failed to patch redis_client"
 
         engine = OddsEngine(config=get_test_settings())
@@ -217,9 +197,7 @@ async def test_engine_caching_logic():
 
         # ASSERT
         mock_adapter.get_races.assert_not_awaited()  # Adapter was NOT called
-        assert (
-            len(result_hit["races"]) == 1
-        ), "Should return data from cache on cache hit"
+        assert len(result_hit["races"]) == 1, "Should return data from cache on cache hit"
         assert result_hit["races"][0]["trackName"] == "Cache Park"
 
 
@@ -231,9 +209,7 @@ async def test_http_client_tenacity_retry():
     # ARRANGE
     engine = OddsEngine(config=get_test_settings())
     # Find a real adapter instance to test with
-    adapter_instance = next(
-        (a for a in engine.adapters if a.source_name == "at_the_races_adapter"), None
-    )
+    adapter_instance = next((a for a in engine.adapters if a.source_name == "at_the_races_adapter"), None)
     assert adapter_instance is not None, "Could not find a suitable adapter to test"
 
     # Mock the internal httpx client's request method to simulate failures
@@ -260,6 +236,6 @@ async def test_http_client_tenacity_retry():
         pytest.fail("The HTTP client did not successfully retry after transient errors")
 
     # ASSERT
-    assert (
-        adapter_instance.http_client.get.call_count == 3
-    ), "The client should have been called 3 times (1 initial + 2 retries)"
+    assert adapter_instance.http_client.get.call_count == 3, (
+        "The client should have been called 3 times (1 initial + 2 retries)"
+    )

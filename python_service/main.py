@@ -1,9 +1,9 @@
-import uvicorn
 import multiprocessing
+
+import uvicorn
 
 # This is the crucial import. We are grabbing the configured FastAPI app
 # from your existing api.py file.
-from python_service.api import app
 
 # It's a best practice for Windows compatibility to guard the execution
 # of the server in this block. PyInstaller and multiprocessing rely on it.
@@ -21,5 +21,5 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=8000,
         reload=False,  # Reloading is not needed in a packaged executable
-        workers=1      # A single worker is standard for this setup
+        workers=1,  # A single worker is standard for this setup
     )

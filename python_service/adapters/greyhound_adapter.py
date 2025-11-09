@@ -24,9 +24,7 @@ class GreyhoundAdapter(BaseAdapterV3):
 
     def __init__(self, config=None):
         if not hasattr(config, "GREYHOUND_API_URL") or not config.GREYHOUND_API_URL:
-            raise AdapterConfigError(
-                self.SOURCE_NAME, "GREYHOUND_API_URL is not configured."
-            )
+            raise AdapterConfigError(self.SOURCE_NAME, "GREYHOUND_API_URL is not configured.")
         super().__init__(
             source_name=self.SOURCE_NAME,
             base_url=config.GREYHOUND_API_URL,
@@ -110,8 +108,6 @@ class GreyhoundAdapter(BaseAdapterV3):
                     )
                 )
             except (KeyError, ValidationError):
-                self.logger.warning(
-                    "Error parsing greyhound runner, skipping.", runner_data=runner_data
-                )
+                self.logger.warning("Error parsing greyhound runner, skipping.", runner_data=runner_data)
                 continue
         return runners

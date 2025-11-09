@@ -27,9 +27,7 @@ class AtTheRacesAdapter(BaseAdapterV3):
     BASE_URL = "https://www.attheraces.com"
 
     def __init__(self, config=None):
-        super().__init__(
-            source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
-        )
+        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
 
     async def _fetch_data(self, date: str) -> Optional[dict]:
         """
@@ -87,13 +85,9 @@ class AtTheRacesAdapter(BaseAdapterV3):
                         all_links = parent_div.select("a.race-time-link")
                         race_number = all_links.index(active_link) + 1
 
-                start_time = datetime.combine(
-                    race_date, datetime.strptime(race_time, "%H:%M").time()
-                )
+                start_time = datetime.combine(race_date, datetime.strptime(race_time, "%H:%M").time())
 
-                runners = [
-                    self._parse_runner(row) for row in soup.select("div.card-horse")
-                ]
+                runners = [self._parse_runner(row) for row in soup.select("div.card-horse")]
                 race = Race(
                     id=f"atr_{track_name.replace(' ', '')}_{start_time.strftime('%Y%m%d')}_R{race_number}",
                     venue=track_name,
@@ -141,7 +135,5 @@ class AtTheRacesAdapter(BaseAdapterV3):
             )
             return Runner(number=number, name=name, odds=odds_data)
         except (AttributeError, ValueError):
-            self.logger.warning(
-                "Failed to parse a runner on AtTheRaces, skipping runner."
-            )
+            self.logger.warning("Failed to parse a runner on AtTheRaces, skipping runner.")
             return None

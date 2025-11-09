@@ -2,6 +2,7 @@
 from unittest.mock import Mock
 from unittest.mock import patch
 
+import fakeredis.aioredis
 import httpx
 import pytest
 from fastapi.testclient import TestClient
@@ -30,9 +31,6 @@ def get_test_settings():
         # Required by GreyhoundAdapter
         GREYHOUND_API_URL="https://api.example.com/greyhound",
     )
-
-
-import fakeredis.aioredis
 
 
 @pytest.fixture(scope="module")

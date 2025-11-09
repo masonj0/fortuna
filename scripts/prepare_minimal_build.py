@@ -45,9 +45,7 @@ def main():
                 print(f"[ERROR] Failed to remove {file_path}: {e}")
                 exit(1)
 
-    print(
-        f"\nMinimal build preparation complete. Removed {removed_count} non-essential adapter(s)."
-    )
+    print(f"\nMinimal build preparation complete. Removed {removed_count} non-essential adapter(s).")
 
 
 if __name__ == "__main__":
