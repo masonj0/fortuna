@@ -11,13 +11,13 @@ import fakeredis
 import pytest
 from tenacity import RetryError
 
-from python_service.adapters.base_adapter_v3 import BaseAdapterV3
+from python_service.adapters.base_v3 import BaseAdapterV3
 from python_service.cache_manager import cache_manager
 from python_service.core.exceptions import AdapterHttpError
 from python_service.engine import OddsEngine
 from python_service.models import Race
 from tests.conftest import get_test_settings
-from .utils import create_mock_race
+from tests.utils import create_mock_race
 
 
 @pytest.mark.asyncio
