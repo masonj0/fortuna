@@ -1,25 +1,30 @@
-import multiprocessing
-
 import uvicorn
+import multiprocessing
+import sys
 
-# This is the crucial import. We are grabbing the configured FastAPI app
-# from your existing api.py file.
+# This is the standard, canonical way to check if the code is running
+# as a packaged executable via PyInstaller.
+# The 'sys.frozen' attribute is set to True by the PyInstaller bootloader.
+IS_FROZEN = getattr(sys, 'frozen', False)
 
-# It's a best practice for Windows compatibility to guard the execution
-# of the server in this block. PyInstaller and multiprocessing rely on it.
 if __name__ == "__main__":
-    # When freezing an application, the default 'spawn' start method
-    # for multiprocessing is often necessary.
+    # Guard for Windows compatibility
     multiprocessing.freeze_support()
 
-    # Programmatically run the Uvicorn server.
-    # We are telling it to run the 'app' object that we imported.
-    # The host '0.0.0.0' is essential for the server to be reachable
-    # within the GitHub Actions container.
+    if IS_FROZEN:
+        # In a packaged app, PyInstaller flattens the structure.
+        # 'api.py' is at the root, so we import from the 'api' module.
+        app_string = "api:app"
+    else:
+        # In a development environment, we run from the project root,
+        # so we need the full package path.
+        app_string = "python_service.api:app"
+
+    # Programmatically run the Uvicorn server with the correct app string.
     uvicorn.run(
-        "python_service.api:app",
+        app_string,
         host="0.0.0.0",
         port=8000,
-        reload=False,  # Reloading is not needed in a packaged executable
-        workers=1,  # A single worker is standard for this setup
+        reload=False,
+        workers=1
     )

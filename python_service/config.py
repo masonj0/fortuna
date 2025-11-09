@@ -28,15 +28,15 @@ if ENCRYPTION_ENABLED and KEY_FILE.exists():
     CIPHER = Fernet(key)
 
 
-def decrypt_value(value: Optional[str]) -> Optional[str]:
+def decrypt_value(value: Optional[str]) -> str:
     """If a value is encrypted, decrypts it. Otherwise, returns it as is."""
     if value and value.startswith("encrypted:") and CIPHER:
         try:
             return CIPHER.decrypt(value[10:].encode()).decode()
         except Exception:
             structlog.get_logger(__name__).error("Decryption failed on field.")
-            return None
-    return value
+            return ""  # Fallback to an empty string on failure
+    return value or ""  # Ensure a non-None return value even if input is None
 
 
 class Settings(BaseSettings):
