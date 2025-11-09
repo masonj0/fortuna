@@ -25,9 +25,9 @@ hiddenimports = []
 binaries = []
 
 # --- Dependency Collection ---
-# This list contains the foundational libraries that require deep inspection
-# to find all their hidden imports and data files. This is the robust
-# solution that prevents the bootloader crashes (exit code 3).
+# This list is now more surgical. We are NOT collecting the huge data science
+# libraries (pandas, numpy) and are letting PyInstaller's default hooks handle them.
+# This is the fix for the 4GB executable size limit.
 
 core_stack = [
     'uvicorn', 'fastapi', 'pydantic', 'pydantic_core', 'starlette',
@@ -37,7 +37,8 @@ core_stack = [
 
 data_stack = [
     'redis', 'tenacity', 'requests', 'selectolax', 'bs4', 'lxml',
-    'structlog', 'python-dotenv', 'pandas', 'numpy'
+    'structlog', 'python-dotenv'
+    # 'pandas' and 'numpy' are intentionally omitted from this list.
 ]
 
 windows_stack = [
