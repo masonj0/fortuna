@@ -90,6 +90,12 @@ jobs:
           }
           pip-audit -r python_service/requirements.txt @ignoreFlags
 
+      - name: Backend - Create Placeholder Directories for PyInstaller
+        shell: pwsh
+        run: |
+          New-Item -Path "python_service/data" -ItemType Directory -Force
+          New-Item -Path "python_service/json" -ItemType Directory -Force
+
       - name: Backend - Build with PyInstaller
         shell: pwsh
         run: |
