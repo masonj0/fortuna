@@ -1,6 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 #
-# This is the definitive PyInstaller spec file for Fortuna Faucet.
+# This is the definitive PyInstaller spec file template for Fortuna Faucet.
 # It programmatically collects all necessary dependencies to prevent hidden import errors.
 #
 
@@ -11,10 +11,10 @@ block_cipher = None
 
 # --- Core Configuration ---
 app_name = 'fortuna-backend'
-entry_point = 'python_service/main.py' # CORRECT ENTRY POINT
-adapters_path = os.path.abspath('python_service/adapters').replace('\\\\', '/')
+entry_point = 'run_backend.py' # CORRECT ENTRY POINT
 
 # --- Data Files ---
+# The '__ADAPTERS_PATH__' placeholder will be replaced by the workflow.
 datas = [
     ('__ADAPTERS_PATH__', 'adapters'),
     ('python_service/data', 'data'),
@@ -25,8 +25,9 @@ hiddenimports = []
 binaries = []
 
 # --- Dependency Collection ---
-# We define logical groups of packages and use collect_all to find everything they need.
-# This is the robust solution to the bootloader crashes.
+# This list contains the foundational libraries that require deep inspection
+# to find all their hidden imports and data files. This is the robust
+# solution that prevents the bootloader crashes (exit code 3).
 
 core_stack = [
     'uvicorn', 'fastapi', 'pydantic', 'pydantic_core', 'starlette',
@@ -53,9 +54,10 @@ for pkg in all_packages_to_collect:
         datas += tmp_datas
         binaries += tmp_binaries
         hiddenimports += tmp_hiddenimports
-        print(f"  [SUCCESS] Successfully collected {pkg}")
+        print(f"  ✓ Successfully collected {pkg}")
     except Exception as e:
-        print(f"  [WARNING] Could not collect {pkg}: {e}")
+        # Use ASCII-safe characters for the warning message
+        print(f"  !! WARNING: Could not collect {pkg}: {e}")
 
 # --- Metadata & Final Hidden Imports ---
 for pkg in ['pydantic', 'pydantic_core', 'fastapi', 'uvicorn', 'starlette', 'httpx']:
@@ -73,7 +75,7 @@ hiddenimports += [
 # --- Analysis Object ---
 a = Analysis(
     [entry_point],
-    pathex=[os.getcwd()],  # <-- ADD THIS LINE
+    pathex=[os.getcwd()], # CRITICAL: Fixes Python path issues in the executable
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
