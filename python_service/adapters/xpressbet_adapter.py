@@ -16,9 +16,7 @@ class XpressbetAdapter(BaseAdapterV3):
     BASE_URL = "https://www.xpressbet.com"
 
     def __init__(self, config=None):
-        super().__init__(
-            source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
-        )
+        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
 
     async def _fetch_data(self, date: str) -> Any:
         """This is a stub and does not fetch any data."""

@@ -51,9 +51,7 @@ def run_archiver():
             except Exception as e:
                 print(f"[ERROR] Could not read file {relative_path}: {e}")
 
-    print(
-        f"\nProcessed {total_files_archived} files across {len(MANIFEST_MAP)} manifests."
-    )
+    print(f"\nProcessed {total_files_archived} files across {len(MANIFEST_MAP)} manifests.")
 
     # Write the four JSON archive files
     for part_num, content_dict in archives.items():
@@ -65,9 +63,7 @@ def run_archiver():
         try:
             with open(output_path, "w", encoding="utf-8") as f:
                 json.dump(content_dict, f, indent=4)
-            print(
-                f"✅ Successfully wrote {len(content_dict)} files to {output_path.name}"
-            )
+            print(f"✅ Successfully wrote {len(content_dict)} files to {output_path.name}")
         except Exception as e:
             print(f"[FATAL] Failed to write {output_path.name}: {e}")
 

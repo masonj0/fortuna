@@ -1,7 +1,7 @@
 # python_service/cache_manager.py
+import asyncio
 import hashlib
 import json
-import os
 from datetime import datetime
 from datetime import timedelta
 from functools import wraps
@@ -34,9 +34,7 @@ class CacheManager:
         try:
             log.info("Attempting to connect to Redis...", url=redis_url)
             # Use the async version of the client
-            self.redis_client = redis.asyncio.from_url(
-                redis_url, decode_responses=True
-            )
+            self.redis_client = redis.asyncio.from_url(redis_url, decode_responses=True)
             await self.redis_client.ping()  # Verify connection asynchronously
             self.is_configured = True
             log.info("Redis cache connected successfully.")
@@ -74,9 +72,7 @@ class CacheManager:
         try:
             serialized = json.dumps(value, default=str)
         except (TypeError, ValueError) as e:
-            log.error(
-                "Failed to serialize value for caching.", value=value, error=str(e)
-            )
+            log.error("Failed to serialize value for caching.", value=value, error=str(e))
             return
 
         if self.redis_client:
@@ -100,12 +96,8 @@ def cache_async_result(ttl_seconds: int = 300, key_prefix: str = "cache"):
     def decorator(func: Callable):
         @wraps(func)
         async def wrapper(*args, **kwargs):
-            instance_args = (
-                args[1:] if args and hasattr(args[0], func.__name__) else args
-            )
-            cache_key = cache_manager._generate_key(
-                f"{key_prefix}:{func.__name__}", *instance_args, **kwargs
-            )
+            instance_args = args[1:] if args and hasattr(args[0], func.__name__) else args
+            cache_key = cache_manager._generate_key(f"{key_prefix}:{func.__name__}", *instance_args, **kwargs)
 
             cached_result = await cache_manager.get(cache_key)
             if cached_result is not None:
@@ -118,9 +110,7 @@ def cache_async_result(ttl_seconds: int = 300, key_prefix: str = "cache"):
             try:
                 await cache_manager.set(cache_key, result, ttl_seconds)
             except Exception as e:
-                log.error(
-                    "Failed to store result in cache.", error=str(e), key=cache_key
-                )
+                log.error("Failed to store result in cache.", error=str(e), key=cache_key)
 
             return result
 

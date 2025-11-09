@@ -28,9 +28,7 @@ async def test_twinspires_adapter_get_races_successfully(twinspires_adapter):
     race_date = "2025-10-26"
 
     # Patch the internal _fetch_data method to return the mock HTML
-    twinspires_adapter._fetch_data = AsyncMock(
-        return_value={"html": mock_html, "date": race_date}
-    )
+    twinspires_adapter._fetch_data = AsyncMock(return_value={"html": mock_html, "date": race_date})
 
     races = twinspires_adapter.get_races(race_date)
 

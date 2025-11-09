@@ -49,9 +49,7 @@ class PerformanceTracker:
         history = self.get_history()
         with open(filename, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(
-                ["Timestamp", "Races", "Duration", "Success Rate", "CPU %", "Memory MB"]
-            )
+            writer.writerow(["Timestamp", "Races", "Duration", "Success Rate", "CPU %", "Memory MB"])
             for i in range(len(history["times"])):
                 writer.writerow(
                     [
@@ -126,29 +124,20 @@ class FortunaAdvancedMonitor(tk.Tk):
         while self.running:
             try:
                 # Use httpx for async requests
-                with httpx.Client(
-                    headers={"X-API-KEY": self.api_key}, timeout=5
-                ) as client:
+                with httpx.Client(headers={"X-API-KEY": self.api_key}, timeout=5) as client:
                     response = client.get(f"{API_BASE_URL}/api/adapters/status")
                 if response.status_code == 200:
                     data = response.json()
                     # Add performance datapoint
                     total_races = sum(a.get("races_fetched", 0) for a in data)
-                    successful_adapters = [
-                        a for a in data if a.get("status") == "SUCCESS"
-                    ]
-                    success_rate = (
-                        (len(successful_adapters) / len(data) * 100) if data else 0
-                    )
+                    successful_adapters = [a for a in data if a.get("status") == "SUCCESS"]
+                    success_rate = (len(successful_adapters) / len(data) * 100) if data else 0
                     avg_duration = (
-                        sum(a.get("fetch_duration", 0) for a in successful_adapters)
-                        / len(successful_adapters)
+                        sum(a.get("fetch_duration", 0) for a in successful_adapters) / len(successful_adapters)
                         if successful_adapters
                         else 0
                     )
-                    self.performance.add_datapoint(
-                        total_races, avg_duration, success_rate
-                    )
+                    self.performance.add_datapoint(total_races, avg_duration, success_rate)
 
                     self.after(0, self.update_ui, data)
             except httpx.RequestError:
@@ -201,9 +190,7 @@ if __name__ == "__main__":
 
         load_dotenv()
     except ImportError:
-        print(
-            "Warning: dotenv is not installed. Script assumes environment variables are set."
-        )
+        print("Warning: dotenv is not installed. Script assumes environment variables are set.")
     app = FortunaAdvancedMonitor()
     app.protocol("WM_DELETE_WINDOW", app.on_closing)
     app.mainloop()

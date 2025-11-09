@@ -66,9 +66,7 @@ def main():
 
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
         f.write("# Fortuna Faucet: Rebranding Audit Report\n\n")
-        f.write(
-            "This report lists all files containing legacy branding terms (`checkmate`, `solo`).\n\n---\n\n"
-        )
+        f.write("This report lists all files containing legacy branding terms (`checkmate`, `solo`).\n\n---\n\n")
         if affected_files:
             for file_path in sorted(affected_files):
                 f.write(f"- `{file_path.replace(os.sep, '/')}`\n")

@@ -41,7 +41,7 @@ data_stack = [
 
 windows_stack = [
     'psutil', 'pywin32', 'pywintypes', 'win32api', 'win32con',
-    'pynput', 'cryptography', 'cffi', 'keyring'
+    'pynput', 'cryptography', 'cffi', 'keyring', 'pywin32-ctypes'
 ]
 
 all_packages_to_collect = core_stack + data_stack + windows_stack
@@ -53,9 +53,9 @@ for pkg in all_packages_to_collect:
         datas += tmp_datas
         binaries += tmp_binaries
         hiddenimports += tmp_hiddenimports
-        print(f"  ✓ Successfully collected {pkg}")
+        print(f"  [SUCCESS] Successfully collected {pkg}")
     except Exception as e:
-        print(f"  ⚠️ Warning: Could not collect {pkg}: {e}")
+        print(f"  [WARNING] Could not collect {pkg}: {e}")
 
 # --- Metadata & Final Hidden Imports ---
 for pkg in ['pydantic', 'pydantic_core', 'fastapi', 'uvicorn', 'starlette', 'httpx']:
