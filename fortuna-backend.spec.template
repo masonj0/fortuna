@@ -54,7 +54,7 @@ for pkg in all_packages_to_collect:
         datas += tmp_datas
         binaries += tmp_binaries
         hiddenimports += tmp_hiddenimports
-        print(f"  [SUCCESS] Successfully collected {pkg}")
+        print(f"  ✓ Successfully collected {pkg}")
     except Exception as e:
         # Use ASCII-safe characters for the warning message
         print(f"  [WARNING] Could not collect {pkg}: {e}")
