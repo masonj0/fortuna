@@ -1,8 +1,4 @@
-#
-# Fortuna Faucet - Production MSI Installer Workflow
-# Version: 2.0 (Refactored to Multi-Job Architecture)
-#
-name: Build Fortuna Faucet MSI Installer - PRODUCTION FORTRESS
+name: Build Fortuna Faucet MSI Installer - 🏆 PRODUCTION FORTRESS
 
 on:
   push:
@@ -18,15 +14,11 @@ env:
   PYTHON_VERSION: '3.12'
 
 jobs:
-  # ====================================================================
-  # JOB 1: Build the Frontend (Next.js Static Export)
-  # ====================================================================
   build-frontend:
-    name: 'Build Frontend'
+    name: '📦 Build Frontend'
     runs-on: windows-latest
     steps:
       - name: Checkout Repository
-        # Action pinning prevents unexpected updates from breaking the build.
         uses: actions/checkout@v4.1.7
 
       - name: Setup Node.js
@@ -44,18 +36,14 @@ jobs:
           npm run build
 
       - name: Upload Frontend Artifact
-        # This artifact will be used by the final packaging job.
         uses: actions/upload-artifact@v4.3.4
         with:
           name: frontend-build-output
           path: web_platform/frontend/out
           retention-days: 1
 
-  # ====================================================================
-  # JOB 2: Build the Backend (Python Executable)
-  # ====================================================================
   build-backend:
-    name: 'Build Backend'
+    name: '🐍 Build Backend'
     runs-on: windows-latest
     steps:
       - name: Checkout Repository
@@ -68,6 +56,20 @@ jobs:
           cache: 'pip'
           cache-dependency-path: 'python_service/requirements.txt'
 
+      - name: '[MONITOR] Verify Source Code Integrity'
+        shell: pwsh
+        run: |
+          Write-Host "--- Verifying contents of python_service/main.py ---" -ForegroundColor Cyan
+          Get-Content python_service/main.py | Write-Host
+          Write-Host "--- End of file ---" -ForegroundColor Cyan
+
+      - name: '[MONITOR] Pre-flight Syntax Check'
+        shell: pwsh
+        run: |
+          Write-Host "--- Running Python syntax pre-flight check ---" -ForegroundColor Cyan
+          python -m py_compile python_service/main.py
+          Write-Host "✅ Syntax check passed." -ForegroundColor Green
+
       - name: Backend - Install Dependencies
         shell: pwsh
         run: |
@@ -77,7 +79,6 @@ jobs:
       - name: Backend - Security Audit
         shell: pwsh
         run: |
-          Write-Host "`n=== BACKEND: Security Audit ===" -ForegroundColor Cyan
           pip install pip-audit
           $ignoreFlags = @()
           if (Test-Path "audit-ignore.txt") {
@@ -90,12 +91,6 @@ jobs:
           }
           pip-audit -r python_service/requirements.txt @ignoreFlags
 
-      - name: Backend - Create Placeholder Directories for PyInstaller
-        shell: pwsh
-        run: |
-          New-Item -Path "python_service/data" -ItemType Directory -Force
-          New-Item -Path "python_service/json" -ItemType Directory -Force
-
       - name: Backend - Build with PyInstaller
         shell: pwsh
         run: |
@@ -104,19 +99,14 @@ jobs:
           pyinstaller fortuna-backend.spec --distpath dist --workpath build --clean --noconfirm
 
       - name: Upload Backend Artifact
-        # This artifact will be used by the final packaging job.
         uses: actions/upload-artifact@v4.3.4
         with:
           name: backend-executable
           path: dist/fortuna-backend.exe
           retention-days: 1
 
-  # ====================================================================
-  # JOB 3: Package the Installer and Run Integration Tests
-  # ====================================================================
   package-and-test:
-    name: 'Package & Test Installer'
-    # This job will only start after both build jobs have succeeded.
+    name: '🏆 Package & Test Installer'
     needs: [build-frontend, build-backend]
     runs-on: windows-latest
     steps:
@@ -151,12 +141,12 @@ jobs:
           Write-Host "--- Starting Integration Test: Polling /health endpoint for 60s ---"
           foreach ($i in 1..30) {
             if ($process.HasExited) {
-              throw "[FATAL] Backend process crashed immediately on startup. Exit Code: $($process.ExitCode)"
+              throw "❌ FATAL: Backend process crashed immediately on startup. Exit Code: $($process.ExitCode)"
             }
             try {
               $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/health" -TimeoutSec 1 -UseBasicParsing
               if ($response.StatusCode -eq 200) {
-                Write-Host "[SUCCESS] Health check passed on attempt $i!"
+                Write-Host "✅ Health check passed on attempt $i!"
                 $serverReady = $true
                 break
               }
@@ -167,7 +157,7 @@ jobs:
           }
           Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
           if (-not $serverReady) {
-            throw "[FATAL] Backend integration test failed. Server never became healthy."
+            throw "❌ FATAL: Backend integration test failed. Server never became healthy."
           }
 
       - name: Electron - Install & Package MSI
