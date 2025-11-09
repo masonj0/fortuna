@@ -10,7 +10,7 @@ from unittest.mock import patch
 import fakeredis
 import httpx
 import pytest
-from python_service.adapters.base_v3 import BaseAdapterV3
+from python_service.adapters.base_adapter_v3 import BaseAdapterV3
 from tenacity import RetryError
 
 from python_service.core.exceptions import AdapterHttpError

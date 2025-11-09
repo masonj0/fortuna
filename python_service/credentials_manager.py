@@ -1,12 +1,12 @@
 # python_service/credentials_manager.py
-import keyring
-
 try:
+    import keyring
     # This check is crucial for cross-platform compatibility
     import keyring.backends.windows
 
     IS_WINDOWS = True
 except ImportError:
+    keyring = None
     IS_WINDOWS = False
 
 

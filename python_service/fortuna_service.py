@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import List
 from typing import Optional
 
-from .engine import EnhancedTrifectaAnalyzer
+from .analyzer import TrifectaAnalyzer
 from .engine import Race
 from .engine import Settings
 from .engine import SuperchargedOrchestrator
@@ -124,7 +124,7 @@ class FortunaBackgroundService:
         self.settings = Settings()
         self.db_handler = DatabaseHandler(db_path)
         self.orchestrator = SuperchargedOrchestrator(self.settings)
-        self.python_analyzer = EnhancedTrifectaAnalyzer(self.settings)
+        self.python_analyzer = TrifectaAnalyzer(self.settings)
         self.stop_event = threading.Event()
         self.rust_engine_path = os.path.join(
             os.path.dirname(__file__),
