@@ -1,6 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 #
-# This is the definitive PyInstaller spec file for Fortuna Faucet.
+# This is the definitive PyInstaller spec file template for Fortuna Faucet.
 # It programmatically collects all necessary dependencies to prevent hidden import errors.
 #
 
@@ -11,10 +11,10 @@ block_cipher = None
 
 # --- Core Configuration ---
 app_name = 'fortuna-backend'
-entry_point = 'python_service/main.py' # CORRECT ENTRY POINT
-adapters_path = os.path.abspath('python_service/adapters').replace('\\\\', '/')
+entry_point = 'run_backend.py' # CORRECT ENTRY POINT
 
 # --- Data Files ---
+# The '__ADAPTERS_PATH__' placeholder will be replaced by the workflow.
 datas = [
     ('__ADAPTERS_PATH__', 'adapters'),
     ('python_service/data', 'data'),
@@ -25,8 +25,9 @@ hiddenimports = []
 binaries = []
 
 # --- Dependency Collection ---
-# We define logical groups of packages and use collect_all to find everything they need.
-# This is the robust solution to the bootloader crashes.
+# This list is now more surgical. We are NOT collecting the huge data science
+# libraries (pandas, numpy) and are letting PyInstaller's default hooks handle them.
+# This is the fix for the 4GB executable size limit.
 
 core_stack = [
     'uvicorn', 'fastapi', 'pydantic', 'pydantic_core', 'starlette',
@@ -36,7 +37,8 @@ core_stack = [
 
 data_stack = [
     'redis', 'tenacity', 'requests', 'selectolax', 'bs4', 'lxml',
-    'structlog', 'python-dotenv', 'pandas', 'numpy'
+    'structlog', 'python-dotenv'
+    # 'pandas' and 'numpy' are intentionally omitted from this list.
 ]
 
 windows_stack = [
@@ -73,7 +75,7 @@ hiddenimports += [
 # --- Analysis Object ---
 a = Analysis(
     [entry_point],
-    pathex=[os.getcwd()],  # <-- ADD THIS LINE
+    pathex=[os.getcwd()], # CRITICAL: Fixes Python path issues in the executable
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
