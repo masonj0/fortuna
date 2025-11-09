@@ -32,6 +32,9 @@ def get_test_settings():
     )
 
 
+import fakeredis.aioredis
+
+
 @pytest.fixture(scope="module")
 def client():
     """
@@ -41,12 +44,17 @@ def client():
     original_get_settings = app.dependency_overrides.get(get_settings)
     app.dependency_overrides[get_settings] = get_test_settings
 
-    with patch(
-        "python_service.credentials_manager.keyring.get_password",
-        side_effect=lambda s, u: f"test_{u}",
-    ):
-        with TestClient(app) as c:
-            yield c
+    # This patch is critical. It replaces the real Redis connection with a fake,
+    # in-memory one *before* the TestClient starts the FastAPI application.
+    # This allows the app's `lifespan` startup event, which initializes the
+    # cache_manager, to complete successfully without a live Redis server.
+    with patch("redis.from_url", fakeredis.aioredis.FakeRedis.from_url):
+        with patch(
+            "python_service.credentials_manager.keyring.get_password",
+            side_effect=lambda s, u: f"test_{u}",
+        ):
+            with TestClient(app) as c:
+                yield c
 
     # Clean up the override
     if original_get_settings:

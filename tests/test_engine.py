@@ -1,172 +1,160 @@
+# tests/test_engine.py
+
 from datetime import date
 from datetime import datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock
+from unittest.mock import MagicMock
 from unittest.mock import patch
 
-import fakeredis.aioredis
+import fakeredis
 import pytest
+from tenacity import RetryError
 
 from python_service.adapters.base_v3 import BaseAdapterV3
+from python_service.cache_manager import cache_manager
+from python_service.core.exceptions import AdapterHttpError
 from python_service.engine import OddsEngine
-from python_service.models import AggregatedResponse
-from python_service.models import OddsData
 from python_service.models import Race
-from python_service.models import Runner
 from tests.conftest import get_test_settings
-
-
-def create_mock_race(
-    source: str, venue: str, race_number: int, start_time: datetime, runners_data: list
-) -> Race:
-    """Helper function to create a Race object for testing."""
-    runners = []
-    for r_data in runners_data:
-        odds = {
-            source: OddsData(
-                win=Decimal(r_data["odds"]), source=source, last_updated=datetime.now()
-            )
-        }
-        runners.append(Runner(number=r_data["number"], name=r_data["name"], odds=odds))
-
-    return Race(
-        id=f"test_{source}_{race_number}",
-        venue=venue,
-        race_number=race_number,
-        start_time=start_time,
-        runners=runners,
-        source=source,
-    )
-
-
-@pytest.fixture
-def mock_engine() -> OddsEngine:
-    """Provides an OddsEngine instance with a mock config."""
-    return OddsEngine(config=get_test_settings())
+from tests.utils import create_mock_race
 
 
 @pytest.mark.asyncio
-@patch("python_service.engine.OddsEngine._time_adapter_fetch", new_callable=AsyncMock)
-async def test_engine_deduplicates_races_and_merges_odds(
-    mock_time_adapter_fetch, mock_engine
-):
+async def test_engine_initialization():
     """
-    SPEC: The OddsEngine's fetch_all_odds method should identify duplicate races
-    from different sources and merge their runner data, stacking the odds.
+    SPEC: The OddsEngine should initialize without errors and load adapters correctly.
+    """
+    engine = OddsEngine(config=get_test_settings())
+    assert len(engine.adapters) > 0, "Adapters should be loaded"
+    assert "betfair_adapter" in [
+        a.source_name for a in engine.adapters
+    ], "Betfair adapter should be loaded"
+
+
+@pytest.mark.asyncio
+async def test_fetch_all_odds_success():
+    """
+    SPEC: The OddsEngine should fetch data from all adapters and aggregate the results.
+    """
+    engine = OddsEngine(config=get_test_settings())
+    mock_adapter = AsyncMock(spec=BaseAdapterV3)
+    mock_adapter.source_name = "MockAdapter"
+    mock_adapter.get_races.return_value = [
+        create_mock_race("MockSource", "Race 1", 1, datetime.now(), [])
+    ]
+    engine.adapters = [mock_adapter]
+
+    today_str = date.today().strftime("%Y-%m-%d")
+    result = await engine.fetch_all_odds(today_str)
+
+    assert "races" in result
+    assert "sources" in result
+    assert len(result["races"]) == 1
+    assert result["races"][0]["trackName"] == "Race 1"
+
+
+@pytest.mark.asyncio
+async def test_fetch_all_odds_resilience():
+    """
+    SPEC: The OddsEngine should be resilient to individual adapter failures.
+          If one adapter fails, the engine should still return data from the others.
     """
     # ARRANGE
-    test_time = datetime(2025, 10, 9, 14, 30)
-
-    source_a_race = create_mock_race(
-        "SourceA",
-        "Test Park",
-        1,
-        test_time,
-        [
-            {"number": 1, "name": "Speedy", "odds": "5.0"},
-            {"number": 2, "name": "Steady", "odds": "10.0"},
-        ],
-    )
-    source_b_race = create_mock_race(
-        "SourceB",
-        "Test Park",
-        1,
-        test_time,
-        [
-            {"number": 1, "name": "Speedy", "odds": "5.5"},
-            {"number": 3, "name": "Newcomer", "odds": "15.0"},
-        ],
-    )
-    other_race = create_mock_race(
-        "SourceC",
-        "Another Place",
-        2,
-        test_time,
-        [{"number": 1, "name": "Solo", "odds": "3.0"}],
-    )
-
-    mock_time_adapter_fetch.side_effect = [
-        (
-            "SourceA",
-            {
-                "races": [source_a_race],
-                "source_info": {
-                    "name": "SourceA",
-                    "status": "SUCCESS",
-                    "races_fetched": 1,
-                    "fetch_duration": 1.0,
-                    "attempted_url": None,
-                    "error_message": None,
-                },
-            },
-            1.0,
-        ),
-        (
-            "SourceB",
-            {
-                "races": [source_b_race],
-                "source_info": {
-                    "name": "SourceB",
-                    "status": "SUCCESS",
-                    "races_fetched": 1,
-                    "fetch_duration": 1.0,
-                    "attempted_url": None,
-                    "error_message": None,
-                },
-            },
-            1.0,
-        ),
-        (
-            "SourceC",
-            {
-                "races": [other_race],
-                "source_info": {
-                    "name": "SourceC",
-                    "status": "SUCCESS",
-                    "races_fetched": 1,
-                    "fetch_duration": 1.0,
-                    "attempted_url": None,
-                    "error_message": None,
-                },
-            },
-            1.0,
-        ),
+    engine = OddsEngine(config=get_test_settings())
+    successful_adapter = AsyncMock(spec=BaseAdapterV3)
+    successful_adapter.source_name = "SuccessAdapter"
+    successful_adapter.get_races.return_value = [
+        create_mock_race(
+            "SuccessSource", "Success Race", 1, datetime.now(), runners=[]
+        )
     ]
 
-    # ACT
+    failing_adapter = AsyncMock(spec=BaseAdapterV3)
+    failing_adapter.source_name = "FailAdapter"
+    failing_adapter.get_races.side_effect = AdapterHttpError("Mock HTTP Error", 500)
+
+    engine.adapters = [successful_adapter, failing_adapter]
     today_str = date.today().strftime("%Y-%m-%d")
-    result = await mock_engine.fetch_all_odds(today_str)
+
+    # ACT
+    result = await engine.fetch_all_odds(today_str)
 
     # ASSERT
-    assert len(result["races"]) == 2, "Engine should have de-duplicated the races."
-    assert result["sourceInfo"] is not None
+    assert "races" in result
+    assert "sources" in result
+    assert len(result["races"]) == 1, "Should return data from the successful adapter"
+    assert result["races"][0]["source"] == "SuccessSource"
 
-    merged_race = next((r for r in result["races"] if r["venue"] == "Test Park"), None)
-    assert merged_race is not None, "Merged race should be present in the results."
+    # Check that the failed adapter's status is correctly recorded
+    adapter_statuses = engine.get_all_adapter_statuses()
+    failed_adapter_status = next(
+        (s for s in adapter_statuses if s["source_name"] == "FailAdapter"), None
+    )
+    assert failed_adapter_status is not None, "Failed adapter status should be present"
     assert (
-        len(merged_race["runners"]) == 3
-    ), "Merged race should contain all unique runners."
+        "Mock HTTP Error" in failed_adapter_status["error"]
+    ), "Error message should be recorded"
 
-    runner1 = next(
-        (r for r in merged_race["runners"] if r["saddleClothNumber"] == 1), None
-    )
-    assert runner1 is not None
-    assert "SourceA" in runner1["odds"]
-    assert "SourceB" in runner1["odds"]
-    assert runner1["odds"]["SourceA"]["win"] == Decimal("5.0")
-    assert runner1["odds"]["SourceB"]["win"] == Decimal("5.5")
 
-    runner2 = next(
-        (r for r in merged_race["runners"] if r["saddleClothNumber"] == 2), None
-    )
-    assert runner2 is not None
-    assert "SourceA" in runner2["odds"] and "SourceB" not in runner2["odds"]
+@pytest.mark.asyncio
+async def test_race_aggregation_and_deduplication():
+    """
+    SPEC: The OddsEngine should correctly aggregate and deduplicate races from
+          multiple sources based on a unique race identifier (track, time, race number).
+    """
+    # ARRANGE
+    engine = OddsEngine(config=get_test_settings())
+    now = datetime.now()
 
-    runner3 = next(
-        (r for r in merged_race["runners"] if r["saddleClothNumber"] == 3), None
+    # Create two identical races from different sources
+    race1_source1 = create_mock_race(
+        "Source1", "Pimlico", 1, now, [{"number": 1, "name": "Runner A", "odds": "2.5"}]
     )
-    assert runner3 is not None
-    assert "SourceB" in runner3["odds"] and "SourceA" not in runner3["odds"]
+    race1_source2 = create_mock_race(
+        "Source2", "Pimlico", 1, now, [{"number": 1, "name": "Runner A", "odds": "2.8"}]
+    )
+
+    # Create a unique race
+    unique_race = create_mock_race(
+        "Source1", "Belmont", 2, now, [{"number": 2, "name": "Runner B", "odds": "5.0"}]
+    )
+
+    adapter1 = AsyncMock(spec=BaseAdapterV3)
+    adapter1.source_name = "Source1"
+    adapter1.get_races.return_value = [race1_source1, unique_race]
+
+    adapter2 = AsyncMock(spec=BaseAdapterV3)
+    adapter2.source_name = "Source2"
+    adapter2.get_races.return_value = [race1_source2]
+
+    engine.adapters = [adapter1, adapter2]
+    today_str = date.today().strftime("%Y-%m-%d")
+
+    # ACT
+    result = await engine.fetch_all_odds(today_str)
+
+    # ASSERT
+    assert len(result["races"]) == 2, "Should have two unique races after deduplication"
+
+    # Find the aggregated race for Pimlico
+    pimlico_race_data = next(
+        (r for r in result["races"] if r["trackName"] == "Pimlico"), None
+    )
+    assert pimlico_race_data is not None, "Pimlico race should be in the result"
+
+    # Convert to Pydantic model for easier validation
+    pimlico_race = Race(**pimlico_race_data)
+
+    # Check runner odds aggregation
+    runner = pimlico_race.runners[0]
+    assert len(runner.odds) == 2, "Runner odds should be aggregated from two sources"
+    assert runner.odds["Source1"].win == Decimal("2.5")
+    assert runner.odds["Source2"].win == Decimal("2.8")
+
+    # Check that the race's `sources` list is correct
+    assert "Source1" in pimlico_race.sources
+    assert "Source2" in pimlico_race.sources
 
 
 @pytest.mark.asyncio
@@ -207,41 +195,71 @@ async def test_engine_caching_logic():
 
         await cache_manager.redis_client.flushdb()
 
-        with patch.object(
-            engine, "_time_adapter_fetch", new_callable=AsyncMock
-        ) as mock_fetch:
-            source_info_payload = {
-                "name": "TestSource",
-                "status": "SUCCESS",
-                "races_fetched": 1,
-                "error_message": None,
-                "fetch_duration": 0.1,
-                "attempted_url": None,
-            }
-            adapter_result_payload = {
-                "races": [mock_race],
-                "source_info": source_info_payload,
-            }
-            mock_fetch.return_value = ("TestSource", adapter_result_payload, 0.1)
+        # --- 1. Cache Miss ---
+        # ARRANGE
+        mock_adapter.get_races.return_value = [mock_race]
+        mock_adapter.get_races.reset_mock()  # Reset call count
 
-            # --- ACT 1: Cache Miss ---
-            result_miss = await engine.fetch_all_odds(today_str)
+        # ACT
+        result_miss = await engine.fetch_all_odds(today_str)
 
-            # --- ASSERT 1: Cache Miss ---
-            mock_fetch.assert_called_once()
-            assert result_miss is not None
-            assert result_miss["races"][0]["venue"] == "Cache Park"
+        # ASSERT
+        mock_adapter.get_races.assert_awaited_once()  # Adapter was called
+        assert len(result_miss["races"]) == 1
+        assert result_miss["races"][0]["trackName"] == "Cache Park"
 
-            # --- ACT 2: Cache Hit ---
-            result_hit = await engine.fetch_all_odds(today_str)
+        # --- 2. Cache Hit ---
+        # ARRANGE
+        mock_adapter.get_races.reset_mock()
 
-            # --- ASSERT 2: Cache Hit ---
-            mock_fetch.assert_called_once()  # Should NOT be called again
-            assert result_hit is not None
+        # ACT
+        result_hit = await engine.fetch_all_odds(today_str)
 
-            # Compare model dumps to avoid Decimal vs. float issues after serialization
-            miss_obj = AggregatedResponse(**result_miss)
-            hit_obj = AggregatedResponse(**result_hit)
-            assert hit_obj.model_dump() == miss_obj.model_dump()
+        # ASSERT
+        mock_adapter.get_races.assert_not_awaited()  # Adapter was NOT called
+        assert (
+            len(result_hit["races"]) == 1
+        ), "Should return data from cache on cache hit"
+        assert result_hit["races"][0]["trackName"] == "Cache Park"
 
-    await engine.close()
+
+@pytest.mark.asyncio
+async def test_http_client_tenacity_retry():
+    """
+    SPEC: The shared httpx client in BaseAdapterV3 should retry on transient HTTP errors.
+    """
+    # ARRANGE
+    engine = OddsEngine(config=get_test_settings())
+    # Find a real adapter instance to test with
+    adapter_instance = next(
+        (a for a in engine.adapters if a.source_name == "at_the_races_adapter"), None
+    )
+    assert adapter_instance is not None, "Could not find a suitable adapter to test"
+
+    # Mock the internal httpx client's request method to simulate failures
+    mock_response = MagicMock()
+    mock_response.status_code = 503  # Service Unavailable
+    mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+        "Service Unavailable", request=MagicMock(), response=mock_response
+    )
+
+    # Configure the mock to fail twice, then succeed
+    adapter_instance.http_client.get = AsyncMock(
+        side_effect=[
+            mock_response,
+            mock_response,
+            AsyncMock(status_code=200, text="<html>Success</html>"),
+        ]
+    )
+
+    # ACT & ASSERT
+    try:
+        # This call should succeed after two retries
+        await adapter_instance._fetch_data("https://any.url")
+    except RetryError:
+        pytest.fail("The HTTP client did not successfully retry after transient errors")
+
+    # ASSERT
+    assert (
+        adapter_instance.http_client.get.call_count == 3
+    ), "The client should have been called 3 times (1 initial + 2 retries)"
