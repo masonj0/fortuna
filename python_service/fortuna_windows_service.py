@@ -9,9 +9,16 @@ import win32event
 import win32service
 import win32serviceutil
 
-# Add the service's directory to the Python path
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from fortuna_service import FortunaBackgroundService
+# Ensure the script's directory is at the front of the path
+script_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, script_dir)
+
+try:
+    from fortuna_service import FortunaBackgroundService
+except ImportError as e:
+    # Log a detailed error to the Windows Event Log if the import fails
+    servicemanager.LogErrorMsg(f"FATAL: Could not import FortunaBackgroundService. Error: {e}")
+    sys.exit(1)  # Exit with an error code
 
 
 class FortunaWindowsService(win32serviceutil.ServiceFramework):
