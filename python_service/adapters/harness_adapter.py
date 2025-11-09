@@ -20,9 +20,7 @@ class HarnessAdapter(BaseAdapterV3):
     BASE_URL = "https://data.ustrotting.com/api/racenet/racing/"
 
     def __init__(self, config=None):
-        super().__init__(
-            source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config
-        )
+        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
 
     async def _fetch_data(self, date: str) -> Optional[Dict[str, Any]]:
         """Fetches all harness races for a given date."""
@@ -36,11 +34,7 @@ class HarnessAdapter(BaseAdapterV3):
 
     def _parse_races(self, raw_data: Optional[Dict[str, Any]]) -> List[Race]:
         """Parses the raw card data into a list of Race objects."""
-        if (
-            not raw_data
-            or not raw_data.get("data")
-            or not raw_data.get("data", {}).get("meetings")
-        ):
+        if not raw_data or not raw_data.get("data") or not raw_data.get("data", {}).get("meetings"):
             self.logger.warning("No meetings found in harness data response.")
             return []
 
@@ -61,9 +55,7 @@ class HarnessAdapter(BaseAdapterV3):
                     continue
         return all_races
 
-    def _parse_race(
-        self, race_data: dict, track_name: str, date: str
-    ) -> Optional[Race]:
+    def _parse_race(self, race_data: dict, track_name: str, date: str) -> Optional[Race]:
         """Parses a single race from the USTA API into a Race object."""
         race_number = race_data.get("raceNumber")
         post_time_str = race_data.get("postTime")

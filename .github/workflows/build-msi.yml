@@ -2,7 +2,7 @@
 # Fortuna Faucet - Production MSI Installer Workflow
 # Version: 2.0 (Refactored to Multi-Job Architecture)
 #
-name: Build Fortuna Faucet MSI Installer - 🏆 PRODUCTION FORTRESS
+name: Build Fortuna Faucet MSI Installer - PRODUCTION FORTRESS
 
 on:
   push:
@@ -22,7 +22,7 @@ jobs:
   # JOB 1: Build the Frontend (Next.js Static Export)
   # ====================================================================
   build-frontend:
-    name: '📦 Build Frontend'
+    name: 'Build Frontend'
     runs-on: windows-latest
     steps:
       - name: Checkout Repository
@@ -55,7 +55,7 @@ jobs:
   # JOB 2: Build the Backend (Python Executable)
   # ====================================================================
   build-backend:
-    name: '🐍 Build Backend'
+    name: 'Build Backend'
     runs-on: windows-latest
     steps:
       - name: Checkout Repository
@@ -90,6 +90,12 @@ jobs:
           }
           pip-audit -r python_service/requirements.txt @ignoreFlags
 
+      - name: Backend - Create Placeholder Directories for PyInstaller
+        shell: pwsh
+        run: |
+          New-Item -Path "python_service/data" -ItemType Directory -Force
+          New-Item -Path "python_service/json" -ItemType Directory -Force
+
       - name: Backend - Build with PyInstaller
         shell: pwsh
         run: |
@@ -109,7 +115,7 @@ jobs:
   # JOB 3: Package the Installer and Run Integration Tests
   # ====================================================================
   package-and-test:
-    name: '🏆 Package & Test Installer'
+    name: 'Package & Test Installer'
     # This job will only start after both build jobs have succeeded.
     needs: [build-frontend, build-backend]
     runs-on: windows-latest
@@ -145,12 +151,12 @@ jobs:
           Write-Host "--- Starting Integration Test: Polling /health endpoint for 60s ---"
           foreach ($i in 1..30) {
             if ($process.HasExited) {
-              throw "❌ FATAL: Backend process crashed immediately on startup. Exit Code: $($process.ExitCode)"
+              throw "[FATAL] Backend process crashed immediately on startup. Exit Code: $($process.ExitCode)"
             }
             try {
               $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/health" -TimeoutSec 1 -UseBasicParsing
               if ($response.StatusCode -eq 200) {
-                Write-Host "✅ Health check passed on attempt $i!"
+                Write-Host "[SUCCESS] Health check passed on attempt $i!"
                 $serverReady = $true
                 break
               }
@@ -161,7 +167,7 @@ jobs:
           }
           Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
           if (-not $serverReady) {
-            throw "❌ FATAL: Backend integration test failed. Server never became healthy."
+            throw "[FATAL] Backend integration test failed. Server never became healthy."
           }
 
       - name: Electron - Install & Package MSI

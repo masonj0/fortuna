@@ -27,10 +27,7 @@ async def test_timeform_adapter_parses_html_correctly(timeform_adapter):
     from bs4 import BeautifulSoup
 
     soup = BeautifulSoup(mock_html, "html.parser")
-    runners = [
-        timeform_adapter._parse_runner(row)
-        for row in soup.select("div.rp-horseTable_mainRow")
-    ]
+    runners = [timeform_adapter._parse_runner(row) for row in soup.select("div.rp-horseTable_mainRow")]
 
     assert len(runners) == 3, "Should parse three runners"
 

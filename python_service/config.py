@@ -28,15 +28,15 @@ if ENCRYPTION_ENABLED and KEY_FILE.exists():
     CIPHER = Fernet(key)
 
 
-def decrypt_value(value: Optional[str]) -> Optional[str]:
+def decrypt_value(value: Optional[str]) -> str:
     """If a value is encrypted, decrypts it. Otherwise, returns it as is."""
     if value and value.startswith("encrypted:") and CIPHER:
         try:
             return CIPHER.decrypt(value[10:].encode()).decode()
         except Exception:
             structlog.get_logger(__name__).error("Decryption failed on field.")
-            return None
-    return value
+            return ""  # Fallback to an empty string on failure
+    return value or ""  # Ensure a non-None return value even if input is None
 
 
 class Settings(BaseSettings):
@@ -68,9 +68,7 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
 
     # --- Optional Adapter Keys ---
-    NEXT_PUBLIC_API_KEY: Optional[
-        str
-    ] = None  # Allow frontend key to be present in .env
+    NEXT_PUBLIC_API_KEY: Optional[str] = None  # Allow frontend key to be present in .env
     TVG_API_KEY: Optional[str] = None
     RACING_AND_SPORTS_TOKEN: Optional[str] = None
     POINTSBET_API_KEY: Optional[str] = None
@@ -92,9 +90,7 @@ class Settings(BaseSettings):
         """
         # 1. Fallback for API_KEY
         if not self.API_KEY:
-            self.API_KEY = (
-                SecureCredentialsManager.get_credential("api_key") or "MISSING"
-            )
+            self.API_KEY = SecureCredentialsManager.get_credential("api_key") or "MISSING"
 
         # 2. Security validation for API_KEY
         insecure_keys = {"test", "changeme", "default", "secret", "password", "admin"}

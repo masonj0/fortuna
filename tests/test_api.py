@@ -94,9 +94,7 @@ def test_health_check_unauthenticated(client):
 
 def test_api_key_authentication_failure(client):
     """Ensures that endpoints are protected and fail with an invalid API key."""
-    response = client.get(
-        "/api/races/qualified/trifecta", headers={"X-API-KEY": "invalid_key"}
-    )
+    response = client.get("/api/races/qualified/trifecta", headers={"X-API-KEY": "invalid_key"})
     assert response.status_code == 403
     assert "Invalid or missing API Key" in response.json()["detail"]
 

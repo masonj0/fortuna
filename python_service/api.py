@@ -1,14 +1,13 @@
 # python_service/api.py
 
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from datetime import date
 from datetime import datetime
 from datetime import timedelta
 from typing import List
 from typing import Optional
-
-import asyncio
-from concurrent.futures import ThreadPoolExecutor
 
 import aiosqlite
 import structlog
@@ -29,7 +28,6 @@ from slowapi.util import get_remote_address
 from starlette.websockets import WebSocketDisconnect
 
 # --- PyInstaller Explicit Imports ---
-from .adapters import *
 from .analyzer import AnalyzerEngine
 from .cache_manager import cache_manager
 from .config import get_settings
@@ -270,11 +268,7 @@ async def get_filter_suggestions(engine: OddsEngine = Depends(get_engine)):
                     second_favorite_odds.append(odds_list[1])
         return {
             "suggestions": {
-                "max_field_size": {
-                    "recommended": (
-                        int(sum(field_sizes) / len(field_sizes)) if field_sizes else 10
-                    )
-                },
+                "max_field_size": {"recommended": (int(sum(field_sizes) / len(field_sizes)) if field_sizes else 10)},
                 "min_favorite_odds": {"recommended": 2.5},
                 "min_second_favorite_odds": {"recommended": 4.0},
             }
@@ -316,9 +310,7 @@ def get_current_date() -> date:
 
 @app.get("/api/tipsheet", response_model=List[TipsheetRace])
 @limiter.limit("30/minute")
-async def get_tipsheet_endpoint(
-    request: Request, date: date = Depends(get_current_date)
-):
+async def get_tipsheet_endpoint(request: Request, date: date = Depends(get_current_date)):
     results = []
     try:
         async with aiosqlite.connect(DB_PATH) as db:

@@ -3,7 +3,6 @@
 
 import json
 import os
-import re
 import sys
 from multiprocessing import Process
 from multiprocessing import Queue
@@ -47,9 +46,7 @@ def convert_file_to_json_sandboxed(file_path):
     if p.is_alive():
         p.terminate()
         p.join()
-        return {
-            "error": f"Timeout: File processing took longer than {FILE_PROCESSING_TIMEOUT} seconds."
-        }
+        return {"error": f"Timeout: File processing took longer than {FILE_PROCESSING_TIMEOUT} seconds."}
     if not q.empty():
         return q.get()
     return {"error": "Unknown error in sandboxed read process."}
@@ -57,9 +54,7 @@ def convert_file_to_json_sandboxed(file_path):
 
 # --- Main Orchestrator ---
 def main():
-    print(
-        f"\n{'=' * 60}\nStarting IRONCLAD JSON backup process... (Enlightened Scribe Edition)\n{'=' * 60}"
-    )
+    print(f"\n{'=' * 60}\nStarting IRONCLAD JSON backup process... (Enlightened Scribe Edition)\n{'=' * 60}")
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     all_local_paths = []
@@ -91,17 +86,15 @@ def main():
             print(f"    [SUCCESS] Saved backup to {output_path}")
             processed_count += 1
         else:
-            error_msg = (
-                json_data.get("error", "Unknown error")
-                if json_data
-                else "File not found"
-            )
+            error_msg = json_data.get("error", "Unknown error") if json_data else "File not found"
             print(f"    [ERROR] Failed to process {local_path}: {error_msg}")
             failed_count += 1
 
-    print(
-        f"\n{'=' * 60}\nBackup process complete.\nSuccessfully processed: {processed_count}/{len(unique_local_paths)}\nFailed/Skipped: {failed_count}\n{'=' * 60}"
-    )
+    print(f"\n{'=' * 60}")
+    print("Backup process complete.")
+    print(f"Successfully processed: {processed_count}/{len(unique_local_paths)}")
+    print(f"Failed/Skipped: {failed_count}")
+    print(f"{'=' * 60}")
 
     if failed_count > 0:
         sys.exit(1)
