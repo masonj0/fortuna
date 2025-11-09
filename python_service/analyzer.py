@@ -192,9 +192,10 @@ class AudioAlertSystem:
         self.sounds = {
             "high_value": Path(__file__).parent.parent.parent / "assets" / "sounds" / "alert_premium.wav",
         }
+        self.enabled = winsound is not None
 
     def play(self, sound_type: str):
-        if not winsound:
+        if not self.enabled:
             return
 
         sound_file = self.sounds.get(sound_type)
@@ -209,7 +210,7 @@ class RaceNotifier:
     """Handles sending native Windows notifications and audio alerts for high-value races."""
 
     def __init__(self):
-        self.toaster = None
+        self.toaster = ToastNotifier("Fortuna") if ToastNotifier else None
         self.audio_system = AudioAlertSystem()
         self.notified_races = set()
 

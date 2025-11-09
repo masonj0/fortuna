@@ -13,6 +13,7 @@ cryptography==42.0.5  # Pinned to satisfy pyopenssl < 43
 pydantic-settings
 httpx[http2]
 selectolax==0.4.0      # Pinned to ensure a version with pre-compiled wheels
+slowapi
 pandas
 numpy
 scipy
@@ -24,10 +25,10 @@ certifi               # Unpinned to allow pip-compile to find the latest secure 
 
 # --- Desktop & OS Integration (Flexible) ---
 psutil
-pywin32
-windows-toasts
-keyring
-pynput
+pywin32 ; sys_platform == 'win32'
+windows-toasts ; sys_platform == 'win32'
+keyring ; sys_platform == 'win32'
+pynput ; sys_platform == 'win32'
 
 # --- Development & Testing Dependencies ---
 pytest

@@ -52,4 +52,5 @@ class BetfairAuthMixin:
                 log.info("Betfair authentication successful.")
             else:
                 log.error("Betfair authentication failed", error=data.get("error"))
-                raise ConnectionError(f"Betfair authentication failed: {data.get('error')}")
+                self.session_token = None  # Reset token to prevent using a stale one
+                return  # Return gracefully and let the adapter handle the lack of a token
