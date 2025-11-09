@@ -1,4 +1,4 @@
-name: Build Fortuna Faucet MSI Installer - 🏆 PRODUCTION FORTRESS
+name: Build Fortuna Faucet MSI Installer - [PROD]
 
 on:
   push:
@@ -15,7 +15,7 @@ env:
 
 jobs:
   build-frontend:
-    name: '📦 Build Frontend'
+    name: '[BUILD] Frontend'
     runs-on: windows-latest
     steps:
       - name: Checkout Repository
@@ -43,7 +43,7 @@ jobs:
           retention-days: 1
 
   build-backend:
-    name: '🐍 Build Backend'
+    name: '[BUILD] Backend'
     runs-on: windows-latest
     steps:
       - name: Checkout Repository
@@ -68,7 +68,7 @@ jobs:
         run: |
           Write-Host "--- Running Python syntax pre-flight check ---" -ForegroundColor Cyan
           python -m py_compile run_backend.py
-          Write-Host "✅ Syntax check passed." -ForegroundColor Green
+          Write-Host "[OK] Syntax check passed." -ForegroundColor Green
 
       - name: Backend - Install Dependencies
         shell: pwsh
@@ -107,15 +107,15 @@ jobs:
               pyinstaller fortuna-backend.spec --distpath dist --workpath build --clean --noconfirm
               if ($LASTEXITCODE -eq 0) {
                   $success = $true
-                  Write-Host "✅ PyInstaller build succeeded on attempt $attempt." -ForegroundColor Green
+                  Write-Host "[OK] PyInstaller build succeeded on attempt $attempt." -ForegroundColor Green
                   break
               } else {
-                  Write-Host "⚠️ PyInstaller attempt $attempt failed. Waiting 10 seconds before retry..." -ForegroundColor Yellow
+                  Write-Host "[WARN] PyInstaller attempt $attempt failed. Waiting 10 seconds before retry..." -ForegroundColor Yellow
                   Start-Sleep -Seconds 10
               }
           }
           if (-not $success) {
-              throw "❌ FATAL: PyInstaller build failed after $maxRetries attempts."
+              throw "[FATAL] PyInstaller build failed after $maxRetries attempts."
           }
 
       - name: Upload Backend Artifact
@@ -126,7 +126,7 @@ jobs:
           retention-days: 1
 
   package-and-test:
-    name: '🏆 Package & Test Installer'
+    name: '[PACKAGE] Package & Test Installer'
     needs: [build-frontend, build-backend]
     runs-on: windows-latest
     steps:
@@ -161,12 +161,12 @@ jobs:
           Write-Host "--- Starting Integration Test: Polling /health endpoint for 60s ---"
           foreach ($i in 1..30) {
             if ($process.HasExited) {
-              throw "❌ FATAL: Backend process crashed immediately on startup. Exit Code: $($process.ExitCode)"
+              throw "[FATAL] Backend process crashed immediately on startup. Exit Code: $($process.ExitCode)"
             }
             try {
               $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/health" -TimeoutSec 1 -UseBasicParsing
               if ($response.StatusCode -eq 200) {
-                Write-Host "✅ Health check passed on attempt $i!"
+                Write-Host "[OK] Health check passed on attempt $i!"
                 $serverReady = $true
                 break
               }
@@ -177,7 +177,7 @@ jobs:
           }
           Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
           if (-not $serverReady) {
-            throw "❌ FATAL: Backend integration test failed. Server never became healthy."
+            throw "[FATAL] Backend integration test failed. Server never became healthy."
           }
 
       - name: Electron - Install & Package MSI
