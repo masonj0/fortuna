@@ -73,7 +73,7 @@ hiddenimports += [
 # --- Analysis Object ---
 a = Analysis(
     [entry_point],
-    pathex=[],
+    pathex=[os.getcwd()],  # <-- ADD THIS LINE
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,

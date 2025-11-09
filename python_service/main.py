@@ -1,25 +1,16 @@
+import uvicorn
 import multiprocessing
 
-import uvicorn
-
-# This is the crucial import. We are grabbing the configured FastAPI app
-# from your existing api.py file.
-
-# It's a best practice for Windows compatibility to guard the execution
-# of the server in this block. PyInstaller and multiprocessing rely on it.
 if __name__ == "__main__":
-    # When freezing an application, the default 'spawn' start method
-    # for multiprocessing is often necessary.
+    # Guard for Windows compatibility
     multiprocessing.freeze_support()
 
-    # Programmatically run the Uvicorn server.
-    # We are telling it to run the 'app' object that we imported.
-    # The host '0.0.0.0' is essential for the server to be reachable
-    # within the GitHub Actions container.
+    # Now that the sys.path is fixed in the spec file, this string
+    # will work correctly in both development and the packaged .exe.
     uvicorn.run(
         "python_service.api:app",
         host="0.0.0.0",
         port=8000,
-        reload=False,  # Reloading is not needed in a packaged executable
-        workers=1,  # A single worker is standard for this setup
+        reload=False,
+        workers=1
     )
