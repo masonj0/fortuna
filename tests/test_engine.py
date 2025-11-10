@@ -38,16 +38,25 @@ async def test_fetch_all_odds_success():
     engine = OddsEngine(config=get_test_settings())
     mock_adapter = AsyncMock(spec=BaseAdapterV3)
     mock_adapter.source_name = "MockAdapter"
-    mock_adapter.get_races.return_value = [create_mock_race("MockSource", "Race 1", 1, datetime.now(), [])]
+
+    # THE FIX: Return an async generator to satisfy the 'async for' loop in the engine.
+    async def mock_get_races_gen(*args, **kwargs):
+        races = [create_mock_race("MockSource", "Race 1", 1, datetime.now(), [])]
+        for race in races:
+            yield race
+
+    mock_adapter.get_races = mock_get_races_gen
     engine.adapters = [mock_adapter]
 
     today_str = date.today().strftime("%Y-%m-%d")
     result = await engine.fetch_all_odds(today_str)
 
     assert "races" in result
-    assert "sources" in result
+    # THE FIX: The model uses the alias 'sourceInfo', not 'sources'.
+    assert "sourceInfo" in result
     assert len(result["races"]) == 1
-    assert result["races"][0]["trackName"] == "Race 1"
+    # THE FIX: The Pydantic model uses 'venue' internally.
+    assert result["races"][0]["venue"] == "Race 1"
 
 
 @pytest.mark.asyncio
@@ -60,13 +69,19 @@ async def test_fetch_all_odds_resilience():
     engine = OddsEngine(config=get_test_settings())
     successful_adapter = AsyncMock(spec=BaseAdapterV3)
     successful_adapter.source_name = "SuccessAdapter"
-    successful_adapter.get_races.return_value = [
-        create_mock_race("SuccessSource", "Success Race", 1, datetime.now(), runners=[])
-    ]
+
+    async def mock_success_gen(*args, **kwargs):
+        races = [create_mock_race("SuccessSource", "Success Race", 1, datetime.now(), [])]
+        for race in races:
+            yield race
+    successful_adapter.get_races = mock_success_gen
 
     failing_adapter = AsyncMock(spec=BaseAdapterV3)
     failing_adapter.source_name = "FailAdapter"
-    failing_adapter.get_races.side_effect = AdapterHttpError("Mock HTTP Error", 500)
+    # THE FIX: Provide all required arguments to the exception constructor.
+    failing_adapter.get_races.side_effect = AdapterHttpError(
+        "Mock HTTP Error", 500, "https://failed.url"
+    )
 
     engine.adapters = [successful_adapter, failing_adapter]
     today_str = date.today().strftime("%Y-%m-%d")
@@ -76,7 +91,7 @@ async def test_fetch_all_odds_resilience():
 
     # ASSERT
     assert "races" in result
-    assert "sources" in result
+    assert "sourceInfo" in result
     assert len(result["races"]) == 1, "Should return data from the successful adapter"
     assert result["races"][0]["source"] == "SuccessSource"
 
@@ -88,7 +103,7 @@ async def test_fetch_all_odds_resilience():
 
 
 @pytest.mark.asyncio
-async def test_race_aggregation_and_deduplication():
+async def test_race_aggregation_and_deduplication(clear_cache):
     """
     SPEC: The OddsEngine should correctly aggregate and deduplicate races from
           multiple sources based on a unique race identifier (track, time, race number).
@@ -106,11 +121,19 @@ async def test_race_aggregation_and_deduplication():
 
     adapter1 = AsyncMock(spec=BaseAdapterV3)
     adapter1.source_name = "Source1"
-    adapter1.get_races.return_value = [race1_source1, unique_race]
+    async def mock_adapter1_gen(*args, **kwargs):
+        races = [race1_source1, unique_race]
+        for race in races:
+            yield race
+    adapter1.get_races = mock_adapter1_gen
 
     adapter2 = AsyncMock(spec=BaseAdapterV3)
     adapter2.source_name = "Source2"
-    adapter2.get_races.return_value = [race1_source2]
+    async def mock_adapter2_gen(*args, **kwargs):
+        races = [race1_source2]
+        for race in races:
+            yield race
+    adapter2.get_races = mock_adapter2_gen
 
     engine.adapters = [adapter1, adapter2]
     today_str = date.today().strftime("%Y-%m-%d")
@@ -148,17 +171,20 @@ async def test_engine_caching_logic():
     """
     # ARRANGE
     # Use the asynchronous FakeRedis for the asynchronous CacheManager
-    with patch("redis.from_url", fakeredis.aioredis.FakeRedis.from_url):
-        import redis.asyncio as redis
+    # THE FIX: The patch target must be the specific `from_url` used by the cache manager.
+    # We also reload the module to ensure the singleton picks up the patched client.
+    with patch("redis.asyncio.from_url", fakeredis.aioredis.FakeRedis.from_url):
+        from importlib import reload
+        from python_service import cache_manager
+        reload(cache_manager)
+        # THE FIX: Call connect() on the *instance* of the CacheManager, not the module.
+        await cache_manager.cache_manager.connect("redis://dummy")
 
-        from python_service.cache_manager import cache_manager
 
-        # Re-initialize the client on the singleton to use the patched async version
-        cache_manager.redis_client = redis.from_url("redis://fake", decode_responses=True)
-        assert cache_manager.redis_client is not None, "Failed to patch redis_client"
-
-        # Initialize the engine *inside* the patch context
+        # Initialize the engine *inside* the patch context to ensure it gets the
+        # correctly mocked cache_manager instance.
         engine = OddsEngine(config=get_test_settings())
+        assert engine.cache_manager.is_configured, "Cache manager should be configured with fake redis"
 
         today_str = date.today().strftime("%Y-%m-%d")
         test_time = datetime(2025, 10, 9, 15, 0)
@@ -174,12 +200,18 @@ async def test_engine_caching_logic():
         mock_adapter.source_name = "TestSource"
         engine.adapters = [mock_adapter]  # Isolate to one mock adapter
 
-        await cache_manager.redis_client.flushdb()
+        # THE FIX: Access the redis_client on the singleton *instance*.
+        await cache_manager.cache_manager.redis_client.flushdb()
 
         # --- 1. Cache Miss ---
         # ARRANGE
-        mock_adapter.get_races.return_value = [mock_race]
-        mock_adapter.get_races.reset_mock()  # Reset call count
+        async def mock_cache_gen(*args, **kwargs):
+            races = [mock_race]
+            for race in races:
+                yield race
+        # THE FIX: Wrap the async generator in an AsyncMock to allow for resetting.
+        mock_adapter.get_races = AsyncMock(side_effect=mock_cache_gen)
+        mock_adapter.get_races.reset_mock()
 
         # ACT
         result_miss = await engine.fetch_all_odds(today_str)
