@@ -1,7 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 #
-# This is the definitive PyInstaller spec file for Fortuna Faucet.
-# It programmatically collects all necessary dependencies to prevent hidden import errors.
+# This is the definitive PyInstaller spec file template for Fortuna Faucet.
 #
 
 from PyInstaller.utils.hooks import collect_all, copy_metadata
@@ -11,8 +10,7 @@ block_cipher = None
 
 # --- Core Configuration ---
 app_name = 'fortuna-backend'
-entry_point = 'python_service/main.py' # CORRECT ENTRY POINT
-adapters_path = os.path.abspath('python_service/adapters').replace('\\\\', '/')
+entry_point = 'python_service/main.py'
 
 # --- Data Files ---
 datas = [
@@ -25,61 +23,52 @@ hiddenimports = []
 binaries = []
 
 # --- Dependency Collection ---
-# We define logical groups of packages and use collect_all to find everything they need.
-# This is the robust solution to the bootloader crashes.
-
-core_stack = [
-    'uvicorn', 'fastapi', 'pydantic', 'pydantic_core', 'starlette',
-    'anyio', 'sniffio', 'h11', 'httptools', 'websockets',
-    'httpx', 'httpcore', 'certifi'
+# RADICALLY MINIMALIST: This list contains only the bare essentials known
+# to have complex hidden imports. Everything else is left to PyInstaller's
+# default analysis. This is the definitive fix for the 4GB executable limit.
+packages_to_collect = [
+    'uvicorn',
+    'fastapi',
+    'starlette',
+    'pydantic',
+    'keyring',
+    'anyio',
+    'httpx'
 ]
 
-data_stack = [
-    'redis', 'tenacity', 'requests', 'selectolax', 'bs4', 'lxml',
-    'structlog', 'python-dotenv', 'pandas', 'numpy'
-]
-
-windows_stack = [
-    'psutil', 'pywin32', 'pywintypes', 'win32api', 'win32con',
-    'pynput', 'cryptography', 'cffi', 'keyring', 'pywin32-ctypes'
-]
-
-all_packages_to_collect = core_stack + data_stack + windows_stack
-
-print(f"--- Collecting {len(all_packages_to_collect)} packages for PyInstaller ---")
-for pkg in all_packages_to_collect:
+print(f"--- Collecting {len(packages_to_collect)} essential packages for PyInstaller ---")
+for pkg in packages_to_collect:
     try:
         tmp_datas, tmp_binaries, tmp_hiddenimports = collect_all(pkg)
         datas += tmp_datas
         binaries += tmp_binaries
         hiddenimports += tmp_hiddenimports
-        print(f"  [SUCCESS] Successfully collected {pkg}")
+        print(f"  [OK] Successfully collected {pkg}")
     except Exception as e:
-        print(f"  [WARNING] Could not collect {pkg}: {e}")
+        print(f"  [!!] WARNING: Could not collect {pkg}: {e}")
 
 # --- Metadata & Final Hidden Imports ---
-for pkg in ['pydantic', 'pydantic_core', 'fastapi', 'uvicorn', 'starlette', 'httpx']:
+for pkg in ['pydantic', 'fastapi', 'uvicorn', 'starlette', 'httpx']:
     try:
         datas += copy_metadata(pkg)
     except:
         pass
-
 hiddenimports += [
-    'uvicorn.lifespan', 'anyio._backends._asyncio', 'redis.asyncio',
-    'keyring.backends.fail', # CRITICAL: Only include the safe backend
-    '_ssl', '_hashlib', '_sqlite3'
+    'uvicorn.lifespan',
+    'anyio._backends._asyncio',
+    'keyring.backends.windows'
 ]
 
 # --- Analysis Object ---
 a = Analysis(
     [entry_point],
-    pathex=[os.getcwd()],  # <-- ADD THIS LINE
+    pathex=[],
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
     runtime_hooks=[],
-    excludes=['matplotlib', 'tkinter', 'pytest', 'IPython', 'streamlit'],
+    excludes=['matplotlib', 'tkinter', 'pytest', 'IPython', 'streamlit', 'pandas', 'numpy', 'scipy'],
     noarchive=False
 )
 
