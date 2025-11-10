@@ -46,19 +46,31 @@ def client():
     # in-memory one *before* the TestClient starts the FastAPI application.
     # This allows the app's `lifespan` startup event, which initializes the
     # cache_manager, to complete successfully without a live Redis server.
-    with patch("redis.from_url", fakeredis.aioredis.FakeRedis.from_url):
+    with patch("redis.from_url", new_callable=lambda: fakeredis.aioredis.FakeRedis.from_url), \
+         patch("python_service.credentials_manager.SecureCredentialsManager.get_betfair_credentials", return_value=("test_user", "test_pass")):
         with patch(
             "python_service.credentials_manager.keyring.get_password",
             side_effect=lambda s, u: f"test_{u}",
         ):
-            with TestClient(app) as c:
-                yield c
+            # THE FIX: Directly instantiate the client. The context manager (`with`)
+            # is no longer the recommended pattern and can cause issues.
+            test_client = TestClient(app)
+            yield test_client
 
     # Clean up the override
     if original_get_settings:
         app.dependency_overrides[get_settings] = original_get_settings
     else:
         app.dependency_overrides.clear()
+
+
+@pytest.fixture()
+async def clear_cache():
+    """A fixture to ensure the cache is cleared before a test."""
+    from python_service.cache_manager import cache_manager
+    if cache_manager.is_configured and cache_manager.redis_client:
+        await cache_manager.redis_client.flushdb()
+    cache_manager.memory_cache.clear()
 
 
 @pytest.fixture
