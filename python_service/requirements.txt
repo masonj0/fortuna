@@ -125,6 +125,10 @@ scipy==1.14.0
     # via -r python_service/requirements.in
 selectolax==0.4.0
     # via -r python_service/requirements.in
+setuptools<81
+    # via
+    #   pip-tools
+    #   pyinstaller
 six==1.16.0
     # via python-dateutil
 slowapi==0.1.9
@@ -160,4 +164,3 @@ wrapt==2.0.1
 
 # The following packages are considered to be unsafe in a requirements file:
 # pip
-# setuptools
