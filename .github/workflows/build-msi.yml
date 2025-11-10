@@ -86,7 +86,7 @@ jobs:
         run: |
           Write-Host "--- Verifying data paths in fortuna-backend.spec.template ---" -ForegroundColor Cyan
           $specContent = Get-Content -Path "fortuna-backend.spec.template" -Raw
-          $matches = $specContent | Select-String -Pattern "\('([^']*)', '([^']*)'\)" -AllMatches
+          $matches = $specContent | Select-String -Pattern "\\('([^']*)', '([^']*)'\\)" -AllMatches
           if (-not $matches) {
             throw "Could not find any data paths to verify in the spec template."
           }

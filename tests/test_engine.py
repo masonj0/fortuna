@@ -157,6 +157,7 @@ async def test_engine_caching_logic():
         cache_manager.redis_client = redis.from_url("redis://fake", decode_responses=True)
         assert cache_manager.redis_client is not None, "Failed to patch redis_client"
 
+        # Initialize the engine *inside* the patch context
         engine = OddsEngine(config=get_test_settings())
 
         today_str = date.today().strftime("%Y-%m-%d")
@@ -209,7 +210,7 @@ async def test_http_client_tenacity_retry():
     # ARRANGE
     engine = OddsEngine(config=get_test_settings())
     # Find a real adapter instance to test with
-    adapter_instance = next((a for a in engine.adapters if a.source_name == "at_the_races_adapter"), None)
+    adapter_instance = next((a for a in engine.adapters if a.source_name == "betfair_adapter"), None)
     assert adapter_instance is not None, "Could not find a suitable adapter to test"
 
     # Mock the internal httpx client's request method to simulate failures

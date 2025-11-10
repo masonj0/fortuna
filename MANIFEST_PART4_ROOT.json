@@ -42,7 +42,6 @@
     "pytest.ini",
     "requirements-dev.txt",
     "requirements.txt",
-    "run_backend.py",
     "scripts/audit_rebranding.py",
     "scripts/convert_to_json.py",
     "scripts/fortuna-quick-start.ps1",

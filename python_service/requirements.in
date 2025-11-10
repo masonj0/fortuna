@@ -12,6 +12,7 @@ cryptography==42.0.5  # Pinned to satisfy pyopenssl < 43
 pydantic-settings
 httpx[http2]
 selectolax==0.4.0
+beautifulsoup4
 slowapi
 redis
 pandas

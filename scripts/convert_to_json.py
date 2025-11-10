@@ -76,6 +76,10 @@ def main():
     processed_count, failed_count = 0, 0
 
     for local_path in unique_local_paths:
+        if os.path.basename(local_path) in EXCLUDED_FILES:
+            print(f"\n--> Skipping excluded file: {local_path}")
+            failed_count += 1
+            continue
         print(f"\nProcessing: {local_path}")
         json_data = convert_file_to_json_sandboxed(local_path)
         if json_data and "error" not in json_data:
