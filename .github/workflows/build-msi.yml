@@ -58,10 +58,6 @@ jobs:
           cache: 'pip'
           cache-dependency-path: 'python_service/requirements.txt'
 
-      # ====================================================================
-      # THE FIX: Create required directories before any other steps.
-      # This ensures the build environment matches the spec file's expectations.
-      # ====================================================================
       - name: 'Ensure Required Data Directories Exist'
         shell: pwsh
         run: |
@@ -88,12 +84,14 @@ jobs:
         run: |
           Write-Host "--- Verifying data paths in fortuna-backend.spec.template ---" -ForegroundColor Cyan
           $specContent = Get-Content -Path "fortuna-backend.spec.template" -Raw
+          # THE FIX: This regex is simpler and correctly escaped for PowerShell.
           $matches = $specContent | Select-String -Pattern "\\('([^']*)', '([^']*)'\\)" -AllMatches
           if (-not $matches) {
             throw "Could not find any data paths to verify in the spec template."
           }
           foreach ($match in $matches.Matches) {
             $sourcePath = $match.Groups[1].Value
+            if ($sourcePath -eq "__ADAPTERS_PATH__") { continue }
 
             Write-Host "Verifying path: $sourcePath"
             if (-not (Test-Path -Path $sourcePath)) {
@@ -127,7 +125,8 @@ jobs:
       - name: Backend - Build with PyInstaller (Hardened with Retries)
         shell: pwsh
         run: |
-          cp fortuna-backend.spec.template fortuna-backend.spec
+          $adaptersPath = (Resolve-Path -Path "python_service/adapters").Path.Replace('\', '/')
+          (Get-Content -Path "fortuna-backend.spec.template" -Raw) -replace '__ADAPTERS_PATH__', $adaptersPath | Set-Content -Path "fortuna-backend.spec" -Encoding UTF8
           $maxRetries = 3
           $success = $false
           for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
