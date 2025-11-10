@@ -13,6 +13,9 @@ app_name = 'fortuna-backend'
 entry_point = 'python_service/main.py'
 
 # --- Data Files ---
+# SIMPLIFIED PATHS: These are now simple relative paths. PyInstaller will
+# correctly find them relative to the project root. This is the fix for the
+# "Unable to find" error.
 datas = [
     ('python_service/adapters', 'adapters'),
     ('python_service/data', 'data'),
@@ -50,7 +53,7 @@ for pkg in all_packages_to_collect:
         print(f"  [!!] WARNING: Could not collect {pkg}: {e}")
 
 # --- Metadata & Final Hidden Imports ---
-for pkg in ['pydantic', 'pydantic_core', 'fastapi', 'uvicorn', 'starlette', 'httpx']:
+for pkg in ['pydantic', 'fastapi', 'uvicorn', 'starlette', 'httpx']:
     try:
         datas += copy_metadata(pkg)
     except:
@@ -59,6 +62,9 @@ hiddenimports += [
     'uvicorn.lifespan', 'anyio._backends._asyncio', 'redis.asyncio',
     'keyring.backends.fail',
     '_ssl', '_hashlib', '_sqlite3'
+    'uvicorn.lifespan',
+    'anyio._backends._asyncio',
+    'keyring.backends.windows'
 ]
 
 # --- Analysis Object ---
