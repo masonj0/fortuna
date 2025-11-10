@@ -26,10 +26,10 @@ certifi==2023.7.22
 
 # --- Desktop & OS Integration (Flexible) ---
 psutil
-pywin32
-windows-toasts
+pywin32 ; sys_platform == 'win32'
+windows-toasts ; sys_platform == 'win32'
 keyring
-pynput
+pynput ; sys_platform == 'win32'
 
 # --- Development & Testing Dependencies ---
 pytest
@@ -40,5 +40,7 @@ black
 # THE FIX: Upgraded to 6.6.0 for official Python 3.12 support.
 pyinstaller==6.6.0
 wheel
-setuptools<81
+setuptools>=78.1.1
 pip-tools
+requests>=2.32.4
+urllib3>=2.5.0

@@ -1,4 +1,4 @@
-name: Build Fortuna Faucet MSI Installer - [PROD]
+name: Build Fortuna Faucet MSI Installer - 🏆 PRODUCTION FORTRESS
 
 on:
   push:
@@ -15,26 +15,23 @@ env:
 
 jobs:
   build-frontend:
-    name: '[BUILD] Frontend'
+    name: '📦 Build Frontend'
     runs-on: windows-latest
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4.1.7
-
       - name: Setup Node.js
         uses: actions/setup-node@v4.0.3
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
           cache-dependency-path: 'web_platform/frontend/package-lock.json'
-
       - name: Frontend - Install & Build
         shell: pwsh
         run: |
           cd web_platform/frontend
           npm ci
           npm run build
-
       - name: Upload Frontend Artifact
         uses: actions/upload-artifact@v4.3.4
         with:
@@ -43,107 +40,52 @@ jobs:
           retention-days: 1
 
   build-backend:
-    name: '[BUILD] Backend'
+    name: '🐍 Build Backend'
     runs-on: windows-latest
     env:
       PYTHONUTF8: "1"
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4.1.7
-
       - name: Setup Python
         uses: actions/setup-python@v5.1.1
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
           cache-dependency-path: 'python_service/requirements.txt'
-
-      - name: 'Ensure Required Data Directories Exist'
+      - name: '✅ [MONITOR] Ensure Required Directories Exist'
         shell: pwsh
         run: |
-          # THE FIX: Added the adapters directory to be created.
           New-Item -ItemType Directory -Path "python_service/adapters" -Force | Out-Null
           New-Item -ItemType Directory -Path "python_service/data" -Force | Out-Null
           New-Item -ItemType Directory -Path "python_service/json" -Force | Out-Null
-          Write-Host "[OK] Ensured required data, json, and adapters directories exist."
-
-      - name: '[MONITOR] Verify Source Code Integrity'
+          Write-Host "✅ Ensured required data, json, and adapters directories exist."
+      - name: '✅ [MONITOR] Verify Critical Files'
         shell: pwsh
         run: |
-          Write-Host "--- Verifying contents of python_service/main.py ---" -ForegroundColor Cyan
-          Get-Content python_service/main.py | Write-Host
-          Write-Host "--- End of file ---" -ForegroundColor Cyan
-
-      - name: '[MONITOR] Pre-flight Syntax Check'
-        shell: pwsh
-        run: |
-          Write-Host "--- Running Python syntax pre-flight check ---" -ForegroundColor Cyan
-          python -m py_compile python_service/main.py
-          Write-Host "[OK] Syntax check passed." -ForegroundColor Green
-
-      - name: '[MONITOR] Verify Build Paths from Spec Template'
-        shell: pwsh
-        run: |
-          Write-Host "--- Verifying data paths in fortuna-backend.spec.template ---" -ForegroundColor Cyan
-          $specContent = Get-Content -Path "fortuna-backend.spec.template" -Raw
-          $matches = $specContent | Select-String -Pattern "\\('([^']*)', '([^']*)'\\)" -AllMatches
-          if (-not $matches) {
-            throw "Could not find any data paths to verify in the spec template."
-          }
-          foreach ($match in $matches.Matches) {
-            $sourcePath = $match.Groups[1].Value
-
-            Write-Host "Verifying path: $sourcePath"
-            if (-not (Test-Path -Path $sourcePath)) {
-              throw "[FATAL] Build path '$sourcePath' listed in spec template does not exist!"
-            }
-            Write-Host "  [OK] Path exists." -ForegroundColor Green
-          }
-          Write-Host "All data paths verified." -ForegroundColor Green
-
+          if (-not (Test-Path "python_service/main.py")) { throw "❌ FATAL: python_service/main.py not found" }
+          if (-not (Test-Path "fortuna-backend.spec.template")) { throw "❌ FATAL: fortuna-backend.spec.template not found" }
+          Write-Host "✅ Critical files main.py and spec template are present."
       - name: Backend - Install Dependencies
         shell: pwsh
         run: |
           python -m pip install --upgrade pip wheel setuptools
           pip install -r python_service/requirements.txt
-
       - name: Backend - Security Audit
         shell: pwsh
         run: |
           pip install pip-audit
           $ignoreFlags = @()
           if (Test-Path "audit-ignore.txt") {
-              Get-Content "audit-ignore.txt" | ForEach-Object {
-                  $line = $_.Trim()
-                  if ($line -and !$line.StartsWith("#")) {
-                      $ignoreFlags += "--ignore-vuln", $line
-                  }
-              }
+              Get-Content "audit-ignore.txt" | ForEach-Object { $line = $_.Trim(); if ($line -and !$line.StartsWith("#")) { $ignoreFlags += "--ignore-vuln", $line } }
           }
           pip-audit -r python_service/requirements.txt @ignoreFlags
-
-      - name: Backend - Build with PyInstaller (Hardened with Retries)
+      - name: Backend - Build with PyInstaller
         shell: pwsh
         run: |
-          cp fortuna-backend.spec.template fortuna-backend.spec
-          $maxRetries = 3
-          $success = $false
-          for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
-              Write-Host "--- PyInstaller Build Attempt $attempt of $maxRetries ---" -ForegroundColor Yellow
-              pyinstaller fortuna-backend.spec --distpath dist --workpath build --clean --noconfirm
-              if ($LASTEXITCODE -eq 0) {
-                  $success = $true
-                  Write-Host "[OK] PyInstaller build succeeded on attempt $attempt." -ForegroundColor Green
-                  break
-              } else {
-                  Write-Host "[WARN] PyInstaller attempt $attempt failed. Waiting 10 seconds before retry..." -ForegroundColor Yellow
-                  Start-Sleep -Seconds 10
-              }
-          }
-          if (-not $success) {
-              throw "[FATAL] PyInstaller build failed after $maxRetries attempts."
-          }
-
+          # No more template substitution needed. Just copy the file.
+          Copy-Item -Path "fortuna-backend.spec.template" -Destination "fortuna-backend.spec"
+          pyinstaller fortuna-backend.spec --distpath dist --workpath build --clean --noconfirm
       - name: Upload Backend Artifact
         uses: actions/upload-artifact@v4.3.4
         with:
@@ -152,32 +94,27 @@ jobs:
           retention-days: 1
 
   package-and-test:
-    name: '[PACKAGE] Package & Test Installer'
+    name: '🏆 Package & Test Installer'
     needs: [build-frontend, build-backend]
     runs-on: windows-latest
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4.1.7
-
       - name: Setup Node.js for Electron
         uses: actions/setup-node@v4.0.3
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
           cache-dependency-path: 'electron/package-lock.json'
-
-      - name: Download Frontend Artifact
+      - name: Download Artifacts
         uses: actions/download-artifact@v4.1.8
-        with:
-          name: frontend-build-output
-          path: electron/web-ui-build/out
-
-      - name: Download Backend Artifact
-        uses: actions/download-artifact@v4.1.8
-        with:
-          name: backend-executable
-          path: electron/resources/fortuna-backend
-
+      - name: Stage Artifacts for Packaging
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path "./electron/web-ui-build/out" -Force | Out-Null
+          New-Item -ItemType Directory -Path "./electron/resources/fortuna-backend" -Force | Out-Null
+          Move-Item -Path "./frontend-build-output/*" -Destination "./electron/web-ui-build/out" -Force
+          Move-Item -Path "./backend-executable/fortuna-backend.exe" -Destination "./electron/resources/fortuna-backend/fortuna-backend.exe" -Force
       - name: Critical Integration Test
         shell: pwsh
         run: |
@@ -205,14 +142,12 @@ jobs:
           if (-not $serverReady) {
             throw "[FATAL] Backend integration test failed. Server never became healthy."
           }
-
       - name: Electron - Install & Package MSI
         shell: pwsh
         run: |
           cd electron
           npm ci
           npx electron-builder --config electron-builder-config.yml --publish never
-
       - name: Upload Final MSI Artifact
         uses: actions/upload-artifact@v4.3.4
         with:

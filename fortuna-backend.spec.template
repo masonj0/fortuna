@@ -1,31 +1,26 @@
 # -*- mode: python ; coding: utf-8 -*-
 #
-# This is the definitive PyInstaller spec file template for Fortuna Faucet.
+# This is the definitive PyInstaller spec file for Fortuna Faucet.
+# It uses simple, relative paths and requires no template substitution.
 #
 
 from PyInstaller.utils.hooks import collect_all, copy_metadata
 import os
-
-block_cipher = None
 
 # --- Core Configuration ---
 app_name = 'fortuna-backend'
 entry_point = 'python_service/main.py'
 
 # --- Data Files ---
-# SIMPLIFIED PATHS: These are now simple relative paths. PyInstaller will
-# correctly find them relative to the project root. This is the fix for the
-# "Unable to find" error.
+# These are simple relative paths that PyInstaller will find correctly.
 datas = [
     ('python_service/adapters', 'adapters'),
     ('python_service/data', 'data'),
     ('python_service/json', 'json')
 ]
 
-hiddenimports = []
-binaries = []
-
 # --- Dependency Collection ---
+# A comprehensive list of packages to ensure all necessary files are bundled.
 core_stack = [
     'uvicorn', 'fastapi', 'pydantic', 'pydantic_core', 'starlette',
     'anyio', 'sniffio', 'h11', 'httptools', 'websockets',
@@ -40,6 +35,9 @@ windows_stack = [
     'pynput', 'cryptography', 'cffi', 'keyring', 'pywin32-ctypes'
 ]
 all_packages_to_collect = core_stack + data_stack + windows_stack
+
+hiddenimports = []
+binaries = []
 
 print(f"--- Collecting {len(all_packages_to_collect)} packages for PyInstaller ---")
 for pkg in all_packages_to_collect:
@@ -60,28 +58,25 @@ for pkg in ['pydantic', 'fastapi', 'uvicorn', 'starlette', 'httpx']:
         pass
 hiddenimports += [
     'uvicorn.lifespan', 'anyio._backends._asyncio', 'redis.asyncio',
-    'keyring.backends.fail',
+    'keyring.backends.fail', 'keyring.backends.windows',
     '_ssl', '_hashlib', '_sqlite3'
-    'uvicorn.lifespan',
-    'anyio._backends._asyncio',
-    'keyring.backends.windows'
 ]
+
 
 # --- Analysis Object ---
 a = Analysis(
     [entry_point],
-    pathex=[os.getcwd()],
+    pathex=[os.getcwd()], # This ensures 'python_service' is on the path
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
     runtime_hooks=[],
-    # THE FIX: Removed pandas, numpy, and scipy to resolve the contradiction.
     excludes=['matplotlib', 'tkinter', 'pytest', 'IPython', 'streamlit'],
     noarchive=False
 )
 
-pyz = PYZ(a.pure, cipher=block_cipher)
+pyz = PYZ(a.pure, cipher=None)
 
 exe = EXE(
     pyz, a.scripts, a.binaries, a.zipfiles, a.datas, [],
