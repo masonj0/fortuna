@@ -111,6 +111,8 @@ jobs:
       - name: Stage Artifacts for Packaging
         shell: pwsh
         run: |
+          New-Item -ItemType Directory -Path "./electron/web-ui-build/out" -Force | Out-Null
+          New-Item -ItemType Directory -Path "./electron/resources/fortuna-backend" -Force | Out-Null
           Move-Item -Path "./frontend-build-output/*" -Destination "./electron/web-ui-build/out" -Force
           Move-Item -Path "./backend-executable/fortuna-backend.exe" -Destination "./electron/resources/fortuna-backend/fortuna-backend.exe" -Force
       - name: Critical Integration Test
