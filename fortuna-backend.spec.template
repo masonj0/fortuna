@@ -36,7 +36,8 @@ packages_to_collect = [
     'pydantic',
     'keyring',
     'anyio',
-    'httpx'
+    'httpx',
+    'redis'
 ]
 
 print(f"--- Collecting {len(packages_to_collect)} essential packages for PyInstaller ---")
