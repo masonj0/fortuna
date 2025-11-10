@@ -29,7 +29,7 @@ psutil
 pywin32 ; sys_platform == 'win32'
 windows-toasts ; sys_platform == 'win32'
 keyring
-pynput ; sys_platform != 'win32'
+pynput ; sys_platform == 'win32'
 
 # --- Development & Testing Dependencies ---
 pytest
