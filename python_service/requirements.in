@@ -1,7 +1,6 @@
 #
 # Fortuna Faucet - High-Level Backend Dependencies
 # This is the source of truth. Run 'pip-compile' to generate requirements.txt.
-# Only pin versions here to resolve a specific, known conflict.
 #
 
 # --- Core Application Framework (Hard Pins) ---
@@ -12,8 +11,9 @@ cryptography==42.0.5  # Pinned to satisfy pyopenssl < 43
 # --- Core Application Dependencies (Flexible) ---
 pydantic-settings
 httpx[http2]
-selectolax==0.4.0      # Pinned to ensure a version with pre-compiled wheels
+selectolax==0.4.0
 slowapi
+redis
 pandas
 numpy
 scipy
@@ -21,14 +21,14 @@ aiosqlite
 SQLAlchemy
 psycopg2-binary
 structlog
-certifi               # Unpinned to allow pip-compile to find the latest secure version
+certifi==2023.7.22
 
 # --- Desktop & OS Integration (Flexible) ---
 psutil
-pywin32 ; sys_platform == 'win32'
-windows-toasts ; sys_platform == 'win32'
-keyring ; sys_platform == 'win32'
-pynput ; sys_platform == 'win32'
+pywin32
+windows-toasts
+keyring
+pynput
 
 # --- Development & Testing Dependencies ---
 pytest
@@ -36,7 +36,8 @@ pytest-asyncio
 black
 
 # --- Build Dependencies (Hard Pins) ---
-pyinstaller==6.1.0
+# THE FIX: Upgraded to 6.6.0 for official Python 3.12 support.
+pyinstaller==6.6.0
 wheel
 setuptools<81
 pip-tools
