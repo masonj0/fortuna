@@ -13,6 +13,9 @@ app_name = 'fortuna-backend'
 entry_point = 'python_service/main.py'
 
 # --- Data Files ---
+# SIMPLIFIED PATHS: These are now simple relative paths. PyInstaller will
+# correctly find them relative to the project root. This is the fix for the
+# "Unable to find" error.
 datas = [
     ('python_service/adapters', 'adapters'),
     ('python_service/data', 'data'),
