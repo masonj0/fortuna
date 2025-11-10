@@ -119,6 +119,8 @@ python-dotenv==1.0.1
     # via pydantic-settings
 pytz==2024.1
     # via pandas
+redis==7.0.1
+    # via -r python_service/requirements.in
 scipy==1.14.0
     # via -r python_service/requirements.in
 selectolax==0.4.0

@@ -61,9 +61,11 @@ jobs:
       - name: 'Ensure Required Data Directories Exist'
         shell: pwsh
         run: |
+          # THE FIX: Added the adapters directory to be created.
+          New-Item -ItemType Directory -Path "python_service/adapters" -Force | Out-Null
           New-Item -ItemType Directory -Path "python_service/data" -Force | Out-Null
           New-Item -ItemType Directory -Path "python_service/json" -Force | Out-Null
-          Write-Host "[OK] Ensured required data and json directories exist."
+          Write-Host "[OK] Ensured required data, json, and adapters directories exist."
 
       - name: '[MONITOR] Verify Source Code Integrity'
         shell: pwsh
@@ -84,14 +86,12 @@ jobs:
         run: |
           Write-Host "--- Verifying data paths in fortuna-backend.spec.template ---" -ForegroundColor Cyan
           $specContent = Get-Content -Path "fortuna-backend.spec.template" -Raw
-          # THE FIX: This regex is simpler and correctly escaped for PowerShell.
-          $matches = $specContent | Select-String -Pattern "\('([^']*)', '([^']*)'\)" -AllMatches
+          $matches = $specContent | Select-String -Pattern "\\('([^']*)', '([^']*)'\\)" -AllMatches
           if (-not $matches) {
             throw "Could not find any data paths to verify in the spec template."
           }
           foreach ($match in $matches.Matches) {
             $sourcePath = $match.Groups[1].Value
-            if ($sourcePath -eq "__ADAPTERS_PATH__") { continue }
 
             Write-Host "Verifying path: $sourcePath"
             if (-not (Test-Path -Path $sourcePath)) {
@@ -125,8 +125,7 @@ jobs:
       - name: Backend - Build with PyInstaller (Hardened with Retries)
         shell: pwsh
         run: |
-          $adaptersPath = (Resolve-Path -Path "python_service/adapters").Path.Replace('\', '/')
-          (Get-Content -Path "fortuna-backend.spec.template" -Raw) -replace '__ADAPTERS_PATH__', $adaptersPath | Set-Content -Path "fortuna-backend.spec" -Encoding UTF8
+          cp fortuna-backend.spec.template fortuna-backend.spec
           $maxRetries = 3
           $success = $false
           for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
