@@ -1,0 +1,98 @@
+# -*- mode: python ; coding: utf-8 -*-
+#
+# This is the definitive PyInstaller spec file template for Fortuna Faucet.
+#
+
+from PyInstaller.utils.hooks import collect_all, copy_metadata
+import os
+
+block_cipher = None
+
+# --- Core Configuration ---
+app_name = 'fortuna-backend'
+entry_point = 'python_service/main.py'
+
+# --- Data Files ---
+# SIMPLIFIED PATHS: These are now simple relative paths. PyInstaller will
+# correctly find them relative to the project root. This is the fix for the
+# "Unable to find" error.
+datas = [
+    ('python_service/adapters', 'adapters'),
+    ('python_service/data', 'data'),
+    ('python_service/json', 'json')
+]
+
+hiddenimports = []
+binaries = []
+
+# --- Dependency Collection ---
+core_stack = [
+    'uvicorn', 'fastapi', 'pydantic', 'pydantic_core', 'starlette',
+    'anyio', 'sniffio', 'h11', 'httptools', 'websockets',
+    'httpx', 'httpcore', 'certifi'
+]
+data_stack = [
+    'redis', 'tenacity', 'requests', 'selectolax', 'bs4', 'lxml',
+    'structlog', 'python-dotenv'
+]
+windows_stack = [
+    'psutil', 'pywin32', 'pywintypes', 'win32api', 'win32con',
+    'pynput', 'cryptography', 'cffi', 'keyring', 'pywin32-ctypes'
+]
+all_packages_to_collect = core_stack + data_stack + windows_stack
+
+print(f"--- Collecting {len(all_packages_to_collect)} packages for PyInstaller ---")
+for pkg in all_packages_to_collect:
+    try:
+        tmp_datas, tmp_binaries, tmp_hiddenimports = collect_all(pkg)
+        datas += tmp_datas
+        binaries += tmp_binaries
+        hiddenimports += tmp_hiddenimports
+        # ENCODING FIX: Replaced Unicode checkmark with ASCII-safe text.
+        print(f"  [OK] Successfully collected {pkg}")
+    except Exception as e:
+        # ENCODING FIX: Replaced Unicode warning with ASCII-safe text.
+        print(f"  [!!] WARNING: Could not collect {pkg}: {e}")
+
+# --- Metadata & Final Hidden Imports ---
+for pkg in ['pydantic', 'pydantic_core', 'fastapi', 'uvicorn', 'starlette', 'httpx']:
+    try:
+        datas += copy_metadata(pkg)
+    except:
+        pass
+hiddenimports += [
+    'uvicorn.lifespan', 'anyio._backends._asyncio', 'redis.asyncio',
+    'keyring.backends.fail',
+    '_ssl', '_hashlib', '_sqlite3'
+]
+
+# --- Analysis Object ---
+a = Analysis(
+    [entry_point],
+    # PATH FIX: The problematic 'pathex' directive has been removed.
+    pathex=[],
+    binaries=binaries,
+    datas=datas,
+    hiddenimports=hiddenimports,
+    hookspath=[],
+    runtime_hooks=[],
+    excludes=['matplotlib', 'tkinter', 'pytest', 'IPython', 'streamlit'],
+    noarchive=False
+)
+
+pyz = PYZ(a.pure, cipher=block_cipher)
+
+exe = EXE(
+    pyz, a.scripts, a.binaries, a.zipfiles, a.datas, [],
+    name=app_name,
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=True,
+    console=True,
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None
+)
