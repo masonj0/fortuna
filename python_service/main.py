@@ -36,5 +36,9 @@ def main():
         log_level="info"
     )
 
+import multiprocessing
+
 if __name__ == "__main__":
+    # Guard for Windows compatibility when creating child processes.
+    multiprocessing.freeze_support()
     main()
