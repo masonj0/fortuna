@@ -1,0 +1,29 @@
+#
+# Fortuna Faucet - High-Level Development & Testing Dependencies
+# This file is the source of truth for development dependencies.
+# Run 'pip-compile' to generate requirements-dev.txt.
+#
+
+# --- Core Testing Frameworks ---
+pytest
+pytest-asyncio
+fakeredis[lua]
+respx
+playwright
+
+# --- Code Quality & Linting ---
+black
+# ruff is often used with black
+
+# --- Analysis & Notebooks ---
+# pandas is already in the main requirements.in
+altair
+pydeck
+streamlit
+tabula-py
+
+# --- Git & Versioning ---
+GitPython
+
+# --- Security & Auditing ---
+pip-audit
