@@ -60,12 +60,14 @@ class OddsEngine:
         manual_override_manager: ManualOverrideManager = None,
         connection_manager=None,
     ):
+        # THE FIX: Import the cache_manager singleton here to ensure tests can
+        # patch and reload it *before* the engine is initialized.
+        from .cache_manager import cache_manager
+
         self.logger = structlog.get_logger(__name__)
         self.logger.info("Initializing FortunaEngine...")
         self.connection_manager = connection_manager
-        self.redis_client = None
-        self.use_redis = False
-        self._memory_cache = {}  # The in-memory fallback cache
+        self.cache_manager = cache_manager
 
         try:
             try:
@@ -81,25 +83,7 @@ class OddsEngine:
 
                 self.config = Settings(API_KEY="a_secure_test_api_key_that_is_long_enough")
 
-            # --- Redis Initialization with Fallback ---
-            try:
-                # Attempt to connect with a short timeout
-                self.redis_client = redis_async.from_url(
-                    self.config.REDIS_URL,
-                    decode_responses=True,
-                    socket_connect_timeout=2,
-                )
-                # Ping the server to confirm connectivity
-                # Note: This is a synchronous ping for startup validation
-                if redis.Redis.from_url(self.config.REDIS_URL).ping():
-                    self.use_redis = True
-                    self.logger.info("✅ Redis connection successful. Caching is enabled.")
-                else:
-                    raise ConnectionError("Redis ping failed.")
-            except Exception as e:
-                self.logger.warning(f"⚠️ Redis unavailable, falling back to in-memory cache. Reason: {e}")
-                self.redis_client = None
-                self.use_redis = False
+            # Redis is now handled entirely by the CacheManager.
 
             self.logger.info("Initializing adapters...")
             self.adapters: List[BaseAdapterV3] = []
@@ -200,24 +184,11 @@ class OddsEngine:
         return [adapter.get_status() for adapter in self.adapters]
 
     async def get_from_cache(self, key):
-        if self.use_redis and self.redis_client:
-            try:
-                return await self.redis_client.get(key)
-            except Exception as e:
-                self.logger.error(f"Redis GET failed, returning None. Error: {e}")
-                return None
-        else:
-            return self._memory_cache.get(key)
+        return await self.cache_manager.get(key)
 
     async def set_in_cache(self, key, value, ttl=300):
-        if self.use_redis and self.redis_client:
-            try:
-                await self.redis_client.setex(key, ttl, value)
-            except Exception as e:
-                self.logger.error(f"Redis SET failed. Error: {e}")
-        else:
-            self._memory_cache[key] = value
-            # Note: In-memory cache does not have TTL here, but this is a simple fallback.
+        # THE FIX: The keyword argument is 'ttl_seconds', not 'ttl'.
+        await self.cache_manager.set(key, value, ttl_seconds=ttl)
 
     async def _fetch_with_semaphore(self, adapter: BaseAdapterV3, date: str):
         """Acquires the semaphore before fetching data from an adapter."""
@@ -236,7 +207,9 @@ class OddsEngine:
         attempted_url = None
 
         try:
-            races = [race async for race in adapter.get_races(date)]
+            # THE FIX: Instantiate Race objects from the dicts yielded by the adapter
+            # to ensure type consistency within the engine's processing methods.
+            races = [Race(**race_data) async for race_data in adapter.get_races(date)]
             is_success = True
         except AdapterHttpError as e:
             self.logger.error(
