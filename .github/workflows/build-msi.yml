@@ -1,4 +1,4 @@
-name: Build Fortuna Faucet MSI Installer - 🏆 PRODUCTION FORTRESS
+name: Build Fortuna Faucet MSI Installer - [PROD]
 
 on:
   push:
@@ -15,7 +15,7 @@ env:
 
 jobs:
   build-frontend:
-    name: '📦 Build Frontend'
+    name: '[BUILD] Frontend'
     runs-on: windows-latest
     steps:
       - name: Checkout Repository
@@ -43,8 +43,10 @@ jobs:
           retention-days: 1
 
   build-backend:
-    name: '🐍 Build Backend'
+    name: '[BUILD] Backend'
     runs-on: windows-latest
+    env:
+      PYTHONUTF8: "1"
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4.1.7
@@ -55,6 +57,15 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
           cache-dependency-path: 'python_service/requirements.txt'
+
+      - name: 'Ensure Required Data Directories Exist'
+        shell: pwsh
+        run: |
+          # THE FIX: Added the adapters directory to be created.
+          New-Item -ItemType Directory -Path "python_service/adapters" -Force | Out-Null
+          New-Item -ItemType Directory -Path "python_service/data" -Force | Out-Null
+          New-Item -ItemType Directory -Path "python_service/json" -Force | Out-Null
+          Write-Host "[OK] Ensured required data, json, and adapters directories exist."
 
       - name: '[MONITOR] Verify Source Code Integrity'
         shell: pwsh
@@ -68,7 +79,27 @@ jobs:
         run: |
           Write-Host "--- Running Python syntax pre-flight check ---" -ForegroundColor Cyan
           python -m py_compile python_service/main.py
-          Write-Host "✅ Syntax check passed." -ForegroundColor Green
+          Write-Host "[OK] Syntax check passed." -ForegroundColor Green
+
+      - name: '[MONITOR] Verify Build Paths from Spec Template'
+        shell: pwsh
+        run: |
+          Write-Host "--- Verifying data paths in fortuna-backend.spec.template ---" -ForegroundColor Cyan
+          $specContent = Get-Content -Path "fortuna-backend.spec.template" -Raw
+          $matches = $specContent | Select-String -Pattern "\\('([^']*)', '([^']*)'\\)" -AllMatches
+          if (-not $matches) {
+            throw "Could not find any data paths to verify in the spec template."
+          }
+          foreach ($match in $matches.Matches) {
+            $sourcePath = $match.Groups[1].Value
+
+            Write-Host "Verifying path: $sourcePath"
+            if (-not (Test-Path -Path $sourcePath)) {
+              throw "[FATAL] Build path '$sourcePath' listed in spec template does not exist!"
+            }
+            Write-Host "  [OK] Path exists." -ForegroundColor Green
+          }
+          Write-Host "All data paths verified." -ForegroundColor Green
 
       - name: Backend - Install Dependencies
         shell: pwsh
@@ -91,12 +122,27 @@ jobs:
           }
           pip-audit -r python_service/requirements.txt @ignoreFlags
 
-      - name: Backend - Build with PyInstaller
+      - name: Backend - Build with PyInstaller (Hardened with Retries)
         shell: pwsh
         run: |
-          $adaptersPath = (Resolve-Path -Path "python_service/adapters").Path.Replace('\', '/')
-          (Get-Content -Path "fortuna-backend.spec.template" -Raw) -replace '__ADAPTERS_PATH__', $adaptersPath | Set-Content -Path "fortuna-backend.spec" -Encoding UTF8
-          pyinstaller fortuna-backend.spec --distpath dist --workpath build --clean --noconfirm
+          cp fortuna-backend.spec.template fortuna-backend.spec
+          $maxRetries = 3
+          $success = $false
+          for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
+              Write-Host "--- PyInstaller Build Attempt $attempt of $maxRetries ---" -ForegroundColor Yellow
+              pyinstaller fortuna-backend.spec --distpath dist --workpath build --clean --noconfirm
+              if ($LASTEXITCODE -eq 0) {
+                  $success = $true
+                  Write-Host "[OK] PyInstaller build succeeded on attempt $attempt." -ForegroundColor Green
+                  break
+              } else {
+                  Write-Host "[WARN] PyInstaller attempt $attempt failed. Waiting 10 seconds before retry..." -ForegroundColor Yellow
+                  Start-Sleep -Seconds 10
+              }
+          }
+          if (-not $success) {
+              throw "[FATAL] PyInstaller build failed after $maxRetries attempts."
+          }
 
       - name: Upload Backend Artifact
         uses: actions/upload-artifact@v4.3.4
@@ -106,7 +152,7 @@ jobs:
           retention-days: 1
 
   package-and-test:
-    name: '🏆 Package & Test Installer'
+    name: '[PACKAGE] Package & Test Installer'
     needs: [build-frontend, build-backend]
     runs-on: windows-latest
     steps:
@@ -141,12 +187,12 @@ jobs:
           Write-Host "--- Starting Integration Test: Polling /health endpoint for 60s ---"
           foreach ($i in 1..30) {
             if ($process.HasExited) {
-              throw "❌ FATAL: Backend process crashed immediately on startup. Exit Code: $($process.ExitCode)"
+              throw "[FATAL] Backend process crashed immediately on startup. Exit Code: $($process.ExitCode)"
             }
             try {
               $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/health" -TimeoutSec 1 -UseBasicParsing
               if ($response.StatusCode -eq 200) {
-                Write-Host "✅ Health check passed on attempt $i!"
+                Write-Host "[OK] Health check passed on attempt $i!"
                 $serverReady = $true
                 break
               }
@@ -157,7 +203,7 @@ jobs:
           }
           Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
           if (-not $serverReady) {
-            throw "❌ FATAL: Backend integration test failed. Server never became healthy."
+            throw "[FATAL] Backend integration test failed. Server never became healthy."
           }
 
       - name: Electron - Install & Package MSI

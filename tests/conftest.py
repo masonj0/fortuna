@@ -33,7 +33,7 @@ def get_test_settings():
     )
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def client():
     """
     A TestClient instance for testing the FastAPI app.
