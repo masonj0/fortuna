@@ -80,7 +80,7 @@ jobs:
         shell: pwsh
         run: |
           cd python_service
-          pyinstaller ../fortuna-backend.spec.template --distpath ../dist --workpath ../build --clean --noconfirm
+          pyinstaller ../fortuna-backend.spec.template --onefile --distpath ../dist --workpath ../build --clean --noconfirm
       - name: Upload Backend Artifact
         uses: actions/upload-artifact@v4.3.4
         with:
