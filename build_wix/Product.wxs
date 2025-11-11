@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+    <Product Id="*" Name="Fortuna Backend Service" Language="1033" Version="1.0.0.0"
+             Manufacturer="Fortuna Project" UpgradeCode="{da2c1b11-23f3-4787-a655-8094e97aa905}">
+
+        <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
+        <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
+        <MediaTemplate EmbedCab="yes" />
+
+        <Feature Id="ProductFeature" Title="Fortuna Backend Service" Level="1">
+            <ComponentGroupRef Id="MainFiles" />
+            <ComponentRef Id="ServiceControl" />
+        </Feature>
+
+        <Directory Id="TARGETDIR" Name="SourceDir">
+            <Directory Id="ProgramFilesFolder">
+                <Directory Id="INSTALLFOLDER" Name="Fortuna Backend Service" />
+            </Directory>
+        </Directory>
+
+        <ComponentGroup Id="MainFiles">
+            <!-- This will be auto-populated by the 'heat' tool -->
+        </ComponentGroup>
+
+        <DirectoryRef Id="INSTALLFOLDER">
+            <Component Id="ServiceControl" Guid="*">
+                <ServiceInstall Id="ServiceInstaller"
+                                Type="ownProcess"
+                                Name="FortunaBackendService"
+                                DisplayName="Fortuna Backend Service"
+                                Description="Provides access to the Fortuna racing data engine."
+                                Start="auto"
+                                Account="LocalSystem"
+                                ErrorControl="normal" />
+                <ServiceControl Id="StartService" Name="FortunaBackendService" Start="install" Wait="no" />
+                <ServiceControl Id="StopService" Name="FortunaBackendService" Stop="both" Remove="uninstall" Wait="yes" />
+            </Component>
+        </DirectoryRef>
+
+    </Product>
+</Wix>
