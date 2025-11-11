@@ -27,7 +27,7 @@ core_stack = [
     'httpx', 'httpcore', 'certifi', 'slowapi'
 ]
 data_stack = [
-    'redis', 'tenacity', 'requests', 'selectolax', 'bs4', 'lxml',
+    'redis', 'requests', 'selectolax', 'bs4', 'lxml',
     'structlog', 'python-dotenv', 'pandas', 'numpy', 'scipy'
 ]
 windows_stack = [
