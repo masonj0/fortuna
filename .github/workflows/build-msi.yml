@@ -83,19 +83,76 @@ jobs:
       - name: Backend - Build with PyInstaller
         shell: pwsh
         run: |
-          cd python_service
-          pyinstaller ../fortuna-backend.spec.template --hidden-import=keyring.backends.windows --distpath ../dist --workpath ../build --clean --noconfirm
+          # Run from the root to ensure correct pathing for PyInstaller
+          pyinstaller fortuna-backend.spec --noconfirm
       - name: Upload Backend Artifact
         uses: actions/upload-artifact@v4.3.4
         with:
           name: backend-executable
-          path: dist/fortuna-backend/fortuna-backend.exe
+          path: dist/fortuna-backend.exe # The spec file builds a --onefile executable directly into dist/
           retention-days: 1
           if-no-files-found: error
 
+  smoke-test-backend:
+    name: '🧪 Smoke Test Backend Executable'
+    needs: [build-backend]
+    runs-on: windows-latest
+    steps:
+      - name: Download Backend Executable
+        uses: actions/download-artifact@v4.1.8
+        with:
+          name: backend-executable
+          path: ./
+      - name: Run Smoke Test
+        shell: pwsh
+        env:
+          API_KEY: "a_secure_test_api_key_that_is_long_enough_for_smoke_test"
+        run: |
+          $exe = "./fortuna-backend.exe"
+          $logFileBase = "backend-log"
+          $stdOutPath = "$logFileBase-out.txt"
+          $stdErrPath = "$logFileBase-err.txt"
+
+          $process = Start-Process -FilePath $exe -PassThru -NoNewWindow -RedirectStandardOutput $stdOutPath -RedirectStandardError $stdErrPath
+          $serverReady = $false
+          Write-Host "--- Starting Smoke Test: Polling /health endpoint for 60s ---"
+          try {
+            foreach ($i in 1..30) {
+              if ($process.HasExited) {
+                throw "[FATAL] Backend process crashed during smoke test. Exit Code: $($process.ExitCode)"
+              }
+              try {
+                $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/health" -TimeoutSec 1 -UseBasicParsing
+                if ($response.StatusCode -eq 200) {
+                  Write-Host "[OK] Health check passed on attempt $i!"
+                  $serverReady = $true
+                  break
+                }
+              } catch {
+                Write-Host "Attempt $i... server not ready."
+              }
+              Start-Sleep -Seconds 2
+            }
+          } finally {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            if (-not $serverReady) {
+              Write-Host "--- ❌ TEST FAILED ---"
+              if (Test-Path $stdOutPath) {
+                Write-Host "--- STDOUT ---"
+                Get-Content $stdOutPath | Write-Host
+              }
+              if (Test-Path $stdErrPath) {
+                Write-Host "--- STDERR ---"
+                Get-Content $stdErrPath | Write-Host
+              }
+              throw "[FATAL] Backend smoke test failed. Server never became healthy."
+            }
+          }
+          Write-Host "✅ Backend smoke test passed."
+
   package-and-test:
     name: '🏆 Package & Test Electron Installer'
-    needs: [build-frontend, build-backend]
+    needs: [build-frontend, smoke-test-backend]
     runs-on: windows-latest
     steps:
       - name: Checkout Repository
@@ -106,28 +163,36 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
           cache-dependency-path: 'electron/package-lock.json'
-      - name: Download Artifacts
+      - name: Download All Build Artifacts
         uses: actions/download-artifact@v4.1.8
         with:
-          name: backend-executable
-          path: backend-executable
+          path: ./temp-artifacts # Downloads all artifacts into this directory, preserving their names
       - name: Stage Artifacts for Packaging
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Path "./electron/web-ui-build/out" -Force | Out-Null
-          New-Item -ItemType Directory -Path "./electron/resources/fortuna-backend" -Force | Out-Null
-          Move-Item -Path "./frontend-build-output/*" -Destination "./electron/web-ui-build/out" -Force
-          Move-Item -Path "./backend-executable/fortuna-backend.exe" -Destination "./electron/resources/fortuna-backend/fortuna-backend.exe" -Force
+          New-Item -ItemType Directory -Path "./electron/web-ui-build" -Force | Out-Null
+          New-Item -ItemType Directory -Path "./electron/resources" -Force | Out-Null
+          Move-Item -Path "./temp-artifacts/frontend-build-output/*" -Destination "./electron/web-ui-build/out" -Force
+          Move-Item -Path "./temp-artifacts/backend-executable/fortuna-backend.exe" -Destination "./electron/resources/fortuna-backend.exe" -Force
       - name: Critical Integration Test
         shell: pwsh
+        env:
+          API_KEY: "a_secure_test_api_key_that_is_long_enough" # Must be > 16 chars for config validation
         run: |
-          $exe = "./electron/resources/fortuna-backend/fortuna-backend.exe"
+          $exe = "./electron/resources/fortuna-backend.exe"
           $process = Start-Process -FilePath $exe -PassThru -NoNewWindow
           $serverReady = $false
           Write-Host "--- Starting Integration Test: Polling /health endpoint for 60s ---"
           foreach ($i in 1..30) {
             if ($process.HasExited) {
-              throw "[FATAL] Backend process crashed immediately on startup. Exit Code: $($process.ExitCode)"
+              # On crash, dump the last 20 lines of stdout/stderr for diagnostics
+              $stdErr = Get-Content -Path $process.StandardErrorPath -Tail 20 -ErrorAction SilentlyContinue
+              $stdOut = Get-Content -Path $process.StandardOutputPath -Tail 20 -ErrorAction SilentlyContinue
+              Write-Host "--- STDERR ---"
+              Write-Host $stdErr
+              Write-Host "--- STDOUT ---"
+              Write-Host $stdOut
+              throw "[FATAL] Backend process crashed on startup. Exit Code: $($process.ExitCode)"
             }
             try {
               $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/health" -TimeoutSec 1 -UseBasicParsing
