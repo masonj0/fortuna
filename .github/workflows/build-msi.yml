@@ -109,28 +109,44 @@ jobs:
           API_KEY: "a_secure_test_api_key_that_is_long_enough_for_smoke_test"
         run: |
           $exe = "./fortuna-backend.exe"
-          $process = Start-Process -FilePath $exe -PassThru -NoNewWindow
+          $logFileBase = "backend-log"
+          $stdOutPath = "$logFileBase-out.txt"
+          $stdErrPath = "$logFileBase-err.txt"
+
+          $process = Start-Process -FilePath $exe -PassThru -NoNewWindow -RedirectStandardOutput $stdOutPath -RedirectStandardError $stdErrPath
           $serverReady = $false
           Write-Host "--- Starting Smoke Test: Polling /health endpoint for 60s ---"
-          foreach ($i in 1..30) {
-            if ($process.HasExited) {
-              throw "[FATAL] Backend process crashed during smoke test. Exit Code: $($process.ExitCode)"
-            }
-            try {
-              $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/health" -TimeoutSec 1 -UseBasicParsing
-              if ($response.StatusCode -eq 200) {
-                Write-Host "[OK] Health check passed on attempt $i!"
-                $serverReady = $true
-                break
+          try {
+            foreach ($i in 1..30) {
+              if ($process.HasExited) {
+                throw "[FATAL] Backend process crashed during smoke test. Exit Code: $($process.ExitCode)"
               }
-            } catch {
-              Write-Host "Attempt $i... server not ready."
+              try {
+                $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/health" -TimeoutSec 1 -UseBasicParsing
+                if ($response.StatusCode -eq 200) {
+                  Write-Host "[OK] Health check passed on attempt $i!"
+                  $serverReady = $true
+                  break
+                }
+              } catch {
+                Write-Host "Attempt $i... server not ready."
+              }
+              Start-Sleep -Seconds 2
             }
-            Start-Sleep -Seconds 2
-          }
-          Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-          if (-not $serverReady) {
-            throw "[FATAL] Backend smoke test failed. Server never became healthy."
+          } finally {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            if (-not $serverReady) {
+              Write-Host "--- ❌ TEST FAILED ---"
+              if (Test-Path $stdOutPath) {
+                Write-Host "--- STDOUT ---"
+                Get-Content $stdOutPath | Write-Host
+              }
+              if (Test-Path $stdErrPath) {
+                Write-Host "--- STDERR ---"
+                Get-Content $stdErrPath | Write-Host
+              }
+              throw "[FATAL] Backend smoke test failed. Server never became healthy."
+            }
           }
           Write-Host "✅ Backend smoke test passed."
 
