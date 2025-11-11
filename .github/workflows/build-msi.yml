@@ -84,13 +84,14 @@ jobs:
         shell: pwsh
         run: |
           cd python_service
-          pyinstaller ../fortuna-backend.spec --distpath ../dist --workpath ../build --clean --noconfirm
+          pyinstaller ../fortuna-backend.spec.template --hidden-import=keyring.backends.windows --distpath ../dist --workpath ../build --clean --noconfirm
       - name: Upload Backend Artifact
         uses: actions/upload-artifact@v4.3.4
         with:
           name: backend-executable
           path: dist/fortuna-backend/fortuna-backend.exe
           retention-days: 1
+          if-no-files-found: error
 
   package-and-test:
     name: '🏆 Package & Test Electron Installer'
@@ -107,6 +108,9 @@ jobs:
           cache-dependency-path: 'electron/package-lock.json'
       - name: Download Artifacts
         uses: actions/download-artifact@v4.1.8
+        with:
+          name: backend-executable
+          path: backend-executable
       - name: Stage Artifacts for Packaging
         shell: pwsh
         run: |
