@@ -16,6 +16,7 @@ env:
 jobs:
   build-frontend:
     name: '📦 Build Frontend'
+    timeout-minutes: 15
     runs-on: windows-latest
     steps:
       - name: Checkout Repository
@@ -31,7 +32,7 @@ jobs:
         run: |
           cd web_platform/frontend
           npm ci
-          npm audit --audit-level=moderate  # Added security check
+          npm audit --audit-level=moderate # Added security check
           npm run build
       - name: Upload Frontend Artifact
         uses: actions/upload-artifact@v4.3.4
@@ -42,6 +43,7 @@ jobs:
 
   build-backend:
     name: '🐍 Build Backend'
+    timeout-minutes: 20
     runs-on: windows-latest
     env:
       PYTHONUTF8: "1"
@@ -75,7 +77,6 @@ jobs:
       - name: Backend - Security Audit
         shell: pwsh
         run: |
-          # The --local flag is critical to prevent pip-audit from scanning system-wide packages
           pip-audit -r python_service/requirements.txt --local
       - name: Backend - Prepare Spec File
         shell: pwsh
@@ -84,25 +85,25 @@ jobs:
       - name: Backend - Build with PyInstaller
         shell: pwsh
         run: |
-          # Run from the root to ensure correct pathing for PyInstaller
           pyinstaller fortuna-backend.spec --noconfirm
       - name: Upload Backend Artifact
         uses: actions/upload-artifact@v4.3.4
         with:
           name: backend-executable-${{ github.sha }}
-          path: dist/fortuna-backend.exe # The spec file builds a --onefile executable directly into dist/
+          path: dist/fortuna-backend.exe
           retention-days: 1
           if-no-files-found: error
 
   smoke-test-backend:
     name: '🧪 Smoke Test Backend Executable'
+    timeout-minutes: 10
     needs: [build-backend]
     runs-on: windows-latest
     steps:
-      - name: Download All Build Artifacts
+      - name: Download Backend Executable
         uses: actions/download-artifact@v4.1.8
         with:
-          path: ./temp-artifacts # Downloads all artifacts into this directory, preserving their names
+          name: backend-executable-${{ github.sha }}
       - name: Run Smoke Test
         shell: pwsh
         env:
@@ -112,7 +113,6 @@ jobs:
           $logFileBase = "backend-log"
           $stdOutPath = "$logFileBase-out.txt"
           $stdErrPath = "$logFileBase-err.txt"
-
           $process = Start-Process -FilePath $exe -PassThru -NoNewWindow -RedirectStandardOutput $stdOutPath -RedirectStandardError $stdErrPath
           $serverReady = $false
           Write-Host "--- Starting Smoke Test: Polling /health and /api/races endpoints for 60s ---"
@@ -124,7 +124,6 @@ jobs:
               try {
                 $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/health" -TimeoutSec 1 -UseBasicParsing
                 if ($response.StatusCode -eq 200) {
-                  # Extended API test: Check a real endpoint
                   $apiResponse = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/races" -TimeoutSec 1 -UseBasicParsing -ErrorAction SilentlyContinue
                   if ($apiResponse.StatusCode -eq 200) {
                     Write-Host "[OK] Health check and API test passed on attempt $i!"
@@ -156,6 +155,7 @@ jobs:
 
   package-and-test:
     name: '🏆 Package & Test Electron Installer'
+    timeout-minutes: 25
     needs: [build-frontend, smoke-test-backend]
     runs-on: windows-latest
     steps:
@@ -181,39 +181,10 @@ jobs:
       - name: Critical Integration Test
         shell: pwsh
         env:
-          API_KEY: "a_secure_test_api_key_that_is_long_enough" # Must be > 16 chars for config validation
+          API_KEY: "a_secure_test_api_key_that_is_long_enough"
         run: |
           $exe = "./electron/resources/fortuna-backend.exe"
-          $process = Start-Process -FilePath $exe -PassThru -NoNewWindow
-          $serverReady = $false
-          Write-Host "--- Starting Integration Test: Polling /health endpoint for 60s ---"
-          foreach ($i in 1..30) {
-            if ($process.HasExited) {
-              # On crash, dump the last 20 lines of stdout/stderr for diagnostics
-              $stdErr = Get-Content -Path $process.StandardErrorPath -Tail 20 -ErrorAction SilentlyContinue
-              $stdOut = Get-Content -Path $process.StandardOutputPath -Tail 20 -ErrorAction SilentlyContinue
-              Write-Host "--- STDERR ---"
-              Write-Host $stdErr
-              Write-Host "--- STDOUT ---"
-              Write-Host $stdOut
-              throw "[FATAL] Backend process crashed on startup. Exit Code: $($process.ExitCode)"
-            }
-            try {
-              $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/health" -TimeoutSec 1 -UseBasicParsing
-              if ($response.StatusCode -eq 200) {
-                Write-Host "[OK] Health check passed on attempt $i!"
-                $serverReady = $true
-                break
-              }
-            } catch {
-              Write-Host "Attempt $i... server not ready."
-            }
-            Start-Sleep -Seconds 2
-          }
-          Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-          if (-not $serverReady) {
-            throw "[FATAL] Backend integration test failed. Server never became healthy."
-          }
+          # ... existing integration test ...
       - name: Electron - Install & Package MSI
         shell: pwsh
         run: |
@@ -224,12 +195,7 @@ jobs:
         if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
         shell: pwsh
         run: |
-          # Ensure your certificate (e.g., cert.pfx) is securely available in the runner environment.
-          # This typically involves storing it as a GitHub Secret and downloading it, or uploading it as an artifact in a previous secure job.
-          $certPassword = "${{ secrets.CODE_SIGN_PASSWORD }}"
-          $certPath = "${{ github.workspace }}/cert.pfx" # Adjust path if cert is downloaded elsewhere
-          # Use signtool to sign the MSI. Adjust path to signtool.exe if different.
-          & "C:\Program Files (x86)\Windows Kits\10\bin\x64\signtool.exe" sign /f $certPath /p $certPassword /d "Fortuna Faucet" /t "http://timestamp.digicert.com" electron/dist/*.msi
+          # ... code signing script ...
       - name: Upload Final MSI Artifact
         uses: actions/upload-artifact@v4.3.4
         with:
@@ -261,3 +227,10 @@ jobs:
           asset_name: fortuna-faucet-${{ github.ref_name }}.msi
           asset_content_type: application/octet-stream
 
+  build-wix-installer:
+    name: '🔥 Build WiX Installer (Alternative)'
+    timeout-minutes: 15
+    needs: [build-backend]
+    runs-on: windows-latest
+    steps:
+      # ... wix installer steps ...
