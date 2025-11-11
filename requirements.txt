@@ -32,7 +32,7 @@ pystray==0.19.5; sys_platform == 'win32'
 pillow==10.1.0; sys_platform == 'win32'
 
 # --- Data Warehouse & ETL (Optional) ---
-SQLAlchemy==2.0.23
+SQLAlchemy==2.0.44
 psycopg2-binary==2.9.9
 
 # --- Historical Data Parsing (ChartScraper) ---
