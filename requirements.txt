@@ -37,7 +37,7 @@ psycopg2-binary==2.9.9
 
 # --- Historical Data Parsing (ChartScraper) ---
 pikepdf==8.13.0
-tabula-py==2.7.0
+tabula-py==2.10.0
 requests==2.31.0
 
 # --- Code Quality & Testing ---
