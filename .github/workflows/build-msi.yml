@@ -76,15 +76,11 @@ jobs:
         run: |
           # The --local flag is critical to prevent pip-audit from scanning system-wide packages
           pip-audit -r python_service/requirements.txt --local
-      - name: Backend - Prepare Spec File
+      - name: Backend - Prepare and Build
         shell: pwsh
         run: |
           Move-Item -Path "fortuna-backend.spec.template" -Destination "fortuna-backend.spec"
-      - name: Backend - Build with PyInstaller
-        shell: pwsh
-        run: |
-          cd python_service
-          pyinstaller ../fortuna-backend.spec.template --hidden-import=keyring.backends.windows --distpath ../dist --workpath ../build --clean --noconfirm
+          pyinstaller fortuna-backend.spec --hidden-import=keyring.backends.windows --distpath ./dist --workpath ./build --clean --noconfirm
       - name: Upload Backend Artifact
         uses: actions/upload-artifact@v4.3.4
         with:
@@ -109,19 +105,18 @@ jobs:
       - name: Download Artifacts
         uses: actions/download-artifact@v4.1.8
         with:
-          name: backend-executable
-          path: backend-executable
+          path: ./temp-artifacts
       - name: Stage Artifacts for Packaging
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path "./electron/web-ui-build/out" -Force | Out-Null
-          New-Item -ItemType Directory -Path "./electron/resources/fortuna-backend" -Force | Out-Null
-          Move-Item -Path "./frontend-build-output/*" -Destination "./electron/web-ui-build/out" -Force
-          Move-Item -Path "./backend-executable/fortuna-backend.exe" -Destination "./electron/resources/fortuna-backend/fortuna-backend.exe" -Force
+          New-Item -ItemType Directory -Path "./electron/resources" -Force | Out-Null
+          Move-Item -Path "./temp-artifacts/frontend-build-output/*" -Destination "./electron/web-ui-build/out" -Force
+          Move-Item -Path "./temp-artifacts/backend-executable/fortuna-backend.exe" -Destination "./electron/resources/fortuna-backend.exe" -Force
       - name: Critical Integration Test
         shell: pwsh
         run: |
-          $exe = "./electron/resources/fortuna-backend/fortuna-backend.exe"
+          $exe = "./electron/resources/fortuna-backend.exe"
           $process = Start-Process -FilePath $exe -PassThru -NoNewWindow
           $serverReady = $false
           Write-Host "--- Starting Integration Test: Polling /health endpoint for 60s ---"
