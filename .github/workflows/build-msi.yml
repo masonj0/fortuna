@@ -69,22 +69,18 @@ jobs:
       - name: Backend - Install Dependencies
         shell: pwsh
         run: |
-          python -m pip install --upgrade pip wheel setuptools
-          pip install -r python_service/requirements.txt
+          python -m pip install --upgrade pip
+          pip install -r python_service/requirements-dev.txt
       - name: Backend - Security Audit
         shell: pwsh
         run: |
-          pip install pip-audit
-          $ignoreFlags = @()
-          if (Test-Path "audit-ignore.txt") {
-              Get-Content "audit-ignore.txt" | ForEach-Object { $line = $_.Trim(); if ($line -and !$line.StartsWith("#")) { $ignoreFlags += "--ignore-vuln", $line } }
-          }
-          pip-audit -r python_service/requirements.txt @ignoreFlags
+          # The --local flag is critical to prevent pip-audit from scanning system-wide packages
+          pip-audit -r python_service/requirements.txt --local
       - name: Backend - Build with PyInstaller
         shell: pwsh
         run: |
-          Copy-Item -Path "fortuna-backend.spec.template" -Destination "fortuna-backend.spec"
-          pyinstaller fortuna-backend.spec --distpath dist --workpath build --clean --noconfirm
+          cd python_service
+          pyinstaller ../fortuna-backend.spec.template --distpath ../dist --workpath ../build --clean --noconfirm
       - name: Upload Backend Artifact
         uses: actions/upload-artifact@v4.3.4
         with:
