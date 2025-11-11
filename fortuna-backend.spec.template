@@ -59,6 +59,7 @@ for pkg in ['pydantic', 'fastapi', 'uvicorn', 'starlette', 'httpx', 'anyio']:
     except:
         pass
 hiddenimports += [
+    'tenacity',
     'uvicorn.lifespan', 'anyio._backends._asyncio', 'redis.asyncio',
     'keyring.backends.fail', 'keyring.backends.windows',
     '_ssl', '_hashlib', '_sqlite3'
