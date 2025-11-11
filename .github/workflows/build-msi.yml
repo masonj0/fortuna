@@ -100,16 +100,16 @@ jobs:
     needs: [build-backend]
     runs-on: windows-latest
     steps:
-      - name: Download All Build Artifacts
+      - name: Download Backend Executable
         uses: actions/download-artifact@v4.1.8
         with:
-          path: ./temp-artifacts
+          name: backend-executable-${{ github.sha }}
       - name: Run Smoke Test
         shell: pwsh
         env:
           API_KEY: "a_secure_test_api_key_that_is_long_enough_for_smoke_test"
         run: |
-          $exe = "./temp-artifacts/backend-executable-${{ github.sha }}/fortuna-backend.exe"
+          $exe = "./fortuna-backend.exe"
           $logFileBase = "backend-log"
           $stdOutPath = "$logFileBase-out.txt"
           $stdErrPath = "$logFileBase-err.txt"
