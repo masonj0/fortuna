@@ -95,13 +95,13 @@ pywin32==306
     # via -r python_service/requirements.in, keyring, pynput
 redis==5.0.7
     # via -r python_service/requirements.in, slowapi
-requests==2.32.3
+requests==2.32.4
     # via -r python_service/requirements.in (implicit)
 scipy==1.14.0
     # via -r python_service/requirements.in
 selectolax==0.4.0
     # via -r python_service/requirements.in
-setuptools==69.5.1
+setuptools==70.0.0
     # via -r python_service/requirements.in
 six==1.16.0
     # via python-dateutil, pynput
@@ -121,7 +121,7 @@ tomli==2.0.1
     # via black
 tzdata==2024.1
     # via pandas
-urllib3==2.2.2
+urllib3==2.5.0
     # via httpx, requests
 uvicorn==0.30.1
     # via -r python_service/requirements.in
