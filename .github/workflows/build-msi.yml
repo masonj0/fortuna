@@ -76,7 +76,7 @@ jobs:
         run: |
           # The --local flag is critical to prevent pip-audit from scanning system-wide packages
           pip-audit -r python_service/requirements.txt --local
-      - name: Backend - Prepare and Build
+      - name: Backend - Prepare Spec File
         shell: pwsh
         run: |
           Move-Item -Path "fortuna-backend.spec.template" -Destination "fortuna-backend.spec"
