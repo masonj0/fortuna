@@ -69,23 +69,18 @@ jobs:
       - name: Backend - Install Dependencies
         shell: pwsh
         run: |
-          python -m pip install --upgrade pip wheel setuptools
-          pip install -r python_service/requirements.txt
+          python -m pip install --upgrade pip
+          pip install -r python_service/requirements-dev.txt
       - name: Backend - Security Audit
         shell: pwsh
         run: |
-          pip install pip-audit
-          $ignoreFlags = @()
-          if (Test-Path "audit-ignore.txt") {
-              Get-Content "audit-ignore.txt" | ForEach-Object { $line = $_.Trim(); if ($line -and !$line.StartsWith("#")) { $ignoreFlags += "--ignore-vuln", $line } }
-          }
-          pip-audit -r python_service/requirements.txt @ignoreFlags
+          # The --local flag is critical to prevent pip-audit from scanning system-wide packages
+          pip-audit -r python_service/requirements.txt --local
       - name: Backend - Build with PyInstaller
         shell: pwsh
         run: |
-          # No more template substitution needed. Just copy the file.
-          Copy-Item -Path "fortuna-backend.spec.template" -Destination "fortuna-backend.spec"
-          pyinstaller fortuna-backend.spec --distpath dist --workpath build --clean --noconfirm
+          cd python_service
+          pyinstaller ../fortuna-backend.spec.template --distpath ../dist --workpath ../build --clean --noconfirm
       - name: Upload Backend Artifact
         uses: actions/upload-artifact@v4.3.4
         with:
@@ -94,7 +89,7 @@ jobs:
           retention-days: 1
 
   package-and-test:
-    name: '🏆 Package & Test Installer'
+    name: '🏆 Package & Test Electron Installer'
     needs: [build-frontend, build-backend]
     runs-on: windows-latest
     steps:
@@ -153,4 +148,37 @@ jobs:
         with:
           name: fortuna-installer-windows
           path: electron/dist/*.msi
+          retention-days: 7
+
+  build-wix-installer:
+    name: '🔥 Build WiX Installer (Alternative)'
+    needs: [build-backend]
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4.1.7
+      - name: Setup Python
+        uses: actions/setup-python@v5.1.1
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Download Backend Executable
+        uses: actions/download-artifact@v4.1.8
+        with:
+          name: backend-executable
+          path: dist
+      - name: Install WiX Toolset
+        shell: pwsh
+        run: |
+          choco install wixtoolset -y --no-progress
+          $wixPath = "C:\Program Files (x86)\WiX ToolSet v3.14\bin"
+          echo "PATH=$wixPath;${env:PATH}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Build Backend Service MSI with WiX
+        shell: pwsh
+        run: |
+          python build_wix/build_msi.py
+      - name: Upload WiX MSI Artifact
+        uses: actions/upload-artifact@v4.3.4
+        with:
+          name: fortuna-wix-installer-windows
+          path: dist/Fortuna-Backend-Service.msi
           retention-days: 7

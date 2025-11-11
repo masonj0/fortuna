@@ -51,7 +51,9 @@ for pkg in all_packages_to_collect:
         print(f"  [!!] WARNING: Could not collect {pkg}: {e}")
 
 # --- Metadata & Final Hidden Imports ---
-for pkg in ['pydantic', 'fastapi', 'uvicorn', 'starlette', 'httpx']:
+# Forcing metadata copy for these key libraries helps PyInstaller resolve
+# their internal structures, especially for things like plugins or entry points.
+for pkg in ['pydantic', 'fastapi', 'uvicorn', 'starlette', 'httpx', 'anyio']:
     try:
         datas += copy_metadata(pkg)
     except:
