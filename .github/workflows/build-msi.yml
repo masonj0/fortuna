@@ -31,11 +31,12 @@ jobs:
         run: |
           cd web_platform/frontend
           npm ci
+          npm audit --audit-level=moderate  # Added security check
           npm run build
       - name: Upload Frontend Artifact
         uses: actions/upload-artifact@v4.3.4
         with:
-          name: frontend-build-output
+          name: frontend-build-output-${{ github.sha }}
           path: web_platform/frontend/out
           retention-days: 1
 
@@ -88,7 +89,7 @@ jobs:
       - name: Upload Backend Artifact
         uses: actions/upload-artifact@v4.3.4
         with:
-          name: backend-executable
+          name: backend-executable-${{ github.sha }}
           path: dist/fortuna-backend.exe # The spec file builds a --onefile executable directly into dist/
           retention-days: 1
           if-no-files-found: error
@@ -98,11 +99,10 @@ jobs:
     needs: [build-backend]
     runs-on: windows-latest
     steps:
-      - name: Download Backend Executable
+      - name: Download All Build Artifacts
         uses: actions/download-artifact@v4.1.8
         with:
-          name: backend-executable
-          path: ./
+          path: ./temp-artifacts # Downloads all artifacts into this directory, preserving their names
       - name: Run Smoke Test
         shell: pwsh
         env:
@@ -115,7 +115,7 @@ jobs:
 
           $process = Start-Process -FilePath $exe -PassThru -NoNewWindow -RedirectStandardOutput $stdOutPath -RedirectStandardError $stdErrPath
           $serverReady = $false
-          Write-Host "--- Starting Smoke Test: Polling /health endpoint for 60s ---"
+          Write-Host "--- Starting Smoke Test: Polling /health and /api/races endpoints for 60s ---"
           try {
             foreach ($i in 1..30) {
               if ($process.HasExited) {
@@ -124,9 +124,13 @@ jobs:
               try {
                 $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/health" -TimeoutSec 1 -UseBasicParsing
                 if ($response.StatusCode -eq 200) {
-                  Write-Host "[OK] Health check passed on attempt $i!"
-                  $serverReady = $true
-                  break
+                  # Extended API test: Check a real endpoint
+                  $apiResponse = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/races" -TimeoutSec 1 -UseBasicParsing -ErrorAction SilentlyContinue
+                  if ($apiResponse.StatusCode -eq 200) {
+                    Write-Host "[OK] Health check and API test passed on attempt $i!"
+                    $serverReady = $true
+                    break
+                  }
                 }
               } catch {
                 Write-Host "Attempt $i... server not ready."
@@ -166,14 +170,14 @@ jobs:
       - name: Download All Build Artifacts
         uses: actions/download-artifact@v4.1.8
         with:
-          path: ./temp-artifacts # Downloads all artifacts into this directory, preserving their names
+          path: ./temp-artifacts
       - name: Stage Artifacts for Packaging
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path "./electron/web-ui-build" -Force | Out-Null
           New-Item -ItemType Directory -Path "./electron/resources" -Force | Out-Null
-          Move-Item -Path "./temp-artifacts/frontend-build-output/*" -Destination "./electron/web-ui-build/out" -Force
-          Move-Item -Path "./temp-artifacts/backend-executable/fortuna-backend.exe" -Destination "./electron/resources/fortuna-backend.exe" -Force
+          Move-Item -Path "./temp-artifacts/frontend-build-output-${{ github.sha }}/*" -Destination "./electron/web-ui-build/out" -Force
+          Move-Item -Path "./temp-artifacts/backend-executable-${{ github.sha }}/fortuna-backend.exe" -Destination "./electron/resources/fortuna-backend.exe" -Force
       - name: Critical Integration Test
         shell: pwsh
         env:
@@ -216,10 +220,44 @@ jobs:
           cd electron
           npm ci
           npx electron-builder --config electron-builder-config.yml --publish never
+      - name: Code Sign MSI
+        if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: |
+          # Ensure your certificate (e.g., cert.pfx) is securely available in the runner environment.
+          # This typically involves storing it as a GitHub Secret and downloading it, or uploading it as an artifact in a previous secure job.
+          $certPassword = "${{ secrets.CODE_SIGN_PASSWORD }}"
+          $certPath = "${{ github.workspace }}/cert.pfx" # Adjust path if cert is downloaded elsewhere
+          # Use signtool to sign the MSI. Adjust path to signtool.exe if different.
+          & "C:\Program Files (x86)\Windows Kits\10\bin\x64\signtool.exe" sign /f $certPath /p $certPassword /d "Fortuna Faucet" /t "http://timestamp.digicert.com" electron/dist/*.msi
       - name: Upload Final MSI Artifact
         uses: actions/upload-artifact@v4.3.4
         with:
-          name: fortuna-installer-windows
+          name: fortuna-installer-windows-${{ github.sha }}
           path: electron/dist/*.msi
           retention-days: 7
+      - name: Create GitHub Release
+        if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          body: |
+            MSI Installer for Fortuna Faucet.
+            Built from commit ${{ github.sha }}.
+          draft: false
+          prerelease: false
+      - name: Upload Release Asset
+        if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: electron/dist/*.msi
+          asset_name: fortuna-faucet-${{ github.ref_name }}.msi
+          asset_content_type: application/octet-stream
 

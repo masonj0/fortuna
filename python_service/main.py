@@ -2,7 +2,6 @@ import uvicorn
 import sys
 import os
 from multiprocessing import freeze_support
-import tenacity  # Force PyInstaller to bundle this critical dependency.
 
 # This is the definitive entry point for the Fortuna Faucet backend service.
 # It is designed to be compiled with PyInstaller.
