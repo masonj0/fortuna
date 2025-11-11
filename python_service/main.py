@@ -1,6 +1,8 @@
 import uvicorn
 import sys
 import os
+from multiprocessing import freeze_support
+import tenacity  # Force PyInstaller to bundle this critical dependency.
 
 # This is the definitive entry point for the Fortuna Faucet backend service.
 # It is designed to be compiled with PyInstaller.
@@ -15,6 +17,10 @@ def main():
     # When packaged, the executable's path needs to be added to sys.path
     # to ensure that modules can be found.
     if getattr(sys, 'frozen', False):
+        # CRITICAL: This is required for multiprocessing to work correctly when
+        # the application is frozen with PyInstaller on Windows.
+        freeze_support()
+
         # If the application is run as a bundle, the PyInstaller bootloader
         # extends the sys module by a flag frozen=True and sets the app
         # path into variable _MEIPASS'.
@@ -25,7 +31,7 @@ def main():
 
     # It's critical to import the app object *after* the path has been manipulated.
     from python_service.api import app
-    from python_service.config import get_settings
+    from python_service.config import get__settings
 
     settings = get_settings()
 
@@ -36,9 +42,5 @@ def main():
         log_level="info"
     )
 
-import multiprocessing
-
 if __name__ == "__main__":
-    # Guard for Windows compatibility when creating child processes.
-    multiprocessing.freeze_support()
     main()
