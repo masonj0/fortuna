@@ -76,11 +76,15 @@ jobs:
         run: |
           # The --local flag is critical to prevent pip-audit from scanning system-wide packages
           pip-audit -r python_service/requirements.txt --local
+      - name: Backend - Prepare Spec File
+        shell: pwsh
+        run: |
+          Move-Item -Path "fortuna-backend.spec.template" -Destination "fortuna-backend.spec"
       - name: Backend - Build with PyInstaller
         shell: pwsh
         run: |
           cd python_service
-          pyinstaller ../fortuna-backend.spec.template --onefile --distpath ../dist --workpath ../build --clean --noconfirm
+          pyinstaller ../fortuna-backend.spec --distpath ../dist --workpath ../build --clean --noconfirm
       - name: Upload Backend Artifact
         uses: actions/upload-artifact@v4.3.4
         with:
