@@ -27,7 +27,7 @@ core_stack = [
     'httpx', 'httpcore', 'certifi', 'slowapi'
 ]
 data_stack = [
-    'redis', 'tenacity', 'requests', 'selectolax', 'bs4', 'lxml',
+    'redis', 'requests', 'selectolax', 'bs4', 'lxml',
     'structlog', 'python-dotenv', 'pandas', 'numpy', 'scipy'
 ]
 windows_stack = [
@@ -59,6 +59,7 @@ for pkg in ['pydantic', 'fastapi', 'uvicorn', 'starlette', 'httpx', 'anyio']:
     except:
         pass
 hiddenimports += [
+    'tenacity',
     'uvicorn.lifespan', 'anyio._backends._asyncio', 'redis.asyncio',
     'keyring.backends.fail', 'keyring.backends.windows',
     '_ssl', '_hashlib', '_sqlite3'
@@ -86,7 +87,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,
     console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,
