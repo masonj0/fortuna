@@ -9,17 +9,17 @@ altair==5.5.0
     #   -r requirements-dev.in
     #   streamlit
 anyio==4.11.0
-    # via
-    #   -c python_service/requirements.txt
-    #   httpx
+    # via httpx
+async-timeout==5.0.1
+    # via redis
 attrs==25.4.0
     # via
     #   jsonschema
     #   referencing
+backports-asyncio-runner==1.2.0
+    # via pytest-asyncio
 black==25.11.0
-    # via
-    #   -c python_service/requirements.txt
-    #   -r requirements-dev.in
+    # via -r requirements-dev.in
 blinker==1.9.0
     # via streamlit
 boolean-py==5.0
@@ -32,7 +32,6 @@ cachetools==6.2.1
     # via streamlit
 certifi==2023.7.22
     # via
-    #   -c python_service/requirements.txt
     #   httpcore
     #   httpx
     #   requests
@@ -40,7 +39,6 @@ charset-normalizer==3.4.4
     # via requests
 click==8.3.0
     # via
-    #   -c python_service/requirements.txt
     #   black
     #   streamlit
 cyclonedx-python-lib==9.1.0
@@ -49,6 +47,10 @@ defusedxml==0.7.1
     # via py-serializable
 distro==1.9.0
     # via tabula-py
+exceptiongroup==1.3.0
+    # via
+    #   anyio
+    #   pytest
 fakeredis[lua]==2.23.0
     # via -r requirements-dev.in
 filelock==3.20.0
@@ -60,31 +62,20 @@ gitpython==3.1.45
     #   -r requirements-dev.in
     #   streamlit
 greenlet==3.2.4
-    # via
-    #   -c python_service/requirements.txt
-    #   playwright
+    # via playwright
 h11==0.16.0
-    # via
-    #   -c python_service/requirements.txt
-    #   httpcore
+    # via httpcore
 httpcore==1.0.9
-    # via
-    #   -c python_service/requirements.txt
-    #   httpx
+    # via httpx
 httpx==0.28.1
-    # via
-    #   -c python_service/requirements.txt
-    #   respx
+    # via respx
 idna==3.11
     # via
-    #   -c python_service/requirements.txt
     #   anyio
     #   httpx
     #   requests
 iniconfig==2.3.0
-    # via
-    #   -c python_service/requirements.txt
-    #   pytest
+    # via pytest
 jinja2==3.1.6
     # via
     #   altair
@@ -106,14 +97,11 @@ mdurl==0.1.2
 msgpack==1.1.2
     # via cachecontrol
 mypy-extensions==1.1.0
-    # via
-    #   -c python_service/requirements.txt
-    #   black
+    # via black
 narwhals==2.9.0
     # via altair
-numpy==2.3.4
+numpy==2.2.6
     # via
-    #   -c python_service/requirements.txt
     #   pandas
     #   pydeck
     #   streamlit
@@ -122,7 +110,6 @@ packageurl-python==0.17.5
     # via cyclonedx-python-lib
 packaging==25.0
     # via
-    #   -c python_service/requirements.txt
     #   altair
     #   black
     #   pip-audit
@@ -131,13 +118,10 @@ packaging==25.0
     #   streamlit
 pandas==2.3.3
     # via
-    #   -c python_service/requirements.txt
     #   streamlit
     #   tabula-py
 pathspec==0.12.1
-    # via
-    #   -c python_service/requirements.txt
-    #   black
+    # via black
 pillow==11.3.0
     # via streamlit
 pip-api==0.0.34
@@ -148,15 +132,12 @@ pip-requirements-parser==32.0.1
     # via pip-audit
 platformdirs==4.5.0
     # via
-    #   -c python_service/requirements.txt
     #   black
     #   pip-audit
 playwright==1.55.0
     # via -r requirements-dev.in
 pluggy==1.6.0
-    # via
-    #   -c python_service/requirements.txt
-    #   pytest
+    # via pytest
 protobuf==6.33.0
     # via streamlit
 py-serializable==2.1.0
@@ -171,36 +152,24 @@ pyee==13.0.0
     # via playwright
 pygments==2.19.2
     # via
-    #   -c python_service/requirements.txt
     #   pytest
     #   rich
 pyparsing==3.2.5
     # via pip-requirements-parser
 pytest==8.4.2
     # via
-    #   -c python_service/requirements.txt
     #   -r requirements-dev.in
     #   pytest-asyncio
 pytest-asyncio==1.2.0
-    # via
-    #   -c python_service/requirements.txt
-    #   -r requirements-dev.in
+    # via -r requirements-dev.in
 python-dateutil==2.9.0.post0
-    # via
-    #   -c python_service/requirements.txt
-    #   pandas
+    # via pandas
 pytokens==0.3.0
-    # via
-    #   -c python_service/requirements.txt
-    #   black
+    # via black
 pytz==2025.2
-    # via
-    #   -c python_service/requirements.txt
-    #   pandas
+    # via pandas
 redis==7.0.1
-    # via
-    #   -c python_service/requirements.txt
-    #   fakeredis
+    # via fakeredis
 referencing==0.37.0
     # via
     #   jsonschema
@@ -219,20 +188,16 @@ rpds-py==0.28.0
     #   jsonschema
     #   referencing
 six==1.17.0
-    # via
-    #   -c python_service/requirements.txt
-    #   python-dateutil
+    # via python-dateutil
 smmap==5.0.2
     # via gitdb
 sniffio==1.3.1
-    # via
-    #   -c python_service/requirements.txt
-    #   anyio
+    # via anyio
 sortedcontainers==2.4.0
     # via
     #   cyclonedx-python-lib
     #   fakeredis
-streamlit==1.50.0
+streamlit==1.51.0
     # via -r requirements-dev.in
 tabula-py==2.10.0
     # via -r requirements-dev.in
@@ -242,21 +207,25 @@ toml==0.10.2
     # via
     #   pip-audit
     #   streamlit
+tomli==2.3.0
+    # via
+    #   black
+    #   pytest
 tornado==6.5.2
     # via streamlit
 typing-extensions==4.15.0
     # via
-    #   -c python_service/requirements.txt
     #   altair
     #   anyio
+    #   black
+    #   exceptiongroup
+    #   fakeredis
     #   pyee
     #   pytest-asyncio
     #   referencing
     #   streamlit
 tzdata==2025.2
-    # via
-    #   -c python_service/requirements.txt
-    #   pandas
+    # via pandas
 urllib3==2.5.0
     # via requests
 watchdog==6.0.0
