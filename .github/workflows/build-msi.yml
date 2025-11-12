@@ -242,7 +242,7 @@ jobs:
       - name: Download Backend Executable
         uses: actions/download-artifact@v4.1.8
         with:
-          name: backend-executable
+          name: backend-executable-${{ github.sha }}
           path: dist
       - name: Install WiX Toolset
         shell: pwsh
