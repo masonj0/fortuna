@@ -233,4 +233,30 @@ jobs:
     needs: [build-backend]
     runs-on: windows-latest
     steps:
-      # ... wix installer steps ...
+      - name: Checkout Repository
+        uses: actions/checkout@v4.1.7
+      - name: Setup Python
+        uses: actions/setup-python@v5.1.1
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Download Backend Executable
+        uses: actions/download-artifact@v4.1.8
+        with:
+          name: backend-executable
+          path: dist
+      - name: Install WiX Toolset
+        shell: pwsh
+        run: |
+          choco install wixtoolset -y --no-progress
+          $wixPath = "C:\Program Files (x86)\WiX ToolSet v3.14\bin"
+          echo "PATH=$wixPath;${env:PATH}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Build Backend Service MSI with WiX
+        shell: pwsh
+        run: |
+          python build_wix/build_msi.py
+      - name: Upload WiX MSI Artifact
+        uses: actions/upload-artifact@v4.3.4
+        with:
+          name: fortuna-wix-installer-windows
+          path: dist/Fortuna-Backend-Service.msi
+          retention-days: 7
