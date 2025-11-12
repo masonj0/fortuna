@@ -118,7 +118,6 @@ class BaseAdapterV3(ABC):
                 adapter_name=self.source_name,
                 status_code=503,  # Service Unavailable
                 url=full_url,
-                detail=str(e),
             ) from e
 
     def get_status(self) -> dict:

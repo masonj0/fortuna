@@ -52,7 +52,6 @@ export const LiveRaceDashboard = React.memo(() => {
   const [races, setRaces] = useState<Race[]>([]);
   const [adapterStatuses, setAdapterStatuses] = useState<SourceInfo[]>([]);
   const [failedSources, setFailedSources] = useState<SourceInfo[]>([]);
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
 
   // Separate status for backend process and API connection
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting');
@@ -90,7 +89,6 @@ export const LiveRaceDashboard = React.memo(() => {
       setFailedSources(liveData.source_info?.filter((s: SourceInfo) => s.status === 'FAILED' && s.attemptedUrl) || []);
       setLastUpdate(new Date());
       setConnectionStatus('online');
-      setIsInitialLoad(false);
     }
   }, [liveData, isLiveMode]);
 
@@ -129,8 +127,6 @@ export const LiveRaceDashboard = React.memo(() => {
       setErrorDetails(err.message || 'An unknown API error occurred.');
       setConnectionStatus('offline');
       console.error('Failed to fetch adapter statuses:', err);
-    } finally {
-      setIsInitialLoad(false);
     }
   }, [backendStatus.state]);
 
@@ -244,22 +240,25 @@ export const LiveRaceDashboard = React.memo(() => {
   }, []);
 
   const renderContent = () => {
-    // Priority 1: Backend process has failed.
+    // Priority 1: Backend process has failed. Show a detailed error panel.
     if (backendStatus.state === 'error') {
       return <BackendErrorPanel logs={backendStatus.logs} onRestart={() => window.electronAPI.restartBackend()} />;
     }
 
-    // Priority 2: Handle loading states (initial load, backend starting, or API connecting)
-    if (isInitialLoad || backendStatus.state === 'starting' || connectionStatus === 'connecting') {
+    // Priority 2: Backend is starting or API is connecting for the first time. Show skeleton loaders.
+    const isLoading = backendStatus.state === 'starting' || (connectionStatus === 'connecting' && adapterStatuses.length === 0);
+    if (isLoading) {
       return (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="p-4 rounded-lg border bg-slate-800 border-slate-700 animate-pulse h-24"></div>
-          <div className="p-4 rounded-lg border bg-slate-800 border-slate-700 animate-pulse h-24"></div>
-        </div>
+          <div className="space-y-4">
+              <h2 className="text-2xl font-bold text-white">Data Adapters</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {[...Array(3)].map((_, i) => <div key={i} className="p-4 rounded-lg border bg-slate-800 border-slate-700 animate-pulse h-24"></div>)}
+              </div>
+          </div>
       );
     }
 
-    // Priority 3: API connection is offline, but backend is running.
+    // Priority 3: API connection is offline after an attempt. Show an error message.
     if (connectionStatus === 'offline') {
       return <EmptyState
           title="API Connection Offline"
@@ -268,7 +267,7 @@ export const LiveRaceDashboard = React.memo(() => {
       />;
     }
 
-    // Priority 4: Show the adapter status panels.
+    // Priority 4: Everything is good. Show the adapter status panels.
     return (
       <div className="space-y-4">
         <h2 className="text-2xl font-bold text-white">Data Adapters</h2>
