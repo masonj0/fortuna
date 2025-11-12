@@ -81,7 +81,7 @@ jobs:
       - name: Backend - Prepare Spec File
         shell: pwsh
         run: |
-          Move-Item -Path "fortuna-backend.spec.template" -Destination "fortuna-backend.spec"
+          Move-Item -Path "fortuna-backend.spec.template" -Destination "fortuna-backend.spec" -Force
       - name: Backend - Build with PyInstaller
         shell: pwsh
         run: |
