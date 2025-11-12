@@ -26,6 +26,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   restartBackend: () => ipcRenderer.send('restart-backend'),
   getBackendStatus: () => ipcRenderer.invoke('get-backend-status'),
   generateApiKey: () => ipcRenderer.invoke('generate-api-key'),
+  saveApiKey: (apiKey) => ipcRenderer.invoke('save-api-key', apiKey),
+  saveBetfairCredentials: (credentials) => ipcRenderer.invoke('save-betfair-credentials', credentials),
 });
 
 console.log('Preload script loaded and electronAPI is exposed.');

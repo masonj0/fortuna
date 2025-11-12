@@ -61,7 +61,6 @@
     "python_service/requirements_minimal.txt",
     "python_service/run_api.py",
     "python_service/security.py",
-    "python_service/setup_wizard_gui.py",
     "python_service/tests/test_manual_override.py",
     "python_service/user_friendly_errors.py",
     "python_service/utils/__init__.py",
