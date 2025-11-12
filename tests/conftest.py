@@ -5,6 +5,7 @@ from unittest.mock import patch
 import fakeredis.aioredis
 import httpx
 import pytest
+import pytest_asyncio
 from fastapi.testclient import TestClient
 
 from python_service.api import app
@@ -64,7 +65,7 @@ def client():
         app.dependency_overrides.clear()
 
 
-@pytest.fixture()
+@pytest_asyncio.fixture
 async def clear_cache():
     """A fixture to ensure the cache is cleared before a test."""
     from python_service.cache_manager import cache_manager

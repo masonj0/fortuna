@@ -36,7 +36,7 @@ export interface Race {
 // --- API Response Interfaces ---
 export interface SourceInfo {
   name: string;
-  status: 'SUCCESS' | 'FAILED';
+  status: 'SUCCESS' | 'FAILED' | 'CONFIG_ERROR' | 'PENDING';
   racesFetched: number;
   fetchDuration: number;
   errorMessage?: string;

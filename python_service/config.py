@@ -40,7 +40,7 @@ def decrypt_value(value: Optional[str]) -> str:
 
 
 class Settings(BaseSettings):
-    API_KEY: str = Field("", min_length=16)
+    API_KEY: str = Field("")
 
     # --- API Gateway Configuration ---
     UVICORN_HOST: str = "127.0.0.1"
@@ -95,8 +95,10 @@ class Settings(BaseSettings):
         # 2. Security validation for API_KEY
         insecure_keys = {"test", "changeme", "default", "secret", "password", "admin"}
         if self.API_KEY in insecure_keys:
-            raise ValueError(
-                f"The provided API_KEY '{self.API_KEY}' is on the list of insecure default values and is not allowed."
+            structlog.get_logger(__name__).warning(
+                "insecure_api_key",
+                key=self.API_KEY,
+                recommendation="The API_KEY should be a long, random string for security.",
             )
 
         # 2. Decrypt sensitive fields

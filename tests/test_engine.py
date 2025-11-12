@@ -39,13 +39,11 @@ async def test_fetch_all_odds_success():
     mock_adapter = AsyncMock(spec=BaseAdapterV3)
     mock_adapter.source_name = "MockAdapter"
 
-    # THE FIX: Return an async generator to satisfy the 'async for' loop in the engine.
-    async def mock_get_races_gen(*args, **kwargs):
-        races = [create_mock_race("MockSource", "Race 1", 1, datetime.now(), [])]
-        for race in races:
-            yield race
+    # THE FIX: Return a list from an async function to match the expected adapter behavior.
+    async def mock_get_races(*args, **kwargs):
+        return [create_mock_race("MockSource", "Race 1", 1, datetime.now(), [])]
 
-    mock_adapter.get_races = mock_get_races_gen
+    mock_adapter.get_races = mock_get_races
     engine.adapters = [mock_adapter]
 
     today_str = date.today().strftime("%Y-%m-%d")
@@ -70,11 +68,10 @@ async def test_fetch_all_odds_resilience():
     successful_adapter = AsyncMock(spec=BaseAdapterV3)
     successful_adapter.source_name = "SuccessAdapter"
 
-    async def mock_success_gen(*args, **kwargs):
-        races = [create_mock_race("SuccessSource", "Success Race", 1, datetime.now(), [])]
-        for race in races:
-            yield race
-    successful_adapter.get_races = mock_success_gen
+    async def mock_success_get_races(*args, **kwargs):
+        return [create_mock_race("SuccessSource", "Success Race", 1, datetime.now(), [])]
+
+    successful_adapter.get_races = mock_success_get_races
 
     failing_adapter = AsyncMock(spec=BaseAdapterV3)
     failing_adapter.source_name = "FailAdapter"
@@ -121,19 +118,19 @@ async def test_race_aggregation_and_deduplication(clear_cache):
 
     adapter1 = AsyncMock(spec=BaseAdapterV3)
     adapter1.source_name = "Source1"
-    async def mock_adapter1_gen(*args, **kwargs):
-        races = [race1_source1, unique_race]
-        for race in races:
-            yield race
-    adapter1.get_races = mock_adapter1_gen
+
+    async def mock_adapter1_get_races(*args, **kwargs):
+        return [race1_source1, unique_race]
+
+    adapter1.get_races = mock_adapter1_get_races
 
     adapter2 = AsyncMock(spec=BaseAdapterV3)
     adapter2.source_name = "Source2"
-    async def mock_adapter2_gen(*args, **kwargs):
-        races = [race1_source2]
-        for race in races:
-            yield race
-    adapter2.get_races = mock_adapter2_gen
+
+    async def mock_adapter2_get_races(*args, **kwargs):
+        return [race1_source2]
+
+    adapter2.get_races = mock_adapter2_get_races
 
     engine.adapters = [adapter1, adapter2]
     today_str = date.today().strftime("%Y-%m-%d")
@@ -145,7 +142,7 @@ async def test_race_aggregation_and_deduplication(clear_cache):
     assert len(result["races"]) == 2, "Should have two unique races after deduplication"
 
     # Find the aggregated race for Pimlico
-    pimlico_race_data = next((r for r in result["races"] if r["trackName"] == "Pimlico"), None)
+    pimlico_race_data = next((r for r in result["races"] if r["venue"] == "Pimlico"), None)
     assert pimlico_race_data is not None, "Pimlico race should be in the result"
 
     # Convert to Pydantic model for easier validation
@@ -205,12 +202,11 @@ async def test_engine_caching_logic():
 
         # --- 1. Cache Miss ---
         # ARRANGE
-        async def mock_cache_gen(*args, **kwargs):
-            races = [mock_race]
-            for race in races:
-                yield race
+        async def mock_get_races(*args, **kwargs):
+            return [mock_race]
+
         # THE FIX: Wrap the async generator in an AsyncMock to allow for resetting.
-        mock_adapter.get_races = AsyncMock(side_effect=mock_cache_gen)
+        mock_adapter.get_races = AsyncMock(side_effect=mock_get_races)
         mock_adapter.get_races.reset_mock()
 
         # ACT
@@ -219,7 +215,7 @@ async def test_engine_caching_logic():
         # ASSERT
         mock_adapter.get_races.assert_awaited_once()  # Adapter was called
         assert len(result_miss["races"]) == 1
-        assert result_miss["races"][0]["trackName"] == "Cache Park"
+        assert result_miss["races"][0]["venue"] == "Cache Park"
 
         # --- 2. Cache Hit ---
         # ARRANGE
@@ -231,7 +227,7 @@ async def test_engine_caching_logic():
         # ASSERT
         mock_adapter.get_races.assert_not_awaited()  # Adapter was NOT called
         assert len(result_hit["races"]) == 1, "Should return data from cache on cache hit"
-        assert result_hit["races"][0]["trackName"] == "Cache Park"
+        assert result_hit["races"][0]["venue"] == "Cache Park"
 
 
 @pytest.mark.asyncio

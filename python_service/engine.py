@@ -209,7 +209,8 @@ class OddsEngine:
         try:
             # THE FIX: Instantiate Race objects from the dicts yielded by the adapter
             # to ensure type consistency within the engine's processing methods.
-            races = [Race(**race_data) async for race_data in adapter.get_races(date)]
+            race_data_list = await adapter.get_races(date)
+            races = [Race(**race_data) for race_data in race_data_list]
             is_success = True
         except AdapterHttpError as e:
             self.logger.error(

@@ -278,6 +278,29 @@ async def get_filter_suggestions(engine: OddsEngine = Depends(get_engine)):
         raise HTTPException(status_code=500, detail="Failed to generate suggestions")
 
 
+@app.get("/api/races/source/{source_name}", response_model=AggregatedResponse)
+@limiter.limit("60/minute")
+async def get_races_by_source(
+    source_name: str,
+    request: Request,
+    race_date: Optional[date] = Query(
+        default=None,
+        description="Date of the races in YYYY-MM-DD format. Defaults to today.",
+    ),
+    engine: OddsEngine = Depends(get_engine),
+    _=Depends(verify_api_key),
+):
+    try:
+        date_obj = race_date or datetime.now().date()
+        date_str = date_obj.strftime("%Y-%m-%d")
+        return await engine.fetch_all_odds(date_str, source=source_name)
+    except (AdapterHttpError, AdapterConfigError) as e:
+        raise UserFriendlyException(error_key=e.__class__.__name__, details=str(e))
+    except Exception:
+        log.error(f"Error in /api/races/source/{source_name}", exc_info=True)
+        raise UserFriendlyException(error_key="default")
+
+
 @app.get("/api/races", response_model=AggregatedResponse)
 @limiter.limit("30/minute")
 async def get_races(
