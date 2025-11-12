@@ -12,7 +12,9 @@ EXECUTABLE_NAME = 'fortuna-backend.exe'
 
 def run_command(cmd, cwd=None):
     print(f'▶ Running: {" ".join(cmd)}')
-    subprocess.run(cmd, cwd=cwd, check=True, text=True)
+    # FIX: Explicitly use UTF-8 for decoding the output, and ignore errors for robustness.
+    # This resolves the UnicodeDecodeError when reading the external WiX process's output.
+    subprocess.run(cmd, cwd=cwd, check=True, text=True, encoding='utf-8', errors='ignore')
 
 def main():
     print('=== Starting Fortuna WiX MSI Build ===')
@@ -45,8 +47,15 @@ def main():
 
     # 4. Link WiX project into MSI
     print("--- Step 4: Linking MSI with 'light' ---")
+    import glob
+    obj_files = glob.glob(str(obj_dir / '*.wixobj'))
+    if not obj_files:
+        sys.exit('✗ Linking failed: No .wixobj files found to link.')
+
     output_msi = PROJECT_ROOT / 'dist' / 'Fortuna-Backend-Service.msi'
-    run_command(['light', '-o', str(output_msi), f'{obj_dir}/*.wixobj'])
+
+    light_cmd = ['light', '-o', str(output_msi)] + obj_files
+    run_command(light_cmd)
     print(f'✓ MSI created successfully at {output_msi}')
 
     print('\n=== BUILD COMPLETE ===')
