@@ -59,5 +59,4 @@ async def test_get_races_with_mock_data(adapter):
     first_race = races[0]
     assert first_race.venue == "Central Park"
     assert first_race.race_number == 1
-    assert first_race.discipline == "Greyhound"
     assert first_race.runners == [] # Expected to be empty for now

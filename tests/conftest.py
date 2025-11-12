@@ -1,4 +1,5 @@
 # tests/conftest.py
+from contextlib import asynccontextmanager
 from unittest.mock import Mock
 from unittest.mock import patch
 
@@ -6,11 +7,14 @@ import fakeredis.aioredis
 import httpx
 import pytest
 import pytest_asyncio
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from python_service.api import app
 from python_service.api import get_settings
 from python_service.config import Settings
+from python_service.engine import OddsEngine
+from python_service.manual_override_manager import ManualOverrideManager
 
 
 def get_test_settings():
@@ -21,15 +25,10 @@ def get_test_settings():
     """
     return Settings(
         API_KEY="a_secure_test_api_key_that_is_long_enough",
-        # Required by TheRacingApiAdapter
         THE_RACING_API_KEY="test_racing_api_key",
-        # Required by Betfair adapters
         BETFAIR_APP_KEY="test_betfair_key",
-        # Required by TVGAdapter
         TVG_API_KEY="test_tvg_key",
-        # Required by RacingAndSports adapters
         RACING_AND_SPORTS_TOKEN="test_ras_token",
-        # Required by GreyhoundAdapter
         GREYHOUND_API_URL="https://api.example.com/greyhound",
     )
 
@@ -38,27 +37,41 @@ def get_test_settings():
 def client():
     """
     A TestClient instance for testing the FastAPI app.
-    This fixture handles the setup and teardown of dependency overrides.
+    This fixture handles the setup and teardown of dependency overrides
+    and a custom, synchronous lifespan for tests.
     """
+
+    @asynccontextmanager
+    async def test_lifespan(app_for_lifespan: FastAPI):
+        """A synchronous, test-friendly version of the app's lifespan."""
+        settings = get_test_settings()
+        # No background thread needed for tests. Initialize directly.
+        app_for_lifespan.state.engine = OddsEngine(config=settings)
+        app_for_lifespan.state.manual_override_manager = ManualOverrideManager()
+        yield
+        # No shutdown tasks needed for test client
+
+    # Temporarily replace the real lifespan with our test version
+    original_lifespan = app.router.lifespan_context
+    app.router.lifespan_context = test_lifespan
+
+    # Override settings dependency
     original_get_settings = app.dependency_overrides.get(get_settings)
     app.dependency_overrides[get_settings] = get_test_settings
 
-    # This patch is critical. It replaces the real Redis connection with a fake,
-    # in-memory one *before* the TestClient starts the FastAPI application.
-    # This allows the app's `lifespan` startup event, which initializes the
-    # cache_manager, to complete successfully without a live Redis server.
-    with patch("redis.from_url", new_callable=lambda: fakeredis.aioredis.FakeRedis.from_url), \
-         patch("python_service.credentials_manager.SecureCredentialsManager.get_betfair_credentials", return_value=("test_user", "test_pass")):
-        with patch(
-            "python_service.credentials_manager.keyring.get_password",
-            side_effect=lambda s, u: f"test_{u}",
-        ):
-            # THE FIX: Directly instantiate the client. The context manager (`with`)
-            # is no longer the recommended pattern and can cause issues.
-            test_client = TestClient(app)
+    # This patch is critical. It replaces the real Redis connection with a fake one.
+    with patch(
+        "redis.from_url", new_callable=lambda: fakeredis.aioredis.FakeRedis.from_url
+    ), patch(
+        "python_service.credentials_manager.SecureCredentialsManager.get_betfair_credentials",
+        return_value=("test_user", "test_pass"),
+    ):
+        # Create a client that will run our test_lifespan on startup
+        with TestClient(app) as test_client:
             yield test_client
 
-    # Clean up the override
+    # Clean up overrides and restore the original lifespan
+    app.router.lifespan_context = original_lifespan
     if original_get_settings:
         app.dependency_overrides[get_settings] = original_get_settings
     else:
@@ -69,6 +82,7 @@ def client():
 async def clear_cache():
     """A fixture to ensure the cache is cleared before a test."""
     from python_service.cache_manager import cache_manager
+
     if cache_manager.is_configured and cache_manager.redis_client:
         await cache_manager.redis_client.flushdb()
     cache_manager.memory_cache.clear()

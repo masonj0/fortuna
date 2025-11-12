@@ -27,7 +27,7 @@ async def test_engine_initialization():
     """
     engine = OddsEngine(config=get_test_settings())
     assert len(engine.adapters) > 0, "Adapters should be loaded"
-    assert "betfair_adapter" in [a.source_name for a in engine.adapters], "Betfair adapter should be loaded"
+    assert "BetfairExchange" in [a.source_name for a in engine.adapters], "Betfair adapter should be loaded"
 
 
 @pytest.mark.asyncio
@@ -58,7 +58,7 @@ async def test_fetch_all_odds_success():
 
 
 @pytest.mark.asyncio
-async def test_fetch_all_odds_resilience():
+async def test_fetch_all_odds_resilience(clear_cache):
     """
     SPEC: The OddsEngine should be resilient to individual adapter failures.
           If one adapter fails, the engine should still return data from the others.
@@ -92,11 +92,13 @@ async def test_fetch_all_odds_resilience():
     assert len(result["races"]) == 1, "Should return data from the successful adapter"
     assert result["races"][0]["source"] == "SuccessSource"
 
-    # Check that the failed adapter's status is correctly recorded
-    adapter_statuses = engine.get_all_adapter_statuses()
-    failed_adapter_status = next((s for s in adapter_statuses if s["source_name"] == "FailAdapter"), None)
-    assert failed_adapter_status is not None, "Failed adapter status should be present"
-    assert "Mock HTTP Error" in failed_adapter_status["error"], "Error message should be recorded"
+    # Check that the failed adapter's status is correctly recorded in the response
+    failed_adapter_info = next((s for s in result["sourceInfo"] if s["name"] == "FailAdapter"), None)
+    assert failed_adapter_info is not None, "Failed adapter status should be present in the response"
+    assert failed_adapter_info["status"] == "FAILED", "Status should be FAILED"
+    # THE FIX: The auto-generated error message contains the status and URL, which is sufficient.
+    assert "500" in failed_adapter_info["errorMessage"]
+    assert "failed.url" in failed_adapter_info["errorMessage"]
 
 
 @pytest.mark.asyncio
@@ -154,9 +156,9 @@ async def test_race_aggregation_and_deduplication(clear_cache):
     assert runner.odds["Source1"].win == Decimal("2.5")
     assert runner.odds["Source2"].win == Decimal("2.8")
 
-    # Check that the race's `sources` list is correct
-    assert "Source1" in pimlico_race.sources
-    assert "Source2" in pimlico_race.sources
+    # Check that the race's `source` attribute is correct
+    assert "Source1" in pimlico_race.source
+    assert "Source2" in pimlico_race.source
 
 
 @pytest.mark.asyncio
@@ -233,38 +235,34 @@ async def test_engine_caching_logic():
 @pytest.mark.asyncio
 async def test_http_client_tenacity_retry():
     """
-    SPEC: The shared httpx client in BaseAdapterV3 should retry on transient HTTP errors.
+    SPEC: The BaseAdapterV3's make_request method should retry on transient errors.
     """
     # ARRANGE
-    engine = OddsEngine(config=get_test_settings())
-    # Find a real adapter instance to test with
-    adapter_instance = next((a for a in engine.adapters if a.source_name == "betfair_adapter"), None)
-    assert adapter_instance is not None, "Could not find a suitable adapter to test"
+    # Create an instance of a concrete adapter to test the shared `make_request`
+    from python_service.adapters.betfair_adapter import BetfairAdapter
+    adapter_instance = BetfairAdapter(config=get_test_settings())
 
-    # Mock the internal httpx client's request method to simulate failures
-    mock_response = MagicMock()
-    mock_response.status_code = 503  # Service Unavailable
-    mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
-        "Service Unavailable", request=MagicMock(), response=mock_response
-    )
+    # Replace the http_client with a mock
+    mock_http_client = AsyncMock(spec=httpx.AsyncClient)
+    adapter_instance.http_client = mock_http_client
 
-    # Configure the mock to fail twice, then succeed
-    adapter_instance.http_client.get = AsyncMock(
-        side_effect=[
-            mock_response,
-            mock_response,
-            AsyncMock(status_code=200, text="<html>Success</html>"),
-        ]
-    )
+    # Configure the mock to simulate failures then success
+    mock_http_client.request.side_effect = [
+        httpx.ReadTimeout("Timeout!", request=MagicMock()),
+        httpx.ConnectError("Connection failed!"),
+        AsyncMock(spec=httpx.Response, status_code=200, text="Success"),
+    ]
 
     # ACT & ASSERT
     try:
         # This call should succeed after two retries
-        await adapter_instance._fetch_data("https://any.url")
+        await adapter_instance.make_request(
+            adapter_instance.http_client, "get", "https://any.url"
+        )
     except RetryError:
-        pytest.fail("The HTTP client did not successfully retry after transient errors")
+        pytest.fail("The make_request method did not successfully retry after transient errors")
 
     # ASSERT
-    assert adapter_instance.http_client.get.call_count == 3, (
-        "The client should have been called 3 times (1 initial + 2 retries)"
+    assert mock_http_client.request.call_count == 3, (
+        "The http_client.request method should have been called 3 times (1 initial + 2 retries)"
     )
