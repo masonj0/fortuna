@@ -1,21 +1,39 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-    <Product Id="*" Name="Fortuna Backend Service" Language="1033" Version="1.0.0.0"
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
+     xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
+
+    <Product Id="*" Name="Fortuna Full App Service" Language="1033" Version="1.0.0.0"
              Manufacturer="Fortuna Project" UpgradeCode="{da2c1b11-23f3-4787-a655-8094e97aa905}">
 
         <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
         <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
         <MediaTemplate EmbedCab="yes" />
 
-        <Feature Id="ProductFeature" Title="Fortuna Backend Service" Level="1">
-            <ComponentGroupRef Id="MainFiles" />
+        <Feature Id="ProductFeature" Title="Fortuna Full App Service" Level="1">
+            <ComponentGroupRef Id="MainFilesGroup" />
+            <ComponentRef Id="ApplicationShortcuts" />
         </Feature>
 
         <Directory Id="TARGETDIR" Name="SourceDir">
             <Directory Id="ProgramFilesFolder">
-                <Directory Id="INSTALLFOLDER" Name="Fortuna Backend Service" />
+                <Directory Id="INSTALLFOLDER" Name="Fortuna App Service" />
+            </Directory>
+            <Directory Id="ProgramMenuFolder">
+                <Directory Id="ApplicationProgramsFolder" Name="Fortuna App"/>
             </Directory>
         </Directory>
+
+        <DirectoryRef Id="ApplicationProgramsFolder">
+            <Component Id="ApplicationShortcuts" Guid="*">
+                <Shortcut Id="ApplicationStartMenuShortcut"
+                          Name="Fortuna Faucet"
+                          Description="Launch the Fortuna Faucet Dashboard"
+                          Target="[INSTALLFOLDER]ui\index.html"
+                          WorkingDirectory="INSTALLFOLDER"/>
+                <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall"/>
+                <RegistryValue Root="HKCU" Key="Software\FortunaProject\FortunaApp" Name="installed" Type="integer" Value="1" KeyPath="yes"/>
+            </Component>
+        </DirectoryRef>
 
     </Product>
 </Wix>
