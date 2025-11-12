@@ -33,6 +33,8 @@ declare global {
        */
       getBackendStatus: () => Promise<{ state: 'starting' | 'running' | 'error' | 'stopped'; logs: string[] }>;
       generateApiKey: () => Promise<string>;
+      saveApiKey: (apiKey: string) => Promise<{ success: boolean }>;
+      saveBetfairCredentials: (credentials: { appKey: string; username: string; password: string }) => Promise<{ success: boolean }>;
     };
   }
 }

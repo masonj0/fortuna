@@ -3,6 +3,7 @@ const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain } = require('electr
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const SecureSettingsManager = require('./secure-settings-manager');
 
 class FortunaDesktopApp {
   constructor() {
@@ -174,6 +175,25 @@ class FortunaDesktopApp {
       state: this.backendState,
       logs: this.backendLogs.slice(-20)
     }));
+
+    ipcMain.handle('get-api-key', async () => {
+      return SecureSettingsManager.getApiKey();
+    });
+
+    ipcMain.handle('generate-api-key', async () => {
+      const {-_ } = await import('node:crypto');
+      const newKey = crypto.randomBytes(16).toString('hex');
+      SecureSettingsManager.saveApiKey(newKey);
+      return newKey;
+    });
+
+    ipcMain.handle('save-api-key', async (event, apiKey) => {
+      return SecureSettingsManager.saveApiKey(apiKey);
+    });
+
+    ipcMain.handle('save-betfair-credentials', async (event, credentials) => {
+      return SecureSettingsManager.saveBetfairCredentials(credentials);
+    });
   }
 
   cleanup() {
