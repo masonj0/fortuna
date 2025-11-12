@@ -1,8 +1,5 @@
 # tests/adapters/test_twinspires_adapter.py
 import pytest
-import respx
-import httpx
-from httpx import Response
 from python_service.adapters.twinspires_adapter import TwinSpiresAdapter
 from python_service.models import Race
 
@@ -15,48 +12,37 @@ def adapter():
     return TwinSpiresAdapter(config=MockSettings())
 
 @pytest.mark.asyncio
-@respx.mock
-async def test_get_races_with_mock_data(adapter):
+async def test_get_races_from_fixture(adapter):
     """
-    Test that the adapter can correctly parse a mock API response.
-    This test uses a mocked API response to avoid live calls and ensure reproducibility.
+    Test that the adapter can correctly parse a local HTML fixture.
+    This test validates the end-to-end parsing logic, including runner data,
+    using the offline implementation.
     """
-    mock_track_data = [
-        {"trackId":"cp1","trackName":"Central Park","raceType":"Greyhound"},
-        {"trackId":"fl","trackName":"Finger Lakes","raceType":"Thoroughbred"},
-        {"trackId":"mr","trackName":"Monticello Raceway","raceType":"Harness"},
-    ]
-
-    mock_race_card_data = [
-        {"raceNumber": 1, "postTime": "2025-11-12T10:36:17-04:00", "distance": "303 Y"},
-        {"raceNumber": 2, "postTime": "2025-11-12T10:54:15-04:00", "distance": "537 Y"},
-    ]
-
-    # Mock the initial 'todays-tracks' call
-    respx.get(adapter.base_url + "/adw/todays-tracks?affid=0").mock(
-        return_value=Response(200, json=mock_track_data)
-    )
-
-    # Mock the race card calls for each track
-    for track in mock_track_data:
-        track_id = track.get("trackId")
-        race_type = track.get("raceType")
-        respx.get(f"{adapter.base_url}/adw/todays-tracks/{track_id}/{race_type}/races?affid=0").mock(
-            return_value=Response(200, json=mock_race_card_data)
-        )
-
-    # The adapter needs a real http_client to work with the mock
-    async with httpx.AsyncClient() as client:
-        adapter.http_client = client
-        # Call the method under test
-        races = await adapter._get_races_async(date="2025-11-12")
+    # Call the method under test, which is now wired to read from the fixture
+    races = await adapter._get_races_async(date="2025-11-12")
 
     # Assertions
     assert isinstance(races, list)
-    assert len(races) == 6 # 3 tracks * 2 races each
+    assert len(races) == 1
 
-    # Check the first race for correct parsing
-    first_race = races[0]
-    assert first_race.venue == "Central Park"
-    assert first_race.race_number == 1
-    assert first_race.runners == [] # Expected to be empty for now
+    # Check the race for correct parsing
+    race = races[0]
+    assert race.venue == "Churchill Downs"
+    assert race.race_number == 5
+
+    # Check that runners were parsed correctly
+    assert len(race.runners) == 4
+
+    # Verify a specific runner's details
+    runner_1 = next((r for r in race.runners if r.number == 1), None)
+    assert runner_1 is not None
+    assert runner_1.name == "Braveheart"
+    assert not runner_1.scratched
+    assert runner_1.odds["TwinSpires"].win == 3.5
+
+    # Verify a scratched runner
+    runner_3 = next((r for r in race.runners if r.number == 3), None)
+    assert runner_3 is not None
+    assert runner_3.name == "Steady Eddy"
+    assert runner_3.scratched
+    assert not runner_3.odds
