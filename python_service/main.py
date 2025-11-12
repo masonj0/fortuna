@@ -30,7 +30,7 @@ def main():
 
     # It's critical to import the app object *after* the path has been manipulated.
     from python_service.api import app
-    from python_service.config import get__settings
+    from python_service.config import get_settings
 
     settings = get_settings()
 
