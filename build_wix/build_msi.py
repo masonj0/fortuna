@@ -47,8 +47,15 @@ def main():
 
     # 4. Link WiX project into MSI
     print("--- Step 4: Linking MSI with 'light' ---")
+    import glob
+    obj_files = glob.glob(str(obj_dir / '*.wixobj'))
+    if not obj_files:
+        sys.exit('✗ Linking failed: No .wixobj files found to link.')
+
     output_msi = PROJECT_ROOT / 'dist' / 'Fortuna-Backend-Service.msi'
-    run_command(['light', '-o', str(output_msi), f'{obj_dir}/*.wixobj'])
+
+    light_cmd = ['light', '-o', str(output_msi)] + obj_files
+    run_command(light_cmd)
     print(f'✓ MSI created successfully at {output_msi}')
 
     print('\n=== BUILD COMPLETE ===')
