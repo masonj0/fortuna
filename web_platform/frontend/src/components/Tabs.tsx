@@ -27,7 +27,7 @@ export function Tabs({ tabs }: TabsProps) {
                 activeTab === index
                   ? 'border-blue-500 text-blue-400'
                   : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-500'
-              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
+              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors focus:outline-none`}
             >
               {tab.label}
             </button>

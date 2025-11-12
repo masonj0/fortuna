@@ -8,7 +8,7 @@ PROJECT_ROOT = Path(__file__).parent.parent
 DIST_DIR = PROJECT_ROOT / 'dist'
 BUILD_DIR = PROJECT_ROOT / 'build'
 MSI_SOURCE_DIR = PROJECT_ROOT / 'build_wix' / 'msi_source'
-EXECUTABLE_NAME = 'fortuna-backend.exe'
+EXECUTABLE_NAME = 'fortuna-backend.exe' if sys.platform == 'win32' else 'fortuna-backend'
 
 def run_command(cmd, cwd=None):
     print(f'▶ Running: {" ".join(cmd)}')
@@ -46,7 +46,7 @@ def main():
     print("--- Step 2: Generating WiX file list with 'heat' ---")
     MSI_SOURCE_DIR.mkdir(exist_ok=True)
     files_wxs = MSI_SOURCE_DIR / 'files.wxs'
-    run_command(['heat', 'dir', str(heat_source_dir), '-o', str(files_wxs), '-gg', '-sfrag', '-srd', '-cg', 'MainFiles', '-dr', 'INSTALLFOLDER'])
+    run_command(['heat', 'dir', str(heat_source_dir), '-o', str(files_wxs), '-gg', '-sfrag', '-srd', '-cg', 'MainFiles'])
     print(f'✓ WiX file fragment created at {files_wxs}')
 
     # 3. Compile WiX project

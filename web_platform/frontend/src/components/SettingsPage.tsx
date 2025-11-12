@@ -42,12 +42,12 @@ export function SettingsPage() {
   };
 
   return (
-    <div className="bg-slate-800 p-6 rounded-lg border border-slate-700 text-white">
-      <h2 className="text-2xl font-bold text-white mb-6">Application Settings</h2>
+    <div className="bg-slate-800 p-8 rounded-lg border border-slate-700 text-white max-w-2xl mx-auto">
+      <h2 className="text-3xl font-bold text-white mb-6">Application Settings</h2>
 
       <div className="space-y-8">
         <div>
-          <h3 className="text-lg font-semibold text-slate-300 mb-2">API Key</h3>
+          <h3 className="text-xl font-semibold text-slate-300 mb-2">API Key</h3>
           <p className="text-sm text-slate-400 mb-3">This key is required for the dashboard to communicate with the backend service.</p>
           <div className="flex items-center space-x-2">
             <input
@@ -58,15 +58,15 @@ export function SettingsPage() {
             />
             <button
               onClick={handleGenerateApiKey}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded transition-colors"
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded transition-colors font-semibold"
             >
-              Generate
+              Generate New Key
             </button>
           </div>
         </div>
 
         <div>
-          <h3 className="text-lg font-semibold text-slate-300 mb-2">Betfair Credentials (Optional)</h3>
+          <h3 className="text-xl font-semibold text-slate-300 mb-2">Betfair Credentials (Optional)</h3>
            <p className="text-sm text-slate-400 mb-3">Required for adapters that use the Betfair Exchange API.</p>
           <div className="space-y-3">
             <input
@@ -93,10 +93,10 @@ export function SettingsPage() {
           </div>
         </div>
 
-        <div className="flex justify-end pt-4 border-t border-slate-700">
+        <div className="flex justify-end pt-6 border-t border-slate-700">
           <button
             onClick={handleSaveSettings}
-            className="px-6 py-2 bg-green-600 hover:bg-green-700 rounded font-semibold transition-colors"
+            className="px-8 py-3 bg-green-600 hover:bg-green-700 rounded font-bold text-lg transition-colors"
           >
             Save All Settings
           </button>
