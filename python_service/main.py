@@ -3,6 +3,9 @@ import sys
 import os
 from multiprocessing import freeze_support
 
+# Force UTF-8 encoding for stdout and stderr, crucial for PyInstaller on Windows
+os.environ['PYTHONUTF8'] = '1'
+
 # This is the definitive entry point for the Fortuna Faucet backend service.
 # It is designed to be compiled with PyInstaller.
 

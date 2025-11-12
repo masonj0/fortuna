@@ -124,7 +124,8 @@ jobs:
               try {
                 $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/health" -TimeoutSec 1 -UseBasicParsing
                 if ($response.StatusCode -eq 200) {
-                  $apiResponse = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/races" -TimeoutSec 1 -UseBasicParsing -ErrorAction SilentlyContinue
+                  $headers = @{ "X-API-Key" = $env:API_KEY }
+                  $apiResponse = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/races" -Headers $headers -TimeoutSec 1 -UseBasicParsing -ErrorAction SilentlyContinue
                   if ($apiResponse.StatusCode -eq 200) {
                     Write-Host "[OK] Health check and API test passed on attempt $i!"
                     $serverReady = $true
