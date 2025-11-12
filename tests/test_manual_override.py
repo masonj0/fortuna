@@ -54,7 +54,7 @@ def test_get_pending_overrides_endpoint(client):
     # ARRANGE
     # Access the manager *after* the TestClient has run the lifespan startup
     manager = client.app.state.manual_override_manager
-    manager.clear_all_requests()  # Ensure a clean state
+    manager.clear_old_requests(max_age_hours=-1)  # Ensure a clean state by clearing all
     manager.register_failure("EndpointAdapter", "http://endpoint.com/data")
 
     # ACT
@@ -69,7 +69,7 @@ def test_get_pending_overrides_endpoint(client):
 def test_submit_manual_data_endpoint(client):
     # ARRANGE
     manager = client.app.state.manual_override_manager
-    manager.clear_all_requests()
+    manager.clear_old_requests(max_age_hours=-1)
     request_id = manager.register_failure("SubmitAdapter", "http://submit.com/data")
     submission = {
         "request_id": request_id,
@@ -91,7 +91,7 @@ def test_submit_manual_data_endpoint(client):
 def test_skip_manual_override_endpoint(client):
     # ARRANGE
     manager = client.app.state.manual_override_manager
-    manager.clear_all_requests()
+    manager.clear_old_requests(max_age_hours=-1)
     request_id = manager.register_failure("SkipAdapter", "http://skip.com/data")
     response = client.post(f"/api/manual-overrides/skip/{request_id}", headers={"X-API-Key": API_KEY})
     assert response.status_code == 200

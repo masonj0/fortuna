@@ -19,23 +19,34 @@ def run_command(cmd, cwd=None):
 def main():
     print('=== Starting Fortuna WiX MSI Build ===')
 
-    exe_path = DIST_DIR / EXECUTABLE_NAME
+    # Step 1: Locate or build the executable
+    print(f'--- Step 1: Searching for {EXECUTABLE_NAME} in {DIST_DIR}... ---')
+    found_exes = list(DIST_DIR.rglob(EXECUTABLE_NAME))
 
-    # 1. Build Executable with PyInstaller (if it doesn't exist)
-    if not exe_path.exists():
-        print('--- Step 1: Building executable with PyInstaller ---')
-        run_command(['pyinstaller', str(PROJECT_ROOT / 'fortuna-backend.spec')])
-        if not exe_path.exists():
-            sys.exit('✗ PyInstaller build failed: Executable not found.')
-        print(f'✓ Executable created at {exe_path}')
-    else:
-        print(f'--- Step 1: Found existing executable at {exe_path}, skipping build. ---')
+    if not found_exes:
+        print(f'Executable not found in {DIST_DIR}. Attempting to build with PyInstaller...')
+        try:
+            run_command(['pyinstaller', str(PROJECT_ROOT / 'fortuna-backend.spec')])
+            found_exes = list(DIST_DIR.rglob(EXECUTABLE_NAME))
+            if not found_exes:
+                sys.exit(f'✗ PyInstaller build failed: Executable "{EXECUTABLE_NAME}" not found in {DIST_DIR} after build.')
+        except subprocess.CalledProcessError as e:
+            sys.exit(f'✗ PyInstaller command failed with exit code {e.returncode}.')
+
+    if len(found_exes) > 1:
+        print(f'⚠️ WARNING: Found multiple executables. Using the first one: {found_exes[0]}')
+
+    exe_path = found_exes[0]
+    heat_source_dir = exe_path.parent
+    print(f'✓ Using executable at {exe_path}')
+    print(f'✓ Setting WiX heat source directory to {heat_source_dir}')
+
 
     # 2. Generate WiX file list from the dist directory
     print("--- Step 2: Generating WiX file list with 'heat' ---")
     MSI_SOURCE_DIR.mkdir(exist_ok=True)
     files_wxs = MSI_SOURCE_DIR / 'files.wxs'
-    run_command(['heat', 'dir', str(DIST_DIR), '-o', str(files_wxs), '-gg', '-sfrag', '-srd', '-cg', 'MainFiles', '-dr', 'INSTALLFOLDER'])
+    run_command(['heat', 'dir', str(heat_source_dir), '-o', str(files_wxs), '-gg', '-sfrag', '-srd', '-cg', 'MainFiles', '-dr', 'INSTALLFOLDER'])
     print(f'✓ WiX file fragment created at {files_wxs}')
 
     # 3. Compile WiX project
