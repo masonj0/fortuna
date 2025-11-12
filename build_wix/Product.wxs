@@ -18,10 +18,6 @@
             </Directory>
         </Directory>
 
-        <ComponentGroup Id="MainFiles">
-            <!-- This will be auto-populated by the 'heat' tool -->
-        </ComponentGroup>
-
         <DirectoryRef Id="INSTALLFOLDER">
             <Component Id="ServiceControl" Guid="*">
                 <ServiceInstall Id="ServiceInstaller"

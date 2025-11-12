@@ -12,7 +12,9 @@ EXECUTABLE_NAME = 'fortuna-backend.exe'
 
 def run_command(cmd, cwd=None):
     print(f'▶ Running: {" ".join(cmd)}')
-    subprocess.run(cmd, cwd=cwd, check=True, text=True)
+    # FIX: Explicitly use UTF-8 for decoding the output, and ignore errors for robustness.
+    # This resolves the UnicodeDecodeError when reading the external WiX process's output.
+    subprocess.run(cmd, cwd=cwd, check=True, text=True, encoding='utf-8', errors='ignore')
 
 def main():
     print('=== Starting Fortuna WiX MSI Build ===')

@@ -54,4 +54,5 @@ This document tracks the strategic evolution of the Fortuna Faucet project.
       - **Primary Track List API:** `https://www.twinspires.com/adw/todays-tracks?affid=0`
       - **Example Race Card URL (Thoroughbred):** `https://www.twinspires.com/adw/todays-tracks/fl/Thoroughbred/races?affid=0`
       - **Example Race Card URL (Greyhound):** `https://www.twinspires.com/adw/todays-tracks/cp1/Greyhound/races?affid=0`
+    - **Status:** In Progress. Initial implementation is complete, including fetching all tracks and their corresponding race cards for all three disciplines (Thoroughbred, Harness, Greyhound). The final piece of work is to discover and implement the API endpoint for fetching the runner data for each race.
     - **Notes:** The race card endpoint provides race details but does not include runner information, which will require discovering and integrating a second API endpoint.
