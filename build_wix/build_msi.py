@@ -2,6 +2,7 @@
 import os
 import sys
 import subprocess
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -12,9 +13,50 @@ EXECUTABLE_NAME = 'fortuna-backend.exe' if sys.platform == 'win32' else 'fortuna
 
 def run_command(cmd, cwd=None):
     print(f'▶ Running: {" ".join(cmd)}')
-    # FIX: Explicitly use UTF-8 for decoding the output, and ignore errors for robustness.
-    # This resolves the UnicodeDecodeError when reading the external WiX process's output.
     subprocess.run(cmd, cwd=cwd, check=True, text=True, encoding='utf-8', errors='ignore')
+
+def inject_service_logic(wxs_file, exe_name):
+    print(f"--- Injecting service logic into {wxs_file} for {exe_name} ---")
+    try:
+        ET.register_namespace('', "http://schemas.microsoft.com/wix/2006/wi")
+        tree = ET.parse(wxs_file)
+        root = tree.getroot()
+
+        ns = {'wix': 'http://schemas.microsoft.com/wix/2006/wi'}
+
+        target_component = None
+        for component in root.findall('.//wix:Component', ns):
+            file_element = component.find(f".//wix:File[@Source='{exe_name}']", ns)
+            if file_element is not None:
+                target_component = component
+                break
+
+        if target_component is None:
+            sys.exit(f"✗ Could not find Component containing File with Source='{exe_name}'")
+
+        print(f"✓ Found target component: {target_component.attrib['Id']}")
+
+        # Add ServiceInstall element
+        si = ET.SubElement(target_component, 'ServiceInstall', {
+            'Id': 'ServiceInstaller', 'Type': 'ownProcess', 'Name': 'FortunaBackendService',
+            'DisplayName': 'Fortuna Backend Service',
+            'Description': 'Provides access to the Fortuna racing data engine.',
+            'Start': 'auto', 'Account': 'LocalSystem', 'ErrorControl': 'normal'
+        })
+
+        # Add ServiceControl elements
+        ET.SubElement(target_component, 'ServiceControl', {
+            'Id': 'StartService', 'Name': 'FortunaBackendService', 'Start': 'install', 'Wait': 'no'
+        })
+        ET.SubElement(target_component, 'ServiceControl', {
+            'Id': 'StopService', 'Name': 'FortunaBackendService', 'Stop': 'both', 'Remove': 'uninstall', 'Wait': 'yes'
+        })
+
+        tree.write(wxs_file, encoding='utf-8', xml_declaration=True)
+        print("✓ Service logic injected successfully.")
+
+    except Exception as e:
+        sys.exit(f"✗ Failed to inject service logic: {e}")
 
 def main():
     print('=== Starting Fortuna WiX MSI Build ===')
@@ -41,19 +83,28 @@ def main():
     print(f'✓ Using executable at {exe_path}')
     print(f'✓ Setting WiX heat source directory to {heat_source_dir}')
 
-
     # 2. Generate WiX file list from the dist directory
     print("--- Step 2: Generating WiX file list with 'heat' ---")
     MSI_SOURCE_DIR.mkdir(exist_ok=True)
     files_wxs = MSI_SOURCE_DIR / 'files.wxs'
-    run_command(['heat', 'dir', str(heat_source_dir), '-o', str(files_wxs), '-gg', '-sfrag', '-srd', '-cg', 'MainFiles'])
+    run_command(['heat', 'dir', str(heat_source_dir), '-o', str(files_wxs), '-gg', '-sfrag', '-srd', '-cg', 'MainFiles', '-var', 'var.heat_source'])
     print(f'✓ WiX file fragment created at {files_wxs}')
+
+    # 2.5 Inject Service Logic
+    inject_service_logic(str(files_wxs), EXECUTABLE_NAME)
 
     # 3. Compile WiX project
     print("--- Step 3: Compiling WiX project with 'candle' ---")
     obj_dir = MSI_SOURCE_DIR / 'obj'
     obj_dir.mkdir(exist_ok=True)
-    run_command(['candle', str(PROJECT_ROOT / 'build_wix' / 'Product.wxs'), str(files_wxs), '-o', f'{obj_dir}/'])
+    candle_cmd = [
+        'candle',
+        '-dheat_source=' + str(heat_source_dir),
+        str(PROJECT_ROOT / 'build_wix' / 'Product.wxs'),
+        str(files_wxs),
+        '-o', f'{obj_dir}/'
+    ]
+    run_command(candle_cmd)
     print('✓ WiX compilation successful.')
 
     # 4. Link WiX project into MSI

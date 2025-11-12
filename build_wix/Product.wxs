@@ -9,7 +9,6 @@
 
         <Feature Id="ProductFeature" Title="Fortuna Backend Service" Level="1">
             <ComponentGroupRef Id="MainFiles" />
-            <ComponentRef Id="ServiceControl" />
         </Feature>
 
         <Directory Id="TARGETDIR" Name="SourceDir">
@@ -17,21 +16,6 @@
                 <Directory Id="INSTALLFOLDER" Name="Fortuna Backend Service" />
             </Directory>
         </Directory>
-
-        <DirectoryRef Id="INSTALLFOLDER">
-            <Component Id="ServiceControl" Guid="*">
-                <ServiceInstall Id="ServiceInstaller"
-                                Type="ownProcess"
-                                Name="FortunaBackendService"
-                                DisplayName="Fortuna Backend Service"
-                                Description="Provides access to the Fortuna racing data engine."
-                                Start="auto"
-                                Account="LocalSystem"
-                                ErrorControl="normal" />
-                <ServiceControl Id="StartService" Name="FortunaBackendService" Start="install" Wait="no" />
-                <ServiceControl Id="StopService" Name="FortunaBackendService" Stop="both" Remove="uninstall" Wait="yes" />
-            </Component>
-        </DirectoryRef>
 
     </Product>
 </Wix>
