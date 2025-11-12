@@ -181,7 +181,7 @@ class FortunaDesktopApp {
     });
 
     ipcMain.handle('generate-api-key', async () => {
-      const {-_ } = await import('node:crypto');
+      const crypto = require('node:crypto');
       const newKey = crypto.randomBytes(16).toString('hex');
       SecureSettingsManager.saveApiKey(newKey);
       return newKey;
