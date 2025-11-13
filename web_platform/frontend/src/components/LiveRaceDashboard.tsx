@@ -47,6 +47,31 @@ const BackendErrorPanel = ({ logs, onRestart }: { logs: string[]; onRestart: () 
   </div>
 );
 
+// New Sub-Component to display an error from a specific adapter
+const ErrorCard = ({ source, message }: { source: string; message: string }) => (
+  <div className="bg-slate-800 rounded-lg p-4 border border-red-500/50 flex flex-col justify-between">
+    <div>
+      <h3 className="font-bold text-red-400 text-lg">{source} Failed</h3>
+      <p className="text-slate-400 text-sm mt-2">{message}</p>
+    </div>
+    <div className="mt-4 text-xs text-slate-500">
+      <p>This adapter failed to fetch data. This is not a critical error; other adapters may provide the necessary data.</p>
+    </div>
+  </div>
+);
+
+// New Sub-Component to render the grid of races or error cards
+const RaceGrid = ({ races }: { races: Race[] }) => (
+  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+    {races.map(race =>
+      race.isErrorPlaceholder ? (
+        <ErrorCard key={race.id} source={race.venue} message={race.errorMessage || 'An unknown error occurred.'} />
+      ) : (
+        <RaceCard key={race.id} race={race} />
+      )
+    )}
+  </div>
+);
 
 export const LiveRaceDashboard = React.memo(() => {
   const [races, setRaces] = useState<Race[]>([]);
@@ -240,44 +265,40 @@ export const LiveRaceDashboard = React.memo(() => {
   }, []);
 
   const renderContent = () => {
-    // Priority 1: Backend process has failed. Show a detailed error panel.
+    // Priority 1: Backend process has failed.
     if (backendStatus.state === 'error') {
       return <BackendErrorPanel logs={backendStatus.logs} onRestart={() => window.electronAPI.restartBackend()} />;
     }
 
-    // Priority 2: Backend is starting or API is connecting for the first time. Show skeleton loaders.
-    const isLoading = backendStatus.state === 'starting' || (connectionStatus === 'connecting' && adapterStatuses.length === 0);
+    // Priority 2: Backend is starting or initial fetch is happening.
+    const isLoading = backendStatus.state === 'starting' || (connectionStatus === 'connecting' && races.length === 0);
     if (isLoading) {
-      return (
-          <div className="space-y-4">
-              <h2 className="text-2xl font-bold text-white">Data Adapters</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {[...Array(3)].map((_, i) => <div key={i} className="p-4 rounded-lg border bg-slate-800 border-slate-700 animate-pulse h-24"></div>)}
-              </div>
-          </div>
-      );
+        return (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {[...Array(8)].map((_, i) => <RaceCardSkeleton key={i} />)}
+            </div>
+        );
     }
 
-    // Priority 3: API connection is offline after an attempt. Show an error message.
+    // Priority 3: API connection is offline.
     if (connectionStatus === 'offline') {
       return <EmptyState
           title="API Connection Offline"
-          message={errorDetails || "The backend service is running, but the dashboard could not connect to its API."}
-          actionButton={<button onClick={fetchAdapterStatuses} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Retry Connection</button>}
+          message={errorDetails || "The backend is running, but the dashboard could not connect to its API."}
+          actionButton={<button onClick={fetchRacesBySource} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Retry Connection</button>}
       />;
     }
 
-    // Priority 4: Everything is good. Show the adapter status panels.
-    return (
-      <div className="space-y-4">
-        <h2 className="text-2xl font-bold text-white">Data Adapters</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {adapterStatuses.map((adapter) => (
-            <AdapterStatusPanel key={adapter.name} adapter={adapter} onFetchRaces={fetchRacesBySource} />
-          ))}
-        </div>
-      </div>
-    );
+    // Priority 4: No races found after a successful fetch.
+    if (races.length === 0) {
+      return <EmptyState
+          title="No Races Found"
+          message="No races matched the specified criteria for the selected date. Please try different filters."
+      />;
+    }
+
+    // Priority 5: Display the races (and any error placeholders).
+    return <RaceGrid races={races} />;
   };
 
   const getStatusIndicator = () => {

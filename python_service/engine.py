@@ -207,29 +207,46 @@ class OddsEngine:
         attempted_url = None
 
         try:
-            # THE FIX: Instantiate Race objects from the dicts yielded by the adapter
-            # to ensure type consistency within the engine's processing methods.
             race_data_list = await adapter.get_races(date)
             races = [Race(**race_data) for race_data in race_data_list]
             is_success = True
         except AdapterHttpError as e:
             self.logger.error(
                 "HTTP failure during fetch from adapter.",
-                adapter=adapter.source_name,
-                status_code=e.status_code,
-                url=e.url,
-                exc_info=False,
+                adapter=adapter.source_name, status_code=e.status_code, url=e.url, exc_info=False,
             )
             error_message = f"HTTP Error {e.status_code} for {e.url}"
             attempted_url = e.url
+            races = [
+                Race(
+                    id=f"error_{adapter.source_name.lower()}",
+                    venue=adapter.source_name,
+                    race_number=0,
+                    start_time=datetime.now(),
+                    runners=[],
+                    source=adapter.source_name,
+                    is_error_placeholder=True,
+                    error_message=error_message,
+                )
+            ]
         except Exception as e:
             self.logger.error(
                 "Critical failure during fetch from adapter.",
-                adapter=adapter.source_name,
-                error=str(e),
-                exc_info=True,
+                adapter=adapter.source_name, error=str(e), exc_info=True,
             )
             error_message = str(e)
+            races = [
+                Race(
+                    id=f"error_{adapter.source_name.lower()}",
+                    venue=adapter.source_name,
+                    race_number=0,
+                    start_time=datetime.now(),
+                    runners=[],
+                    source=adapter.source_name,
+                    is_error_placeholder=True,
+                    error_message=error_message,
+                )
+            ]
 
         duration = (datetime.now() - start_time).total_seconds()
 

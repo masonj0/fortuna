@@ -52,6 +52,8 @@ class Race(FortunaBaseModel):
     favorite: Optional[Runner] = None
     race_name: Optional[str] = None
     distance: Optional[str] = None
+    is_error_placeholder: bool = Field(False, alias="isErrorPlaceholder")
+    error_message: Optional[str] = Field(None, alias="errorMessage")
 
 
 class SourceInfo(FortunaBaseModel):

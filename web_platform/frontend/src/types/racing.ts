@@ -31,6 +31,8 @@ export interface Race {
   distance?: string;
   surface?: string;
   favorite?: Runner;
+  isErrorPlaceholder?: boolean;
+  errorMessage?: string;
 }
 
 // --- API Response Interfaces ---
