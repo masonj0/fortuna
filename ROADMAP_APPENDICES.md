@@ -48,3 +48,5 @@ This document tracks the strategic evolution of the Fortuna Faucet project.
   - **Operation: The Monolith:** Unify the disparate GUI tools (launcher, setup wizard) into a single, tabbed application for a seamless user experience.
   - **Operation: The Interpreter:** Implement a user-friendly error-handling system that translates technical errors into simple, actionable advice.
   - **Data Persistence & Caching:** Implement a local SQLite database to cache race data, improving performance and enabling offline access.
+  - **Operation: The Polisher:** Address technical debt by refactoring backend code to resolve deprecation warnings and align with modern library standards.
+  - **Operation: The Shield:** Improve backend test coverage by adding unit tests for untested data adapters and the Electron main process.

@@ -2,7 +2,9 @@
 
 from datetime import datetime
 from decimal import Decimal
+from typing import Annotated
 from typing import Any
+from typing import Callable
 from typing import Dict
 from typing import List
 from typing import Optional
@@ -10,6 +12,15 @@ from typing import Optional
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
+from pydantic import WrapSerializer
+
+
+def decimal_serializer(value: Decimal, handler: Callable[[Decimal], Any]) -> Any:
+    """Custom serializer for Decimal to float conversion."""
+    return float(value)
+
+
+JsonDecimal = Annotated[Decimal, WrapSerializer(decimal_serializer, when_used="json")]
 
 
 # --- Configuration for Aliases (BUG #4 Fix) ---
@@ -17,15 +28,14 @@ class FortunaBaseModel(BaseModel):
     model_config = ConfigDict(
         populate_by_name=True,
         arbitrary_types_allowed=True,
-        json_encoders={Decimal: lambda v: float(v)},
     )
 
 
 # --- Core Data Models ---
 class OddsData(FortunaBaseModel):
-    win: Optional[Decimal] = None
-    place: Optional[Decimal] = None
-    show: Optional[Decimal] = None
+    win: Optional[JsonDecimal] = None
+    place: Optional[JsonDecimal] = None
+    show: Optional[JsonDecimal] = None
     source: str
     last_updated: datetime
 
