@@ -2,6 +2,7 @@
     "pg_schemas/historical_races.sql",
     "pg_schemas/quarantine_races.sql",
     "pg_schemas/quarantined_races.sql",
+    "tests/__init__.py",
     "tests/adapters/test_gbgb_api_adapter.py",
     "tests/adapters/test_greyhound_adapter.py",
     "tests/adapters/test_racingtv_adapter.py",
@@ -26,5 +27,6 @@
     "tests/test_msi_installation.ps1",
     "tests/test_silent_deployment.ps1",
     "tests/test_uninstall.ps1",
+    "tests/utils.py",
     "tests/utils/test_odds.py"
 ]

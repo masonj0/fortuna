@@ -285,7 +285,7 @@ export const LiveRaceDashboard = React.memo(() => {
       return <EmptyState
           title="API Connection Offline"
           message={errorDetails || "The backend is running, but the dashboard could not connect to its API."}
-          actionButton={<button onClick={fetchRacesBySource} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Retry Connection</button>}
+          actionButton={<button onClick={fetchAdapterStatuses} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Retry Connection</button>}
       />;
     }
 
