@@ -43,13 +43,25 @@ def convert_file_to_json_sandboxed(file_path):
     p = Process(target=_sandboxed_file_read, args=(file_path, q))
     p.start()
     p.join(timeout=FILE_PROCESSING_TIMEOUT)
-    if p.is_alive():
-        p.terminate()
-        p.join()
-        return {"error": f"Timeout: File processing took longer than {FILE_PROCESSING_TIMEOUT} seconds."}
-    if not q.empty():
-        return q.get()
-    return {"error": "Unknown error in sandboxed read process."}
+
+    try:
+        if p.is_alive():
+            p.terminate()
+            p.join()
+            return {"error": f"Timeout: File processing took longer than {FILE_PROCESSING_TIMEOUT} seconds."}
+
+        if not q.empty():
+            return q.get()
+        return {"error": "Unknown error in sandboxed read process."}
+    finally:
+        # ✅ Properly close and flush the queue
+        try:
+            while not q.empty():
+                q.get_nowait()
+        except Exception:
+            pass
+        q.close()
+        q.join_thread()
 
 
 # --- Main Orchestrator ---
