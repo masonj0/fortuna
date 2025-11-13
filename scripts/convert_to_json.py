@@ -17,6 +17,7 @@ MANIFEST_FILES = [
 OUTPUT_DIR = "ReviewableJSON"
 FILE_PROCESSING_TIMEOUT = 10
 EXCLUDED_FILES = ["package-lock.json"]
+MAX_FILE_SIZE_MB = 10  # Max file size in megabytes
 
 
 def read_json_manifest(manifest_path: str) -> list[str]:
@@ -39,6 +40,16 @@ def _sandboxed_file_read(file_path, q):
 
 
 def convert_file_to_json_sandboxed(file_path):
+    # --- Pre-flight check: File size ---
+    try:
+        file_size = os.path.getsize(file_path)
+        if file_size > MAX_FILE_SIZE_MB * 1024 * 1024:
+            return {"error": f"File exceeds {MAX_FILE_SIZE_MB}MB size limit."}
+    except FileNotFoundError:
+        return {"error": "File not found."}
+    except Exception as e:
+        return {"error": f"Could not check file size: {e}"}
+
     q = Queue()
     p = Process(target=_sandboxed_file_read, args=(file_path, q))
     p.start()
@@ -46,8 +57,14 @@ def convert_file_to_json_sandboxed(file_path):
 
     try:
         if p.is_alive():
+            print(f"    [WARNING] Process for {file_path} timed out. Attempting graceful termination...")
             p.terminate()
-            p.join()
+            p.join(timeout=2)  # Give it a moment to terminate gracefully
+
+            if p.is_alive():
+                print(f"    [ERROR] Graceful termination failed. Forcibly killing process...")
+                p.kill()  # The ultimate "just die"
+                p.join()
             return {"error": f"Timeout: File processing took longer than {FILE_PROCESSING_TIMEOUT} seconds."}
 
         if not q.empty():
