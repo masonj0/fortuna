@@ -3,9 +3,8 @@ const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, dialog } = require
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
-const sudo = require('sudo-prompt');
 const SecureSettingsManager = require('./secure-settings-manager');
-const { isServiceRunning, installService, startService } = require('./install-validator');
+// The 'sudo-prompt' and 'install-validator' modules are removed as we are no longer managing the service at runtime.
 
 const SERVICE_NAME = 'FortunaBackend';
 const SERVICE_DISPLAY_NAME = 'Fortuna Backend Service';
@@ -62,42 +61,22 @@ class FortunaDesktopApp {
 
   async validateAndStartBackend() {
     if (app.isPackaged) {
-      try {
-        const isRunning = await isServiceRunning(SERVICE_NAME);
-        if (isRunning) {
-          console.log(`[OK] Service '${SERVICE_NAME}' is already running.`);
-          return;
+      // With sudo-prompt removed, we no longer attempt to manage the Windows service at runtime.
+      // Instead, we will spawn the backend process directly. This is a temporary measure
+      // until the service installation is handled by the MSI installer itself.
+      const backendExePath = path.join(process.resourcesPath, 'fortuna-backend.exe');
+      if (fs.existsSync(backendExePath)) {
+        try {
+          console.log(`[INFO] Attempting to start backend: ${backendExePath}`);
+          spawn(backendExePath, [], { detached: true, stdio: 'ignore' });
+        } catch (err) {
+          dialog.showErrorBox('Backend Start Failed', `The backend executable could not be started: ${err.message}`);
         }
-
-        console.log(`Service '${SERVICE_NAME}' is not running. Attempting to install and start.`);
-        const backendExePath = path.join(process.resourcesPath, 'fortuna-backend.exe');
-
-        // This is the point of failure. We must use sudo-prompt here.
-        const installCommand = `\\\"${backendExePath}\\\" service install --name \\\"${SERVICE_NAME}\\\" --display-name \\\"${SERVICE_DISPLAY_NAME}\\\" --description \\\"${SERVICE_DESCRIPTION}\\\"`;
-        const startCommand = `\\\"${backendExePath}\\\" service start --name \\\"${SERVICE_NAME}\\\"`;
-
-        const options = { name: 'Fortuna Faucet' };
-
-        sudo.exec(installCommand, options, (error, stdout, stderr) => {
-          if (error) {
-            dialog.showErrorBox('Service Installation Failed', `Could not install backend service: ${error.message}`);
-            return;
-          }
-          console.log('Service installed successfully. Now starting...');
-          sudo.exec(startCommand, options, (startError, startStdout, startStderr) => {
-            if (startError) {
-              dialog.showErrorBox('Service Start Failed', `Could not start backend service: ${startError.message}`);
-              return;
-            }
-            console.log('Service started successfully.');
-          });
-        });
-
-      } catch (err) {
-        dialog.showErrorBox('Backend Service Error', `An error occurred while managing the backend service: ${err.message}`);
+      } else {
+        dialog.showErrorBox('Backend Not Found', `The backend executable was not found at the expected location: ${backendExePath}`);
       }
     } else {
-      console.log('[DEV MODE] Skipping service installation. The backend should be run manually.');
+      console.log('[DEV MODE] The backend should be run manually.');
     }
   }
 
