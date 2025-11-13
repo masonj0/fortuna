@@ -124,10 +124,6 @@ class FortunaDesktopApp {
     }
 
     const indexPath = path.join(app.getAppPath(), 'web-ui-build', 'out', 'index.html');
-    if (!fs.existsSync(indexPath)) {
-      // Fallback for debugging if path is wrong
-      return `file://${path.join(__dirname, '..', 'web_platform', 'frontend', 'out', 'index.html')}`;
-    }
     return `file://${indexPath}`;
   }
 
@@ -181,7 +177,7 @@ class FortunaDesktopApp {
     });
 
     ipcMain.handle('generate-api-key', async () => {
-      const {-_ } = await import('node:crypto');
+      const crypto = require('node:crypto');
       const newKey = crypto.randomBytes(16).toString('hex');
       SecureSettingsManager.saveApiKey(newKey);
       return newKey;
