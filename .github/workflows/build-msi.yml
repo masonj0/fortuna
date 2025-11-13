@@ -187,9 +187,9 @@ jobs:
           $exe = "./electron/resources/fortuna-backend.exe"
           # ... existing integration test ...
       - name: Electron - Install & Package MSI
+        working-directory: electron
         shell: pwsh
         run: |
-          cd electron
           npm ci
           npx electron-builder --config electron-builder-config.yml --publish never
       - name: Code Sign MSI
