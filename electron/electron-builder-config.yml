@@ -8,7 +8,6 @@ files:
   - "preload.js"
   - "package.json"
   - "secure-settings-manager.js"
-  - "install-validator.js"
   - "web-ui-build/out/**/*"
   - "assets/**/*"
 extraResources:
