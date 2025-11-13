@@ -22,5 +22,4 @@ msi:
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: "Fortuna Faucet"
-  startMenu:
-    folder: "Fortuna Faucet"
+  menuCategory: "Fortuna Faucet"
