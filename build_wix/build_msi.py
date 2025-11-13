@@ -26,13 +26,18 @@ def inject_service_logic(wxs_file, exe_name):
         root = tree.getroot()
         ns = {'wix': 'http://schemas.microsoft.com/wix/2006/wi'}
         target_component = None
+        # Robustly search for the component containing the executable
         for component in root.findall('.//wix:Component', ns):
-            file_element = component.find(f".//wix:File[@Source='.\\{exe_name}']", ns)
-            if file_element is not None:
-                target_component = component
+            for file_element in component.findall('.//wix:File', ns):
+                source_path = file_element.get('Source', '')
+                if Path(source_path).name == exe_name:
+                    target_component = component
+                    break
+            if target_component:
                 break
+
         if target_component is None:
-             sys.exit(f"✗ Could not find Component containing File with Source='.\\{exe_name}'")
+             sys.exit(f"✗ Could not find a Component containing a File for '{exe_name}'")
         print(f"✓ Found target component: {target_component.attrib['Id']}")
         si = ET.SubElement(target_component, 'ServiceInstall', {
             'Id': 'ServiceInstaller', 'Type': 'ownProcess', 'Name': 'FortunaBackendService',

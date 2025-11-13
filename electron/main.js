@@ -124,10 +124,6 @@ class FortunaDesktopApp {
     }
 
     const indexPath = path.join(app.getAppPath(), 'web-ui-build', 'out', 'index.html');
-    if (!fs.existsSync(indexPath)) {
-      // Fallback for debugging if path is wrong
-      return `file://${path.join(__dirname, '..', 'web_platform', 'frontend', 'out', 'index.html')}`;
-    }
     return `file://${indexPath}`;
   }
 
