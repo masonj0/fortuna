@@ -2,6 +2,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { RaceFilters } from './RaceFilters';
 import { RaceCard } from './RaceCard';
 import { RaceCardSkeleton } from './RaceCardSkeleton';
@@ -12,9 +13,6 @@ import { StatusDetailModal } from './StatusDetailModal';
 import ManualOverridePanel from './ManualOverridePanel';
 import { LiveModeToggle } from './LiveModeToggle';
 import { AdapterStatusPanel } from './AdapterStatusPanel';
-
-// Type for the API connection status
-type ConnectionStatus = 'connecting' | 'online' | 'offline';
 
 // Type for the backend process status received from Electron main
 type BackendState = 'starting' | 'running' | 'error' | 'stopped';
@@ -28,6 +26,21 @@ interface RaceFilterParams {
   minFavoriteOdds: number;
   minSecondFavoriteOdds: number;
 }
+
+const fetchAdapterStatuses = async (apiKey: string | null): Promise<SourceInfo[]> => {
+  if (!apiKey) {
+    throw new Error('API key not configured or retrieved.');
+  }
+  const response = await fetch('/api/adapters/status', {
+    headers: { 'X-API-Key': apiKey, 'Content-Type': 'application/json' },
+  });
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || `API request failed with status ${response.status}`);
+  }
+  return response.json();
+};
+
 
 const BackendErrorPanel = ({ logs, onRestart }: { logs: string[]; onRestart: () => void }) => (
   <div className="bg-slate-800 p-6 rounded-lg border border-red-500/50 text-white">
@@ -75,11 +88,9 @@ const RaceGrid = ({ races }: { races: Race[] }) => (
 
 export const LiveRaceDashboard = React.memo(() => {
   const [races, setRaces] = useState<Race[]>([]);
-  const [adapterStatuses, setAdapterStatuses] = useState<SourceInfo[]>([]);
   const [failedSources, setFailedSources] = useState<SourceInfo[]>([]);
 
   // Separate status for backend process and API connection
-  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting');
   const [backendStatus, setBackendStatus] = useState<BackendStatus>({ state: 'starting', logs: [] });
   const [isLiveMode, setIsLiveMode] = useState(false);
   const [apiKey, setApiKey] = useState<string | null>(null);
@@ -101,6 +112,19 @@ export const LiveRaceDashboard = React.memo(() => {
     fetchApiKey();
   }, []);
 
+  const {
+    data: adapterStatuses,
+    status: connectionStatus,
+    error: errorDetails,
+    refetch,
+  } = useQuery({
+    queryKey: ['adapterStatuses', apiKey],
+    queryFn: () => fetchAdapterStatuses(apiKey),
+    enabled: backendStatus.state === 'running' && !!apiKey,
+    refetchInterval: isLiveMode ? false : 30000,
+    refetchOnWindowFocus: false,
+  });
+
   const { data: liveData, isConnected: isLiveConnected } = useWebSocket<{ races: Race[], source_info: SourceInfo[] }>(
     isLiveMode && apiKey ? '/ws/live-updates' : '',
     { apiKey }
@@ -113,11 +137,9 @@ export const LiveRaceDashboard = React.memo(() => {
       setRaces(liveData.races || []);
       setFailedSources(liveData.source_info?.filter((s: SourceInfo) => s.status === 'FAILED' && s.attemptedUrl) || []);
       setLastUpdate(new Date());
-      setConnectionStatus('online');
     }
   }, [liveData, isLiveMode]);
 
-  const [errorDetails, setErrorDetails] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [params, setParams] = useState<RaceFilterParams>({
     maxFieldSize: 10,
@@ -125,66 +147,6 @@ export const LiveRaceDashboard = React.memo(() => {
     minSecondFavoriteOdds: 4.0,
   });
   const [isModalOpen, setIsModalOpen] = useState(false);
-
-  const fetchAdapterStatuses = useCallback(async () => {
-    if (backendStatus.state !== 'running') return;
-
-    setConnectionStatus('connecting');
-    setErrorDetails(null);
-
-    try {
-      const apiKey = window.electronAPI ? await window.electronAPI.getApiKey() : process.env.NEXT_PUBLIC_API_KEY;
-      if (!apiKey) throw new Error('API key not configured or retrieved.');
-
-      const response = await fetch('/api/adapters/status', {
-        headers: { 'X-API-Key': apiKey, 'Content-Type': 'application/json' },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `API request failed with status ${response.status}`);
-      }
-
-      const data = await response.json();
-      setAdapterStatuses(data || []);
-      setConnectionStatus('online');
-    } catch (err: any) {
-      setErrorDetails(err.message || 'An unknown API error occurred.');
-      setConnectionStatus('offline');
-      console.error('Failed to fetch adapter statuses:', err);
-    }
-  }, [backendStatus.state]);
-
-  const fetchRacesBySource = useCallback(async (sourceName: string) => {
-    if (backendStatus.state !== 'running') return;
-
-    // We can reuse the connecting status and error details for this fetch
-    setConnectionStatus('connecting');
-    setErrorDetails(null);
-
-    try {
-      const apiKey = window.electronAPI ? await window.electronAPI.getApiKey() : process.env.NEXT_PUBLIC_API_KEY;
-      if (!apiKey) throw new Error('API key not configured or retrieved.');
-
-      const response = await fetch(`/api/races/source/${sourceName}`, {
-        headers: { 'X-API-Key': apiKey, 'Content-Type': 'application/json' },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `API request failed with status ${response.status}`);
-      }
-
-      const data = await response.json();
-      // For now, we'll just log the result. In the future, this would populate a race list.
-      console.log(`Races for ${sourceName}:`, data.races);
-      setConnectionStatus('online');
-    } catch (err: any) {
-      setErrorDetails(err.message || `An unknown error occurred while fetching data for ${sourceName}.`);
-      setConnectionStatus('offline');
-      console.error(`Failed to fetch races for ${sourceName}:`, err);
-    }
-  }, [backendStatus.state]);
 
   // Effect for setting up Electron IPC listener and fetching initial status
   useEffect(() => {
@@ -201,11 +163,6 @@ export const LiveRaceDashboard = React.memo(() => {
           console.log('[LiveRaceDashboard] Received initial status:', initialStatus);
           if (isMounted) {
             setBackendStatus(initialStatus);
-            // If the backend is already running, fetch adapter statuses immediately.
-            if (initialStatus.state === 'running') {
-              console.log('[LiveRaceDashboard] Initial state is "running", fetching adapter statuses.');
-              fetchAdapterStatuses();
-            }
           }
         } catch (error) {
           console.error("[LiveRaceDashboard] Failed to get initial backend status:", error);
@@ -239,25 +196,8 @@ export const LiveRaceDashboard = React.memo(() => {
           unsubscribe();
         }
       };
-    } else {
-        // If there's no electron API, maybe we are in a web-only environment.
-        // Let's assume the backend is running and try to fetch.
-        fetchAdapterStatuses();
     }
-  }, [fetchAdapterStatuses]); // Removed isInitialLoad, as this effect should manage its own logic.
-
-  // Effect for periodic data refresh
-  useEffect(() => {
-    if (isLiveMode) {
-      return; // Don't poll when in live mode
-    }
-    const interval = setInterval(() => {
-      if (backendStatus.state === 'running' && connectionStatus === 'online') {
-        fetchAdapterStatuses();
-      }
-    }, 30000); // 30-second refresh
-    return () => clearInterval(interval);
-  }, [backendStatus.state, connectionStatus, fetchAdapterStatuses, isLiveMode]);
+  }, []);
 
 
   const handleParamsChange = useCallback((newParams: RaceFilterParams) => {
@@ -271,7 +211,7 @@ export const LiveRaceDashboard = React.memo(() => {
     }
 
     // Priority 2: Backend is starting or initial fetch is happening.
-    const isLoading = backendStatus.state === 'starting' || (connectionStatus === 'connecting' && races.length === 0);
+    const isLoading = backendStatus.state === 'starting' || (connectionStatus === 'pending' && !adapterStatuses);
     if (isLoading) {
         return (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -281,16 +221,16 @@ export const LiveRaceDashboard = React.memo(() => {
     }
 
     // Priority 3: API connection is offline.
-    if (connectionStatus === 'offline') {
+    if (connectionStatus === 'error') {
       return <EmptyState
           title="API Connection Offline"
-          message={errorDetails || "The backend is running, but the dashboard could not connect to its API."}
-          actionButton={<button onClick={fetchRacesBySource} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Retry Connection</button>}
+          message={(errorDetails as Error)?.message || "The backend is running, but the dashboard could not connect to its API."}
+          actionButton={<button onClick={() => refetch()} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Retry Connection</button>}
       />;
     }
 
     // Priority 4: No races found after a successful fetch.
-    if (races.length === 0) {
+    if (!races || races.length === 0) {
       return <EmptyState
           title="No Races Found"
           message="No races matched the specified criteria for the selected date. Please try different filters."
@@ -314,8 +254,8 @@ export const LiveRaceDashboard = React.memo(() => {
         : { color: 'bg-yellow-500', text: 'Live Connecting...' };
     }
     switch (connectionStatus) {
-      case 'online': return { color: 'bg-green-500', text: 'Online' };
-      case 'offline': return { color: 'bg-orange-500', text: 'API Offline' };
+      case 'success': return { color: 'bg-green-500', text: 'Online' };
+      case 'error': return { color: 'bg-orange-500', text: 'API Offline' };
       default: return { color: 'bg-yellow-500', text: 'Connecting...' };
     }
   };
@@ -334,20 +274,20 @@ export const LiveRaceDashboard = React.memo(() => {
             </div>
             <div className="flex items-center gap-4">
                 <button
-                    onClick={() => (connectionStatus === 'offline' || backendStatus.state === 'error') && setIsModalOpen(true)}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium text-white ${statusColor} ${(connectionStatus === 'offline' || backendStatus.state === 'error') ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
+                    onClick={() => (connectionStatus === 'error' || backendStatus.state === 'error') && setIsModalOpen(true)}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium text-white ${statusColor} ${(connectionStatus === 'error' || backendStatus.state === 'error') ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
                 >
-                    <span className={`w-2.5 h-2.5 rounded-full bg-white ${connectionStatus === 'online' ? 'animate-pulse' : ''}`}></span>
+                    <span className={`w-2.5 h-2.5 rounded-full bg-white ${connectionStatus === 'success' ? 'animate-pulse' : ''}`}></span>
                     {statusText}
                 </button>
                 <LiveModeToggle
                   isLive={isLiveMode}
                   onToggle={setIsLiveMode}
-                  isDisabled={backendStatus.state !== 'running' || connectionStatus === 'offline'}
+                  isDisabled={backendStatus.state !== 'running' || connectionStatus === 'error'}
                 />
                 <button
-                    onClick={fetchAdapterStatuses}
-                    disabled={isLiveMode || connectionStatus === 'connecting' || backendStatus.state !== 'running'}
+                    onClick={() => refetch()}
+                    disabled={isLiveMode || connectionStatus === 'pending' || backendStatus.state !== 'running'}
                     className="px-4 py-2 bg-slate-700 text-white rounded hover:bg-slate-600 disabled:bg-slate-800 disabled:text-slate-500"
                 >
                     Refresh
@@ -355,7 +295,7 @@ export const LiveRaceDashboard = React.memo(() => {
             </div>
         </div>
 
-        <RaceFilters onParamsChange={handleParamsChange} isLoading={connectionStatus === 'connecting'} />
+        <RaceFilters onParamsChange={handleParamsChange} isLoading={connectionStatus === 'pending'} />
 
         {failedSources.map(source => (
           <ManualOverridePanel
@@ -371,7 +311,7 @@ export const LiveRaceDashboard = React.memo(() => {
       <StatusDetailModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        status={{ title: 'Connection Error', details: errorDetails || 'No specific error message was provided.' }}
+        status={{ title: 'Connection Error', details: (errorDetails as Error)?.message || 'No specific error message was provided.' }}
       />
     </>
   );

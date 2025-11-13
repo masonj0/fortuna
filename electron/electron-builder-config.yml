@@ -18,6 +18,9 @@ win:
 msi:
   oneClick: false
   perMachine: true
+  runAfterFinish: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: "Fortuna Faucet"
+  startMenu:
+    folder: "Fortuna Faucet"
