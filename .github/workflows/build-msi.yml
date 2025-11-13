@@ -266,5 +266,5 @@ jobs:
         uses: actions/upload-artifact@v4.3.4
         with:
           name: fortuna-wix-installer-windows
-          path: dist/Fortuna-Backend-Service.msi
+          path: dist/Fortuna-Full-App-Service.msi
           retention-days: 7
