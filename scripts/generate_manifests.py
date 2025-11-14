@@ -9,68 +9,68 @@ OUTPUT_DIR = Path(".")
 NUM_MANIFESTS = 5 # We will create 5 balanced manifests
 
 EXCLUDE_DIRS = {
-    ".git",
-    ".idea",
-    ".vscode",
-    "node_modules",
-    ".next",
-    ".venv",
-    "dist",
-    "build",
-    "__pycache__",
-    "attic",
-    "installer",
-    "ReviewableJSON",
-    "PREV_src",
-    ".pytest_cache",
+ ".git",
+ ".idea",
+ ".vscode",
+ "node_modules",
+ ".next",
+ ".venv",
+ "dist",
+ "build",
+ "__pycache__",
+ "attic",
+ "installer",
+ "ReviewableJSON",
+ "PREV_src",
+ ".pytest_cache",
 }
 
 EXCLUDE_FILES = {
-    # Exclude the manifests and archives themselves
-    "MANIFEST_PART1.json",
-    "MANIFEST_PART2.json",
-    "MANIFEST_PART3.json",
-    "MANIFEST_PART4.json",
-    "MANIFEST_PART5.json",
-    "FORTUNA_ALL_PART1.JSON",
-    "FORTUNA_ALL_PART2.JSON",
-    "FORTUNA_ALL_PART3.JSON",
-    "FORTUNA_ALL_PART4.JSON",
-    "FORTUNA_ALL_PART5.JSON",
-    # Exclude self and other key scripts from being archived
-    "generate_manifests.py",
-    "ARCHIVE_PROJECT.py",
-    # Exclude environment files and build specs
-    ".env",
-    ".env.local.example",
-    "env",
-    "api.spec",
-    "fortuna-api.spec",
+ # Exclude the manifests and archives themselves
+ "MANIFEST_PART1.json",
+ "MANIFEST_PART2.json",
+ "MANIFEST_PART3.json",
+ "MANIFEST_PART4.json",
+ "MANIFEST_PART5.json",
+ "FORTUNA_ALL_PART1.JSON",
+ "FORTUNA_ALL_PART2.JSON",
+ "FORTUNA_ALL_PART3.JSON",
+ "FORTUNA_ALL_PART4.JSON",
+ "FORTUNA_ALL_PART5.JSON",
+ # Exclude self and other key scripts from being archived
+ "generate_manifests.py",
+ "ARCHIVE_PROJECT.py",
+ # Exclude environment files and build specs
+ ".env",
+ ".env.local.example",
+ "env",
+ "api.spec",
+ "fortuna-api.spec",
 }
 
 
 def get_all_project_files():
-    """Walk the directory to find all files, respecting exclusions."""
-    all_files_with_size = []
-    for root, dirs, files in os.walk(ROOT_DIR, topdown=True):
-        # Prevent walking into excluded directories
-        dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS and not d.startswith("PREV_")]
+ """Walk the directory to find all files, respecting exclusions."""
+ all_files_with_size = []
+ for root, dirs, files in os.walk(ROOT_DIR, topdown=True):
+ # Prevent walking into excluded directories
+ dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS and not d.startswith("PREV_")]
 
         for name in files:
             if name in EXCLUDE_FILES or name.endswith(".bmp"):
                 continue
 
-            file_path = Path(root) / name
-            try:
-                # Use forward slashes for cross-platform compatibility
-                posix_path = str(file_path.as_posix())
-                size = os.path.getsize(file_path)
-                all_files_with_size.append((posix_path, size))
-            except FileNotFoundError:
-                print(f"[WARNING] File not found while scanning: {file_path}")
-                continue
+ file_path = Path(root) / name
+ try:
+ # Use forward slashes for cross-platform compatibility
+ posix_path = str(file_path.as_posix())
+ size = os.path.getsize(file_path)
+ all_files_with_size.append((posix_path, size))
+ except FileNotFoundError:
+ print(f"[WARNING] File not found while scanning: {file_path}")
+ continue
 
-    return all_files_with_size
+ return all_files_with_size
 
 
 def balance_files_by_size(files_with_size, num_bins):
@@ -105,12 +105,12 @@ def balance_files_by_size(files_with_size, num_bins):
 
 
 def main():
-    """Generate balanced manifest files based on file size."""
-    print("--- Starting Manifest Generation (Size-Balanced) ---")
-    all_files = get_all_project_files()
-    print(f"Found {len(all_files)} total project files to consider.")
+ """Generate balanced manifest files based on file size."""
+ print("--- Starting Manifest Generation (Size-Balanced) ---")
+ all_files = get_all_project_files()
+ print(f"Found {len(all_files)} total project files to consider.")
 
-    balanced_manifests = balance_files_by_size(all_files, NUM_MANIFESTS)
+ balanced_manifests = balance_files_by_size(all_files, NUM_MANIFESTS)
 
     # Write the updated manifest files
     for i, file_list in enumerate(balanced_manifests):
@@ -125,4 +125,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+ main()
