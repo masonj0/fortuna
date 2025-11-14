@@ -1,232 +1,232 @@
 name: Build Fortuna Faucet MSI Installer - 🏆 PRODUCTION FORTRESS
 
 on:
- push:
- branches: [main]
- tags:
- - 'v*'
- pull_request:
- branches: [main]
- workflow_dispatch:
+  push:
+    branches: [main]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
 
 env:
- NODE_VERSION: '20'
- PYTHON_VERSION: '3.12'
+  NODE_VERSION: '20'
+  PYTHON_VERSION: '3.12'
 
 jobs:
- build-frontend:
- name: '📦 Build Frontend'
- timeout-minutes: 15
- runs-on: windows-latest
- steps:
- - name: Checkout Repository
- uses: actions/checkout@v4.1.7
- - name: Setup Node.js
- uses: actions/setup-node@v4.0.3
- with:
- node-version: ${{ env.NODE_VERSION }}
- cache: 'npm'
- cache-dependency-path: 'web_platform/frontend/package-lock.json'
- - name: Frontend - Install & Build
- shell: pwsh
- run: |
- cd web_platform/frontend
- npm ci
- npm audit --audit-level=moderate # Added security check
- npm run build
- - name: Upload Frontend Artifact
- uses: actions/upload-artifact@v4.3.4
- with:
- name: frontend-build-output-${{ github.sha }}
- path: web_platform/frontend/out
- retention-days: 1
+  build-frontend:
+    name: '📦 Build Frontend'
+    timeout-minutes: 15
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4.1.7
+      - name: Setup Node.js
+        uses: actions/setup-node@v4.0.3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'web_platform/frontend/package-lock.json'
+      - name: Frontend - Install & Build
+        shell: pwsh
+        run: |
+          cd web_platform/frontend
+          npm ci
+          npm audit --audit-level=moderate # Added security check
+          npm run build
+      - name: Upload Frontend Artifact
+        uses: actions/upload-artifact@v4.3.4
+        with:
+          name: frontend-build-output-${{ github.sha }}
+          path: web_platform/frontend/out
+          retention-days: 1
 
- build-backend:
- name: '🐍 Build Backend'
- timeout-minutes: 20
- runs-on: windows-latest
- env:
- PYTHONUTF8: "1"
- steps:
- - name: Checkout Repository
- uses: actions/checkout@v4.1.7
- - name: Setup Python
- uses: actions/setup-python@v5.1.1
- with:
- python-version: ${{ env.PYTHON_VERSION }}
- cache: 'pip'
- cache-dependency-path: 'python_service/requirements.txt'
- - name: '✅ [MONITOR] Ensure Required Directories Exist'
- shell: pwsh
- run: |
- New-Item -ItemType Directory -Path "python_service/adapters" -Force | Out-Null
- New-Item -ItemType Directory -Path "python_service/data" -Force | Out-Null
- New-Item -ItemType Directory -Path "python_service/json" -Force | Out-Null
- Write-Host "✅ Ensured required data, json, and adapters directories exist."
- - name: '✅ [MONITOR] Verify Critical Files'
- shell: pwsh
- run: |
- if (-not (Test-Path "python_service/main.py")) { throw "❌ FATAL: python_service/main.py not found" }
- if (-not (Test-Path "fortuna-backend.spec.template")) { throw "❌ FATAL: fortuna-backend.spec.template not found" }
- Write-Host "✅ Critical files main.py and spec template are present."
- - name: Backend - Install Dependencies
- shell: pwsh
- run: |
- python -m pip install --upgrade pip
- pip install -r python_service/requirements-dev.txt
- - name: Backend - Security Audit
- shell: pwsh
- run: |
- pip-audit -r python_service/requirements.txt --local
- - name: Backend - Prepare Spec File
- shell: pwsh
- run: |
- Move-Item -Path "fortuna-backend.spec.template" -Destination "fortuna-backend.spec" -Force
- - name: Backend - Build with PyInstaller
- shell: pwsh
- run: |
- pyinstaller fortuna-backend.spec --noconfirm
- - name: Upload Backend Artifact
- uses: actions/upload-artifact@v4.3.4
- with:
- name: backend-executable-${{ github.sha }}
- path: dist/fortuna-backend.exe
- retention-days: 1
- if-no-files-found: error
+  build-backend:
+    name: '🐍 Build Backend'
+    timeout-minutes: 20
+    runs-on: windows-latest
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4.1.7
+      - name: Setup Python
+        uses: actions/setup-python@v5.1.1
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: 'python_service/requirements.txt'
+      - name: '✅ [MONITOR] Ensure Required Directories Exist'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path "python_service/adapters" -Force | Out-Null
+          New-Item -ItemType Directory -Path "python_service/data" -Force | Out-Null
+          New-Item -ItemType Directory -Path "python_service/json" -Force | Out-Null
+          Write-Host "✅ Ensured required data, json, and adapters directories exist."
+      - name: '✅ [MONITOR] Verify Critical Files'
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "python_service/main.py")) { throw "❌ FATAL: python_service/main.py not found" }
+          if (-not (Test-Path "fortuna-backend.spec.template")) { throw "❌ FATAL: fortuna-backend.spec.template not found" }
+          Write-Host "✅ Critical files main.py and spec template are present."
+      - name: Backend - Install Dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r python_service/requirements-dev.txt
+      - name: Backend - Security Audit
+        shell: pwsh
+        run: |
+          pip-audit -r python_service/requirements.txt --local
+      - name: Backend - Prepare Spec File
+        shell: pwsh
+        run: |
+          Move-Item -Path "fortuna-backend.spec.template" -Destination "fortuna-backend.spec" -Force
+      - name: Backend - Build with PyInstaller
+        shell: pwsh
+        run: |
+          pyinstaller fortuna-backend.spec --noconfirm
+      - name: Upload Backend Artifact
+        uses: actions/upload-artifact@v4.3.4
+        with:
+          name: backend-executable-${{ github.sha }}
+          path: dist/fortuna-backend.exe
+          retention-days: 1
+          if-no-files-found: error
 
- smoke-test-backend:
- name: '🧪 Smoke Test Backend Executable'
- timeout-minutes: 10
- needs: [build-backend]
- runs-on: windows-latest
- steps:
- - name: Download Backend Executable
- uses: actions/download-artifact@v4.1.8
- with:
- name: backend-executable-${{ github.sha }}
- - name: Run Smoke Test
- shell: pwsh
- env:
- API_KEY: "a_secure_test_api_key_that_is_long_enough_for_smoke_test"
- run: |
- $exe = "./fortuna-backend.exe"
- $logFileBase = "backend-log"
- $stdOutPath = "$logFileBase-out.txt"
- $stdErrPath = "$logFileBase-err.txt"
- $process = Start-Process -FilePath $exe -PassThru -NoNewWindow -RedirectStandardOutput $stdOutPath -RedirectStandardError $stdErrPath
- $serverReady = $false
- Write-Host "--- Starting Smoke Test: Polling /health and /api/races endpoints for 60s ---"
- try {
- foreach ($i in 1..30) {
- if ($process.HasExited) {
- throw "[FATAL] Backend process crashed during smoke test. Exit Code: $($process.ExitCode)"
- }
- try {
- $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/health" -TimeoutSec 1 -UseBasicParsing
- if ($response.StatusCode -eq 200) {
- $headers = @{ "X-API-Key" = $env:API_KEY }
- $apiResponse = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/races" -Headers $headers -TimeoutSec 1 -UseBasicParsing -ErrorAction SilentlyContinue
- if ($apiResponse.StatusCode -eq 200) {
- Write-Host "[OK] Health check and API test passed on attempt $i!"
- $serverReady = $true
- break
- }
- }
- } catch {
- Write-Host "Attempt $i... server not ready."
- }
- Start-Sleep -Seconds 2
- }
- } finally {
- Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
- if (-not $serverReady) {
- Write-Host "--- ❌ TEST FAILED ---"
- if (Test-Path $stdOutPath) {
- Write-Host "--- STDOUT ---"
- Get-Content $stdOutPath | Write-Host
- }
- if (Test-Path $stdErrPath) {
- Write-Host "--- STDERR ---"
- Get-Content $stdErrPath | Write-Host
- }
- throw "[FATAL] Backend smoke test failed. Server never became healthy."
- }
- }
- Write-Host "✅ Backend smoke test passed."
+  smoke-test-backend:
+    name: '🧪 Smoke Test Backend Executable'
+    timeout-minutes: 10
+    needs: [build-backend]
+    runs-on: windows-latest
+    steps:
+      - name: Download Backend Executable
+        uses: actions/download-artifact@v4.1.8
+        with:
+          name: backend-executable-${{ github.sha }}
+      - name: Run Smoke Test
+        shell: pwsh
+        env:
+          API_KEY: "a_secure_test_api_key_that_is_long_enough_for_smoke_test"
+        run: |
+          $exe = "./fortuna-backend.exe"
+          $logFileBase = "backend-log"
+          $stdOutPath = "$logFileBase-out.txt"
+          $stdErrPath = "$logFileBase-err.txt"
+          $process = Start-Process -FilePath $exe -PassThru -NoNewWindow -RedirectStandardOutput $stdOutPath -RedirectStandardError $stdErrPath
+          $serverReady = $false
+          Write-Host "--- Starting Smoke Test: Polling /health and /api/races endpoints for 60s ---"
+          try {
+            foreach ($i in 1..30) {
+              if ($process.HasExited) {
+                throw "[FATAL] Backend process crashed during smoke test. Exit Code: $($process.ExitCode)"
+              }
+              try {
+                $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/health" -TimeoutSec 1 -UseBasicParsing
+                if ($response.StatusCode -eq 200) {
+                  $headers = @{ "X-API-Key" = $env:API_KEY }
+                  $apiResponse = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/races" -Headers $headers -TimeoutSec 1 -UseBasicParsing -ErrorAction SilentlyContinue
+                  if ($apiResponse.StatusCode -eq 200) {
+                    Write-Host "[OK] Health check and API test passed on attempt $i!"
+                    $serverReady = $true
+                    break
+                  }
+                }
+              } catch {
+                Write-Host "Attempt $i... server not ready."
+              }
+              Start-Sleep -Seconds 2
+            }
+          } finally {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            if (-not $serverReady) {
+              Write-Host "--- ❌ TEST FAILED ---"
+              if (Test-Path $stdOutPath) {
+                Write-Host "--- STDOUT ---"
+                Get-Content $stdOutPath | Write-Host
+              }
+              if (Test-Path $stdErrPath) {
+                Write-Host "--- STDERR ---"
+                Get-Content $stdErrPath | Write-Host
+              }
+              throw "[FATAL] Backend smoke test failed. Server never became healthy."
+            }
+          }
+          Write-Host "✅ Backend smoke test passed."
 
- package-and-test:
- name: '🏆 Package & Test Electron Installer'
- timeout-minutes: 25
- needs: [build-frontend, smoke-test-backend]
- runs-on: windows-latest
- steps:
- - name: Checkout Repository
- uses: actions/checkout@v4.1.7
- - name: Setup Node.js for Electron
- uses: actions/setup-node@v4.0.3
- with:
- node-version: ${{ env.NODE_VERSION }}
- cache: 'npm'
- cache-dependency-path: 'electron/package-lock.json'
- - name: Download All Build Artifacts
- uses: actions/download-artifact@v4.1.8
- with:
- path: ./temp-artifacts
- - name: Stage Artifacts for Packaging
- shell: pwsh
- run: |
- New-Item -ItemType Directory -Path "./electron/web-ui-build" -Force | Out-Null
- New-Item -ItemType Directory -Path "./electron/resources" -Force | Out-Null
- Move-Item -Path "./temp-artifacts/frontend-build-output-${{ github.sha }}/*" -Destination "./electron/web-ui-build/out" -Force
- Move-Item -Path "./temp-artifacts/backend-executable-${{ github.sha }}/fortuna-backend.exe" -Destination "./electron/resources/fortuna-backend.exe" -Force
- - name: Critical Integration Test
- shell: pwsh
- env:
- API_KEY: "a_secure_test_api_key_that_is_long_enough"
- run: |
- $exe = "./electron/resources/fortuna-backend.exe"
- # ... existing integration test ...
- - name: Electron - Install & Package MSI
- working-directory: electron
- shell: pwsh
- run: |
- npm ci
- npx electron-builder --config electron-builder-config.yml --publish never
- - name: Code Sign MSI
- if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
- shell: pwsh
- run: |
- # ... code signing script ...
- - name: Upload Final MSI Artifact
- uses: actions/upload-artifact@v4.3.4
- with:
- name: fortuna-installer-windows-${{ github.sha }}
- path: electron/dist/*.msi
- retention-days: 7
- - name: Create GitHub Release
- if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
- id: create_release
- uses: actions/create-release@v1
- env:
- GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
- with:
- tag_name: ${{ github.ref }}
- release_name: Release ${{ github.ref }}
- body: |
- MSI Installer for Fortuna Faucet.
- Built from commit ${{ github.sha }}.
- draft: false
- prerelease: false
- - name: Upload Release Asset
- if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
- uses: actions/upload-release-asset@v1
- env:
- GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
- with:
- upload_url: ${{ steps.create_release.outputs.upload_url }}
- asset_path: electron/dist/*.msi
- asset_name: fortuna-faucet-${{ github.ref_name }}.msi
- asset_content_type: application/octet-stream
+  package-and-test:
+    name: '🏆 Package & Test Electron Installer'
+    timeout-minutes: 25
+    needs: [build-frontend, smoke-test-backend]
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4.1.7
+      - name: Setup Node.js for Electron
+        uses: actions/setup-node@v4.0.3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'electron/package-lock.json'
+      - name: Download All Build Artifacts
+        uses: actions/download-artifact@v4.1.8
+        with:
+          path: ./temp-artifacts
+      - name: Stage Artifacts for Packaging
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path "./electron/web-ui-build" -Force | Out-Null
+          New-Item -ItemType Directory -Path "./electron/resources" -Force | Out-Null
+          Move-Item -Path "./temp-artifacts/frontend-build-output-${{ github.sha }}/*" -Destination "./electron/web-ui-build/out" -Force
+          Move-Item -Path "./temp-artifacts/backend-executable-${{ github.sha }}/fortuna-backend.exe" -Destination "./electron/resources/fortuna-backend.exe" -Force
+      - name: Critical Integration Test
+        shell: pwsh
+        env:
+          API_KEY: "a_secure_test_api_key_that_is_long_enough"
+        run: |
+          $exe = "./electron/resources/fortuna-backend.exe"
+          # ... existing integration test ...
+      - name: Electron - Install & Package MSI
+        working-directory: electron
+        shell: pwsh
+        run: |
+          npm ci
+          npx electron-builder --config electron-builder-config.yml --publish never
+      - name: Code Sign MSI
+        if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: |
+          # ... code signing script ...
+      - name: Upload Final MSI Artifact
+        uses: actions/upload-artifact@v4.3.4
+        with:
+          name: fortuna-installer-windows-${{ github.sha }}
+          path: electron/dist/*.msi
+          retention-days: 7
+      - name: Create GitHub Release
+        if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          body: |
+            MSI Installer for Fortuna Faucet.
+            Built from commit ${{ github.sha }}.
+          draft: false
+          prerelease: false
+      - name: Upload Release Asset
+        if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: electron/dist/*.msi
+          asset_name: fortuna-faucet-${{ github.ref_name }}.msi
+          asset_content_type: application/octet-stream
 
   build-wix-installer:
     name: '🔥 Build WiX Installer (Alternative)'
@@ -256,7 +256,7 @@ jobs:
         shell: pwsh
         run: |
           choco install wixtoolset -y --no-progress
-          $wixPath = "C:\\Program Files (x86)\\WiX ToolSet v3.14\\bin"
+          $wixPath = "C:\Program Files (x86)\WiX ToolSet v3.14\bin"
           echo "PATH=$wixPath;${env:PATH}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Build Backend Service MSI with WiX
         shell: pwsh
@@ -267,4 +267,4 @@ jobs:
         with:
           name: fortuna-wix-installer-windows
           path: dist/Fortuna-Full-App-Service.msi
-          retention-days: 7
+          retention-days: 7name
