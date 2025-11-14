@@ -1,5 +1,6 @@
 // electron/main.js - CORRECTED VERSION
-const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, dialog } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -165,6 +166,23 @@ class FortunaDesktopApp {
  this.createMainWindow();
  this.createSystemTray();
  this.startBackend();
+
+ // Check for updates
+ autoUpdater.checkForUpdatesAndNotify();
+
+ autoUpdater.on('update-downloaded', (info) => {
+ const dialogOpts = {
+ type: 'info',
+ buttons: ['Restart', 'Later'],
+ title: 'Application Update',
+ message: process.platform === 'win32' ? info.releaseName : info.releaseName,
+ detail: 'A new version has been downloaded. Restart the application to apply the updates.'
+ };
+
+ dialog.showMessageBox(dialogOpts).then((returnValue) => {
+ if (returnValue.response === 0) autoUpdater.quitAndInstall();
+ });
+ });
 
  ipcMain.on('restart-backend', () => this.startBackend());
  ipcMain.handle('get-backend-status', async () => ({

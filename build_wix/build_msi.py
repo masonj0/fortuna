@@ -68,6 +68,7 @@ def main():
     # We now pass the SourceDir variable pointing to the root of our staged files
     candle_cmd = [
         'candle',
+        '-ext', 'WixUtilExtension',
         f'-dSourceDir={WIX_STAGING_DIR}',
         str(PROJECT_ROOT / 'build_wix' / 'Product.wxs'),
         str(files_wxs),
