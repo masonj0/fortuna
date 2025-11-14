@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
+     xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
 
     <Product Id="*" Name="Fortuna Full App Service" Language="1033" Version="1.0.0.0"
              Manufacturer="Fortuna Project" UpgradeCode="{da2c1b11-23f3-4787-a655-8094e97aa905}">
@@ -7,6 +8,10 @@
         <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
         <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
         <MediaTemplate EmbedCab="yes" />
+
+        <!-- Add UI and required license variable -->
+        <UIRef Id="WixUI_Minimal" />
+        <WixVariable Id="WixUILicenseRtf" Value="electron/assets/license.rtf" />
 
         <Feature Id="ProductFeature" Title="Fortuna Full App Service" Level="1">
             <!-- Explicitly define our components instead of using a generated group -->
@@ -23,7 +28,7 @@
                         <File Id="file_fortuna_backend_exe" KeyPath="yes" Source="$(var.SourceDir)\fortuna-backend.exe" />
 
                         <!-- FIX: Install the EXE as a Windows Service -->
-                        <ServiceInstall
+                        <util:ServiceInstall
                             Id="ServiceInstaller"
                             Name="FortunaBackendService"
                             DisplayName="Fortuna Faucet Backend Service"
@@ -35,7 +40,7 @@
                         />
 
                         <!-- FIX: Start and Stop the service during install/uninstall -->
-                        <ServiceControl
+                        <util:ServiceControl
                             Id="ServiceStarter"
                             Start="install"
                             Stop="both"
