@@ -56,9 +56,9 @@ def get_all_project_files():
  # Prevent walking into excluded directories
  dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS and not d.startswith("PREV_")]
 
- for name in files:
- if name in EXCLUDE_FILES or name.endswith(".bmp"):
- continue
+        for name in files:
+            if name in EXCLUDE_FILES or name.endswith(".bmp"):
+                continue
 
  file_path = Path(root) / name
  try:
@@ -74,34 +74,34 @@ def get_all_project_files():
 
 
 def balance_files_by_size(files_with_size, num_bins):
- """
- Distributes files into a specified number of bins, balancing the total size.
- Uses a greedy algorithm for efficiency.
- """
- # Sort files by size in descending order to handle largest files first
- files_with_size.sort(key=lambda x: x[1], reverse=True)
+    """
+    Distributes files into a specified number of bins, balancing the total size.
+    Uses a greedy algorithm for efficiency.
+    """
+    # Sort files by size in descending order to handle largest files first
+    files_with_size.sort(key=lambda x: x[1], reverse=True)
 
- bins = [[] for _ in range(num_bins)]
- bin_sizes = [0] * num_bins
+    bins = [[] for _ in range(num_bins)]
+    bin_sizes = [0] * num_bins
 
- for path, size in files_with_size:
- # Find the bin with the smallest current total size
- min_bin_index = bin_sizes.index(min(bin_sizes))
- # Add the file to that bin
- bins[min_bin_index].append(path)
- # Update the bin's total size
- bin_sizes[min_bin_index] += size
+    for path, size in files_with_size:
+        # Find the bin with the smallest current total size
+        min_bin_index = bin_sizes.index(min(bin_sizes))
+        # Add the file to that bin
+        bins[min_bin_index].append(path)
+        # Update the bin's total size
+        bin_sizes[min_bin_index] += size
 
- # Print the balancing results for verification
- print("--- Manifest Balancing Results ---")
- for i, (file_list, total_size) in enumerate(zip(bins, bin_sizes)):
- print(
- f" Manifest {i+1}: {len(file_list):>4} files, "
- f"Total size: {total_size / 1024 / 1024:>6.2f} MB"
- )
- print("---------------------------------")
+    # Print the balancing results for verification
+    print("--- Manifest Balancing Results ---")
+    for i, (file_list, total_size) in enumerate(zip(bins, bin_sizes)):
+        print(
+            f" Manifest {i+1}: {len(file_list):>4} files, "
+            f"Total size: {total_size / 1024 / 1024:>6.2f} MB"
+        )
+    print("---------------------------------")
 
- return bins
+    return bins
 
 
 def main():
@@ -112,16 +112,16 @@ def main():
 
  balanced_manifests = balance_files_by_size(all_files, NUM_MANIFESTS)
 
- # Write the updated manifest files
- for i, file_list in enumerate(balanced_manifests):
- manifest_name = f"MANIFEST_PART{i+1}.json"
- output_path = OUTPUT_DIR / manifest_name
- sorted_files = sorted(file_list) # Sort alphabetically for consistency
- with open(output_path, "w", encoding="utf-8") as f:
- json.dump(sorted_files, f, indent=4)
- print(f"✅ Wrote {len(sorted_files)} entries to {output_path}")
+    # Write the updated manifest files
+    for i, file_list in enumerate(balanced_manifests):
+        manifest_name = f"MANIFEST_PART{i+1}.json"
+        output_path = OUTPUT_DIR / manifest_name
+        sorted_files = sorted(file_list) # Sort alphabetically for consistency
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(sorted_files, f, indent=4)
+        print(f"✅ Wrote {len(sorted_files)} entries to {output_path}")
 
- print("\n[SUCCESS] All manifest files have been generated and balanced.")
+    print("\n[SUCCESS] All manifest files have been generated and balanced.")
 
 
 if __name__ == "__main__":
