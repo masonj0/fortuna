@@ -3,7 +3,6 @@ import os
 import sys
 import shutil
 import subprocess
-import xml.etree.ElementTree as ET
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -14,49 +13,15 @@ MSI_SOURCE_DIR = PROJECT_ROOT / 'build_wix' / 'msi_source'
 EXECUTABLE_NAME = 'fortuna-backend.exe'
 
 def run_command(cmd, cwd=None):
+    """Runs a command and exits if it fails."""
     print(f'▶ Running: {" ".join(cmd)}')
-    subprocess.run(cmd, cwd=cwd, check=True, text=True, encoding='utf-8', errors='ignore')
-
-def inject_service_logic(wxs_file, exe_name):
-    # (function remains the same as before)
-    print(f"--- Injecting service logic into {wxs_file} for {exe_name} ---")
     try:
-        ET.register_namespace('', "http://schemas.microsoft.com/wix/2006/wi")
-        tree = ET.parse(wxs_file)
-        root = tree.getroot()
-        ns = {'wix': 'http://schemas.microsoft.com/wix/2006/wi'}
-        target_component = None
-        # Robustly search for the component containing the executable
-        for component in root.findall('.//wix:Component', ns):
-            for file_element in component.findall('.//wix:File', ns):
-                source_path = file_element.get('Source', '')
-                if Path(source_path).name == exe_name:
-                    target_component = component
-                    break
-            if target_component:
-                break
-
-        if target_component is None:
-             sys.exit(f"✗ Could not find a Component containing a File for '{exe_name}'")
-        print(f"✓ Found target component: {target_component.attrib['Id']}")
-        si = ET.SubElement(target_component, 'ServiceInstall', {
-            'Id': 'ServiceInstaller', 'Type': 'ownProcess', 'Name': 'FortunaBackendService',
-            'DisplayName': 'Fortuna Backend Service',
-            'Description': 'Provides access to the Fortuna racing data engine.',
-            'Start': 'auto', 'Account': 'LocalSystem', 'ErrorControl': 'normal'
-        })
-        ET.SubElement(target_component, 'ServiceControl', {
-            'Id': 'StartService', 'Name': 'FortunaBackendService', 'Start': 'install', 'Wait': 'no'
-        })
-        ET.SubElement(target_component, 'ServiceControl', {
-            'Id': 'StopService', 'Name': 'FortunaBackendService', 'Stop': 'both', 'Remove': 'uninstall', 'Wait': 'yes'
-        })
-        tree.write(wxs_file, encoding='utf-8', xml_declaration=True)
-        print("✓ Service logic injected successfully.")
-    except Exception as e:
-        sys.exit(f"✗ Failed to inject service logic: {e}")
+        subprocess.run(cmd, cwd=cwd, check=True, text=True, encoding='utf-8', errors='ignore')
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        sys.exit(f'✗ Command failed: {e}')
 
 def main():
+    """Main build process for the WiX MSI installer."""
     print('=== Starting Fortuna WiX MSI Build ===')
 
     # Step 1: Verify assets
@@ -72,34 +37,35 @@ def main():
     print(f'--- Step 2: Staging all files in {WIX_STAGING_DIR} ---')
     if WIX_STAGING_DIR.exists():
         shutil.rmtree(WIX_STAGING_DIR)
-    WIX_STAGING_DIR.mkdir()
 
-    # Copy backend and frontend to staging
+    # Stage backend executable and the entire UI directory
+    ui_staging_dir = WIX_STAGING_DIR / 'ui'
+    shutil.copytree(FRONTEND_BUILD_DIR, ui_staging_dir)
     shutil.copy(exe_path, WIX_STAGING_DIR / EXECUTABLE_NAME)
-    shutil.copytree(FRONTEND_BUILD_DIR, WIX_STAGING_DIR / 'ui')
     print('✓ All assets copied to staging directory.')
 
-    # Step 3. Generate WiX file list from the staging directory
-    print("--- Step 3: Generating WiX file list with 'heat' ---")
+    # Step 3: Generate WiX file list ONLY for the frontend files
+    print("--- Step 3: Generating WiX file list for frontend with 'heat' ---")
     MSI_SOURCE_DIR.mkdir(exist_ok=True)
-    files_wxs = MSI_SOURCE_DIR / 'files.wxs'
+    files_wxs = MSI_SOURCE_DIR / 'frontend_files.wxs'
+
+    # The `heat` command now targets the UI subdirectory and the FrontendFiles ComponentGroup
     run_command([
-        'heat', 'dir', str(WIX_STAGING_DIR),
+        'heat', 'dir', str(ui_staging_dir),
         '-o', str(files_wxs),
         '-gg', '-sfrag', '-srd',
-        '-cg', 'MainFilesGroup',
-        '-dr', 'INSTALLFOLDER',
+        '-cg', 'FrontendFiles', # Target the correct ComponentGroup
+        '-dr', 'UIDirectory',    # Target the correct Directory Id from Product.wxs
         '-var', 'var.SourceDir'
     ])
-    print(f'✓ WiX file fragment created at {files_wxs}')
+    print(f'✓ WiX file fragment for frontend created at {files_wxs}')
 
-    # Step 4: Inject Service Logic
-    inject_service_logic(str(files_wxs), EXECUTABLE_NAME)
-
-    # Step 5: Compile WiX project
-    print("--- Step 5: Compiling WiX project with 'candle' ---")
+    # Step 4: Compile WiX project
+    print("--- Step 4: Compiling WiX project with 'candle' ---")
     obj_dir = MSI_SOURCE_DIR / 'obj'
     obj_dir.mkdir(exist_ok=True)
+
+    # We now pass the SourceDir variable pointing to the root of our staged files
     candle_cmd = [
         'candle',
         f'-dSourceDir={WIX_STAGING_DIR}',
@@ -110,8 +76,8 @@ def main():
     run_command(candle_cmd)
     print('✓ WiX compilation successful.')
 
-    # Step 6: Link WiX project into MSI
-    print("--- Step 6: Linking MSI with 'light' ---")
+    # Step 5: Link WiX project into MSI
+    print("--- Step 5: Linking MSI with 'light' ---")
     import glob
     obj_files = glob.glob(str(obj_dir / '*.wixobj'))
     if not obj_files:
@@ -119,6 +85,7 @@ def main():
 
     output_msi = DIST_DIR / 'Fortuna-Full-App-Service.msi'
 
+    # Light command remains the same
     light_cmd = [
         'light',
         '-ext', 'WixUtilExtension',
