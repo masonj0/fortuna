@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { RaceFilters } from './RaceFilters';
 import { RaceCard } from './RaceCard';
 import { RaceCardSkeleton } from './RaceCardSkeleton';
@@ -92,8 +92,8 @@ export const LiveRaceDashboard = React.memo(() => {
 
   // Separate status for backend process and API connection
   const [backendStatus, setBackendStatus] = useState<BackendStatus>({ state: 'starting', logs: [] });
-  const [isLiveMode, setIsLiveMode] = useState(false);
   const [apiKey, setApiKey] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   // Get API key on component mount
   useEffect(() => {
@@ -121,24 +121,24 @@ export const LiveRaceDashboard = React.memo(() => {
     queryKey: ['adapterStatuses', apiKey],
     queryFn: () => fetchAdapterStatuses(apiKey),
     enabled: backendStatus.state === 'running' && !!apiKey,
-    refetchInterval: isLiveMode ? false : 30000,
     refetchOnWindowFocus: false,
   });
 
   const { data: liveData, isConnected: isLiveConnected } = useWebSocket<{ races: Race[], source_info: SourceInfo[] }>(
-    isLiveMode && apiKey ? '/ws/live-updates' : '',
+    apiKey ? '/ws/live-updates' : '',
     { apiKey }
   );
 
   // Effect to update state when new live data arrives
   useEffect(() => {
-    if (isLiveMode && liveData) {
+    if (liveData) {
       console.log('Received live data update:', liveData);
+      queryClient.setQueryData(['adapterStatuses', apiKey], liveData.source_info);
       setRaces(liveData.races || []);
       setFailedSources(liveData.source_info?.filter((s: SourceInfo) => s.status === 'FAILED' && s.attemptedUrl) || []);
       setLastUpdate(new Date());
     }
-  }, [liveData, isLiveMode]);
+  }, [liveData, queryClient, apiKey]);
 
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [params, setParams] = useState<RaceFilterParams>({
@@ -248,16 +248,10 @@ export const LiveRaceDashboard = React.memo(() => {
     if (backendStatus.state === 'starting') {
       return { color: 'bg-yellow-500', text: 'Backend Starting...' };
     }
-    if (isLiveMode) {
-      return isLiveConnected
-        ? { color: 'bg-cyan-500', text: 'Live' }
-        : { color: 'bg-yellow-500', text: 'Live Connecting...' };
+    if (isLiveConnected) {
+      return { color: 'bg-cyan-500', text: 'Live' };
     }
-    switch (connectionStatus) {
-      case 'success': return { color: 'bg-green-500', text: 'Online' };
-      case 'error': return { color: 'bg-orange-500', text: 'API Offline' };
-      default: return { color: 'bg-yellow-500', text: 'Connecting...' };
-    }
+    return { color: 'bg-yellow-500', text: 'Connecting...' };
   };
 
   const { color: statusColor, text: statusText } = getStatusIndicator();
@@ -276,21 +270,10 @@ export const LiveRaceDashboard = React.memo(() => {
                 <button
                     onClick={() => (connectionStatus === 'error' || backendStatus.state === 'error') && setIsModalOpen(true)}
                     className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium text-white ${statusColor} ${(connectionStatus === 'error' || backendStatus.state === 'error') ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
+                    data-testid="status-indicator"
                 >
-                    <span className={`w-2.5 h-2.5 rounded-full bg-white ${connectionStatus === 'success' ? 'animate-pulse' : ''}`}></span>
+                    <span className={`w-2.5 h-2.5 rounded-full bg-white ${isLiveConnected ? 'animate-pulse' : ''}`}></span>
                     {statusText}
-                </button>
-                <LiveModeToggle
-                  isLive={isLiveMode}
-                  onToggle={setIsLiveMode}
-                  isDisabled={backendStatus.state !== 'running' || connectionStatus === 'error'}
-                />
-                <button
-                    onClick={() => refetch()}
-                    disabled={isLiveMode || connectionStatus === 'pending' || backendStatus.state !== 'running'}
-                    className="px-4 py-2 bg-slate-700 text-white rounded hover:bg-slate-600 disabled:bg-slate-800 disabled:text-slate-500"
-                >
-                    Refresh
                 </button>
             </div>
         </div>
