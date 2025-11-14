@@ -49,3 +49,6 @@ web_platform/frontend/.next/
 
 # Review artifacts
 ReviewableJSON/
+
+# Image files
+*.png

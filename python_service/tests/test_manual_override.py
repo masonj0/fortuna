@@ -5,36 +5,52 @@ from python_service.manual_override_manager import ManualOverrideManager
 
 
 @pytest.fixture
-def manager(tmp_path):
-    return ManualOverrideManager(storage_path=str(tmp_path))
+def manager():
+    # The manager is now in-memory and doesn't need a path
+    return ManualOverrideManager()
 
 
 def test_register_and_retrieve(manager):
-    request_id = manager.register_failed_fetch(
-        adapter_name="TestAdapter",
-        url="https://example.com/blocked",
-        date="2025-01-15",
-        error=Exception("403 Forbidden"),
+    adapter = "TestAdapter"
+    url = "https://example.com/blocked"
+
+    request_id = manager.register_failure(
+        adapter_name=adapter,
+        url=url,
     )
 
     pending = manager.get_pending_requests()
     assert len(pending) == 1
     assert pending[0].request_id == request_id
+    assert pending[0].adapter_name == adapter
+    assert pending[0].url == url
 
 
 def test_submit_manual_data(manager):
-    request_id = manager.register_failed_fetch(
-        adapter_name="TestAdapter",
-        url="https://example.com/blocked",
-        date="2025-01-15",
-        error=Exception("403 Forbidden"),
+    adapter = "TestAdapter"
+    url = "https://example.com/blocked"
+    content = "<html>Manual content</html>"
+    content_type = "text/html"
+
+    request_id = manager.register_failure(
+        adapter_name=adapter,
+        url=url,
     )
 
     success = manager.submit_manual_data(
         request_id=request_id,
-        raw_content="<html>Manual content</html>",
-        content_type="html",
+        raw_content=content,
+        content_type=content_type,
     )
 
     assert success
-    assert manager.get_completed_data(request_id) == "<html>Manual content</html>"
+
+    # Verify that the data can be retrieved correctly
+    retrieved_data = manager.get_manual_data(adapter_name=adapter, url=url)
+    assert retrieved_data is not None
+    retrieved_content, retrieved_type = retrieved_data
+    assert retrieved_content == content
+    assert retrieved_type == content_type
+
+    # Verify that data is consumed after retrieval
+    assert manager.get_manual_data(adapter_name=adapter, url=url) is None

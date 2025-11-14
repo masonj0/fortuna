@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
-     xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
 
     <Product Id="*" Name="Fortuna Full App Service" Language="1033" Version="1.0.0.0"
              Manufacturer="Fortuna Project" UpgradeCode="{da2c1b11-23f3-4787-a655-8094e97aa905}">
@@ -10,13 +9,45 @@
         <MediaTemplate EmbedCab="yes" />
 
         <Feature Id="ProductFeature" Title="Fortuna Full App Service" Level="1">
-            <ComponentGroupRef Id="MainFilesGroup" />
+            <!-- Explicitly define our components instead of using a generated group -->
+            <ComponentRef Id="cmp_fortuna_backend_exe" />
+            <ComponentGroupRef Id="FrontendFiles" />
             <ComponentRef Id="ApplicationShortcuts" />
         </Feature>
 
         <Directory Id="TARGETDIR" Name="SourceDir">
             <Directory Id="ProgramFilesFolder">
-                <Directory Id="INSTALLFOLDER" Name="Fortuna App Service" />
+                <Directory Id="INSTALLFOLDER" Name="Fortuna App Service">
+                    <!-- Component for the backend executable and service -->
+                    <Component Id="cmp_fortuna_backend_exe" Guid="*">
+                        <File Id="file_fortuna_backend_exe" KeyPath="yes" Source="$(var.SourceDir)\fortuna-backend.exe" />
+
+                        <!-- FIX: Install the EXE as a Windows Service -->
+                        <ServiceInstall
+                            Id="ServiceInstaller"
+                            Name="FortunaBackendService"
+                            DisplayName="Fortuna Faucet Backend Service"
+                            Type="ownProcess"
+                            Start="auto"
+                            ErrorControl="normal"
+                            Account="LocalSystem"
+                            Vital="yes"
+                        />
+
+                        <!-- FIX: Start and Stop the service during install/uninstall -->
+                        <ServiceControl
+                            Id="ServiceStarter"
+                            Start="install"
+                            Stop="both"
+                            Remove="uninstall"
+                            Name="FortunaBackendService"
+                            Wait="yes"
+                        />
+                    </Component>
+
+                    <!-- Directory for the UI -->
+                    <Directory Id="UIDirectory" Name="ui" />
+                </Directory>
             </Directory>
             <Directory Id="ProgramMenuFolder">
                 <Directory Id="ApplicationProgramsFolder" Name="Fortuna App"/>
