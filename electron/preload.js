@@ -6,28 +6,55 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 // Expose a safe, limited API to the frontend.
 contextBridge.exposeInMainWorld('electronAPI', {
-  /**
-   * Asynchronously fetches the secure API key from the main process.
-   * @returns {Promise<string|null>} A promise that resolves with the API key or null if not found.
-   */
-  getApiKey: () => ipcRenderer.invoke('get-api-key'),
+ /**
+ * Asynchronously fetches the secure API key from the main process.
+ * @returns {Promise<string|null>} A promise that resolves with the API key or null if not found.
+ */
+ getApiKey: () => ipcRenderer.invoke('get-api-key'),
 
-  /**
-   * Registers a callback to be invoked when the backend status changes.
-   * @param {Function} callback - The function to call with the status object.
-   *                              It receives an object like { status: 'online' | 'offline', error?: string }.
-   */
-  onBackendStatusUpdate: (callback) => {
-    const handler = (_event, value) => callback(value);
-    ipcRenderer.on('backend-status-update', handler);
-    // Return a cleanup function to remove the listener
-    return () => ipcRenderer.removeListener('backend-status-update', handler);
-  },
-  restartBackend: () => ipcRenderer.send('restart-backend'),
-  getBackendStatus: () => ipcRenderer.invoke('get-backend-status'),
-  generateApiKey: () => ipcRenderer.invoke('generate-api-key'),
-  saveApiKey: (apiKey) => ipcRenderer.invoke('save-api-key', apiKey),
-  saveBetfairCredentials: (credentials) => ipcRenderer.invoke('save-betfair-credentials', credentials),
+ /**
+ * Asynchronously generates and saves a new secure API key.
+ * @returns {Promise<string>} A promise that resolves with the newly generated API key.
+ */
+ generateApiKey: () => ipcRenderer.invoke('generate-api-key'),
+
+ /**
+ * Asynchronously saves a provided API key.
+ * @param {string} apiKey - The API key to save.
+ * @returns {Promise<{success: boolean}>} A promise that resolves with the result of the save operation.
+ */
+ saveApiKey: (apiKey) => ipcRenderer.invoke('save-api-key', apiKey),
+
+ /**
+ * Asynchronously saves Betfair credentials.
+ * @param {{username: string, apiKey: string}} credentials - The credentials to save.
+ * @returns {Promise<{success: boolean}>} A promise that resolves with the result of the save operation.
+ */
+ saveBetfairCredentials: (credentials) => ipcRenderer.invoke('save-betfair-credentials', credentials),
+
+ /**
+  * Restarts the backend service.
+  */
+ restartBackend: () => ipcRenderer.send('restart-backend'),
+
+ /**
+  * Fetches the current status of the backend service.
+  * @returns {Promise<{state: string, logs: string[]}>} A promise that resolves with the backend status.
+  */
+ getBackendStatus: () => ipcRenderer.invoke('get-backend-status'),
+
+ /**
+  * Subscribes to backend status updates.
+  * @param {function(event, {state: string, logs: string[]})} callback - The function to call with status updates.
+  */
+ onBackendStatusUpdate: (callback) => {
+    // Deliberately strip event sender from callback to avoid security risks
+    const subscription = (event, ...args) => callback(...args);
+    ipcRenderer.on('backend-status-update', subscription);
+
+    // Return a function to unsubscribe
+    return () => {
+      ipcRenderer.removeListener('backend-status-update', subscription);
+    };
+  }
 });
-
-console.log('Preload script loaded and electronAPI is exposed.');
