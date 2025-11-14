@@ -24,6 +24,16 @@ class FortunaDesktopApp {
  }
  }
 
+ stopBackend() {
+ if (this.backendProcess && !this.backendProcess.killed) {
+ console.log('Stopping backend process...');
+ this.backendProcess.kill();
+ this.backendState = 'stopped';
+ this.backendLogs.push('Backend process stopped by user.');
+ this.sendBackendStatusUpdate();
+ }
+ }
+
  startBackend() {
  this.backendState = 'starting';
  this.backendLogs = ['Attempting to start backend process...'];
@@ -185,6 +195,7 @@ class FortunaDesktopApp {
  });
 
  ipcMain.on('restart-backend', () => this.startBackend());
+ ipcMain.on('stop-backend', () => this.stopBackend());
  ipcMain.handle('get-backend-status', async () => ({
  state: this.backendState,
  logs: this.backendLogs.slice(-20)

@@ -86,12 +86,49 @@ const RaceGrid = ({ races }: { races: Race[] }) => (
   </div>
 );
 
+const useBackendStatus = () => {
+  const [backendStatus, setBackendStatus] = useState<BackendStatus>({ state: 'starting', logs: [] });
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const getInitialStatus = async () => {
+      if (window.electronAPI?.getBackendStatus) {
+        try {
+          const initialStatus = await window.electronAPI.getBackendStatus();
+          if (isMounted) setBackendStatus(initialStatus);
+        } catch (error) {
+          console.error("Failed to get initial backend status:", error);
+          if (isMounted) setBackendStatus({ state: 'error', logs: ['Failed to query backend status from main process.'] });
+        }
+      } else {
+          setBackendStatus({ state: 'running', logs: ['In a web-only environment, backend is assumed to be running.'] });
+      }
+    };
+
+    if (window.electronAPI?.onBackendStatusUpdate) {
+      const unsubscribe = window.electronAPI.onBackendStatusUpdate((status: BackendStatus) => {
+        if (isMounted) setBackendStatus(status);
+      });
+      getInitialStatus();
+      return () => {
+        isMounted = false;
+        if (typeof unsubscribe === 'function') {
+          unsubscribe();
+        }
+      };
+    } else {
+        getInitialStatus();
+    }
+  }, []);
+
+  return backendStatus;
+};
+
 export const LiveRaceDashboard = React.memo(() => {
   const [races, setRaces] = useState<Race[]>([]);
   const [failedSources, setFailedSources] = useState<SourceInfo[]>([]);
-
-  // Separate status for backend process and API connection
-  const [backendStatus, setBackendStatus] = useState<BackendStatus>({ state: 'starting', logs: [] });
+  const backendStatus = useBackendStatus();
   const [apiKey, setApiKey] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
@@ -148,57 +185,6 @@ export const LiveRaceDashboard = React.memo(() => {
   });
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // Effect for setting up Electron IPC listener and fetching initial status
-  useEffect(() => {
-    console.log('[LiveRaceDashboard] Component did mount.');
-    // Flag to prevent updates after unmount
-    let isMounted = true;
-
-    // Function to get the initial status
-    const getInitialStatus = async () => {
-      if (window.electronAPI?.getBackendStatus) {
-        console.log('[LiveRaceDashboard] electronAPI is available. Requesting initial status.');
-        try {
-          const initialStatus = await window.electronAPI.getBackendStatus();
-          console.log('[LiveRaceDashboard] Received initial status:', initialStatus);
-          if (isMounted) {
-            setBackendStatus(initialStatus);
-          }
-        } catch (error) {
-          console.error("[LiveRaceDashboard] Failed to get initial backend status:", error);
-          if (isMounted) {
-            setBackendStatus({ state: 'error', logs: ['Failed to query backend status from main process.'] });
-          }
-        }
-      } else {
-        console.warn('[LiveRaceDashboard] electronAPI is not available. Forcing error state for verification.');
-        if (isMounted) {
-            setBackendStatus({ state: 'error', logs: ['In a web-only environment, backend is unavailable. This is a simulated error for component verification.'] });
-        }
-      }
-    };
-
-    // Set up the listener for ongoing status updates
-    if (window.electronAPI?.onBackendStatusUpdate) {
-      const unsubscribe = window.electronAPI.onBackendStatusUpdate((status: BackendStatus) => {
-        if (isMounted) {
-          setBackendStatus(status);
-        }
-      });
-
-      // Get the initial state right after setting up the listener
-      getInitialStatus();
-
-      // Cleanup: remove the listener when the component unmounts
-      return () => {
-        isMounted = false;
-        if (typeof unsubscribe === 'function') {
-          unsubscribe();
-        }
-      };
-    }
-  }, []);
-
 
   const handleParamsChange = useCallback((newParams: RaceFilterParams) => {
     setParams(newParams);
@@ -208,6 +194,14 @@ export const LiveRaceDashboard = React.memo(() => {
     // Priority 1: Backend process has failed.
     if (backendStatus.state === 'error') {
       return <BackendErrorPanel logs={backendStatus.logs} onRestart={() => window.electronAPI.restartBackend()} />;
+    }
+
+    if (backendStatus.state === 'stopped') {
+        return <EmptyState
+            title="Backend Service Stopped"
+            message="The backend data service is not running. Please start it to see live race data."
+            actionButton={<button onClick={() => window.electronAPI.restartBackend()} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Start Backend Service</button>}
+        />;
     }
 
     // Priority 2: Backend is starting or initial fetch is happening.
@@ -244,6 +238,9 @@ export const LiveRaceDashboard = React.memo(() => {
   const getStatusIndicator = () => {
     if (backendStatus.state === 'error') {
       return { color: 'bg-red-500', text: 'Backend Error' };
+    }
+    if (backendStatus.state === 'stopped') {
+        return { color: 'bg-gray-500', text: 'Stopped' };
     }
     if (backendStatus.state === 'starting') {
       return { color: 'bg-yellow-500', text: 'Backend Starting...' };
