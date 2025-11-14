@@ -57,7 +57,7 @@ def get_all_project_files():
         dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS and not d.startswith("PREV_")]
 
         for name in files:
-            if name in EXCLUDE_FILES or name.endswith(".bmp"):
+            if name in EXCLUDE_FILES or name.endswith((".bmp", ".png", ".ico")):
                 continue
 
             file_path = Path(root) / name

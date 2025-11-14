@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { RaceFilters } from './RaceFilters';
 import { RaceCard } from './RaceCard';
 import { RaceCardSkeleton } from './RaceCardSkeleton';
@@ -86,14 +86,51 @@ const RaceGrid = ({ races }: { races: Race[] }) => (
   </div>
 );
 
+const useBackendStatus = () => {
+  const [backendStatus, setBackendStatus] = useState<BackendStatus>({ state: 'starting', logs: [] });
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const getInitialStatus = async () => {
+      if (window.electronAPI?.getBackendStatus) {
+        try {
+          const initialStatus = await window.electronAPI.getBackendStatus();
+          if (isMounted) setBackendStatus(initialStatus);
+        } catch (error) {
+          console.error("Failed to get initial backend status:", error);
+          if (isMounted) setBackendStatus({ state: 'error', logs: ['Failed to query backend status from main process.'] });
+        }
+      } else {
+          setBackendStatus({ state: 'running', logs: ['In a web-only environment, backend is assumed to be running.'] });
+      }
+    };
+
+    if (window.electronAPI?.onBackendStatusUpdate) {
+      const unsubscribe = window.electronAPI.onBackendStatusUpdate((status: BackendStatus) => {
+        if (isMounted) setBackendStatus(status);
+      });
+      getInitialStatus();
+      return () => {
+        isMounted = false;
+        if (typeof unsubscribe === 'function') {
+          unsubscribe();
+        }
+      };
+    } else {
+        getInitialStatus();
+    }
+  }, []);
+
+  return backendStatus;
+};
+
 export const LiveRaceDashboard = React.memo(() => {
   const [races, setRaces] = useState<Race[]>([]);
   const [failedSources, setFailedSources] = useState<SourceInfo[]>([]);
-
-  // Separate status for backend process and API connection
-  const [backendStatus, setBackendStatus] = useState<BackendStatus>({ state: 'starting', logs: [] });
-  const [isLiveMode, setIsLiveMode] = useState(false);
+  const backendStatus = useBackendStatus();
   const [apiKey, setApiKey] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   // Get API key on component mount
   useEffect(() => {
@@ -121,24 +158,24 @@ export const LiveRaceDashboard = React.memo(() => {
     queryKey: ['adapterStatuses', apiKey],
     queryFn: () => fetchAdapterStatuses(apiKey),
     enabled: backendStatus.state === 'running' && !!apiKey,
-    refetchInterval: isLiveMode ? false : 30000,
     refetchOnWindowFocus: false,
   });
 
   const { data: liveData, isConnected: isLiveConnected } = useWebSocket<{ races: Race[], source_info: SourceInfo[] }>(
-    isLiveMode && apiKey ? '/ws/live-updates' : '',
+    apiKey ? '/ws/live-updates' : '',
     { apiKey }
   );
 
   // Effect to update state when new live data arrives
   useEffect(() => {
-    if (isLiveMode && liveData) {
+    if (liveData) {
       console.log('Received live data update:', liveData);
+      queryClient.setQueryData(['adapterStatuses', apiKey], liveData.source_info);
       setRaces(liveData.races || []);
       setFailedSources(liveData.source_info?.filter((s: SourceInfo) => s.status === 'FAILED' && s.attemptedUrl) || []);
       setLastUpdate(new Date());
     }
-  }, [liveData, isLiveMode]);
+  }, [liveData, queryClient, apiKey]);
 
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [params, setParams] = useState<RaceFilterParams>({
@@ -147,57 +184,6 @@ export const LiveRaceDashboard = React.memo(() => {
     minSecondFavoriteOdds: 4.0,
   });
   const [isModalOpen, setIsModalOpen] = useState(false);
-
-  // Effect for setting up Electron IPC listener and fetching initial status
-  useEffect(() => {
-    console.log('[LiveRaceDashboard] Component did mount.');
-    // Flag to prevent updates after unmount
-    let isMounted = true;
-
-    // Function to get the initial status
-    const getInitialStatus = async () => {
-      if (window.electronAPI?.getBackendStatus) {
-        console.log('[LiveRaceDashboard] electronAPI is available. Requesting initial status.');
-        try {
-          const initialStatus = await window.electronAPI.getBackendStatus();
-          console.log('[LiveRaceDashboard] Received initial status:', initialStatus);
-          if (isMounted) {
-            setBackendStatus(initialStatus);
-          }
-        } catch (error) {
-          console.error("[LiveRaceDashboard] Failed to get initial backend status:", error);
-          if (isMounted) {
-            setBackendStatus({ state: 'error', logs: ['Failed to query backend status from main process.'] });
-          }
-        }
-      } else {
-        console.warn('[LiveRaceDashboard] electronAPI is not available. Forcing error state for verification.');
-        if (isMounted) {
-            setBackendStatus({ state: 'error', logs: ['In a web-only environment, backend is unavailable. This is a simulated error for component verification.'] });
-        }
-      }
-    };
-
-    // Set up the listener for ongoing status updates
-    if (window.electronAPI?.onBackendStatusUpdate) {
-      const unsubscribe = window.electronAPI.onBackendStatusUpdate((status: BackendStatus) => {
-        if (isMounted) {
-          setBackendStatus(status);
-        }
-      });
-
-      // Get the initial state right after setting up the listener
-      getInitialStatus();
-
-      // Cleanup: remove the listener when the component unmounts
-      return () => {
-        isMounted = false;
-        if (typeof unsubscribe === 'function') {
-          unsubscribe();
-        }
-      };
-    }
-  }, []);
 
 
   const handleParamsChange = useCallback((newParams: RaceFilterParams) => {
@@ -208,6 +194,14 @@ export const LiveRaceDashboard = React.memo(() => {
     // Priority 1: Backend process has failed.
     if (backendStatus.state === 'error') {
       return <BackendErrorPanel logs={backendStatus.logs} onRestart={() => window.electronAPI.restartBackend()} />;
+    }
+
+    if (backendStatus.state === 'stopped') {
+        return <EmptyState
+            title="Backend Service Stopped"
+            message="The backend data service is not running. Please start it to see live race data."
+            actionButton={<button onClick={() => window.electronAPI.restartBackend()} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Start Backend Service</button>}
+        />;
     }
 
     // Priority 2: Backend is starting or initial fetch is happening.
@@ -245,19 +239,16 @@ export const LiveRaceDashboard = React.memo(() => {
     if (backendStatus.state === 'error') {
       return { color: 'bg-red-500', text: 'Backend Error' };
     }
+    if (backendStatus.state === 'stopped') {
+        return { color: 'bg-gray-500', text: 'Stopped' };
+    }
     if (backendStatus.state === 'starting') {
       return { color: 'bg-yellow-500', text: 'Backend Starting...' };
     }
-    if (isLiveMode) {
-      return isLiveConnected
-        ? { color: 'bg-cyan-500', text: 'Live' }
-        : { color: 'bg-yellow-500', text: 'Live Connecting...' };
+    if (isLiveConnected) {
+      return { color: 'bg-cyan-500', text: 'Live' };
     }
-    switch (connectionStatus) {
-      case 'success': return { color: 'bg-green-500', text: 'Online' };
-      case 'error': return { color: 'bg-orange-500', text: 'API Offline' };
-      default: return { color: 'bg-yellow-500', text: 'Connecting...' };
-    }
+    return { color: 'bg-yellow-500', text: 'Connecting...' };
   };
 
   const { color: statusColor, text: statusText } = getStatusIndicator();
@@ -276,21 +267,10 @@ export const LiveRaceDashboard = React.memo(() => {
                 <button
                     onClick={() => (connectionStatus === 'error' || backendStatus.state === 'error') && setIsModalOpen(true)}
                     className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium text-white ${statusColor} ${(connectionStatus === 'error' || backendStatus.state === 'error') ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
+                    data-testid="status-indicator"
                 >
-                    <span className={`w-2.5 h-2.5 rounded-full bg-white ${connectionStatus === 'success' ? 'animate-pulse' : ''}`}></span>
+                    <span className={`w-2.5 h-2.5 rounded-full bg-white ${isLiveConnected ? 'animate-pulse' : ''}`}></span>
                     {statusText}
-                </button>
-                <LiveModeToggle
-                  isLive={isLiveMode}
-                  onToggle={setIsLiveMode}
-                  isDisabled={backendStatus.state !== 'running' || connectionStatus === 'error'}
-                />
-                <button
-                    onClick={() => refetch()}
-                    disabled={isLiveMode || connectionStatus === 'pending' || backendStatus.state !== 'running'}
-                    className="px-4 py-2 bg-slate-700 text-white rounded hover:bg-slate-600 disabled:bg-slate-800 disabled:text-slate-500"
-                >
-                    Refresh
                 </button>
             </div>
         </div>

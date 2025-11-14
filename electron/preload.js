@@ -38,6 +38,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
  restartBackend: () => ipcRenderer.send('restart-backend'),
 
  /**
+  * Stops the backend service.
+  */
+ stopBackend: () => ipcRenderer.send('stop-backend'),
+
+ /**
   * Fetches the current status of the backend service.
   * @returns {Promise<{state: string, logs: string[]}>} A promise that resolves with the backend status.
   */
