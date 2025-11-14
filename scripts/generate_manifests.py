@@ -6,7 +6,7 @@ from pathlib import Path
 # --- Configuration ---
 ROOT_DIR = Path(".")
 OUTPUT_DIR = Path(".")
-NUM_MANIFESTS = 5  # We will create 5 balanced manifests
+NUM_MANIFESTS = 5 # We will create 5 balanced manifests
 
 EXCLUDE_DIRS = {
     ".git",
@@ -57,7 +57,7 @@ def get_all_project_files():
         dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS and not d.startswith("PREV_")]
 
         for name in files:
-            if name in EXCLUDE_FILES:
+            if name in EXCLUDE_FILES or name.endswith(".bmp"):
                 continue
 
             file_path = Path(root) / name
@@ -96,7 +96,7 @@ def balance_files_by_size(files_with_size, num_bins):
     print("--- Manifest Balancing Results ---")
     for i, (file_list, total_size) in enumerate(zip(bins, bin_sizes)):
         print(
-            f"  Manifest {i+1}: {len(file_list):>4} files, "
+            f" Manifest {i+1}: {len(file_list):>4} files, "
             f"Total size: {total_size / 1024 / 1024:>6.2f} MB"
         )
     print("---------------------------------")
@@ -116,12 +116,12 @@ def main():
     for i, file_list in enumerate(balanced_manifests):
         manifest_name = f"MANIFEST_PART{i+1}.json"
         output_path = OUTPUT_DIR / manifest_name
-        sorted_files = sorted(file_list)  # Sort alphabetically for consistency
+        sorted_files = sorted(file_list) # Sort alphabetically for consistency
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(sorted_files, f, indent=4)
         print(f"✅ Wrote {len(sorted_files)} entries to {output_path}")
 
-    print("\\n[SUCCESS] All manifest files have been generated and balanced.")
+    print("\n[SUCCESS] All manifest files have been generated and balanced.")
 
 
 if __name__ == "__main__":
