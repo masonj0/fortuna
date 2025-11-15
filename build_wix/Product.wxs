@@ -57,10 +57,6 @@
             </Directory>
         </Directory>
 
-        <!-- Use a ComponentGroup to manage the frontend files -->
-        <ComponentGroup Id="FrontendFiles" Directory="UIDirectory">
-             <!-- This will be populated by the heat tool -->
-        </ComponentGroup>
 
         <DirectoryRef Id="ApplicationProgramsFolder">
             <Component Id="ApplicationShortcuts" Guid="*">
