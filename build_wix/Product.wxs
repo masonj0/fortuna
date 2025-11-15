@@ -26,7 +26,6 @@
                     <!-- Component for the backend executable and service -->
                     <Component Id="cmp_fortuna_backend_exe" Guid="*">
                         <File Id="file_fortuna_backend_exe" KeyPath="yes" Source="$(var.SourceDir)\fortuna-backend.exe" />
-
                         <!-- FIX: Install the EXE as a Windows Service -->
                         <util:ServiceInstall
                             Id="ServiceInstaller"
@@ -38,7 +37,6 @@
                             Account="LocalSystem"
                             Vital="yes"
                         />
-
                         <!-- FIX: Start and Stop the service during install/uninstall -->
                         <util:ServiceControl
                             Id="ServiceStarter"
