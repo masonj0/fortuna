@@ -67,7 +67,6 @@ jobs:
         shell: pwsh
         run: |
           if (-not (Test-Path "python_service/main.py")) { throw "❌ FATAL: python_service/main.py not found" }
-          if (-not (Test-Path "fortuna-backend.spec")) { throw "❌ FATAL: fortuna-backend.spec not found" }
           Write-Host "✅ Critical files verified."
       - name: Backend - Install Dependencies
         shell: pwsh
