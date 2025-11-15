@@ -16,9 +16,25 @@ def run_command(cmd, cwd=None):
     """Runs a command and exits if it fails."""
     print(f'▶ Running: {" ".join(cmd)}')
     try:
-        subprocess.run(cmd, cwd=cwd, check=True, text=True, encoding='utf-8', errors='ignore')
-    except (subprocess.CalledProcessError, FileNotFoundError) as e:
-        sys.exit(f'✗ Command failed: {e}')
+        # Use utf-8 explicitly for all subprocess calls
+        result = subprocess.run(
+            cmd,
+            cwd=cwd,
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            errors='replace'  # Replace undecodable characters instead of failing
+        )
+        if result.stdout:
+            print(result.stdout)
+        return result
+    except subprocess.CalledProcessError as e:
+        print(f"STDOUT: {e.stdout if e.stdout else '(none)'}")
+        print(f"STDERR: {e.stderr if e.stderr else '(none)'}")
+        sys.exit(f'✗ Command failed with exit code {e.returncode}')
+    except FileNotFoundError as e:
+        sys.exit(f'✗ Command not found: {e}')
 
 def main():
     """Main build process for the WiX MSI installer."""
