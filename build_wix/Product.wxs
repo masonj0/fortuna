@@ -14,8 +14,7 @@
         <WixVariable Id="WixUILicenseRtf" Value="electron/assets/license.rtf" />
 
         <Feature Id="ProductFeature" Title="Fortuna Full App Service" Level="1">
-            <!-- Explicitly define our components instead of using a generated group -->
-            <ComponentRef Id="cmp_fortuna_backend_exe" />
+            <ComponentRef Id="cmp_fortuna_backend" />
             <ComponentGroupRef Id="FrontendFiles" />
             <ComponentRef Id="ApplicationShortcuts" />
         </Feature>
@@ -23,31 +22,37 @@
         <Directory Id="TARGETDIR" Name="SourceDir">
             <Directory Id="ProgramFilesFolder">
                 <Directory Id="INSTALLFOLDER" Name="Fortuna App Service">
-                    <!-- Component for the backend executable and service -->
-                    <Component Id="cmp_fortuna_backend_exe" Guid="*">
-                        <File Id="file_fortuna_backend_exe" KeyPath="yes" Source="$(var.SourceDir)\fortuna-backend.exe" />
-                        <!-- FIX: Install the EXE as a Windows Service -->
-                        <util:ServiceInstall
-                            Id="ServiceInstaller"
-                            Name="FortunaBackendService"
-                            DisplayName="Fortuna Faucet Backend Service"
-                            Type="ownProcess"
-                            Start="auto"
-                            ErrorControl="normal"
-                            Account="LocalSystem"
-                            Vital="yes"
-                        />
-                        <!-- FIX: Start and Stop the service during install/uninstall -->
-                        <util:ServiceControl
-                            Id="ServiceStarter"
-                            Start="install"
-                            Stop="both"
-                            Remove="uninstall"
-                            Name="FortunaBackendService"
-                            Wait="yes"
-                        />
+                    <Component Id="cmp_fortuna_backend" Guid="*">
+                        <File Id="file_fortuna_backend_exe" KeyPath="yes" Source="$(var.SourceDir)\fortuna-backend.exe">
+                            <util:ServiceInstall
+                                Id="ServiceInstaller"
+                                Name="FortunaBackendService"
+                                DisplayName="Fortuna Faucet Backend Service"
+                                Description="Fortuna Faucet Backend API Service"
+                                Type="ownProcess"
+                                Start="auto"
+                                ErrorControl="normal"
+                                Account="LocalSystem"
+                                Arguments=""
+                                Interactive="no"
+                            >
+                                <util:ServiceConfig
+                                    FirstFailureActionType="restart"
+                                    SecondFailureActionType="restart"
+                                    ThirdFailureActionType="restart"
+                                    ResetPeriodInDays="1"
+                                    RestartServiceDelayInSeconds="60" />
+                            </util:ServiceInstall>
+                            <util:ServiceControl
+                                Id="ServiceStarter"
+                                Start="install"
+                                Stop="both"
+                                Remove="uninstall"
+                                Name="FortunaBackendService"
+                                Wait="yes"
+                            />
+                        </File>
                     </Component>
-
                     <!-- Directory for the UI -->
                     <Directory Id="UIDirectory" Name="ui" />
                 </Directory>
@@ -56,7 +61,6 @@
                 <Directory Id="ApplicationProgramsFolder" Name="Fortuna App"/>
             </Directory>
         </Directory>
-
 
         <DirectoryRef Id="ApplicationProgramsFolder">
             <Component Id="ApplicationShortcuts" Guid="*">
