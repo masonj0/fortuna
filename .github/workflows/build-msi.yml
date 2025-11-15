@@ -67,7 +67,8 @@ jobs:
         shell: pwsh
         run: |
           if (-not (Test-Path "python_service/main.py")) { throw "❌ FATAL: python_service/main.py not found" }
-          Write-Host "✅ Critical files main.py and spec template are present."
+          if (-not (Test-Path "fortuna-backend.spec")) { throw "❌ FATAL: fortuna-backend.spec not found" }
+          Write-Host "✅ Critical files verified."
       - name: Backend - Install Dependencies
         shell: pwsh
         run: |
@@ -77,9 +78,27 @@ jobs:
         shell: pwsh
         run: |
           pip-audit -r python_service/requirements.txt --local
-      - name: Backend - Build with PyInstaller
+      - name: Backend - Generate and Build with PyInstaller
         shell: pwsh
         run: |
+          # Generate spec file if it doesn't exist
+          if (-not (Test-Path "fortuna-backend.spec")) {
+            Write-Host "Generating spec file..."
+            pyi-makespec `
+              --name fortuna-backend `
+              --onefile `
+              --console `
+              --add-data "python_service/data;data" `
+              --add-data "python_service/json;json" `
+              --add-data "python_service/adapters;adapters" `
+              --hidden-import uvicorn.logging `
+              --hidden-import uvicorn.loops.auto `
+              --hidden-import uvicorn.protocols.http.auto `
+              --hidden-import uvicorn.protocols.websockets.auto `
+              --hidden-import uvicorn.lifespan.on `
+              python_service/main.py
+          }
+          # Build the executable
           pyinstaller fortuna-backend.spec --noconfirm
       - name: Upload Backend Artifact
         uses: actions/upload-artifact@v4.3.4
