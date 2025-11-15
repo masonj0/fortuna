@@ -55,8 +55,7 @@ def main():
         '-o', str(files_wxs),
         '-gg', '-sfrag', '-srd',
         '-cg', 'FrontendFiles', # Target the correct ComponentGroup
-        '-dr', 'UIDirectory',    # Target the correct Directory Id from Product.wxs
-        '-var', 'var.SourceDir'
+        '-dr', 'UIDirectory'    # Target the correct Directory Id from Product.wxs
     ])
     print(f'✓ WiX file fragment for frontend created at {files_wxs}')
 
