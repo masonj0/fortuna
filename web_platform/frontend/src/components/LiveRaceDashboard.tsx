@@ -7,6 +7,7 @@ import { RaceFilters } from './RaceFilters';
 import { RaceCard } from './RaceCard';
 import { RaceCardSkeleton } from './RaceCardSkeleton';
 import { EmptyState } from './EmptyState';
+import { ErrorDisplay } from './ErrorDisplay';
 import { Race, SourceInfo } from '../types/racing';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { StatusDetailModal } from './StatusDetailModal';
@@ -36,7 +37,7 @@ const fetchAdapterStatuses = async (apiKey: string | null): Promise<SourceInfo[]
   });
   if (!response.ok) {
     const errorData = await response.json();
-    throw new Error(errorData.error || `API request failed with status ${response.status}`);
+    throw new Error(JSON.stringify(errorData));
   }
   return response.json();
 };
@@ -216,11 +217,16 @@ export const LiveRaceDashboard = React.memo(() => {
 
     // Priority 3: API connection is offline.
     if (connectionStatus === 'error') {
-      return <EmptyState
-          title="API Connection Offline"
-          message={(errorDetails as Error)?.message || "The backend is running, but the dashboard could not connect to its API."}
-          actionButton={<button onClick={() => refetch()} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Retry Connection</button>}
-      />;
+      try {
+        const errorInfo = JSON.parse((errorDetails as Error).message);
+        return <ErrorDisplay error={errorInfo.error} />;
+      } catch (e) {
+        return <EmptyState
+            title="API Connection Offline"
+            message={(errorDetails as Error)?.message || "The backend is running, but the dashboard could not connect to its API."}
+            actionButton={<button onClick={() => refetch()} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Retry Connection</button>}
+        />;
+      }
     }
 
     // Priority 4: No races found after a successful fetch.
