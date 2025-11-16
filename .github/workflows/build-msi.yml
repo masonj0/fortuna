@@ -324,6 +324,11 @@ jobs:
         run: |
           dotnet tool install --global wix
 
+      - name: Add WiX Util Extension
+        shell: pwsh
+        run: |
+          wix extension add WixToolset.Util.wixext
+
       - name: Stage Files and Harvest with Heat
         shell: pwsh
         run: |
