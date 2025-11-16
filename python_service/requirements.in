@@ -41,7 +41,6 @@ black
 # THE FIX: Upgraded to 6.6.0 for official Python 3.12 support.
 pyinstaller==6.6.0
 wheel
-setuptools<81
 pip-tools
 requests>=2.32.4
 urllib3>=2.5.0
