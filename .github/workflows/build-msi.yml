@@ -1,4 +1,4 @@
-name: Build Fortuna Faucet MSI Installer (Dual Variant)
+name: Build Fortuna Faucet MSI Installer (Dual Variant - Resilient)
 
 on:
   push:
@@ -7,123 +7,99 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-and-package:
-    name: '🚀 Build & Package Fortuna Faucet'
+  build-frontend:
+    name: '📦 Build Frontend'
     runs-on: windows-latest
-
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Build Frontend
+        run: |
+          npm install --prefix web_platform/frontend
+          npm run build --prefix web_platform/frontend
+      - name: Upload Frontend Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: web_platform/frontend/out
 
+  build-backend:
+    name: '🐍 Build Backend Executable'
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-
-      - name: Create and Activate Virtual Environment
+      - name: Install Dependencies
         run: |
           python -m venv .venv
           .\.venv\Scripts\Activate.ps1
           python -m pip install --upgrade pip
           pip install -r python_service/requirements-dev.txt
-
       - name: Build PyInstaller Backend
         run: |
-          # The adapter hotfix is already applied in the source
-          Write-Host "Building backend executable..."
-          .\.venv\Scripts\python.exe -m PyInstaller `
+          pip install pyinstaller # Ensure pyinstaller is available
+          pyinstaller `
             --onefile `
             --name fortuna-backend `
             --add-data "python_service;python_service" `
             python_service/main.py
-
-      - name: Verify Backend Executable
-        run: |
-          if (-not (Test-Path "dist/fortuna-backend.exe")) {
-            throw "Backend build failed - executable not found"
-          }
-          $size = (Get-Item "dist/fortuna-backend.exe").Length / 1MB
-          Write-Host "✓ Backend executable: $($size.ToString('F2')) MB"
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Verify and Upload Backend Artifact
+        uses: actions/upload-artifact@v4
         with:
-          node-version: '20'
+          name: backend-executable
+          path: dist/fortuna-backend.exe
 
-      - name: Build Frontend
-        run: |
-          npm install --prefix web_platform/frontend
-          npm run build --prefix web_platform/frontend
-
+  package-installers:
+    name: '🏆 Package Dual MSI Installers'
+    needs: [build-frontend, build-backend]
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      - name: Download Build Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
       - name: Install WiX Toolset
-        run: choco install wixtoolset -y
-
-      # Build MSI #1: Simple (No Service)
+        run: choco install wixtoolset -y --no-progress
       - name: Build MSI - Simple Variant
         run: |
           Write-Host "=== Building Simple MSI (No Service) ==="
+          $backendExePath = "artifacts/backend-executable/fortuna-backend.exe"
+          $frontendPath = "artifacts/frontend-build"
 
-          # Stage files
           New-Item -ItemType Directory -Force -Path "staging_simple"
-          Copy-Item "dist/fortuna-backend.exe" "staging_simple/"
-          Copy-Item -Recurse "web_platform/frontend/out" "staging_simple/ui"
+          Copy-Item $backendExePath "staging_simple/"
+          Copy-Item -Recurse $frontendPath/* "staging_simple/ui"
 
-          # Generate frontend file list
-          heat dir staging_simple/ui `
-            -o build_wix/frontend_files_simple.wxs `
-            -gg -sfrag -srd -cg FrontendFiles -dr UIDirectory
-
-          # Compile
-          candle -dSourceDir=staging_simple `
-            build_wix/Product_NoService.wxs `
-            build_wix/frontend_files_simple.wxs `
-            -o build_wix/obj_simple/
-
-          # Link
-          light build_wix/obj_simple/*.wixobj `
-            -o dist/FortunaFaucet-Simple.msi
+          heat dir staging_simple/ui -o build_wix/frontend_files_simple.wxs -gg -sfrag -srd -cg FrontendFiles -dr UIDirectory
+          candle -dSourceDir=staging_simple build_wix/Product_NoService.wxs build_wix/frontend_files_simple.wxs -o build_wix/obj_simple/
+          light build_wix/obj_simple/*.wixobj -o dist/FortunaFaucet-Simple.msi
 
           Write-Host "✓ Simple MSI created"
-
-      # Build MSI #2: With Service
       - name: Build MSI - Service Variant
         run: |
           Write-Host "=== Building Service MSI ==="
+          $backendExePath = "artifacts/backend-executable/fortuna-backend.exe"
+          $frontendPath = "artifacts/frontend-build"
 
-          # Stage files (separate directory)
           New-Item -ItemType Directory -Force -Path "staging_service"
-          Copy-Item "dist/fortuna-backend.exe" "staging_service/"
-          Copy-Item -Recurse "web_platform/frontend/out" "staging_service/ui"
+          Copy-Item $backendExePath "staging_service/"
+          Copy-Item -Recurse $frontendPath/* "staging_service/ui"
 
-          # Generate frontend file list
-          heat dir staging_service/ui `
-            -o build_wix/frontend_files_service.wxs `
-            -gg -sfrag -srd -cg FrontendFiles -dr UIDirectory
-
-          # Compile with WixUtilExtension
-          candle -ext WixUtilExtension `
-            -dSourceDir=staging_service `
-            build_wix/Product_WithService.wxs `
-            build_wix/frontend_files_service.wxs `
-            -o build_wix/obj_service/
-
-          # Link with WixUtilExtension
-          light -ext WixUtilExtension `
-            build_wix/obj_service/*.wixobj `
-            -o dist/FortunaFaucet-Service.msi
+          heat dir staging_service/ui -o build_wix/frontend_files_service.wxs -gg -sfrag -srd -cg FrontendFiles -dr UIDirectory
+          candle -ext WixUtilExtension -dSourceDir=staging_service build_wix/Product_WithService.wxs build_wix/frontend_files_service.wxs -o build_wix/obj_service/
+          light -ext WixUtilExtension build_wix/obj_service/*.wixobj -o dist/FortunaFaucet-Service.msi
 
           Write-Host "✓ Service MSI created"
-
-      - name: Compare MSI Builds
-        run: |
-          $simple = Get-Item "dist/FortunaFaucet-Simple.msi"
-          $service = Get-Item "dist/FortunaFaucet-Service.msi"
-
-          Write-Host "`n=== BUILD COMPARISON ==="
-          Write-Host "Simple MSI:  $((Get-Item $simple).Length / 1MB) MB"
-          Write-Host "Service MSI: $((Get-Item $service).Length / 1MB) MB"
-          Write-Host "========================`n"
-
       - name: Upload Both MSIs
         uses: actions/upload-artifact@v4
         with:
