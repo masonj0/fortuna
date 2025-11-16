@@ -1,6 +1,7 @@
 # Byte-compiled / optimized files
 __pycache__/
 *.pyc
+!*.spec
 
 # Distribution / packaging
 build/
