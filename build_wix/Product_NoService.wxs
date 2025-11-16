@@ -1,17 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
 
-  <Product Id="*"
-           Name="Fortuna Faucet (Standard)"
-           Language="1033"
-           Version="1.0.0.0"
-           Manufacturer="Fortuna Development"
-           UpgradeCode="F0E1D2C3-B4A5-9687-7856-493021ABCDEF">
-
-    <Package InstallerVersion="200"
-             Compressed="yes"
-             InstallScope="perMachine"
-             Platform="x64" />
+  <Package Name="Fortuna Faucet (Standard)" Language="1033" Version="1.0.0.0"
+           Manufacturer="Fortuna Development" UpgradeCode="F0E1D2C3-B4A5-9687-7856-493021ABCDEF}"
+           InstallerVersion="200" Compressed="yes" Platform="x64">
 
     <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
     <MediaTemplate EmbedCab="yes" />
@@ -22,30 +14,34 @@
       <ComponentRef Id="StartMenuShortcuts" />
     </Feature>
 
-    <Directory Id="TARGETDIR" Name="SourceDir">
-      <Directory Id="ProgramFiles64Folder">
-        <Directory Id="INSTALLFOLDER" Name="Fortuna Faucet">
-          <Directory Id="BackendDirectory" Name="backend" />
-          <Directory Id="UIDirectory" Name="ui" />
-        </Directory>
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Fortuna Faucet">
+        <Directory Id="BackendDirectory" Name="backend" />
+        <Directory Id="UIDirectory" Name="ui" />
       </Directory>
-      <Directory Id="ProgramMenuFolder">
-        <Directory Id="ApplicationProgramsFolder" Name="Fortuna Faucet" />
-      </Directory>
-    </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ApplicationProgramsFolder" Name="Fortuna Faucet" />
+    </StandardDirectory>
 
     <!-- Backend Executable -->
     <ComponentGroup Id="BackendComponents" Directory="BackendDirectory">
-      <Component Id="BackendExe" Guid="11111111-2222-3333-4444-555555555555" Win64="yes">
+      <Component Id="BackendExe" Guid="11111111-2222-3333-4444-555555555555">
         <File Id="FortunaBackendExe"
               Source="$(var.SourceDir)\fortuna-backend.exe"
               KeyPath="yes" />
       </Component>
     </ComponentGroup>
 
+    <!-- Frontend Files -->
+    <ComponentGroup Id="FrontendFiles" Directory="UIDirectory">
+      <HarvestDirectory Id="HarvestUI" Directory="UIDirectory" ComponentGroupName="FrontendFiles" />
+    </ComponentGroup>
+
     <!-- Start Menu Shortcuts -->
     <DirectoryRef Id="ApplicationProgramsFolder">
-      <Component Id="StartMenuShortcuts" Guid="66666666-7777-8888-9999-000000000000" Win64="yes">
+      <Component Id="StartMenuShortcuts" Guid="66666666-7777-8888-9999-000000000000">
         <Shortcut Id="StartMenuShortcut"
                   Name="Fortuna Faucet"
                   Target="[BackendDirectory]fortuna-backend.exe"
@@ -60,5 +56,5 @@
       </Component>
     </DirectoryRef>
 
-  </Product>
+  </Package>
 </Wix>
