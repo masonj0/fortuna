@@ -35,9 +35,7 @@
     </ComponentGroup>
 
     <!-- Frontend Files -->
-    <ComponentGroup Id="FrontendFiles" Directory="UIDirectory">
-      <HarvestDirectory Id="HarvestUI" Directory="UIDirectory" ComponentGroupName="FrontendFiles" />
-    </ComponentGroup>
+    <ComponentGroup Id="FrontendFiles" Directory="UIDirectory" />
 
     <!-- Start Menu Shortcuts -->
     <DirectoryRef Id="ApplicationProgramsFolder">
