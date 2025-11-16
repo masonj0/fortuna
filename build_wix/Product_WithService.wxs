@@ -2,18 +2,14 @@
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
      xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
 
-    <Product Id="*" Name="Fortuna Full App Service" Language="1033" Version="1.0.0.0"
-             Manufacturer="Fortuna Project" UpgradeCode="{da2c1b11-23f3-4787-a655-8094e97aa905}">
+    <Product Id="*" Name="Fortuna Faucet (Service)" Language="1033" Version="1.0.0.0"
+             Manufacturer="Fortuna Development" UpgradeCode="{A1B2C3D4-E5F6-7890-1234-567890ABCDEF}">
 
         <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
         <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
         <MediaTemplate EmbedCab="yes" />
 
-        <!-- Add UI and required license variable -->
-        <UIRef Id="WixUI_Minimal" />
-        <WixVariable Id="WixUILicenseRtf" Value="electron/assets/license.rtf" />
-
-        <Feature Id="ProductFeature" Title="Fortuna Full App Service" Level="1">
+        <Feature Id="ProductFeature" Title="Fortuna Faucet Service" Level="1">
             <ComponentRef Id="cmp_fortuna_backend" />
             <ComponentGroupRef Id="FrontendFiles" />
             <ComponentRef Id="ApplicationShortcuts" />
@@ -21,7 +17,7 @@
 
         <Directory Id="TARGETDIR" Name="SourceDir">
             <Directory Id="ProgramFilesFolder">
-                <Directory Id="INSTALLFOLDER" Name="Fortuna App Service">
+                <Directory Id="INSTALLFOLDER" Name="Fortuna Faucet Service">
                     <Component Id="cmp_fortuna_backend" Guid="*">
                         <File Id="file_fortuna_backend_exe" KeyPath="yes" Source="$(var.SourceDir)\fortuna-backend.exe">
                             <util:ServiceInstall
@@ -53,24 +49,23 @@
                             />
                         </File>
                     </Component>
-                    <!-- Directory for the UI -->
                     <Directory Id="UIDirectory" Name="ui" />
                 </Directory>
             </Directory>
             <Directory Id="ProgramMenuFolder">
-                <Directory Id="ApplicationProgramsFolder" Name="Fortuna App"/>
+                <Directory Id="ApplicationProgramsFolder" Name="Fortuna Faucet"/>
             </Directory>
         </Directory>
 
         <DirectoryRef Id="ApplicationProgramsFolder">
             <Component Id="ApplicationShortcuts" Guid="*">
                 <Shortcut Id="ApplicationStartMenuShortcut"
-                          Name="Fortuna Faucet"
+                          Name="Fortuna Faucet Dashboard"
                           Description="Launch the Fortuna Faucet Dashboard"
                           Target="[INSTALLFOLDER]ui\index.html"
                           WorkingDirectory="INSTALLFOLDER"/>
                 <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall"/>
-                <RegistryValue Root="HKCU" Key="Software\FortunaProject\FortunaApp" Name="installed" Type="integer" Value="1" KeyPath="yes"/>
+                <RegistryValue Root="HKCU" Key="Software\Fortuna\Service" Name="installed" Type="integer" Value="1" KeyPath="yes"/>
             </Component>
         </DirectoryRef>
 
