@@ -3,7 +3,7 @@
 
   <Package Name="Fortuna Faucet (Standard)" Language="1033" Version="1.0.0.0"
            Manufacturer="Fortuna Development" UpgradeCode="F0E1D2C3-B4A5-9687-7856-493021ABCDEF}"
-           InstallerVersion="200" Compressed="yes" InstallScope="perMachine" Platform="x64">
+           InstallerVersion="200" Compressed="yes" Platform="x64">
 
     <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
     <MediaTemplate EmbedCab="yes" />
