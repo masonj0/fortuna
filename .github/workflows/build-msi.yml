@@ -301,42 +301,65 @@ jobs:
           asset_content_type: application/octet-stream
 
   build-wix-installer:
-    name: '🔥 Build WiX Installer (Alternative)'
+    name: '🔥 Build WiX Installer (Modernized)'
     timeout-minutes: 15
     needs: [build-backend, build-frontend]
     runs-on: windows-latest
-    env:
-      PYTHONIOENCODING: 'utf-8' # FIX: Forces Python to use UTF-8 for all I/O to prevent Unicode errors
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4.1.7
-      - name: Setup Python
-        uses: actions/setup-python@v5.1.1
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      - name: Download Backend Executable
+
+      - name: Download Build Artifacts
         uses: actions/download-artifact@v4.1.8
         with:
-          name: backend-executable-${{ github.sha }}
-          path: dist
-      - name: Download Frontend Build
-        uses: actions/download-artifact@v4.1.8
+          path: ./artifacts
+
+      - name: Setup .NET for WiX v4
+        uses: actions/setup-dotnet@v4
         with:
-          name: frontend-build-output-${{ github.sha }}
-          path: frontend_build
-      - name: Install WiX Toolset
+          dotnet-version: '6.0.x'
+
+      - name: Install WiX v4 Toolset
         shell: pwsh
         run: |
-          choco install wixtoolset -y --no-progress
-          $wixPath = "C:\Program Files (x86)\WiX ToolSet v3.14\bin"
-          echo "PATH=$wixPath;${env:PATH}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-      - name: Build Backend Service MSI with WiX
+          dotnet tool install --global wix
+
+      - name: Stage Files and Harvest with Heat
         shell: pwsh
         run: |
-          python build_wix/build_msi.py
+          $wixStagingDir = "build_wix/staging"
+          $uiStagingDir = Join-Path $wixStagingDir "ui"
+          $msiSourceDir = "build_wix/msi_source"
+          $frontendWxs = Join-Path $msiSourceDir "frontend_files.wxs"
+
+          if (Test-Path $wixStagingDir) { Remove-Item -Recurse -Force $wixStagingDir }
+          New-Item -ItemType Directory -Path $uiStagingDir | Out-Null
+          New-Item -ItemType Directory -Path $msiSourceDir -Force | Out-Null
+
+          Copy-Item -Path "./artifacts/backend-executable-${{ github.sha }}/fortuna-backend.exe" -Destination (Join-Path $wixStagingDir "fortuna-backend.exe")
+          Copy-Item -Path "./artifacts/frontend-build-output-${{ github.sha }}/*" -Destination $uiStagingDir -Recurse
+          Write-Host "✅ All assets staged for WiX build."
+
+          heat dir $uiStagingDir -o $frontendWxs -gg -sfrag -srd -cg FrontendFiles -dr UIDirectory
+          Write-Host "✅ WiX file fragment for frontend created with heat."
+
+      - name: Build MSI with WiX v4
+        shell: pwsh
+        run: |
+          $wixStagingDir = "build_wix/staging"
+          $frontendWxs = "build_wix/msi_source/frontend_files.wxs"
+          $outputMsi = "dist/Fortuna-Full-App-Service-v4.msi"
+
+          wix build ./build_wix/Product_WithService.wxs $frontendWxs `
+            -ext WixToolset.Util.wixext `
+            -d "SourceDir=$wixStagingDir" `
+            -o $outputMsi
+
+          Write-Host "✅ MSI created successfully with WiX v4."
+
       - name: Upload WiX MSI Artifact
         uses: actions/upload-artifact@v4.3.4
         with:
-          name: fortuna-wix-installer-windows
-          path: dist/Fortuna-Full-App-Service.msi
+          name: fortuna-wix-installer-windows-v4
+          path: dist/Fortuna-Full-App-Service-v4.msi
           retention-days: 7
