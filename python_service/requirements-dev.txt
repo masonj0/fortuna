@@ -19,3 +19,4 @@ respx
 black
 ruff
 pip-audit
+setuptools<81
