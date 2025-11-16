@@ -329,33 +329,26 @@ jobs:
         run: |
           wix extension add WixToolset.Util.wixext
 
-      - name: Stage Files and Harvest with Heat
+      - name: Stage Files for WiX
         shell: pwsh
         run: |
           $wixStagingDir = "build_wix/staging"
           $uiStagingDir = Join-Path $wixStagingDir "ui"
-          $msiSourceDir = "build_wix/msi_source"
-          $frontendWxs = Join-Path $msiSourceDir "frontend_files.wxs"
 
           if (Test-Path $wixStagingDir) { Remove-Item -Recurse -Force $wixStagingDir }
           New-Item -ItemType Directory -Path $uiStagingDir | Out-Null
-          New-Item -ItemType Directory -Path $msiSourceDir -Force | Out-Null
 
           Copy-Item -Path "./artifacts/backend-executable-${{ github.sha }}/fortuna-backend.exe" -Destination (Join-Path $wixStagingDir "fortuna-backend.exe")
           Copy-Item -Path "./artifacts/frontend-build-output-${{ github.sha }}/*" -Destination $uiStagingDir -Recurse
           Write-Host "✅ All assets staged for WiX build."
 
-          heat dir $uiStagingDir -o $frontendWxs -gg -sfrag -srd -cg FrontendFiles -dr UIDirectory
-          Write-Host "✅ WiX file fragment for frontend created with heat."
-
       - name: Build MSI with WiX v4
         shell: pwsh
         run: |
           $wixStagingDir = "build_wix/staging"
-          $frontendWxs = "build_wix/msi_source/frontend_files.wxs"
           $outputMsi = "dist/Fortuna-Full-App-Service-v4.msi"
 
-          wix build ./build_wix/Product_WithService.wxs $frontendWxs `
+          wix build ./build_wix/Product_WithService.wxs `
             -ext WixToolset.Util.wixext `
             -d "SourceDir=$wixStagingDir" `
             -o $outputMsi
