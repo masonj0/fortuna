@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
-     xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
 
-    <Product Id="*" Name="Fortuna Faucet (Service)" Language="1033" Version="1.0.0.0"
-             Manufacturer="Fortuna Development" UpgradeCode="{A1B2C3D4-E5F6-7890-1234-567890ABCDEF}">
+    <Package Name="Fortuna Faucet (Service)" Language="1033" Version="1.0.0.0"
+             Manufacturer="Fortuna Development" UpgradeCode="{A1B2C3D4-E5F6-7890-1234-567890ABCDEF}"
+             InstallerVersion="200" Compressed="yes">
 
-        <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
         <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
         <MediaTemplate EmbedCab="yes" />
 
@@ -15,47 +15,45 @@
             <ComponentRef Id="ApplicationShortcuts" />
         </Feature>
 
-        <Directory Id="TARGETDIR" Name="SourceDir">
-            <Directory Id="ProgramFilesFolder">
-                <Directory Id="INSTALLFOLDER" Name="Fortuna Faucet Service">
-                    <Component Id="cmp_fortuna_backend" Guid="*">
-                        <File Id="file_fortuna_backend_exe" KeyPath="yes" Source="$(var.SourceDir)\fortuna-backend.exe">
-                            <util:ServiceInstall
-                                Id="ServiceInstaller"
-                                Name="FortunaBackendService"
-                                DisplayName="Fortuna Faucet Backend Service"
-                                Description="Fortuna Faucet Backend API Service"
-                                Type="ownProcess"
-                                Start="auto"
-                                ErrorControl="normal"
-                                Account="LocalSystem"
-                                Arguments=""
-                                Interactive="no"
-                            >
-                                <util:ServiceConfig
-                                    FirstFailureActionType="restart"
-                                    SecondFailureActionType="restart"
-                                    ThirdFailureActionType="restart"
-                                    ResetPeriodInDays="1"
-                                    RestartServiceDelayInSeconds="60" />
-                            </util:ServiceInstall>
-                            <util:ServiceControl
-                                Id="ServiceStarter"
-                                Start="install"
-                                Stop="both"
-                                Remove="uninstall"
-                                Name="FortunaBackendService"
-                                Wait="yes"
-                            />
-                        </File>
-                    </Component>
-                    <Directory Id="UIDirectory" Name="ui" />
-                </Directory>
+        <StandardDirectory Id="ProgramFilesFolder">
+            <Directory Id="INSTALLFOLDER" Name="Fortuna Faucet Service">
+                <Component Id="cmp_fortuna_backend" Guid="*">
+                    <File Id="file_fortuna_backend_exe" KeyPath="yes" Source="$(var.SourceDir)\fortuna-backend.exe" />
+                    <util:ServiceInstall
+                        Id="ServiceInstaller"
+                        Name="FortunaBackendService"
+                        DisplayName="Fortuna Faucet Backend Service"
+                        Description="Fortuna Faucet Backend API Service"
+                        Type="ownProcess"
+                        Start="auto"
+                        ErrorControl="normal"
+                        Account="LocalSystem"
+                        Arguments=""
+                        Interactive="no"
+                    >
+                        <util:ServiceConfig
+                            FirstFailureActionType="restart"
+                            SecondFailureActionType="restart"
+                            ThirdFailureActionType="restart"
+                            ResetPeriodInDays="1"
+                            RestartServiceDelayInSeconds="60" />
+                    </util:ServiceInstall>
+                    <util:ServiceControl
+                        Id="ServiceStarter"
+                        Start="install"
+                        Stop="both"
+                        Remove="uninstall"
+                        Name="FortunaBackendService"
+                        Wait="yes"
+                    />
+                </Component>
+                <Directory Id="UIDirectory" Name="ui" />
             </Directory>
-            <Directory Id="ProgramMenuFolder">
-                <Directory Id="ApplicationProgramsFolder" Name="Fortuna Faucet"/>
-            </Directory>
-        </Directory>
+        </StandardDirectory>
+
+        <StandardDirectory Id="ProgramMenuFolder">
+            <Directory Id="ApplicationProgramsFolder" Name="Fortuna Faucet"/>
+        </StandardDirectory>
 
         <DirectoryRef Id="ApplicationProgramsFolder">
             <Component Id="ApplicationShortcuts" Guid="*">
@@ -69,5 +67,7 @@
             </Component>
         </DirectoryRef>
 
-    </Product>
+        <ComponentGroup Id="FrontendFiles" Directory="UIDirectory" />
+
+    </Package>
 </Wix>
