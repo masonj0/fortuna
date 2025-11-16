@@ -18,7 +18,7 @@ from pydantic import ValidationError
 from .adapters.at_the_races_adapter import AtTheRacesAdapter
 from .adapters.base_adapter_v3 import BaseAdapterV3
 from .adapters.betfair_adapter import BetfairAdapter
-from .adapters.betfair_datascientist_adapter import BetfairDataScientistAdapter
+# from .adapters.betfair_datascientist_adapter import BetfairDataScientistAdapter
 from .adapters.betfair_greyhound_adapter import BetfairGreyhoundAdapter
 from .adapters.brisnet_adapter import BrisnetAdapter
 from .adapters.drf_adapter import DRFAdapter
@@ -134,21 +134,21 @@ class OddsEngine:
                         exc_info=True,
                     )
 
-            # Special case for BetfairDataScientistAdapter with extra args
-            try:
-                bds_adapter = BetfairDataScientistAdapter(
-                    model_name="ThoroughbredModel",
-                    url="https://betfair-data-supplier-prod.herokuapp.com/api/widgets/kvs-ratings/datasets",
-                    config=self.config,
-                )
-                if manual_override_manager and getattr(bds_adapter, "supports_manual_override", False):
-                    bds_adapter.enable_manual_override(manual_override_manager)
-                self.adapters.append(bds_adapter)
-            except Exception:
-                self.logger.warning(
-                    "Failed to initialize adapter: BetfairDataScientistAdapter",
-                    exc_info=True,
-                )
+            # Special case for BetfairDataScientistAdapter with extra args - DISABLED
+            # try:
+            #     bds_adapter = BetfairDataScientistAdapter(
+            #         model_name="ThoroughbredModel",
+            #         url="https://betfair-data-supplier-prod.herokuapp.com/api/widgets/kvs-ratings/datasets",
+            #         config=self.config,
+            #     )
+            #     if manual_override_manager and getattr(bds_adapter, "supports_manual_override", False):
+            #         bds_adapter.enable_manual_override(manual_override_manager)
+            #     self.adapters.append(bds_adapter)
+            # except Exception:
+            #     self.logger.warning(
+            #         "Failed to initialize adapter: BetfairDataScientistAdapter",
+            #         exc_info=True,
+            #     )
 
             self.logger.info(f"{len(self.adapters)} adapters initialized successfully.")
 
