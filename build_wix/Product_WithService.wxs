@@ -28,10 +28,9 @@
                         Start="auto"
                         ErrorControl="normal"
                         Account="LocalSystem"
-                        Arguments=""
                         Interactive="no"
                     >
-                        <ServiceConfig
+                        <util:ServiceConfig
                             FirstFailureActionType="restart"
                             SecondFailureActionType="restart"
                             ThirdFailureActionType="restart"
