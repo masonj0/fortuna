@@ -66,7 +66,5 @@
             </Component>
         </DirectoryRef>
 
-        <ComponentGroup Id="FrontendFiles" Directory="UIDirectory" />
-
     </Package>
 </Wix>
