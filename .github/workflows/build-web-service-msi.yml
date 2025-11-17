@@ -180,10 +180,11 @@ jobs:
         run: |
           dotnet tool install --global wix
 
-      - name: Add WiX Util Extension
+      - name: Add WiX Util and Firewall Extensions
         shell: pwsh
         run: |
           wix extension add WixToolset.Util.wixext
+          wix extension add WixToolset.Firewall.wixext
 
       - name: Stage Files for WiX
         shell: pwsh
@@ -198,16 +199,12 @@ jobs:
           Copy-Item -Path "./artifacts/frontend-build-output-${{ github.sha }}/*" -Destination $uiStagingDir -Recurse
           Write-Host "✅ All assets staged for WiX build."
 
-      - name: Harvest UI Components with Heat
+      - name: Harvest UI Components via MSBuild
+        working-directory: build_wix
         shell: pwsh
         run: |
-          $uiStagingDir = "build_wix/staging/ui"
-          $harvestedFile = "build_wix/frontend_components.wxs"
-          wix heat dir $uiStagingDir -gg -sfrag -srd -dr INSTALLFOLDER -cg FrontendComponents -out $harvestedFile
-          Write-Host "✅ UI components harvested into $harvestedFile"
-          Write-Host "--- Displaying harvested file contents ---"
-          Get-Content -Path $harvestedFile -Raw
-          Write-Host "--- End of harvested file ---"
+          dotnet msbuild harvest.wixproj
+          Write-Host "✅ UI components harvested into frontend_components.wxs"
 
       - name: Validate Harvested Components
         shell: pwsh
