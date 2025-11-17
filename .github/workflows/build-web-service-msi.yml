@@ -1,4 +1,4 @@
-name: Build Fortuna Faucet MSI Installer - 🏆 PRODUCTION FORTRESS
+name: Build Fortuna Faucet Web Service Installer
 
 on:
   push:
@@ -43,8 +43,8 @@ jobs:
 
   build-backend:
     name: '🐍 Build Backend'
-    needs: [build-frontend]
     timeout-minutes: 20
+    needs: [build-frontend]
     runs-on: windows-latest
     env:
       PYTHONUTF8: "1"
@@ -57,6 +57,11 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
           cache-dependency-path: 'python_service/requirements.txt'
+      - name: Download Frontend Artifact
+        uses: actions/download-artifact@v4.1.8
+        with:
+          name: frontend-build-output-${{ github.sha }}
+          path: web_platform/frontend/out
       - name: '✅ [MONITOR] Ensure Required Directories Exist'
         shell: pwsh
         run: |
@@ -69,11 +74,6 @@ jobs:
         run: |
           if (-not (Test-Path "python_service/main.py")) { throw "❌ FATAL: python_service/main.py not found" }
           Write-Host "✅ Critical files verified."
-      - name: Download Frontend Artifact
-        uses: actions/download-artifact@v4.1.8
-        with:
-          name: frontend-build-output-${{ github.sha }}
-          path: web_platform/frontend/out
       - name: Backend - Install Dependencies
         shell: pwsh
         run: |
@@ -86,7 +86,7 @@ jobs:
       - name: Backend - Build with PyInstaller
         shell: pwsh
         run: |
-          pyinstaller fortuna-backend-electron.spec --noconfirm
+          pyinstaller fortuna-backend-webservice.spec --noconfirm
       - name: Upload Backend Artifact
         uses: actions/upload-artifact@v4.3.4
         with:
@@ -155,79 +155,6 @@ jobs:
           }
           Write-Host "✅ Backend smoke test passed."
 
-  package-and-test:
-    name: '🏆 Package & Test Electron Installer'
-    timeout-minutes: 25
-    needs: [build-frontend, smoke-test-backend]
-    runs-on: windows-latest
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4.1.7
-      - name: Setup Node.js for Electron
-        uses: actions/setup-node@v4.0.3
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: 'electron/package-lock.json'
-      - name: Download All Build Artifacts
-        uses: actions/download-artifact@v4.1.8
-        with:
-          path: ./temp-artifacts
-      - name: Stage Artifacts for Packaging
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Path "./electron/web-ui-build" -Force | Out-Null
-          New-Item -ItemType Directory -Path "./electron/resources" -Force | Out-Null
-          Move-Item -Path "./temp-artifacts/frontend-build-output-${{ github.sha }}/*" -Destination "./electron/web-ui-build/out" -Force
-          Move-Item -Path "./temp-artifacts/backend-executable-${{ github.sha }}/fortuna-backend.exe" -Destination "./electron/resources/fortuna-backend.exe" -Force
-      - name: Critical Integration Test
-        shell: pwsh
-        env:
-          API_KEY: "a_secure_test_api_key_that_is_long_enough"
-        run: |
-          $exe = "./electron/resources/fortuna-backend.exe"
-          # ... existing integration test ...
-      - name: Electron - Install & Package MSI
-        working-directory: electron
-        shell: pwsh
-        run: |
-          npm ci
-          npx electron-builder --config electron-builder-config.yml --publish never
-      - name: Code Sign MSI
-        if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
-        shell: pwsh
-        run: |
-          # ... code signing script ...
-      - name: Upload Final MSI Artifact
-        uses: actions/upload-artifact@v4.3.4
-        with:
-          name: fortuna-installer-windows-${{ github.sha }}
-          path: electron/dist/*.msi
-          retention-days: 7
-      - name: Create GitHub Release
-        if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          body: |
-            MSI Installer for Fortuna Faucet.
-            Built from commit ${{ github.sha }}.
-          draft: false
-          prerelease: false
-      - name: Upload Release Asset
-        if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: electron/dist/*.msi
-          asset_name: fortuna-faucet-${{ github.ref_name }}.msi
-          asset_content_type: application/octet-stream
 
   build-wix-installer:
     name: '🔥 Build WiX Installer (Modernized)'
@@ -271,19 +198,15 @@ jobs:
           Copy-Item -Path "./artifacts/frontend-build-output-${{ github.sha }}/*" -Destination $uiStagingDir -Recurse
           Write-Host "✅ All assets staged for WiX build."
 
-      - name: Generate Frontend.wxs (WiX v4 Heat)
-        shell: pwsh
-        run: |
-          dotnet msbuild build_wix/Harvest.proj -restore -t:GenerateFrontendWxs
-          Write-Host "✅ UI directory harvested into Frontend.wxs via MSBuild."
-
       - name: Build MSI with WiX v4
         shell: pwsh
         run: |
           $wixStagingDir = "build_wix/staging"
           $outputMsi = "dist/Fortuna-Full-App-Service-v4.msi"
 
-          wix build ./build_wix/Product_WithService.wxs ./build_wix/Frontend.wxs `
+          # The <HarvestDirectory> element in the .wxs file now handles the UI files,
+          # so we no longer need a separate heat step or to pass Frontend.wxs here.
+          wix build ./build_wix/Product_WithService.wxs `
             -ext WixToolset.Util.wixext `
             -d "SourceDir=$wixStagingDir" `
             -o $outputMsi
