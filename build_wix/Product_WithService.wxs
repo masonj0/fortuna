@@ -27,7 +27,7 @@
                         Type="ownProcess"
                         Start="auto"
                         ErrorControl="normal"
-                        Account="LocalSystem"
+                        Account="NetworkService"
                         Interactive="no"
                     >
                         <util:ServiceConfig
