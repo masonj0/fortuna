@@ -13,6 +13,7 @@ class FortunaDesktopApp {
  this.tray = null;
  this.backendState = 'stopped'; // "stopped", "starting", "running", "error"
  this.backendLogs = [];
+ this.isBackendStarting = false;
  }
 
  sendBackendStatusUpdate() {
@@ -29,12 +30,19 @@ class FortunaDesktopApp {
  console.log('Stopping backend process...');
  this.backendProcess.kill();
  this.backendState = 'stopped';
+ this.isBackendStarting = false; // Ensure lock is released on stop
  this.backendLogs.push('Backend process stopped by user.');
  this.sendBackendStatusUpdate();
  }
  }
 
  startBackend() {
+ if (this.isBackendStarting) {
+ console.log('Backend start already in progress. Ignoring request.');
+ return;
+ }
+ this.isBackendStarting = true;
+
  this.backendState = 'starting';
  this.backendLogs = ['Attempting to start backend process...'];
  this.sendBackendStatusUpdate();
@@ -60,6 +68,7 @@ class FortunaDesktopApp {
  this.backendState = 'error';
  this.backendLogs.push(errorMsg);
  this.sendBackendStatusUpdate();
+ this.isBackendStarting = false;
  return;
  }
  } else {
@@ -76,6 +85,7 @@ class FortunaDesktopApp {
  'Backend Missing',
  'The backend service is missing. Please reinstall Fortuna Faucet.'
  );
+ this.isBackendStarting = false;
  return;
  }
  }
@@ -96,6 +106,7 @@ class FortunaDesktopApp {
  if (this.backendState !== 'running' && (output.includes('Uvicorn running') || output.includes('Application startup complete'))) {
  console.log('✅ Backend is ready!');
  this.backendState = 'running';
+ this.isBackendStarting = false;
  }
  this.sendBackendStatusUpdate();
  });
@@ -105,6 +116,7 @@ class FortunaDesktopApp {
  console.error(`[Backend ERROR] ${errorOutput}`);
  this.backendLogs.push(`ERROR: ${errorOutput}`);
  this.backendState = 'error';
+ this.isBackendStarting = false;
  this.sendBackendStatusUpdate();
  });
 
@@ -113,6 +125,7 @@ class FortunaDesktopApp {
  console.error(errorMsg);
  this.backendLogs.push(errorMsg);
  this.backendState = 'error';
+ this.isBackendStarting = false;
  this.sendBackendStatusUpdate();
  });
 
@@ -122,6 +135,7 @@ class FortunaDesktopApp {
  console.error(errorMsg);
  this.backendLogs.push(errorMsg);
  this.backendState = 'error';
+ this.isBackendStarting = false;
  this.sendBackendStatusUpdate();
  }
  });
