@@ -1,0 +1,10 @@
+<Project Sdk="WixToolset.Sdk/4.0.0">
+  <ItemGroup>
+    <HarvestDirectory Include="staging/ui">
+      <ComponentGroupName>FrontendComponents</ComponentGroupName>
+      <DirectoryRefId>INSTALLFOLDER</DirectoryRefId>
+      <SuppressRootDirectory>true</SuppressRootDirectory>
+      <OutputFile>frontend_components.wxs</OutputFile>
+    </HarvestDirectory>
+  </ItemGroup>
+</Project>

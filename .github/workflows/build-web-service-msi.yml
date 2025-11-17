@@ -180,10 +180,11 @@ jobs:
         run: |
           dotnet tool install --global wix
 
-      - name: Add WiX Util Extension
+      - name: Add WiX Util and Firewall Extensions
         shell: pwsh
         run: |
           wix extension add WixToolset.Util.wixext
+          wix extension add WixToolset.Firewall.wixext
 
       - name: Stage Files for WiX
         shell: pwsh
@@ -198,16 +199,64 @@ jobs:
           Copy-Item -Path "./artifacts/frontend-build-output-${{ github.sha }}/*" -Destination $uiStagingDir -Recurse
           Write-Host "✅ All assets staged for WiX build."
 
+      - name: Harvest UI Components via MSBuild
+        working-directory: build_wix
+        shell: pwsh
+        run: |
+          dotnet msbuild harvest.wixproj
+          Write-Host "✅ UI components harvested into frontend_components.wxs"
+
+      - name: Validate Harvested Components
+        shell: pwsh
+        run: |
+          $harvestedFile = "build_wix/frontend_components.wxs"
+          if (-not (Test-Path $harvestedFile)) {
+            throw "❌ FATAL: Harvested file '$harvestedFile' was not created."
+          }
+          [xml]$xml = Get-Content $harvestedFile
+          $fileNodes = $xml.SelectNodes("//*[local-name()='File']")
+          if ($fileNodes.Count -eq 0) {
+            throw "❌ FATAL: No <File> elements were found in the harvested file. The UI will be missing."
+          }
+          Write-Host "✅ Validation passed: Found $($fileNodes.Count) <File> elements in harvested file."
+
+      - name: '🔍 Diagnose WXS File Encoding'
+        shell: pwsh
+        run: |
+          function Get-FileEncoding {
+            param([string]$Path)
+            [byte[]]$byte = Get-Content -Encoding byte -Path $Path -TotalCount 4
+            if ($byte[0] -eq 0xef -and $byte[1] -eq 0xbb -and $byte[2] -eq 0xbf) {
+                return [System.Text.Encoding]::UTF8
+            } elseif ($byte[0] -eq 0xff -and $byte[1] -eq 0xfe) {
+                return [System.Text.Encoding]::Unicode
+            } elseif ($byte[0] -eq 0xfe -and $byte[1] -eq 0xff) {
+                return [System.Text.Encoding]::BigEndianUnicode
+            } elseif ($byte[0] -eq 0 -and $byte[1] -eq 0 -and $byte[2] -eq 0xfe -and $byte[3] -eq 0xff) {
+                return [System.Text.Encoding]::UTF32
+            } elseif ($byte[0] -ge 0x20 -and $byte[0] -le 0x7e) {
+                return [System.Text.Encoding]::ASCII
+            } else {
+                return [System.Text.Encoding]::Default
+            }
+          }
+          $filePath = "./build_wix/Product_WithService.wxs"
+          $encoding = Get-FileEncoding -Path $filePath
+          Write-Host "--- File Content of $filePath ---"
+          Get-Content -Path $filePath -Raw | Write-Host
+          Write-Host "------------------------------------"
+          Write-Host "Detected Encoding: $($encoding.EncodingName)"
+          Write-Host "------------------------------------"
+
       - name: Build MSI with WiX v4
         shell: pwsh
         run: |
           $wixStagingDir = "build_wix/staging"
           $outputMsi = "dist/Fortuna-Full-App-Service-v4.msi"
 
-          # The <HarvestDirectory> element in the .wxs file now handles the UI files,
-          # so we no longer need a separate heat step or to pass Frontend.wxs here.
-          wix build ./build_wix/Product_WithService.wxs `
+          wix build ./build_wix/Product_WithService.wxs ./build_wix/frontend_components.wxs `
             -ext WixToolset.Util.wixext `
+            -ext WixToolset.Firewall.wixext `
             -d "SourceDir=$wixStagingDir" `
             -o $outputMsi
 
