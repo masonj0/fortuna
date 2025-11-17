@@ -105,5 +105,7 @@ roup>
 
     <ComponentGroup Id="FrontendComponents" Directory="INSTALLFOLDER" />
 
+    <ComponentGroup Id="FrontendComponents" Directory="INSTALLFOLDER" />
+
   </Package>
 </Wix>
