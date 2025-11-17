@@ -10,6 +10,7 @@ a = Analysis(
         ('python_service/data', 'data'),
         ('python_service/json', 'json'),
         ('python_service/adapters', 'adapters'),
+        ('web_platform/frontend/out', 'ui'),
     ],
     hiddenimports=[
         'uvicorn.logging',
@@ -22,6 +23,8 @@ a = Analysis(
         'uvicorn.protocols.websockets.auto',
         'uvicorn.lifespan',
         'uvicorn.lifespan.on',
+        'numpy',
+        'pandas',
     ],
     hookspath=[],
     hooksconfig={},
