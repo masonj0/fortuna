@@ -180,10 +180,11 @@ jobs:
         run: |
           dotnet tool install --global wix
 
-      - name: Add WiX Util Extension
+      - name: Add WiX Util and Firewall Extensions
         shell: pwsh
         run: |
           wix extension add WixToolset.Util.wixext
+          wix extension add WixToolset.Firewall.wixext
 
       - name: Stage Files for WiX
         shell: pwsh
@@ -198,20 +199,38 @@ jobs:
           Copy-Item -Path "./artifacts/frontend-build-output-${{ github.sha }}/*" -Destination $uiStagingDir -Recurse
           Write-Host "✅ All assets staged for WiX build."
 
-      - name: Build MSI with WiX v4
+      - name: Generate Frontend.wxs with Heat
         shell: pwsh
         run: |
-          $wixStagingDir = "build_wix/staging"
-          $outputMsi = "dist/Fortuna-Full-App-Service-v4.msi"
+          $sourceDir = "$PWD/build_wix/staging"
+          $uiDir = "$sourceDir/ui"
 
-          # The <HarvestDirectory> element in the .wxs file now handles the UI files,
-          # so we no longer need a separate heat step or to pass Frontend.wxs here.
-          wix build ./build_wix/Product_WithService.wxs `
+          wix heat dir "$uiDir" `
+            -o build_wix/frontend_components.wxs `
+            -cg FrontendComponents `
+            -dr INSTALLFOLDER `
+            -gg -sfrag -srd `
+            -var var.FrontendSourceDir
+
+          Write-Host "✅ frontend_components.wxs generated"
+
+      - name: Build MSI with WiX
+        shell: pwsh
+        run: |
+          $sourceDir = "$PWD/build_wix/staging"
+          $uiDir = "$sourceDir/ui"
+
+          # Build the MSI
+          wix build `
+            build_wix/Product_WithService.wxs `
+            build_wix/frontend_components.wxs `
             -ext WixToolset.Util.wixext `
-            -d "SourceDir=$wixStagingDir" `
-            -o $outputMsi
+            -ext WixToolset.Firewall.wixext `
+            -d "SourceDir=$sourceDir" `
+            -d "FrontendSourceDir=$uiDir" `
+            -o dist/Fortuna-Full-App-Service-v4.msi
 
-          Write-Host "✅ MSI created successfully with WiX v4."
+          Write-Host "✅ MSI created successfully"
 
       - name: Upload WiX MSI Artifact
         uses: actions/upload-artifact@v4.3.4
