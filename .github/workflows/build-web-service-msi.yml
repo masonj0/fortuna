@@ -220,6 +220,34 @@ jobs:
           }
           Write-Host "✅ Validation passed: Found $($fileNodes.Count) <File> elements in harvested file."
 
+      - name: '🔍 Diagnose WXS File Encoding'
+        shell: pwsh
+        run: |
+          function Get-FileEncoding {
+            param([string]$Path)
+            [byte[]]$byte = Get-Content -Encoding byte -Path $Path -TotalCount 4
+            if ($byte[0] -eq 0xef -and $byte[1] -eq 0xbb -and $byte[2] -eq 0xbf) {
+                return [System.Text.Encoding]::UTF8
+            } elseif ($byte[0] -eq 0xff -and $byte[1] -eq 0xfe) {
+                return [System.Text.Encoding]::Unicode
+            } elseif ($byte[0] -eq 0xfe -and $byte[1] -eq 0xff) {
+                return [System.Text.Encoding]::BigEndianUnicode
+            } elseif ($byte[0] -eq 0 -and $byte[1] -eq 0 -and $byte[2] -eq 0xfe -and $byte[3] -eq 0xff) {
+                return [System.Text.Encoding]::UTF32
+            } elseif ($byte[0] -ge 0x20 -and $byte[0] -le 0x7e) {
+                return [System.Text.Encoding]::ASCII
+            } else {
+                return [System.Text.Encoding]::Default
+            }
+          }
+          $filePath = "./build_wix/Product_WithService.wxs"
+          $encoding = Get-FileEncoding -Path $filePath
+          Write-Host "--- File Content of $filePath ---"
+          Get-Content -Path $filePath -Raw | Write-Host
+          Write-Host "------------------------------------"
+          Write-Host "Detected Encoding: $($encoding.EncodingName)"
+          Write-Host "------------------------------------"
+
       - name: Build MSI with WiX v4
         shell: pwsh
         run: |
