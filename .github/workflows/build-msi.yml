@@ -43,6 +43,7 @@ jobs:
 
   build-backend:
     name: '🐍 Build Backend'
+    needs: [build-frontend]
     timeout-minutes: 20
     runs-on: windows-latest
     env:
@@ -68,6 +69,11 @@ jobs:
         run: |
           if (-not (Test-Path "python_service/main.py")) { throw "❌ FATAL: python_service/main.py not found" }
           Write-Host "✅ Critical files verified."
+      - name: Download Frontend Artifact
+        uses: actions/download-artifact@v4.1.8
+        with:
+          name: frontend-build-output-${{ github.sha }}
+          path: web_platform/frontend/out
       - name: Backend - Install Dependencies
         shell: pwsh
         run: |
@@ -80,7 +86,7 @@ jobs:
       - name: Backend - Build with PyInstaller
         shell: pwsh
         run: |
-          pyinstaller fortuna-backend.spec --noconfirm
+          pyinstaller fortuna-backend-electron.spec --noconfirm
       - name: Upload Backend Artifact
         uses: actions/upload-artifact@v4.3.4
         with:
