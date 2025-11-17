@@ -91,7 +91,16 @@
 
     <ComponentGroup Id="StartMenuShortcut">
       <ComponentRef Id="ShortcutComponent" />
-    </ComponentGroup>
+    </ComponentG
+roup>
+
+    <ComponentGroup Id="FrontendComponents" Directory="INSTALLFOLDER" />
+
+    <ComponentGroup Id="FrontendComponents" Directory="INSTALLFOLDER" />
+
+    <ComponentGroup Id="FrontendComponents" Directory="INSTALLFOLDER" />
+
+    <ComponentGroup Id="FrontendComponents" Directory="INSTALLFOLDER" />
 
   </Package>
 </Wix>
