@@ -135,7 +135,8 @@ class FortunaDesktopApp {
  }
 
  const indexPath = path.join(app.getAppPath(), 'web-ui-build', 'out', 'index.html');
- return `file://${indexPath}`;
+ const { pathToFileURL } = require('url');
+ return pathToFileURL(indexPath).toString();
  }
 
  createMainWindow() {
