@@ -180,10 +180,11 @@ jobs:
         run: |
           dotnet tool install --global wix
 
-      - name: Add WiX Util Extension
+      - name: Add WiX Util and Firewall Extensions
         shell: pwsh
         run: |
           wix extension add WixToolset.Util.wixext
+          wix extension add WixToolset.Firewall.wixext
 
       - name: Stage Files for WiX
         shell: pwsh
@@ -198,16 +199,36 @@ jobs:
           Copy-Item -Path "./artifacts/frontend-build-output-${{ github.sha }}/*" -Destination $uiStagingDir -Recurse
           Write-Host "✅ All assets staged for WiX build."
 
+      - name: Harvest UI Components via MSBuild
+        working-directory: build_wix
+        shell: pwsh
+        run: |
+          dotnet msbuild harvest.wixproj
+          Write-Host "✅ UI components harvested into frontend_components.wxs"
+
+      - name: Validate Harvested Components
+        shell: pwsh
+        run: |
+          $harvestedFile = "build_wix/frontend_components.wxs"
+          if (-not (Test-Path $harvestedFile)) {
+            throw "❌ FATAL: Harvested file '$harvestedFile' was not created."
+          }
+          [xml]$xml = Get-Content $harvestedFile
+          $fileNodes = $xml.SelectNodes("//*[local-name()='File']")
+          if ($fileNodes.Count -eq 0) {
+            throw "❌ FATAL: No <File> elements were found in the harvested file. The UI will be missing."
+          }
+          Write-Host "✅ Validation passed: Found $($fileNodes.Count) <File> elements in harvested file."
+
       - name: Build MSI with WiX v4
         shell: pwsh
         run: |
           $wixStagingDir = "build_wix/staging"
           $outputMsi = "dist/Fortuna-Full-App-Service-v4.msi"
 
-          # The <HarvestDirectory> element in the .wxs file now handles the UI files,
-          # so we no longer need a separate heat step or to pass Frontend.wxs here.
-          wix build ./build_wix/Product_WithService.wxs `
+          wix build ./build_wix/Product_WithService.wxs ./build_wix/frontend_components.wxs `
             -ext WixToolset.Util.wixext `
+            -ext WixToolset.Firewall.wixext `
             -d "SourceDir=$wixStagingDir" `
             -o $outputMsi
 
