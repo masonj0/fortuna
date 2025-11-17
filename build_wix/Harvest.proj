@@ -19,6 +19,7 @@
                    ComponentGroupName="FrontendFiles"
                    DirectoryRefId="UIDirectory"
                    AutogenerateGuids="true"
-                   SuppressFragments="true" />
+                   SuppressFragments="true"
+                   PreprocessorVariable="var.FrontendSourceDir" />
   </Target>
 </Project>
