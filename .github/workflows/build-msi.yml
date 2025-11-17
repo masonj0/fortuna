@@ -353,10 +353,12 @@ jobs:
         run: |
           $wixStagingDir = "build_wix/staging"
           $outputMsi = "dist/Fortuna-Full-App-Service-v4.msi"
+          $frontendSourceDir = Join-Path $env:GITHUB_WORKSPACE "build_wix/staging/ui"
 
           wix build ./build_wix/Product_WithService.wxs ./build_wix/Frontend.wxs `
             -ext WixToolset.Util.wixext `
             -d "SourceDir=$wixStagingDir" `
+            -d "FrontendSourceDir=$frontendSourceDir" `
             -o $outputMsi
 
           Write-Host "✅ MSI created successfully with WiX v4."

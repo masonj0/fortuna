@@ -37,6 +37,14 @@ def main():
 
     settings = get_settings()
 
+    # Check if the port is already in use before attempting to start the server.
+    # This prevents a common crash scenario when another instance is running.
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        if s.connect_ex((settings.UVICORN_HOST, settings.UVICORN_PORT)) == 0:
+            print(f"FATAL: Port {settings.UVICORN_PORT} is already in use. Another process may be running.")
+            sys.exit(1)
+
     uvicorn.run(
         app,
         host=settings.UVICORN_HOST,
