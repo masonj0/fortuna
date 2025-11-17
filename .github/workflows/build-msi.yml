@@ -329,6 +329,13 @@ jobs:
         run: |
           wix extension add WixToolset.Util.wixext
 
+      - name: Add .NET Tools to PATH
+        shell: pwsh
+        run: |
+          $dotNetToolsPath = Join-Path $env:USERPROFILE ".dotnet\tools"
+          "##[add-path]$dotNetToolsPath" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          Write-Host "Added '$dotNetToolsPath' to PATH."
+
       - name: Stage Files for WiX
         shell: pwsh
         run: |
@@ -345,7 +352,7 @@ jobs:
       - name: Harvest UI Files with Heat
         shell: pwsh
         run: |
-          wix heat dir build_wix/staging/ui -o build_wix/Frontend.wxs -gg -sreg -scom -sfrag -dr UIDirectory -cg FrontendFiles
+          heat dir build_wix/staging/ui -o build_wix/Frontend.wxs -gg -sreg -scom -sfrag -dr UIDirectory -cg FrontendFiles
           Write-Host "✅ UI directory harvested into Frontend.wxs."
 
       - name: Build MSI with WiX v4
