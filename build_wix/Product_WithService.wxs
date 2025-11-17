@@ -19,7 +19,7 @@
             <Directory Id="INSTALLFOLDER" Name="Fortuna Faucet Service">
                 <Component Id="cmp_fortuna_backend" Guid="*">
                     <File Id="file_fortuna_backend_exe" KeyPath="yes" Source="$(var.SourceDir)\fortuna-backend.exe" />
-                    <util:ServiceInstall
+                    <ServiceInstall
                         Id="ServiceInstaller"
                         Name="FortunaBackendService"
                         DisplayName="Fortuna Faucet Backend Service"
@@ -31,14 +31,14 @@
                         Arguments=""
                         Interactive="no"
                     >
-                        <util:ServiceConfig
+                        <ServiceConfig
                             FirstFailureActionType="restart"
                             SecondFailureActionType="restart"
                             ThirdFailureActionType="restart"
                             ResetPeriodInDays="1"
                             RestartServiceDelayInSeconds="60" />
-                    </util:ServiceInstall>
-                    <util:ServiceControl
+                    </ServiceInstall>
+                    <ServiceControl
                         Id="ServiceStarter"
                         Start="install"
                         Stop="both"

@@ -345,7 +345,7 @@ jobs:
       - name: Harvest UI Files with Heat
         shell: pwsh
         run: |
-          heat dir build_wix/staging/ui -o build_wix/Frontend.wxs -gg -sreg -scom -sfrag -dr UIDirectory -cg FrontendFiles
+          wix heat dir build_wix/staging/ui -o build_wix/Frontend.wxs -gg -sreg -scom -sfrag -dr UIDirectory -cg FrontendFiles
           Write-Host "✅ UI directory harvested into Frontend.wxs."
 
       - name: Build MSI with WiX v4
