@@ -198,16 +198,40 @@ jobs:
           Copy-Item -Path "./artifacts/frontend-build-output-${{ github.sha }}/*" -Destination $uiStagingDir -Recurse
           Write-Host "✅ All assets staged for WiX build."
 
+      - name: Harvest UI Components with Heat
+        shell: pwsh
+        run: |
+          $uiStagingDir = "build_wix/staging/ui"
+          $harvestedFile = "build_wix/frontend_components.wxs"
+          wix heat dir $uiStagingDir -gg -sfrag -srd -dr INSTALLFOLDER -cg FrontendComponents -out $harvestedFile
+          Write-Host "✅ UI components harvested into $harvestedFile"
+          Write-Host "--- Displaying harvested file contents ---"
+          Get-Content -Path $harvestedFile -Raw
+          Write-Host "--- End of harvested file ---"
+
+      - name: Validate Harvested Components
+        shell: pwsh
+        run: |
+          $harvestedFile = "build_wix/frontend_components.wxs"
+          if (-not (Test-Path $harvestedFile)) {
+            throw "❌ FATAL: Harvested file '$harvestedFile' was not created."
+          }
+          [xml]$xml = Get-Content $harvestedFile
+          $fileNodes = $xml.SelectNodes("//*[local-name()='File']")
+          if ($fileNodes.Count -eq 0) {
+            throw "❌ FATAL: No <File> elements were found in the harvested file. The UI will be missing."
+          }
+          Write-Host "✅ Validation passed: Found $($fileNodes.Count) <File> elements in harvested file."
+
       - name: Build MSI with WiX v4
         shell: pwsh
         run: |
           $wixStagingDir = "build_wix/staging"
           $outputMsi = "dist/Fortuna-Full-App-Service-v4.msi"
 
-          # The <HarvestDirectory> element in the .wxs file now handles the UI files,
-          # so we no longer need a separate heat step or to pass Frontend.wxs here.
-          wix build ./build_wix/Product_WithService.wxs `
+          wix build ./build_wix/Product_WithService.wxs ./build_wix/frontend_components.wxs `
             -ext WixToolset.Util.wixext `
+            -ext WixToolset.Firewall.wixext `
             -d "SourceDir=$wixStagingDir" `
             -o $outputMsi
 
