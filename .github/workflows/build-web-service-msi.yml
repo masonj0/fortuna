@@ -1,0 +1,302 @@
+name: Build Fortuna Faucet Web Service Installer
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '20'
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  build-frontend:
+    name: '📦 Build Frontend'
+    timeout-minutes: 15
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4.1.7
+      - name: Setup Node.js
+        uses: actions/setup-node@v4.0.3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'web_platform/frontend/package-lock.json'
+      - name: Frontend - Install & Build
+        shell: pwsh
+        run: |
+          cd web_platform/frontend
+          npm ci
+          npm audit --audit-level=moderate # Added security check
+          npm run build
+      - name: Upload Frontend Artifact
+        uses: actions/upload-artifact@v4.3.4
+        with:
+          name: frontend-build-output-${{ github.sha }}
+          path: web_platform/frontend/out
+          retention-days: 1
+
+  build-backend:
+    name: '🐍 Build Backend'
+    timeout-minutes: 20
+    needs: [build-frontend]
+    runs-on: windows-latest
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4.1.7
+      - name: Setup Python
+        uses: actions/setup-python@v5.1.1
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: 'python_service/requirements.txt'
+      - name: Download Frontend Artifact
+        uses: actions/download-artifact@v4.1.8
+        with:
+          name: frontend-build-output-${{ github.sha }}
+          path: web_platform/frontend/out
+      - name: '✅ [MONITOR] Ensure Required Directories Exist'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path "python_service/adapters" -Force | Out-Null
+          New-Item -ItemType Directory -Path "python_service/data" -Force | Out-Null
+          New-Item -ItemType Directory -Path "python_service/json" -Force | Out-Null
+          Write-Host "✅ Ensured required data, json, and adapters directories exist."
+      - name: '✅ [MONITOR] Verify Critical Files'
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "python_service/main.py")) { throw "❌ FATAL: python_service/main.py not found" }
+          Write-Host "✅ Critical files verified."
+      - name: Backend - Install Dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r python_service/requirements-dev.txt
+      - name: Backend - Security Audit
+        shell: pwsh
+        run: |
+          pip-audit -r python_service/requirements.txt --local
+      - name: Backend - Build with PyInstaller
+        shell: pwsh
+        run: |
+          # Check if spec file exists, if not create it
+          if (-not (Test-Path "fortuna-backend.spec")) {
+            Write-Host "⚠️ Spec file not found, generating it..."
+
+            $specContent = @(
+                '# -*- mode: python ; coding: utf-8 -*-',
+                '',
+                'block_cipher = None',
+                '',
+                'a = Analysis(',
+                "    ['python_service/main.py'],",
+                '    pathex=[],',
+                '    binaries=[],',
+                '    datas=[',
+                "        ('python_service/data', 'data'),",
+                "        ('python_service/json', 'json'),",
+                "        ('python_service/adapters', 'adapters'),",
+                '    ],',
+                '    hiddenimports=[',
+                "        'uvicorn.logging',",
+                "        'uvicorn.loops',",
+                "        'uvicorn.loops.auto',",
+                "        'uvicorn.protocols',",
+                "        'uvicorn.protocols.http',",
+                "        'uvicorn.protocols.http.auto',",
+                "        'uvicorn.protocols.websockets',",
+                "        'uvicorn.protocols.websockets.auto',",
+                "        'uvicorn.lifespan',",
+                "        'uvicorn.lifespan.on',",
+                "        'numpy',",
+                "        'numpy.core',",
+                "        'numpy.core._multiarray_umath',",
+                "        'pandas',",
+                "        'pandas._libs',",
+                "        'pandas._libs.tslibs',",
+                '    ],',
+                '    hookspath=[],',
+                '    hooksconfig={},',
+                '    runtime_hooks=[],',
+                '    excludes=[],',
+                '    win_no_prefer_redirects=False,',
+                '    win_private_assemblies=False,',
+                '    cipher=block_cipher,',
+                '    noarchive=False,',
+                ')',
+                '',
+                'pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)',
+                '',
+                'exe = EXE(',
+                '    pyz,',
+                '    a.scripts,',
+                '    a.binaries,',
+                '    a.zipfiles,',
+                '    a.datas,',
+                '    [],',
+                "    name='fortuna-backend',",
+                '    debug=False,',
+                '    bootloader_ignore_signals=False,',
+                '    strip=False,',
+                '    upx=True,',
+                '    upx_exclude=[],',
+                '    runtime_tmpdir=None,',
+                '    console=True,',
+                "    disable_windowed_traceback=False,",
+                '    argv_emulation=False,',
+                '    target_arch=None,',
+                '    codesign_identity=None,',
+                '    entitlements_file=None,',
+                ')'
+            ) -join [System.Environment]::NewLine
+            Set-Content -Path "fortuna-backend.spec" -Value $specContent -Encoding UTF8
+            Write-Host "✅ Generated fortuna-backend.spec"
+          } else {
+            Write-Host "✅ Using existing fortuna-backend.spec"
+          }
+
+          # Build the executable
+          pyinstaller fortuna-backend.spec --noconfirm
+      - name: Upload Backend Artifact
+        uses: actions/upload-artifact@v4.3.4
+        with:
+          name: backend-executable-${{ github.sha }}
+          path: dist/fortuna-backend.exe
+          retention-days: 1
+          if-no-files-found: error
+
+  smoke-test-backend:
+    name: '🧪 Smoke Test Backend Executable'
+    timeout-minutes: 10
+    needs: [build-backend]
+    runs-on: windows-latest
+    steps:
+      - name: Download Backend Executable
+        uses: actions/download-artifact@v4.1.8
+        with:
+          name: backend-executable-${{ github.sha }}
+      - name: Run Smoke Test
+        shell: pwsh
+        env:
+          API_KEY: "a_secure_test_api_key_that_is_long_enough_for_smoke_test"
+        run: |
+          $exe = "./fortuna-backend.exe"
+          $logFileBase = "backend-log"
+          $stdOutPath = "$logFileBase-out.txt"
+          $stdErrPath = "$logFileBase-err.txt"
+          $process = Start-Process -FilePath $exe -PassThru -NoNewWindow -RedirectStandardOutput $stdOutPath -RedirectStandardError $stdErrPath
+          $serverReady = $false
+          Write-Host "--- Starting Smoke Test: Polling /health and /api/races endpoints for 60s ---"
+          try {
+            foreach ($i in 1..30) {
+              if ($process.HasExited) {
+                throw "[FATAL] Backend process crashed during smoke test. Exit Code: $($process.ExitCode)"
+              }
+              try {
+                $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/health" -TimeoutSec 1 -UseBasicParsing
+                if ($response.StatusCode -eq 200) {
+                  $headers = @{ "X-API-Key" = $env:API_KEY }
+                  $apiResponse = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/races" -Headers $headers -TimeoutSec 1 -UseBasicParsing -ErrorAction SilentlyContinue
+                  if ($apiResponse.StatusCode -eq 200) {
+                    Write-Host "[OK] Health check and API test passed on attempt $i!"
+                    $serverReady = $true
+                    break
+                  }
+                }
+              } catch {
+                Write-Host "Attempt $i... server not ready."
+              }
+              Start-Sleep -Seconds 2
+            }
+          } finally {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            if (-not $serverReady) {
+              Write-Host "--- ❌ TEST FAILED ---"
+              if (Test-Path $stdOutPath) {
+                Write-Host "--- STDOUT ---"
+                Get-Content $stdOutPath | Write-Host
+              }
+              if (Test-Path $stdErrPath) {
+                Write-Host "--- STDERR ---"
+                Get-Content $stdErrPath | Write-Host
+              }
+              throw "[FATAL] Backend smoke test failed. Server never became healthy."
+            }
+          }
+          Write-Host "✅ Backend smoke test passed."
+
+
+  build-wix-installer:
+    name: '🔥 Build WiX Installer (Modernized)'
+    timeout-minutes: 15
+    needs: [build-backend, build-frontend]
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4.1.7
+
+      - name: Download Build Artifacts
+        uses: actions/download-artifact@v4.1.8
+        with:
+          path: ./artifacts
+
+      - name: Setup .NET for WiX v4
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '6.0.x'
+
+      - name: Install WiX v4 Toolset
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix
+
+      - name: Add WiX Util Extension
+        shell: pwsh
+        run: |
+          wix extension add WixToolset.Util.wixext
+
+      - name: Stage Files for WiX
+        shell: pwsh
+        run: |
+          $wixStagingDir = "build_wix/staging"
+          $uiStagingDir = Join-Path $wixStagingDir "ui"
+
+          if (Test-Path $wixStagingDir) { Remove-Item -Recurse -Force $wixStagingDir }
+          New-Item -ItemType Directory -Path $uiStagingDir | Out-Null
+
+          Copy-Item -Path "./artifacts/backend-executable-${{ github.sha }}/fortuna-backend.exe" -Destination (Join-Path $wixStagingDir "fortuna-backend.exe")
+          Copy-Item -Path "./artifacts/frontend-build-output-${{ github.sha }}/*" -Destination $uiStagingDir -Recurse
+          Write-Host "✅ All assets staged for WiX build."
+
+      - name: Generate Frontend.wxs (WiX v4 Heat)
+        shell: pwsh
+        run: |
+          dotnet msbuild build_wix/Harvest.proj -restore -t:GenerateFrontendWxs
+          Write-Host "✅ UI directory harvested into Frontend.wxs via MSBuild."
+
+      - name: Build MSI with WiX v4
+        shell: pwsh
+        run: |
+          $wixStagingDir = "build_wix/staging"
+          $outputMsi = "dist/Fortuna-Full-App-Service-v4.msi"
+
+          wix build ./build_wix/Product_WithService.wxs ./build_wix/Frontend.wxs `
+            -ext WixToolset.Util.wixext `
+            -d "SourceDir=$wixStagingDir" `
+            -o $outputMsi
+
+          Write-Host "✅ MSI created successfully with WiX v4."
+
+      - name: Upload WiX MSI Artifact
+        uses: actions/upload-artifact@v4.3.4
+        with:
+          name: fortuna-wix-installer-windows-v4
+          path: dist/Fortuna-Full-App-Service-v4.msi
+          retention-days: 7
