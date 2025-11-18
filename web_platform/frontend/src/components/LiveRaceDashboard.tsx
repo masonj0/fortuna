@@ -42,6 +42,29 @@ const fetchAdapterStatuses = async (apiKey: string | null): Promise<SourceInfo[]
   return response.json();
 };
 
+const fetchQualifiedRaces = async (apiKey: string | null, params: RaceFilterParams) => {
+  if (!apiKey) {
+    throw new Error('API key not available');
+  }
+  const url = new URL('/api/races/qualified/trifecta', window.location.origin);
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      url.searchParams.append(key, value.toString());
+    }
+  });
+
+  const response = await fetch(url.toString(), {
+    headers: { 'X-API-Key': apiKey },
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(JSON.stringify(errorData));
+  }
+
+  return response.json();
+};
+
 
 const BackendErrorPanel = ({ logs, onRestart }: { logs: string[]; onRestart: () => void }) => (
   <div className="bg-slate-800 p-6 rounded-lg border border-red-500/50 text-white">
@@ -150,6 +173,12 @@ export const LiveRaceDashboard = React.memo(() => {
     fetchApiKey();
   }, []);
 
+  const [params, setParams] = useState<RaceFilterParams>({
+    maxFieldSize: 10,
+    minFavoriteOdds: 2.5,
+    minSecondFavoriteOdds: 4.0,
+  });
+
   const {
     data,
     status: connectionStatus,
@@ -166,12 +195,6 @@ export const LiveRaceDashboard = React.memo(() => {
     apiKey ? '/ws/live-updates' : '',
     { apiKey }
   );
-
-  const [params, setParams] = useState<RaceFilterParams>({
-    maxFieldSize: 10,
-    minFavoriteOdds: 2.5,
-    minSecondFavoriteOdds: 4.0,
-  });
 
   // Effect to update state when new live data arrives
   useEffect(() => {
@@ -224,7 +247,7 @@ export const LiveRaceDashboard = React.memo(() => {
     }
 
     // Priority 2: Backend is starting or initial fetch is happening.
-    const isLoading = backendStatus.state === 'starting' || (connectionStatus === 'pending' && !adapterStatuses);
+    const isLoading = backendStatus.state === 'starting' || (connectionStatus === 'pending' && !data);
     if (isLoading) {
         return (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
