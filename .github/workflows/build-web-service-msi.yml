@@ -44,7 +44,6 @@ jobs:
   build-backend:
     name: '🐍 Build Backend'
     timeout-minutes: 20
-    needs: [build-frontend]
     runs-on: windows-latest
     env:
       PYTHONUTF8: "1"
