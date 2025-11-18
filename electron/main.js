@@ -2,6 +2,7 @@
 const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, dialog } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const { spawn } = require('child_process');
+const net = require('net');
 const path = require('path');
 const fs = require('fs');
 const SecureSettingsManager = require('./secure-settings-manager');
@@ -36,12 +37,46 @@ class FortunaDesktopApp {
  }
  }
 
- startBackend() {
- if (this.isBackendStarting) {
- console.log('Backend start already in progress. Ignoring request.');
- return;
- }
- this.isBackendStarting = true;
+  checkPortInUse(port) {
+    return new Promise((resolve, reject) => {
+      const server = net.createServer();
+      server.once('error', (err) => {
+        if (err.code === 'EADDRINUSE') {
+          resolve(true); // Port is in use
+        } else {
+          reject(err);
+        }
+      });
+      server.once('listening', () => {
+        server.close(() => {
+          resolve(false); // Port is free
+        });
+      });
+      server.listen(port, '127.0.0.1');
+    });
+  }
+
+  async startBackend() {
+    if (this.isBackendStarting) {
+      console.log('Backend start already in progress. Ignoring request.');
+      return;
+    }
+    this.isBackendStarting = true;
+
+    const isPortInUse = await this.checkPortInUse(8000);
+    if (isPortInUse) {
+      const errorMsg = 'FATAL: Port 8000 is already in use. Another process may be running.';
+      console.error(errorMsg);
+      this.backendState = 'error';
+      this.backendLogs.push(errorMsg);
+      this.sendBackendStatusUpdate();
+      dialog.showErrorBox(
+        'Backend Conflict',
+        'Port 8000 is already in use. Please close any other running instances of Fortuna Faucet or the backend service and try again.'
+      );
+      this.isBackendStarting = false;
+      return;
+    }
 
  this.backendState = 'starting';
  this.backendLogs = ['Attempting to start backend process...'];
