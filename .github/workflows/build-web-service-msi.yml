@@ -56,6 +56,25 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
           cache-dependency-path: 'python_service/requirements.txt'
+      - name: Download Frontend Artifact
+        uses: actions/download-artifact@v4.1.8
+        with:
+          name: frontend-build-output-${{ github.sha }}
+          path: ./temp-frontend
+      - name: '✅ [FIX] Stage Frontend Artifact for PyInstaller'
+        shell: pwsh
+        run: |
+          $sourceDir = "./temp-frontend"
+          $destinationDir = "web_platform/frontend/out"
+          if (Test-Path $destinationDir) {
+            Remove-Item -Recurse -Force $destinationDir
+          }
+          New-Item -ItemType Directory -Path $destinationDir -Force | Out-Null
+          Copy-Item -Path "$sourceDir/*" -Destination $destinationDir -Recurse -Force
+          Write-Host "✅ Frontend artifact staged from $sourceDir to $destinationDir."
+          Write-Host "--- Verifying staged content: ---"
+          Get-ChildItem -Path $destinationDir -Recurse | ForEach-Object { Write-Host $_.FullName }
+          Write-Host "--- Verification complete. ---"
       - name: '✅ [MONITOR] Ensure Required Directories Exist'
         shell: pwsh
         run: |
