@@ -191,6 +191,20 @@ export const LiveRaceDashboard = React.memo(() => {
     setParams(newParams);
   }, []);
 
+  const handleParseSuccess = (adapterName: string, parsedRaces: Race[]) => {
+    // 1. Remove the placeholder error card for this adapter
+    const otherRaces = races.filter(race => race.source !== adapterName);
+
+    // 2. Merge the new races in
+    const updatedRaces = [...otherRaces, ...parsedRaces].sort(
+      (a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
+    );
+    setRaces(updatedRaces);
+
+    // 3. Remove the source from the failed list so the panel disappears
+    setFailedSources(prev => prev.filter(s => s.name !== adapterName));
+  };
+
   const renderContent = () => {
     // Priority 1: Backend process has failed.
     if (backendStatus.state === 'error') {
@@ -288,6 +302,8 @@ export const LiveRaceDashboard = React.memo(() => {
             key={source.name}
             adapterName={source.name}
             attemptedUrl={source.attemptedUrl || 'URL not available'}
+            apiKey={apiKey}
+            onParseSuccess={handleParseSuccess}
           />
         ))}
 

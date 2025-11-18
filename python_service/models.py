@@ -92,3 +92,8 @@ class TipsheetRace(FortunaBaseModel):
     post_time: str = Field(..., alias="postTime")
     score: float
     factors: Any  # JSON string stored as Any
+
+
+class ManualParseRequest(FortunaBaseModel):
+    adapter_name: str
+    html_content: str
