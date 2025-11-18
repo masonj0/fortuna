@@ -1,5 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?define FrontendSourceDir = "staging/ui" ?>
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
-     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
+     xmlns:firewall="http://wixtoolset.org/schemas/v4/wxs/firewall">
   <Package Name="Fortuna Faucet Web Service"
            Manufacturer="Fortuna Development Team"
            Version="1.0.0.0"
@@ -11,15 +14,8 @@
       <ComponentGroupRef Id="ServiceAndFirewall" />
       <ComponentGroupRef Id="DirectoryAndEnv" />
       <ComponentGroupRef Id="StartMenuShortcut" />
-      <ComponentGroupRef Id="FrontendComponents" /> <!-- This is populated by the HarvestDirectory element -->
+      <ComponentGroupRef Id="FrontendComponents" />
     </Feature>
-
-    <ComponentGroup Id="FrontendComponents" Directory="INSTALLFOLDER">
-      <HarvestDirectory Id="HarvestedUI"
-                        DirectoryId="INSTALLFOLDER"
-                        ComponentGroupName="FrontendComponents"
-                        SourceDir="$(var.SourceDir)/ui" />
-    </ComponentGroup>
 
     <StandardDirectory Id="ProgramFiles6432Folder">
       <Directory Id="INSTALLFOLDER" Name="Fortuna Faucet Web Service">
@@ -30,41 +26,40 @@
         <Component Id="FortunaBackendService" Guid="a1b1a73a-4424-4221-897b-0331984639e2">
           <File Id="FortunaBackendExe"
                 Source="$(var.SourceDir)/fortuna-backend.exe"
-                KeyPath="yes" />
+                KeyPath="yes">
 
-          <util:ServiceInstall Id="InstallFortunaService"
-                               Name="FortunaBackendService"
-                               DisplayName="Fortuna Faucet Backend"
-                               Description="Handles data aggregation for Fortuna Faucet."
-                               Account="LocalService"
-                               Start="auto"
-                               Type="ownProcess"
-                               Vital="yes"
-                               ErrorControl="critical" />
+            <util:ServiceInstall Id="InstallFortunaService"
+                                 Name="FortunaBackendService"
+                                 DisplayName="Fortuna Faucet Backend"
+                                 Description="Handles data aggregation for Fortuna Faucet."
+                                 Account="LocalService"
+                                 Start="auto"
+                                 Type="ownProcess"
+                                 Vital="yes"
+                                 ErrorControl="critical" />
 
-          <util:ServiceControl Id="StartFortunaService"
-                               Name="FortunaBackendService"
-                               Start="install"
-                               Stop="both"
-                               Remove="uninstall"
-                               Wait="yes" />
+            <util:ServiceControl Id="StartFortunaService"
+                                 Name="FortunaBackendService"
+                                 Start="install"
+                                 Stop="both"
+                                 Remove="uninstall"
+                                 Wait="yes" />
 
-          <util:FirewallException Id="FWException"
-                                  Name="Fortuna Faucet"
-                                  Port="8000"
-                                  Protocol="tcp"
-                                  Scope="any" />
+            <firewall:FirewallException Id="FWException"
+                                        Name="Fortuna Faucet"
+                                        Port="8000"
+                                        Protocol="tcp"
+                                        Scope="any" />
+          </File>
         </Component>
 
         <Component Id="DataAndLogsFolders" Guid="f9e0a2d2-8533-4a6c-921c-55913e11f75b">
-          <!-- This component needs a KeyPath, so we create a dummy registry entry. -->
           <RegistryValue Root="HKLM" Key="Software\Fortuna Faucet" Name="FoldersCreated" Type="integer" Value="1" KeyPath="yes" />
           <CreateFolder Directory="DataFolder" />
           <CreateFolder Directory="LogsFolder" />
         </Component>
 
         <Component Id="EnvironmentVariables" Guid="c3d9a9a0-6b6f-4c18-9c59-26d0e6a1240c">
-          <!-- This component also needs a KeyPath. -->
           <RegistryValue Root="HKLM" Key="Software\Fortuna Faucet" Name="EnvVariablesSet" Type="integer" Value="1" KeyPath="yes" />
           <Environment Id="DataDirEnv" Name="FORTUNA_DATA_DIR" Value="[DataFolder]" Action="set" System="yes" />
           <Environment Id="LogDirEnv" Name="FORTUNA_LOG_DIR" Value="[LogsFolder]" Action="set" System="yes" />
@@ -80,13 +75,11 @@
                                  Name="Fortuna Faucet"
                                  Target="http://localhost:8000" />
           <RemoveFolder Id="RemoveProgramMenuSubfolder" On="uninstall" />
-          <!-- A component needs a KeyPath. The shortcut can't be it, so we add a registry value. -->
           <RegistryValue Root="HKCU" Key="Software\Fortuna Faucet" Name="ShortcutCreated" Type="integer" Value="1" KeyPath="yes"/>
         </Component>
       </Directory>
     </StandardDirectory>
 
-    <!-- Define Component Groups to logically group our components -->
     <ComponentGroup Id="ServiceAndFirewall">
       <ComponentRef Id="FortunaBackendService" />
     </ComponentGroup>
