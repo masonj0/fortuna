@@ -167,6 +167,12 @@ export const LiveRaceDashboard = React.memo(() => {
     { apiKey }
   );
 
+  const [params, setParams] = useState<RaceFilterParams>({
+    maxFieldSize: 10,
+    minFavoriteOdds: 2.5,
+    minSecondFavoriteOdds: 4.0,
+  });
+
   // Effect to update state when new live data arrives
   useEffect(() => {
     if (liveData) {
@@ -177,11 +183,6 @@ export const LiveRaceDashboard = React.memo(() => {
   }, [liveData, queryClient, apiKey, params]);
 
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
-  const [params, setParams] = useState<RaceFilterParams>({
-    maxFieldSize: 10,
-    minFavoriteOdds: 2.5,
-    minSecondFavoriteOdds: 4.0,
-  });
   const [isModalOpen, setIsModalOpen] = useState(false);
 
 
