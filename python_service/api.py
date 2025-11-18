@@ -41,6 +41,7 @@ from .middleware.error_handler import UserFriendlyException
 from .middleware.error_handler import user_friendly_exception_handler
 from .middleware.error_handler import validation_exception_handler
 from .models import AggregatedResponse
+from .models import ManualParseRequest
 from .models import QualifiedRacesResponse
 from .models import Race
 from .models import TipsheetRace
@@ -443,3 +444,38 @@ async def websocket_endpoint(websocket: WebSocket, api_key: str = Query(...)):
     except WebSocketDisconnect:
         manager.disconnect(websocket)
         log.info("Client disconnected from WebSocket.")
+
+
+@app.post("/api/races/parse-manual", response_model=List[Race])
+@limiter.limit("30/minute")
+async def parse_manual_html(
+    request: Request,
+    parse_request: ManualParseRequest,
+    engine: OddsEngine = Depends(get_engine),
+    _=Depends(verify_api_key),
+):
+    """
+    Manually parses a block of HTML using a specified adapter.
+    """
+    try:
+        adapter = engine.get_adapter(parse_request.adapter_name)
+        if not adapter:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Adapter '{parse_request.adapter_name}' not found.",
+            )
+
+        # The _parse_races method is synchronous, so we run it in a thread
+        # to avoid blocking the asyncio event loop.
+        loop = asyncio.get_event_loop()
+        parsed_races_data = await loop.run_in_executor(
+            executor, adapter._parse_races, parse_request.html_content
+        )
+
+        # Validate the parsed data with the Race model
+        validated_races = [Race(**race_data) for race_data in parsed_races_data]
+        return validated_races
+
+    except Exception as e:
+        log.error("Error during manual parsing", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"An error occurred: {e}")
