@@ -96,4 +96,4 @@ class TipsheetRace(FortunaBaseModel):
 
 class ManualParseRequest(FortunaBaseModel):
     adapter_name: str
-    html_content: str
+    html_content: str = Field(..., max_length=5_000_000)  # ~5MB limit

@@ -1,6 +1,7 @@
 # python_service/api.py
 
 import asyncio
+import time
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from datetime import date
@@ -139,8 +140,14 @@ async def lifespan(app: FastAPI):
     loop.run_in_executor(executor, _initialize_heavy_resources_sync, app)
     log.info("Heavy resource initialization has been scheduled in a background thread.")
 
-    # 3. Yield control back to Uvicorn immediately. The server is now ready to accept requests
-    #    while the OddsEngine initializes in the background.
+    # 3. Wait for the engine to be initialized before yielding control.
+    start_time = time.time()
+    while not hasattr(app.state, "engine") or app.state.engine is None:
+        if time.time() - start_time > 30:  # 30-second timeout
+            raise RuntimeError("Engine initialization timed out.")
+        await asyncio.sleep(0.1)
+
+    log.info("Engine is initialized. Server is ready to accept requests.")
     yield
 
     # --- Shutdown Sequence ---
