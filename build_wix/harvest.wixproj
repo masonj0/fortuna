@@ -1,31 +1,14 @@
 <Project Sdk="WixToolset.Sdk/4.0.0">
-  <PropertyGroup>
-    <OutputPath>bin\$(Configuration)\</OutputPath>
-    <IntermediateOutputPath>obj\$(Configuration)\</IntermediateOutputPath>
-  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="WixToolset.Heat" Version="4.0.0" />
+  </ItemGroup>
 
-  <Target Name="GenerateFrontendWxs" BeforeTargets="Build">
-    <PropertyGroup>
-      <HarvestSourceDir>$(MSBuildThisFileDirectory)staging\ui</HarvestSourceDir>
-      <HarvestOutputFile>$(MSBuildThisFileDirectory)frontend_components.wxs</HarvestOutputFile>
-    </PropertyGroup>
-
-    <ItemGroup>
-      <HarvestDirectory Include="$(HarvestSourceDir)">
-        <ComponentGroupName>FrontendComponents</ComponentGroupName>
-        <DirectoryRefId>INSTALLFOLDER</DirectoryRefId>
-        <SuppressRootDirectory>true</SuppressRootDirectory>
-        <PreprocessorVariables>wix.FrontendSourceDir=$(HarvestSourceDir)</PreprocessorVariables>
-      </HarvestDirectory>
-    </ItemGroup>
-
-    <HeatDirectory
-        Directory="$(HarvestSourceDir)"
-        ComponentGroupName="FrontendComponents"
-        DirectoryRefId="INSTALLFOLDER"
-        OutputFile="$(HarvestOutputFile)"
-        SuppressRootDirectory="true"
-        ToolPath="$(WixToolPath)"
-        />
-  </Target>
+  <ItemGroup>
+    <HarvestDirectory Include="staging\ui">
+      <ComponentGroupName>FrontendComponents</ComponentGroupName>
+      <DirectoryRefId>INSTALLFOLDER</DirectoryRefId>
+      <SuppressRootDirectory>true</SuppressRootDirectory>
+      <PreprocessorVariables>wix.FrontendSourceDir=staging\ui</PreprocessorVariables>
+    </HarvestDirectory>
+  </ItemGroup>
 </Project>

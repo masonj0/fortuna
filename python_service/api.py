@@ -1,6 +1,7 @@
 # python_service/api.py
 
 import asyncio
+import time
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from datetime import date
@@ -41,6 +42,7 @@ from .middleware.error_handler import UserFriendlyException
 from .middleware.error_handler import user_friendly_exception_handler
 from .middleware.error_handler import validation_exception_handler
 from .models import AggregatedResponse
+from .models import ManualParseRequest
 from .models import QualifiedRacesResponse
 from .models import Race
 from .models import TipsheetRace
@@ -138,8 +140,14 @@ async def lifespan(app: FastAPI):
     loop.run_in_executor(executor, _initialize_heavy_resources_sync, app)
     log.info("Heavy resource initialization has been scheduled in a background thread.")
 
-    # 3. Yield control back to Uvicorn immediately. The server is now ready to accept requests
-    #    while the OddsEngine initializes in the background.
+    # 3. Wait for the engine to be initialized before yielding control.
+    start_time = time.time()
+    while not hasattr(app.state, "engine") or app.state.engine is None:
+        if time.time() - start_time > 30:  # 30-second timeout
+            raise RuntimeError("Engine initialization timed out.")
+        await asyncio.sleep(0.1)
+
+    log.info("Engine is initialized. Server is ready to accept requests.")
     yield
 
     # --- Shutdown Sequence ---
@@ -443,3 +451,38 @@ async def websocket_endpoint(websocket: WebSocket, api_key: str = Query(...)):
     except WebSocketDisconnect:
         manager.disconnect(websocket)
         log.info("Client disconnected from WebSocket.")
+
+
+@app.post("/api/races/parse-manual", response_model=List[Race])
+@limiter.limit("30/minute")
+async def parse_manual_html(
+    request: Request,
+    parse_request: ManualParseRequest,
+    engine: OddsEngine = Depends(get_engine),
+    _=Depends(verify_api_key),
+):
+    """
+    Manually parses a block of HTML using a specified adapter.
+    """
+    try:
+        adapter = engine.get_adapter(parse_request.adapter_name)
+        if not adapter:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Adapter '{parse_request.adapter_name}' not found.",
+            )
+
+        # The _parse_races method is synchronous, so we run it in a thread
+        # to avoid blocking the asyncio event loop.
+        loop = asyncio.get_event_loop()
+        parsed_races_data = await loop.run_in_executor(
+            executor, adapter._parse_races, parse_request.html_content
+        )
+
+        # Validate the parsed data with the Race model
+        validated_races = [Race(**race_data) for race_data in parsed_races_data]
+        return validated_races
+
+    except Exception as e:
+        log.error("Error during manual parsing", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"An error occurred: {e}")
