@@ -13,6 +13,7 @@ interface FilterParams {
 export interface RaceFiltersProps {
   onParamsChange: (params: FilterParams) => void;
   isLoading: boolean;
+  refetch: () => void;
 }
 
 const DEFAULT_PARAMS: FilterParams = {
@@ -21,7 +22,7 @@ const DEFAULT_PARAMS: FilterParams = {
   minSecondFavoriteOdds: 4.0,
 };
 
-export function RaceFilters({ onParamsChange, isLoading }: RaceFiltersProps) {
+export function RaceFilters({ onParamsChange, isLoading, refetch }: RaceFiltersProps) {
   const [params, setParams] = useState<FilterParams>(DEFAULT_PARAMS);
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -32,13 +33,19 @@ export function RaceFilters({ onParamsChange, isLoading }: RaceFiltersProps) {
       onParamsChange(updated);
       return updated;
     });
-  }, [onParamsChange]);
+    // Debounce the refetch call
+    const timer = setTimeout(() => {
+      refetch();
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [onParamsChange, refetch]);
 
   // Reset to defaults
   const handleReset = useCallback(() => {
     setParams(DEFAULT_PARAMS);
     onParamsChange(DEFAULT_PARAMS);
-  }, [onParamsChange]);
+    refetch();
+  }, [onParamsChange, refetch]);
 
   return (
     <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-lg p-4 mb-6 border border-slate-700">
