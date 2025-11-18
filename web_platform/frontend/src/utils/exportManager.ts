@@ -1,6 +1,6 @@
 // web_platform/frontend/src/utils/exportManager.ts
-import { saveAs } from 'file-saver';
-import * as XLSX from 'xlsx';
+// import { saveAs } from 'file-saver';
+// import * as XLSX from 'xlsx';
 
 export class ExportManager {
   static exportToExcel(races: any[], filename: string = 'fortuna_races') {
