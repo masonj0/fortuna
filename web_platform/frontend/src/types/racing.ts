@@ -4,6 +4,8 @@
 // --- Runner & Odds Interfaces ---
 export interface OddsData {
   win: number | null;
+  place: number | null;
+  show: number | null;
   source: string;
   last_updated: string;
 }

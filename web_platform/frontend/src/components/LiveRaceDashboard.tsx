@@ -151,15 +151,15 @@ export const LiveRaceDashboard = React.memo(() => {
   }, []);
 
   const {
-    data: adapterStatuses,
+    data,
     status: connectionStatus,
     error: errorDetails,
     refetch,
   } = useQuery({
-    queryKey: ['adapterStatuses', apiKey],
-    queryFn: () => fetchAdapterStatuses(apiKey),
+    queryKey: ['qualifiedRaces', apiKey, params],
+    queryFn: () => fetchQualifiedRaces(apiKey, params),
     enabled: backendStatus.state === 'running' && !!apiKey,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
   });
 
   const { data: liveData, isConnected: isLiveConnected } = useWebSocket<{ races: Race[], source_info: SourceInfo[] }>(
@@ -171,12 +171,10 @@ export const LiveRaceDashboard = React.memo(() => {
   useEffect(() => {
     if (liveData) {
       console.log('Received live data update:', liveData);
-      queryClient.setQueryData(['adapterStatuses', apiKey], liveData.source_info);
-      setRaces(liveData.races || []);
-      setFailedSources(liveData.source_info?.filter((s: SourceInfo) => s.status === 'FAILED' && s.attemptedUrl) || []);
+      queryClient.setQueryData(['qualifiedRaces', apiKey, params], liveData);
       setLastUpdate(new Date());
     }
-  }, [liveData, queryClient, apiKey]);
+  }, [liveData, queryClient, apiKey, params]);
 
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [params, setParams] = useState<RaceFilterParams>({
@@ -190,6 +188,25 @@ export const LiveRaceDashboard = React.memo(() => {
   const handleParamsChange = useCallback((newParams: RaceFilterParams) => {
     setParams(newParams);
   }, []);
+
+  const handleParseSuccess = (adapterName: string, parsedRaces: Race[]) => {
+    queryClient.setQueryData(['qualifiedRaces', apiKey, params], (oldData: { races: Race[], source_info: SourceInfo[] } | undefined) => {
+      if (!oldData) return { races: parsedRaces, source_info: [] };
+
+      // 1. Remove the placeholder error card for this adapter
+      const otherRaces = oldData.races.filter(race => race.source !== adapterName);
+
+      // 2. Merge the new races in
+      const updatedRaces = [...otherRaces, ...parsedRaces].sort(
+        (a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
+      );
+
+      // 3. Update source_info to remove the failed source
+      const updatedSourceInfo = oldData.source_info.filter(s => s.name !== adapterName);
+
+      return { races: updatedRaces, source_info: updatedSourceInfo };
+    });
+  };
 
   const renderContent = () => {
     // Priority 1: Backend process has failed.
@@ -281,13 +298,15 @@ export const LiveRaceDashboard = React.memo(() => {
             </div>
         </div>
 
-        <RaceFilters onParamsChange={handleParamsChange} isLoading={connectionStatus === 'pending'} />
+        <RaceFilters onParamsChange={handleParamsChange} isLoading={connectionStatus === 'pending'} refetch={refetch} />
 
         {failedSources.map(source => (
           <ManualOverridePanel
             key={source.name}
             adapterName={source.name}
             attemptedUrl={source.attemptedUrl || 'URL not available'}
+            apiKey={apiKey}
+            onParseSuccess={handleParseSuccess}
           />
         ))}
 
