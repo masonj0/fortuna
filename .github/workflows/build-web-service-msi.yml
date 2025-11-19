@@ -685,7 +685,7 @@ jobs:
 
           Write-Host "Files to harvest: $fileCount" -ForegroundColor Green
 
-          wix heat dir "$uiDir" -o "build_wix/frontend_components.wxs" -cg "FrontendComponents" -dr "INSTALLFOLDER" -srd -ag
+          wix heat -ag -cg FrontendComponents -dr INSTALLFOLDER -out "build_wix/frontend_components.wxs" -srd dir "$uiDir"
           if ($LASTEXITCODE -ne 0) {
             Write-Host "❌ FATAL: Heat harvest failed" -ForegroundColor Red
             exit 1

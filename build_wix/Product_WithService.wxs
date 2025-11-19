@@ -31,7 +31,7 @@
                                Name="FortunaBackendService"
                                DisplayName="Fortuna Faucet Backend"
                                Description="Handles data aggregation for Fortuna Faucet."
-                               Account="LocalService"
+                               Account="NetworkService"
                                Start="auto"
                                Type="ownProcess"
                                Vital="yes"
