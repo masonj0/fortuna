@@ -38,8 +38,7 @@ jobs:
             'python_service/requirements-dev.txt',
             'python_service/main.py',
             'fortuna-backend-webservice.spec',
-            'build_wix/Product_WithService.wxs',
-            'build_wix/harvester/harvest.wixproj'
+            'build_wix/Product_WithService.wxs'
           )
 
           $missing = @()
@@ -654,8 +653,7 @@ jobs:
         shell: pwsh
         run: |
           $files = @(
-            'build_wix/Product_WithService.wxs',
-            'build_wix/harvester/harvest.wixproj'
+            'build_wix/Product_WithService.wxs'
           )
 
           foreach ($file in $files) {
@@ -674,45 +672,24 @@ jobs:
           (Get-Content -Path $filePath -Raw) | Set-Content -Path $filePath -Encoding Utf8 -Force
           Write-Host "✅ Encoding set to UTF-8."
 
-      - name: Run WiX Harvest via MSBuild
+      - name: Run WiX Harvest via Heat Tool
         shell: pwsh
         run: |
-          Write-Host "Harvesting frontend directory via MSBuild..." -ForegroundColor Cyan
+          Write-Host "Harvesting frontend directory with 'wix heat'..." -ForegroundColor Cyan
           $uiDir = "build_wix/staging/ui"
           $outputFile = "build_wix/frontend_components.wxs"
 
-          if (-not (Test-Path $uiDir)) {
-            Write-Host "❌ FATAL: UI staging directory not found at '$uiDir'" -ForegroundColor Red
-            exit 1
-          }
-
-          $fileCount = (Get-ChildItem -Path $uiDir -Recurse -File | Measure-Object).Count
-          if ($fileCount -eq 0) {
-            Write-Host "❌ FATAL: No files in UI directory to harvest" -ForegroundColor Red
-            exit 1
-          }
-          Write-Host "Files to harvest: $fileCount" -ForegroundColor Green
-
-          # Clean up old output if it exists
-          if (Test-Path $outputFile) {
-            Remove-Item $outputFile -Force
-          }
-
-          # Build the harvest project - this generates frontend_components.wxs
-          $sourcePath = (Resolve-Path "build_wix/staging").Path
-          Write-Host "Invoking MSBuild HeatDirectory target with SourceDir: $sourcePath" -ForegroundColor Cyan
-          dotnet msbuild build_wix/harvester/harvest.wixproj -t:HeatDirectory -p:SourceDir="$sourcePath" -v:minimal
+          wix heat dir $uiDir `
+            -gg `
+            -srd `
+            -dr INSTALLFOLDER `
+            -cg FrontendComponents `
+            -out $outputFile
 
           if ($LASTEXITCODE -ne 0) {
-            Write-Host "❌ FATAL: MSBuild harvest failed with exit code: $LASTEXITCODE" -ForegroundColor Red
+            Write-Host "❌ FATAL: 'wix heat' failed with exit code: $LASTEXITCODE" -ForegroundColor Red
             exit 1
           }
-
-          if (-not (Test-Path $outputFile)) {
-            Write-Host "❌ FATAL: Output file was not created at '$outputFile'" -ForegroundColor Red
-            exit 1
-          }
-
           Write-Host "✅ Frontend harvest complete" -ForegroundColor Green
 
       - name: Validate Generated Frontend Components
