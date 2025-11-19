@@ -1,0 +1,24 @@
+<Project Sdk="WixToolset.Sdk/4.0.5">
+
+  <PropertyGroup>
+    <OutputPath>..</OutputPath>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WixToolset.Heat" Version="4.0.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <HarvestDirectory Include="../staging/ui">
+      <ComponentGroupName>FrontendComponents</ComponentGroupName>
+      <DirectoryRefId>INSTALLFOLDER</DirectoryRefId>
+      <SuppressRootDirectory>true</SuppressRootDirectory>
+      <PreprocessorVariable>var.SourceDir</PreprocessorVariable>
+      <OutputFile>../frontend_components.wxs</OutputFile>
+    </HarvestDirectory>
+    <BindPath Include="../staging" />
+  </ItemGroup>
+
+</Project>
