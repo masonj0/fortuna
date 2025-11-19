@@ -4,7 +4,7 @@
     "REBRANDING_AUDIT.md",
     "VERSION.txt",
     "WISDOM.md",
-    "build_wix/harvest.wixproj",
+    "build_wix/harvester/harvest.wixproj",
     "electron/install-dependencies.js",
     "electron/package-lock.json",
     "electron/package.json",

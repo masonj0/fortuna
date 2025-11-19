@@ -43,15 +43,8 @@ class TwinSpiresAdapter(BaseAdapterV3):
         # the HTML content.
         return {
             "html_content": html_content,
-            "mock_track_data": {
-                "trackId": "cd",
-                "trackName": "Churchill Downs",
-                "raceType": "Thoroughbred"
-            },
-            "mock_race_card": {
-                "raceNumber": 5,
-                "postTime": "2025-10-26T16:30:00Z"
-            }
+            "mock_track_data": {"trackId": "cd", "trackName": "Churchill Downs", "raceType": "Thoroughbred"},
+            "mock_race_card": {"raceNumber": 5, "postTime": "2025-10-26T16:30:00Z"},
         }
 
     def _parse_races(self, raw_data: Any) -> List[Race]:
@@ -151,6 +144,7 @@ class TwinSpiresAdapter(BaseAdapterV3):
         # This is a synchronous wrapper for the async orchestrator
         # It's a temporary measure to allow me to see the API response.
         import asyncio
+
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
