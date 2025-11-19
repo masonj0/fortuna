@@ -322,6 +322,14 @@ jobs:
           }
           Write-Host "✅ Dev dependencies installed" -ForegroundColor Green
 
+      - name: Backend - Linting
+        shell: pwsh
+        run: |
+          Write-Host "Running Ruff linter..." -ForegroundColor Cyan
+          ruff check python_service
+          Write-Host "Running Ruff formatter check..." -ForegroundColor Cyan
+          ruff format --check python_service
+
       - name: Backend - Security Audit
         shell: pwsh
         continue-on-error: true
