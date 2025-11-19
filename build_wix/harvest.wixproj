@@ -3,12 +3,13 @@
     <PackageReference Include="WixToolset.Heat" Version="4.0.0" />
   </ItemGroup>
 
-  <Target Name="GenerateFrontendWxs">
-    <HeatDirectory
-        Directory="staging\ui"
-        OutputFile="frontend_components.wxs"
-        ComponentGroupName="FrontendComponents"
-        DirectoryRefId="INSTALLFOLDER"
-        SuppressRootDirectory="true" />
-  </Target>
+  <ItemGroup>
+    <HarvestDirectory Include="staging\ui">
+      <ComponentGroupName>FrontendComponents</ComponentGroupName>
+      <DirectoryRefId>INSTALLFOLDER</DirectoryRefId>
+      <SuppressRootDirectory>true</SuppressRootDirectory>
+      <AutogenerateGuids>true</AutogenerateGuids>
+      <OutputFile>frontend_components.wxs</OutputFile>
+    </HarvestDirectory>
+  </ItemGroup>
 </Project>
