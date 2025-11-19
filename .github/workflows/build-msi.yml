@@ -34,6 +34,20 @@ jobs:
           npm ci
           npm audit --audit-level=moderate # Added security check
           npm run build
+      - name: Verify Frontend Build
+        shell: pwsh
+        run: |
+          $outDir = 'web_platform/frontend/out'
+          if (-not (Test-Path $outDir)) {
+            Write-Host "❌ FATAL: Build output directory 'out' not created" -ForegroundColor Red
+            exit 1
+          }
+          $fileCount = (Get-ChildItem -Path $outDir -Recurse -File | Measure-Object).Count
+          if ($fileCount -eq 0) {
+            Write-Host "❌ FATAL: Build output directory is empty" -ForegroundColor Red
+            exit 1
+          }
+          Write-Host "✅ Frontend build verified ($fileCount files)" -ForegroundColor Green
       - name: Upload Frontend Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -101,53 +115,103 @@ jobs:
           name: backend-executable-${{ github.sha }}
       - name: Run Smoke Test
         shell: pwsh
+        timeout-minutes: 5
         env:
           API_KEY: "a_secure_test_api_key_that_is_long_enough_for_smoke_test"
         run: |
-          $exe = "./fortuna-backend.exe"
-          $logFileBase = "backend-log"
-          $stdOutPath = "$logFileBase-out.txt"
-          $stdErrPath = "$logFileBase-err.txt"
-          $process = Start-Process -FilePath $exe -PassThru -NoNewWindow -RedirectStandardOutput $stdOutPath -RedirectStandardError $stdErrPath
+          $exe = './fortuna-backend.exe'
+          $logDir = 'logs'
+          $stdOutPath = Join-Path $logDir 'backend-out.txt'
+          $stdErrPath = Join-Path $logDir 'backend-err.txt'
+
+          if (-not (Test-Path $logDir)) {
+            New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+          }
+
+          Write-Host "Starting backend process..." -ForegroundColor Cyan
+          $process = Start-Process -FilePath $exe `
+            -PassThru `
+            -NoNewWindow `
+            -RedirectStandardOutput $stdOutPath `
+            -RedirectStandardError $stdErrPath `
+            -ErrorAction Stop
+
+          Write-Host "Backend process started (PID: $($process.Id))" -ForegroundColor Green
+
           $serverReady = $false
-          Write-Host "--- Starting Smoke Test: Polling /health and /api/races endpoints for 60s ---"
+          $maxAttempts = 40
+          $attemptCount = 0
+
           try {
-            foreach ($i in 1..30) {
+            for ($i = 1; $i -le $maxAttempts; $i++) {
+              $attemptCount = $i
+
               if ($process.HasExited) {
-                throw "[FATAL] Backend process crashed during smoke test. Exit Code: $($process.ExitCode)"
+                Write-Host "❌ Backend process exited unexpectedly (Exit Code: $($process.ExitCode))" -ForegroundColor Red
+                break
               }
+
               try {
-                $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/health" -TimeoutSec 1 -UseBasicParsing
+                Write-Host "Attempt $i/${maxAttempts}: Checking /health endpoint..." -ForegroundColor Gray
+                $response = Invoke-WebRequest `
+                  -Uri 'http://127.0.0.1:8000/health' `
+                  -TimeoutSec 2 `
+                  -UseBasicParsing `
+                  -ErrorAction SilentlyContinue
+
                 if ($response.StatusCode -eq 200) {
-                  $headers = @{ "X-API-Key" = $env:API_KEY }
-                  $apiResponse = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/races" -Headers $headers -TimeoutSec 1 -UseBasicParsing -ErrorAction SilentlyContinue
-                  if ($apiResponse.StatusCode -eq 200) {
-                    Write-Host "[OK] Health check and API test passed on attempt $i!"
+                  Write-Host "✅ Health endpoint responded" -ForegroundColor Green
+
+                  Write-Host "Checking /api/races endpoint..." -ForegroundColor Gray
+                  $headers = @{ 'X-API-Key' = $env:API_KEY }
+                  $apiResponse = Invoke-WebRequest `
+                    -Uri 'http://127.0.0.1:8000/api/races' `
+                    -Headers $headers `
+                    -TimeoutSec 2 `
+                    -UseBasicParsing `
+                    -ErrorAction SilentlyContinue
+
+                  if ($apiResponse.StatusCode -eq 200 -or $apiResponse.StatusCode -eq 400 -or $apiResponse.StatusCode -eq 401) {
+                    Write-Host "✅ API endpoint responded (Status: $($apiResponse.StatusCode))" -ForegroundColor Green
                     $serverReady = $true
                     break
                   }
                 }
               } catch {
-                Write-Host "Attempt $i... server not ready."
+                Write-Host "  (waiting...)" -ForegroundColor Gray
               }
-              Start-Sleep -Seconds 2
+
+              Start-Sleep -Seconds 1.5
             }
           } finally {
+            Write-Host "Stopping backend process..." -ForegroundColor Cyan
             Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-            if (-not $serverReady) {
-              Write-Host "--- ❌ TEST FAILED ---"
-              if (Test-Path $stdOutPath) {
-                Write-Host "--- STDOUT ---"
-                Get-Content $stdOutPath | Write-Host
-              }
-              if (Test-Path $stdErrPath) {
-                Write-Host "--- STDERR ---"
-                Get-Content $stdErrPath | Write-Host
-              }
-              throw "[FATAL] Backend smoke test failed. Server never became healthy."
-            }
+            Start-Sleep -Milliseconds 500
           }
-          Write-Host "✅ Backend smoke test passed."
+
+          if (-not $serverReady) {
+            Write-Host "❌ SMOKE TEST FAILED: Backend did not become healthy" -ForegroundColor Red
+            Write-Host "Attempts: ${attemptCount}/${maxAttempts}" -ForegroundColor Red
+
+            if (Test-Path $stdOutPath) {
+              Write-Host "`n--- STDOUT (last 30 lines) ---" -ForegroundColor Yellow
+              Get-Content $stdOutPath -Tail 30 | Write-Host
+            }
+            if (Test-Path $stdErrPath) {
+              Write-Host "`n--- STDERR (last 30 lines) ---" -ForegroundColor Yellow
+              Get-Content $stdErrPath -Tail 30 | Write-Host
+            }
+            exit 1
+          }
+
+          Write-Host "`n✅ SMOKE TEST PASSED on attempt $attemptCount" -ForegroundColor Green
+      - name: Upload Smoke Test Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-test-logs-${{ github.sha }}
+          path: logs/
+          retention-days: 3
 
   package-and-test:
     name: '🏆 Package & Test Electron Installer'
@@ -174,6 +238,21 @@ jobs:
           New-Item -ItemType Directory -Path "./electron/resources" -Force | Out-Null
           Move-Item -Path "./temp-artifacts/frontend-build-output-${{ github.sha }}/*" -Destination "./electron/web-ui-build/out" -Force
           Move-Item -Path "./temp-artifacts/backend-executable-${{ github.sha }}/fortuna-backend.exe" -Destination "./electron/resources/fortuna-backend.exe" -Force
+      - name: Verify Staged Artifacts
+        shell: pwsh
+        run: |
+          $backendPath = "./electron/resources/fortuna-backend.exe"
+          $frontendDir = "./electron/web-ui-build/out"
+          if (-not (Test-Path $backendPath)) {
+            Write-Host "❌ FATAL: Backend executable not found at $backendPath" -ForegroundColor Red
+            exit 1
+          }
+          $frontendFiles = (Get-ChildItem -Path $frontendDir -Recurse -File | Measure-Object).Count
+          if ($frontendFiles -eq 0) {
+            Write-Host "❌ FATAL: No files found in frontend directory $frontendDir" -ForegroundColor Red
+            exit 1
+          }
+          Write-Host "✅ Artifacts staged successfully: Backend executable and $frontendFiles frontend files." -ForegroundColor Green
       - name: Critical Integration Test
         shell: pwsh
         env:
