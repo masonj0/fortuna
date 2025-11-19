@@ -666,10 +666,10 @@ jobs:
           (Get-Content -Path $filePath -Raw) | Set-Content -Path $filePath -Encoding Utf8 -Force
           Write-Host "✅ Encoding set to UTF-8."
 
-      - name: Run WiX Heat (Frontend Harvesting)
+      - name: Run WiX Harvest via MSBuild
         shell: pwsh
         run: |
-          Write-Host "Harvesting frontend directory..." -ForegroundColor Cyan
+          Write-Host "Harvesting frontend directory via MSBuild..." -ForegroundColor Cyan
           $uiDir = "build_wix/staging/ui"
           $outputFile = "build_wix/frontend_components.wxs"
 
@@ -685,9 +685,21 @@ jobs:
           }
           Write-Host "Files to harvest: $fileCount" -ForegroundColor Green
 
-          wix harvest dir "$uiDir" -cg FrontendComponents -dr INSTALLFOLDER -srd -ag -out $outputFile
+          # Clean up old output if it exists
+          if (Test-Path $outputFile) {
+            Remove-Item $outputFile -Force
+          }
+
+          # Build the harvest project - this generates frontend_components.wxs
+          dotnet build build_wix/harvest.wixproj -v:minimal
+
           if ($LASTEXITCODE -ne 0) {
-            Write-Host "❌ FATAL: WiX harvest failed" -ForegroundColor Red
+            Write-Host "❌ FATAL: MSBuild harvest failed with exit code: $LASTEXITCODE" -ForegroundColor Red
+            exit 1
+          }
+
+          if (-not (Test-Path $outputFile)) {
+            Write-Host "❌ FATAL: Output file was not created at '$outputFile'" -ForegroundColor Red
             exit 1
           }
 

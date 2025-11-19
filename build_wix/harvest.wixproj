@@ -1,15 +1,21 @@
-<Project Sdk="WixToolset.Sdk/4.0.0">
+<Project Sdk="WixToolset.Sdk/4.0.5">
+
+  <PropertyGroup>
+    <OutputPath>.</OutputPath>
+  </PropertyGroup>
+
   <ItemGroup>
-    <PackageReference Include="WixToolset.Heat" Version="4.0.0" />
+    <PackageReference Include="WixToolset.Heat" Version="4.0.5" />
   </ItemGroup>
 
   <ItemGroup>
-    <HarvestDirectory Include="staging\ui">
+    <HarvestDirectory Include="staging/ui">
       <ComponentGroupName>FrontendComponents</ComponentGroupName>
       <DirectoryRefId>INSTALLFOLDER</DirectoryRefId>
       <SuppressRootDirectory>true</SuppressRootDirectory>
-      <AutogenerateGuids>true</AutogenerateGuids>
-      <OutputFile>frontend_components.wxs</OutputFile>
+      <PreprocessorVariable>var.SourceDir</PreprocessorVariable>
     </HarvestDirectory>
+    <BindPath Include="staging" />
   </ItemGroup>
+
 </Project>
