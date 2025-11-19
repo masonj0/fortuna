@@ -39,7 +39,7 @@ jobs:
             'python_service/main.py',
             'fortuna-backend-webservice.spec',
             'build_wix/Product_WithService.wxs',
-            'build_wix/harvest.wixproj'
+            'build_wix/harvester/harvest.wixproj'
           )
 
           $missing = @()
