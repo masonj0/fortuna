@@ -9,7 +9,6 @@
         OutputFile="frontend_components.wxs"
         ComponentGroupName="FrontendComponents"
         DirectoryRefId="INSTALLFOLDER"
-        SuppressRootDirectory="true"
-        PreprocessorVariables="wix.FrontendSourceDir=staging\ui" />
+        SuppressRootDirectory="true" />
   </Target>
 </Project>
