@@ -26,7 +26,7 @@ jobs:
       python-cache-hit: ${{ steps.python-cache.outputs.cache-hit }}
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4.1.7
+        uses: actions/checkout@v5
 
       - name: Validate Critical Files Exist
         shell: pwsh
@@ -103,10 +103,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4.1.7
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4.0.3
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
@@ -181,7 +181,7 @@ jobs:
           }
 
       - name: Upload Frontend Artifact
-        uses: actions/upload-artifact@v4.3.4
+        uses: actions/upload-artifact@v4
         with:
           name: frontend-build-output-${{ github.sha }}
           path: web_platform/frontend/out
@@ -205,10 +205,10 @@ jobs:
       PYTHONUTF8: "1"
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4.1.7
+        uses: actions/checkout@v5
 
       - name: Setup Python
-        uses: actions/setup-python@v5.1.1
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
@@ -239,7 +239,7 @@ jobs:
           }
 
       - name: Download Frontend Artifact
-        uses: actions/download-artifact@v4.1.8
+        uses: actions/download-artifact@v4
         with:
           name: frontend-build-output-${{ github.sha }}
           path: ./temp-frontend
@@ -384,7 +384,7 @@ jobs:
           Write-Host "  Modified: $($fileInfo.LastWriteTime)" -ForegroundColor Green
 
       - name: Upload Backend Artifact
-        uses: actions/upload-artifact@v4.3.4
+        uses: actions/upload-artifact@v4
         with:
           name: backend-executable-${{ github.sha }}
           path: dist/fortuna-backend.exe
@@ -406,7 +406,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Download Backend Executable
-        uses: actions/download-artifact@v4.1.8
+        uses: actions/download-artifact@v4
         with:
           name: backend-executable-${{ github.sha }}
           path: ./backend-dist
@@ -459,7 +459,7 @@ jobs:
               }
 
               try {
-                Write-Host "Attempt $i/$maxAttempts: Checking /health endpoint..." -ForegroundColor Gray
+                Write-Host "Attempt $i/${maxAttempts}: Checking /health endpoint..." -ForegroundColor Gray
                 $response = Invoke-WebRequest `
                   -Uri 'http://127.0.0.1:8000/health' `
                   -TimeoutSec 2 `
@@ -498,7 +498,7 @@ jobs:
 
           if (-not $serverReady) {
             Write-Host "❌ SMOKE TEST FAILED: Backend did not become healthy" -ForegroundColor Red
-            Write-Host "Attempts: $attemptCount/$maxAttempts" -ForegroundColor Red
+            Write-Host "Attempts: ${attemptCount}/${maxAttempts}" -ForegroundColor Red
 
             if (Test-Path $stdOutPath) {
               Write-Host "`n--- STDOUT (last 30 lines) ---" -ForegroundColor Yellow
@@ -515,7 +515,7 @@ jobs:
 
       - name: Upload Smoke Test Logs
         if: always()
-        uses: actions/upload-artifact@v4.3.4
+        uses: actions/upload-artifact@v4
         with:
           name: smoke-test-logs-${{ github.sha }}
           path: logs/
@@ -531,7 +531,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4.1.7
+        uses: actions/checkout@v5
 
       - name: Create Staging Directory
         shell: pwsh
@@ -544,13 +544,13 @@ jobs:
           Write-Host "✅ Staging directory prepared" -ForegroundColor Green
 
       - name: Download Frontend Artifact
-        uses: actions/download-artifact@v4.1.8
+        uses: actions/download-artifact@v4
         with:
           name: frontend-build-output-${{ github.sha }}
           path: ./artifacts/frontend
 
       - name: Download Backend Artifact
-        uses: actions/download-artifact@v4.1.8
+        uses: actions/download-artifact@v4
         with:
           name: backend-executable-${{ github.sha }}
           path: ./artifacts/backend
@@ -612,7 +612,7 @@ jobs:
       - name: Setup .NET for WiX v4
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '6.0.x'
+          dotnet-version: '8.0.x'
 
       - name: Verify .NET Installation
         shell: pwsh
@@ -656,6 +656,14 @@ jobs:
             }
           }
           Write-Host "✅ WiX configuration files verified" -ForegroundColor Green
+
+      - name: Harden WiX Source File Encoding (UTF-8)
+        shell: pwsh
+        run: |
+          $filePath = 'build_wix/Product_WithService.wxs'
+          Write-Host "Normalizing encoding for $filePath..."
+          (Get-Content -Path $filePath -Raw) | Set-Content -Path $filePath -Encoding Utf8 -Force
+          Write-Host "✅ Encoding set to UTF-8."
 
       - name: Run WiX Heat (Frontend Harvesting)
         shell: pwsh
@@ -769,7 +777,7 @@ jobs:
           Write-Host "  Path: $msiPath" -ForegroundColor Green
 
       - name: Upload WiX MSI Artifact
-        uses: actions/upload-artifact@v4.3.4
+        uses: actions/upload-artifact@v4
         with:
           name: fortuna-wix-installer-windows-v4
           path: dist/Fortuna-Full-App-Service-v4.msi

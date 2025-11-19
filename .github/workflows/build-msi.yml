@@ -20,9 +20,9 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4.1.7
+        uses: actions/checkout@v5
       - name: Setup Node.js
-        uses: actions/setup-node@v4.0.3
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
@@ -35,7 +35,7 @@ jobs:
           npm audit --audit-level=moderate # Added security check
           npm run build
       - name: Upload Frontend Artifact
-        uses: actions/upload-artifact@v4.3.4
+        uses: actions/upload-artifact@v4
         with:
           name: frontend-build-output-${{ github.sha }}
           path: web_platform/frontend/out
@@ -49,9 +49,9 @@ jobs:
       PYTHONUTF8: "1"
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4.1.7
+        uses: actions/checkout@v5
       - name: Setup Python
-        uses: actions/setup-python@v5.1.1
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
@@ -82,7 +82,7 @@ jobs:
         run: |
           pyinstaller fortuna-backend-electron.spec --noconfirm
       - name: Upload Backend Artifact
-        uses: actions/upload-artifact@v4.3.4
+        uses: actions/upload-artifact@v4
         with:
           name: backend-executable-${{ github.sha }}
           path: dist/fortuna-backend.exe
@@ -96,7 +96,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Download Backend Executable
-        uses: actions/download-artifact@v4.1.8
+        uses: actions/download-artifact@v4
         with:
           name: backend-executable-${{ github.sha }}
       - name: Run Smoke Test
@@ -156,15 +156,15 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4.1.7
+        uses: actions/checkout@v5
       - name: Setup Node.js for Electron
-        uses: actions/setup-node@v4.0.3
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
           cache-dependency-path: 'electron/package-lock.json'
       - name: Download All Build Artifacts
-        uses: actions/download-artifact@v4.1.8
+        uses: actions/download-artifact@v4
         with:
           path: ./temp-artifacts
       - name: Stage Artifacts for Packaging
@@ -193,7 +193,7 @@ jobs:
         run: |
           # ... code signing script ...
       - name: Upload Final MSI Artifact
-        uses: actions/upload-artifact@v4.3.4
+        uses: actions/upload-artifact@v4
         with:
           name: fortuna-installer-windows-${{ github.sha }}
           path: electron/dist/*.msi
