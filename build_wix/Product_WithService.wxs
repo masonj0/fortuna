@@ -31,7 +31,7 @@
                                Name="FortunaBackendService"
                                DisplayName="Fortuna Faucet Backend"
                                Description="Handles data aggregation for Fortuna Faucet."
-                               Account="NetworkService"
+                               Account="LocalService"
                                Start="auto"
                                Type="ownProcess"
                                Vital="yes"
@@ -53,8 +53,12 @@
 
         <Component Id="DataAndLogsFolders" Guid="f9e0a2d2-8533-4a6c-921c-55913e11f75b">
           <RegistryValue Root="HKLM" Key="Software\Fortuna Faucet" Name="FoldersCreated" Type="integer" Value="1" KeyPath="yes" />
-          <CreateFolder Directory="DataFolder" />
-          <CreateFolder Directory="LogsFolder" />
+          <CreateFolder Directory="DataFolder">
+            <util:PermissionEx User="LocalService" GenericAll="yes" />
+          </CreateFolder>
+          <CreateFolder Directory="LogsFolder">
+            <util:PermissionEx User="LocalService" GenericAll="yes" />
+          </CreateFolder>
         </Component>
 
         <Component Id="EnvironmentVariables" Guid="c3d9a9a0-6b6f-4c18-9c59-26d0e6a1240c">
