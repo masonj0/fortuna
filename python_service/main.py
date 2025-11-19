@@ -36,8 +36,15 @@ def main():
     from python_service.config import get_settings
     from fastapi.staticfiles import StaticFiles
     from fastapi.responses import FileResponse
+    from python_service.port_check import check_port_and_exit_if_in_use
 
     settings = get_settings()
+
+    # --- Port Sanity Check ---
+    # Before doing anything else, ensure the target port is not already in use.
+    # This prevents a common and confusing crash scenario on startup.
+    check_port_and_exit_if_in_use(settings.UVICORN_PORT, settings.UVICORN_HOST)
+
 
     # --- Conditional UI Serving for Web Service Mode ---
     # Only serve the UI if the FORTUNA_MODE environment variable is set to 'webservice'.
@@ -69,14 +76,6 @@ def main():
             else:
                 # This will only be hit if the frontend files are missing entirely.
                 raise HTTPException(status_code=404, detail="Frontend not found. Please build the frontend and ensure it's in the correct location.")
-
-    # Check if the port is already in use before attempting to start the server.
-    # This prevents a common crash scenario when another instance is running.
-    import socket
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        if s.connect_ex((settings.UVICORN_HOST, settings.UVICORN_PORT)) == 0:
-            print(f"FATAL: Port {settings.UVICORN_PORT} is already in use. Another process may be running.")
-            sys.exit(1)
 
     uvicorn.run(
         app,
