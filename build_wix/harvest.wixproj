@@ -9,6 +9,7 @@
         OutputFile="frontend_components.wxs"
         ComponentGroupName="FrontendComponents"
         DirectoryRefId="INSTALLFOLDER"
-        SuppressRootDirectory="true" />
+        SuppressRootDirectory="true"
+        AutogenerateGuids="true" />
   </Target>
 </Project>
