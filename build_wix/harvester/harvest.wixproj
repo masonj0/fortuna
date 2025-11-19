@@ -1,7 +1,8 @@
 <Project Sdk="WixToolset.Sdk/4.0.5">
 
   <PropertyGroup>
-    <OutputPath>.</OutputPath>
+    <OutputPath>..</OutputPath>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
 
   <ItemGroup>
@@ -9,13 +10,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <HarvestDirectory Include="staging/ui">
+    <HarvestDirectory Include="../staging/ui">
       <ComponentGroupName>FrontendComponents</ComponentGroupName>
       <DirectoryRefId>INSTALLFOLDER</DirectoryRefId>
       <SuppressRootDirectory>true</SuppressRootDirectory>
       <PreprocessorVariable>var.SourceDir</PreprocessorVariable>
     </HarvestDirectory>
-    <BindPath Include="staging" />
+    <BindPath Include="../staging" />
   </ItemGroup>
 
 </Project>
