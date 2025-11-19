@@ -670,11 +670,11 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "Harvesting frontend directory..." -ForegroundColor Cyan
-          $stagingDir = "build_wix/staging"
-          $uiDir = "$stagingDir/ui"
+          $uiDir = "build_wix/staging/ui"
+          $outputFile = "build_wix/frontend_components.wxs"
 
           if (-not (Test-Path $uiDir)) {
-            Write-Host "❌ FATAL: UI staging directory not found" -ForegroundColor Red
+            Write-Host "❌ FATAL: UI staging directory not found at '$uiDir'" -ForegroundColor Red
             exit 1
           }
 
@@ -683,12 +683,11 @@ jobs:
             Write-Host "❌ FATAL: No files in UI directory to harvest" -ForegroundColor Red
             exit 1
           }
-
           Write-Host "Files to harvest: $fileCount" -ForegroundColor Green
 
-          dotnet msbuild build_wix/harvest.wixproj -restore -t:GenerateFrontendWxs -v:minimal
+          wix harvest dir "$uiDir" -cg FrontendComponents -dr INSTALLFOLDER -srd -ag -out $outputFile
           if ($LASTEXITCODE -ne 0) {
-            Write-Host "❌ FATAL: Heat harvest failed" -ForegroundColor Red
+            Write-Host "❌ FATAL: WiX harvest failed" -ForegroundColor Red
             exit 1
           }
 
