@@ -691,7 +691,9 @@ jobs:
           }
 
           # Build the harvest project - this generates frontend_components.wxs
-          dotnet build build_wix/harvest.wixproj -v:minimal
+          $sourcePath = (Resolve-Path "build_wix/staging").Path
+          Write-Host "Invoking MSBuild with SourceDir: $sourcePath" -ForegroundColor Cyan
+          dotnet build build_wix/harvest.wixproj -p:SourceDir="$sourcePath" -v:minimal
 
           if ($LASTEXITCODE -ne 0) {
             Write-Host "❌ FATAL: MSBuild harvest failed with exit code: $LASTEXITCODE" -ForegroundColor Red
