@@ -459,7 +459,7 @@ jobs:
               }
 
               try {
-                Write-Host "Attempt $i/$maxAttempts: Checking /health endpoint..." -ForegroundColor Gray
+                Write-Host "Attempt $i/${maxAttempts}: Checking /health endpoint..." -ForegroundColor Gray
                 $response = Invoke-WebRequest `
                   -Uri 'http://127.0.0.1:8000/health' `
                   -TimeoutSec 2 `
@@ -498,7 +498,7 @@ jobs:
 
           if (-not $serverReady) {
             Write-Host "❌ SMOKE TEST FAILED: Backend did not become healthy" -ForegroundColor Red
-            Write-Host "Attempts: $attemptCount/$maxAttempts" -ForegroundColor Red
+            Write-Host "Attempts: ${attemptCount}/${maxAttempts}" -ForegroundColor Red
 
             if (Test-Path $stdOutPath) {
               Write-Host "`n--- STDOUT (last 30 lines) ---" -ForegroundColor Yellow
