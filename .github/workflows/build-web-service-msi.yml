@@ -637,6 +637,7 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "Adding WiX extensions..." -ForegroundColor Cyan
+          wix extension add WixToolset.Heat.wixext
           wix extension add WixToolset.Util.wixext
           wix extension add WixToolset.Firewall.wixext
           Write-Host "✅ Extensions installed" -ForegroundColor Green
@@ -665,15 +666,15 @@ jobs:
           (Get-Content -Path $filePath -Raw) | Set-Content -Path $filePath -Encoding Utf8 -Force
           Write-Host "✅ Encoding set to UTF-8."
 
-      - name: Run WiX Heat (Frontend Harvesting)
+      - name: Run WiX Harvest (Frontend Harvesting)
         shell: pwsh
         run: |
           Write-Host "Harvesting frontend directory..." -ForegroundColor Cyan
-          $stagingDir = "build_wix/staging"
-          $uiDir = "$stagingDir/ui"
+          $uiDir = "build_wix/staging/ui"
+          $outputFile = "build_wix/frontend_components.wxs"
 
           if (-not (Test-Path $uiDir)) {
-            Write-Host "❌ FATAL: UI staging directory not found" -ForegroundColor Red
+            Write-Host "❌ FATAL: UI staging directory not found at '$uiDir'" -ForegroundColor Red
             exit 1
           }
 
@@ -682,12 +683,17 @@ jobs:
             Write-Host "❌ FATAL: No files in UI directory to harvest" -ForegroundColor Red
             exit 1
           }
-
           Write-Host "Files to harvest: $fileCount" -ForegroundColor Green
 
-          wix heat -ag -cg FrontendComponents -dr INSTALLFOLDER -out "build_wix/frontend_components.wxs" -srd dir "$uiDir"
+          wix harvest dir $uiDir `
+            -ag `
+            -srd `
+            -cg FrontendComponents `
+            -dr INSTALLFOLDER `
+            -o $outputFile
+
           if ($LASTEXITCODE -ne 0) {
-            Write-Host "❌ FATAL: Heat harvest failed" -ForegroundColor Red
+            Write-Host "❌ FATAL: WiX harvest failed" -ForegroundColor Red
             exit 1
           }
 
