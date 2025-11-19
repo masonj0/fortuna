@@ -666,7 +666,7 @@ jobs:
           (Get-Content -Path $filePath -Raw) | Set-Content -Path $filePath -Encoding Utf8 -Force
           Write-Host "✅ Encoding set to UTF-8."
 
-      - name: Run WiX Harvest (Frontend Harvesting)
+      - name: Run WiX Heat (Frontend Harvesting)
         shell: pwsh
         run: |
           Write-Host "Harvesting frontend directory..." -ForegroundColor Cyan
