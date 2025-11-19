@@ -2,6 +2,7 @@
 
   <PropertyGroup>
     <OutputPath>.</OutputPath>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
 
   <ItemGroup>
