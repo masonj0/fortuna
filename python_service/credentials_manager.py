@@ -1,6 +1,7 @@
 # python_service/credentials_manager.py
 try:
     import keyring
+
     # This check is crucial for cross-platform compatibility
     import keyring.backends.windows
 

@@ -18,6 +18,7 @@ from pydantic import ValidationError
 from .adapters.at_the_races_adapter import AtTheRacesAdapter
 from .adapters.base_adapter_v3 import BaseAdapterV3
 from .adapters.betfair_adapter import BetfairAdapter
+
 # from .adapters.betfair_datascientist_adapter import BetfairDataScientistAdapter
 from .adapters.betfair_greyhound_adapter import BetfairGreyhoundAdapter
 from .adapters.brisnet_adapter import BrisnetAdapter
@@ -213,7 +214,10 @@ class OddsEngine:
         except AdapterHttpError as e:
             self.logger.error(
                 "HTTP failure during fetch from adapter.",
-                adapter=adapter.source_name, status_code=e.status_code, url=e.url, exc_info=False,
+                adapter=adapter.source_name,
+                status_code=e.status_code,
+                url=e.url,
+                exc_info=False,
             )
             error_message = f"HTTP Error {e.status_code} for {e.url}"
             attempted_url = e.url
@@ -232,7 +236,9 @@ class OddsEngine:
         except Exception as e:
             self.logger.error(
                 "Critical failure during fetch from adapter.",
-                adapter=adapter.source_name, error=str(e), exc_info=True,
+                adapter=adapter.source_name,
+                error=str(e),
+                exc_info=True,
             )
             error_message = str(e)
             races = [
