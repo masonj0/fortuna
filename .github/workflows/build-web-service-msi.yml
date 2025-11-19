@@ -172,7 +172,7 @@ jobs:
   build-wix-installer:
     name: '🔥 Build WiX Installer (Modernized)'
     timeout-minutes: 15
-    needs: [build-backend, build-frontend]
+    needs: [smoke-test-backend]
     runs-on: windows-latest
     steps:
       - name: Checkout Repository
