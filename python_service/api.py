@@ -475,9 +475,7 @@ async def parse_manual_html(
         # The _parse_races method is synchronous, so we run it in a thread
         # to avoid blocking the asyncio event loop.
         loop = asyncio.get_event_loop()
-        parsed_races_data = await loop.run_in_executor(
-            executor, adapter._parse_races, parse_request.html_content
-        )
+        parsed_races_data = await loop.run_in_executor(executor, adapter._parse_races, parse_request.html_content)
 
         # Validate the parsed data with the Race model
         validated_races = [Race(**race_data) for race_data in parsed_races_data]

@@ -4,6 +4,7 @@
 from .at_the_races_adapter import AtTheRacesAdapter
 from .betfair_adapter import BetfairAdapter
 from .betfair_greyhound_adapter import BetfairGreyhoundAdapter
+
 # from .betfair_datascientist_adapter import BetfairDataScientistAdapter  # DISABLED: PyInstaller NumPy issue
 from .gbgb_api_adapter import GbgbApiAdapter
 from .greyhound_adapter import GreyhoundAdapter
