@@ -685,13 +685,7 @@ jobs:
           }
           Write-Host "Files to harvest: $fileCount" -ForegroundColor Green
 
-          wix harvest dir $uiDir `
-            -ag `
-            -srd `
-            -cg FrontendComponents `
-            -dr INSTALLFOLDER `
-            -o $outputFile
-
+          wix harvest dir "$uiDir" -cg FrontendComponents -dr INSTALLFOLDER -srd -ag -out $outputFile
           if ($LASTEXITCODE -ne 0) {
             Write-Host "❌ FATAL: WiX harvest failed" -ForegroundColor Red
             exit 1

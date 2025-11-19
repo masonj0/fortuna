@@ -95,7 +95,5 @@
       <ComponentRef Id="ShortcutComponent" />
     </ComponentGroup>
 
-    <ComponentGroup Id="FrontendComponents" Directory="INSTALLFOLDER" />
-
   </Package>
 </Wix>
