@@ -124,7 +124,7 @@ jobs:
 
           $success = $false
           foreach ($attempt in 1..15) {
-            Write-Host "Attempt ${{attempt}}: Checking health..."
+            Write-Host "Attempt ${attempt}: Checking health..."
             try {
               $resp = Invoke-WebRequest -Uri 'http://127.0.0.1:8000/health' -UseBasicParsing -TimeoutSec 2
               if ($resp.StatusCode -eq 200) {
