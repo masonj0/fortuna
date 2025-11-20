@@ -120,7 +120,7 @@ jobs:
           $healthCheckPassed = $false
           while ($stopwatch.Elapsed -lt $timeout) {
               try {
-                  $response = Invoke-WebRequest -Uri "http://localhost:8000/" -UseBasicParsing -TimeoutSec 2
+                  $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/" -UseBasicParsing -TimeoutSec 2
                   if ($response.StatusCode -eq 200) {
                       Write-Host "✅ Health check passed!" -ForegroundColor Green
                       $healthCheckPassed = $true
