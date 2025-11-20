@@ -111,8 +111,9 @@ jobs:
       - name: Run Backend and Test
         shell: pwsh
         run: |
-          $logFile = "backend-log.txt"
-          Start-Process -FilePath "./dist/fortuna-backend.exe" -RedirectStandardOutput $logFile -RedirectStandardError $logFile
+          $stdOutLog = "backend-out.log"
+          $stdErrLog = "backend-err.log"
+          Start-Process -FilePath "./dist/fortuna-backend.exe" -RedirectStandardOutput $stdOutLog -RedirectStandardError $stdErrLog
           Write-Host "Waiting for backend to become available..."
           $timeout = New-TimeSpan -Seconds 30
           $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
@@ -133,10 +134,15 @@ jobs:
           $stopwatch.Stop()
           if (-not $healthCheckPassed) {
               Write-Host "❌ FATAL: Backend health check timed out after $($timeout.TotalSeconds) seconds." -ForegroundColor Red
-              if (Test-Path $logFile) {
-                  Write-Host "--- Backend Log ---"
-                  Get-Content $logFile
-                  Write-Host "--- End of Log ---"
+              if (Test-Path $stdOutLog) {
+                  Write-Host "--- Backend Standard Output ---"
+                  Get-Content $stdOutLog
+                  Write-Host "--- End of Standard Output ---"
+              }
+              if (Test-Path $stdErrLog) {
+                  Write-Host "--- Backend Standard Error ---"
+                  Get-Content $stdErrLog
+                  Write-Host "--- End of Standard Error ---"
               }
               throw "Backend health check failed."
           }
