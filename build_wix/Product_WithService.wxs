@@ -1,26 +1,24 @@
-<?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
      xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
      xmlns:firewall="http://wixtoolset.org/schemas/v4/wxs/firewall">
+
   <Package Name="Fortuna Faucet Web Service"
            Manufacturer="Fortuna Development Team"
            Version="1.0.0.0"
-           UpgradeCode="d8ba82a4-1215-4c83-9369-5254165563e4">
+           UpgradeCode="d8ba82a4-1215-4c83-9369-5254165563e4"
+           Scope="perMachine">
 
-    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+    <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
 
-    <!--
-      Note: FrontendComponents ComponentGroup removed.
-      The frontend UI is now bundled directly into fortuna-backend.exe by PyInstaller,
-      eliminating the need for separate frontend file installation.
-    -->
-    <Feature Id="MainApplication" Title="Main Application">
-      <ComponentGroupRef Id="ServiceAndFirewall" />
-      <ComponentGroupRef Id="DirectoryAndEnv" />
-      <ComponentGroupRef Id="StartMenuShortcut" />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Feature Id="MainApplication" Title="Main Application" Level="1">
+      <ComponentGroupRef Id="ServiceComponents" />
+      <ComponentGroupRef Id="ShortcutsComponentGroup" />
     </Feature>
 
-    <StandardDirectory Id="ProgramFiles6432Folder">
+    <!-- Directory Structure -->
+    <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLFOLDER" Name="Fortuna">
 
         <Directory Id="DataFolder" Name="data" />
@@ -31,6 +29,11 @@
                 Source="$(var.SourceDir)/fortuna-backend.exe"
                 KeyPath="yes" />
 
+          <!-- Environment Variables -->
+          <Environment Id="FortunaDataDir" Name="FORTUNA_DATA_DIR" Value="[DataFolder]" Action="set" System="yes" />
+          <Environment Id="FortunaLogDir" Name="FORTUNA_LOG_DIR" Value="[LogsFolder]" Action="set" System="yes" />
+          <Environment Id="FortunaMode" Name="FORTUNA_MODE" Value="webservice" Action="set" System="yes" />
+
           <util:ServiceInstall Id="InstallFortunaService"
                                Name="FortunaBackendService"
                                DisplayName="Fortuna Faucet Backend"
@@ -39,7 +42,7 @@
                                Start="auto"
                                Type="ownProcess"
                                Vital="yes"
-                               ErrorControl="critical" />
+                               ErrorControl="normal" />
 
           <util:ServiceControl Id="StartFortunaService"
                                Name="FortunaBackendService"
@@ -53,10 +56,7 @@
                                       Port="8000"
                                       Protocol="tcp"
                                       Scope="any" />
-        </Component>
 
-        <Component Id="DataAndLogsFolders" Guid="f9e0a2d2-8533-4a6c-921c-55913e11f75b">
-          <RegistryValue Root="HKLM" Key="Software\Fortuna Faucet" Name="FoldersCreated" Type="integer" Value="1" KeyPath="yes" />
           <CreateFolder Directory="DataFolder">
             <util:PermissionEx User="LocalService" GenericAll="yes" />
           </CreateFolder>
@@ -64,40 +64,32 @@
             <util:PermissionEx User="LocalService" GenericAll="yes" />
           </CreateFolder>
         </Component>
-
-        <Component Id="EnvironmentVariables" Guid="c3d9a9a0-6b6f-4c18-9c59-26d0e6a1240c">
-          <RegistryValue Root="HKLM" Key="Software\Fortuna Faucet" Name="EnvVariablesSet" Type="integer" Value="1" KeyPath="yes" />
-          <Environment Id="DataDirEnv" Name="FORTUNA_DATA_DIR" Value="[DataFolder]" Action="set" System="yes" />
-          <Environment Id="LogDirEnv" Name="FORTUNA_LOG_DIR" Value="[LogsFolder]" Action="set" System="yes" />
-          <Environment Id="FortunaModeEnv" Name="FORTUNA_MODE" Value="webservice" Action="set" System="yes" />
-        </Component>
       </Directory>
     </StandardDirectory>
 
     <StandardDirectory Id="ProgramMenuFolder">
-      <Directory Id="ProgramMenuSubfolder" Name="Fortuna Faucet">
-        <Component Id="ShortcutComponent" Guid="b5c5e5e4-3e3d-4c4c-8c8c-1234567890ab">
-          <util:InternetShortcut Id="WebAppShortcut"
-                                 Name="Fortuna Faucet"
-                                 Target="http://localhost:8000" />
-          <RemoveFolder Id="RemoveProgramMenuSubfolder" On="uninstall" />
-          <RegistryValue Root="HKCU" Key="Software\Fortuna Faucet" Name="ShortcutCreated" Type="integer" Value="1" KeyPath="yes"/>
-        </Component>
-      </Directory>
+        <Directory Id="ApplicationProgramsFolder" Name="Fortuna Service"/>
     </StandardDirectory>
 
-    <ComponentGroup Id="ServiceAndFirewall">
+    <!-- Component Groups -->
+    <ComponentGroup Id="ServiceComponents">
       <ComponentRef Id="FortunaBackendService" />
     </ComponentGroup>
 
-    <ComponentGroup Id="DirectoryAndEnv">
-      <ComponentRef Id="DataAndLogsFolders" />
-      <ComponentRef Id="EnvironmentVariables" />
+    <ComponentGroup Id="ShortcutsComponentGroup" Directory="ApplicationProgramsFolder">
+      <Component Id="ApplicationShortcuts" Guid="0fe34ea7-c144-465a-8ab7-7eef33ccfd5c">
+          <util:InternetShortcut Id="DashboardShortcut" Name="Fortuna Faucet Dashboard" Target="http://localhost:8000"/>
+          <Shortcut Id="UninstallShortcut" Name="Uninstall Fortuna Service" Description="Remove this application" Target="[System64Folder]msiexec.exe" Arguments="/x [ProductCode]" />
+          <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall"/>
+          <RegistryValue Root="HKCU" Key="Software\Fortuna Faucet Service" Name="Installed" Type="integer" Value="1" KeyPath="yes"/>
+      </Component>
     </ComponentGroup>
 
-    <ComponentGroup Id="StartMenuShortcut">
-      <ComponentRef Id="ShortcutComponent" />
-    </ComponentGroup>
+    <!-- UI -->
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+    <UI>
+      <UIRef Id="WixUI_InstallDir" />
+    </UI>
 
   </Package>
 </Wix>
