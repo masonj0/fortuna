@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+
+  <Package Name="Fortuna Faucet - Standalone"
+           Manufacturer="Fortuna Development Team"
+           Version="1.0.0.0"
+           UpgradeCode="28085bda-8ed9-48de-8d12-08d9cc77fb76"
+           Scope="perMachine">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- Features -->
+    <Feature Id="MainApplication" Title="Main Application" Level="1">
+      <ComponentGroupRef Id="StandaloneComponents" />
+      <ComponentGroupRef Id="ShortcutsComponentGroup"/>
+    </Feature>
+
+    <!-- Directory Structure -->
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Fortuna Standalone">
+        <Component Id="FortunaBackendStandalone" Guid="04e85c16-b8de-4ca6-b540-dbf5f178ba3e">
+          <File Id="FortunaBackendExe"
+                Source="$(var.SourceDir)/fortuna-backend.exe"
+                KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+        <Directory Id="ApplicationProgramsFolder" Name="Fortuna Standalone"/>
+    </StandardDirectory>
+
+    <!-- Component Groups -->
+    <ComponentGroup Id="StandaloneComponents">
+      <ComponentRef Id="FortunaBackendStandalone" />
+    </ComponentGroup>
+
+    <ComponentGroup Id="ShortcutsComponentGroup" Directory="ApplicationProgramsFolder">
+      <Component Id="ApplicationShortcuts" Guid="f4bd5c40-1d9f-4428-9413-8fbcf6ecdc4e">
+          <util:InternetShortcut Id="DashboardShortcut" Name="Fortuna Faucet Dashboard" Target="http://localhost:8000"/>
+          <Shortcut Id="UninstallShortcut" Name="Uninstall Fortuna Faucet Standalone" Description="Remove this application" Target="[System64Folder]msiexec.exe" Arguments="/x [ProductCode]" />
+          <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall"/>
+          <RegistryValue Root="HKCU" Key="Software\Fortuna Faucet Standalone" Name="Installed" Type="integer" Value="1" KeyPath="yes"/>
+      </Component>
+    </ComponentGroup>
+
+    <!-- UI -->
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+    <UI>
+      <UIRef Id="WixUI_InstallDir" />
+    </UI>
+
+  </Package>
+</Wix>
