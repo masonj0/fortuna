@@ -9,6 +9,11 @@
 
     <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
 
+    <!--
+      Note: FrontendComponents ComponentGroup removed.
+      The frontend UI is now bundled directly into fortuna-backend.exe by PyInstaller,
+      eliminating the need for separate frontend file installation.
+    -->
     <Feature Id="MainApplication" Title="Main Application">
       <ComponentGroupRef Id="ServiceAndFirewall" />
       <ComponentGroupRef Id="DirectoryAndEnv" />
