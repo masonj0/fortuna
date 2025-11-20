@@ -14,6 +14,7 @@
 
     <Feature Id="MainApplication" Title="Main Application" Level="1">
       <ComponentGroupRef Id="ServiceComponents" />
+      <ComponentGroupRef Id="FrontendComponents" />
       <ComponentGroupRef Id="ShortcutsComponentGroup" />
     </Feature>
 
