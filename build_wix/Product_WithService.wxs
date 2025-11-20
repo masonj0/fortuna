@@ -9,15 +9,11 @@
 
     <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
 
-    <!--
-      Note: FrontendComponents ComponentGroup removed.
-      The frontend UI is now bundled directly into fortuna-backend.exe by PyInstaller,
-      eliminating the need for separate frontend file installation.
-    -->
     <Feature Id="MainApplication" Title="Main Application">
       <ComponentGroupRef Id="ServiceAndFirewall" />
       <ComponentGroupRef Id="DirectoryAndEnv" />
       <ComponentGroupRef Id="StartMenuShortcut" />
+      <!-- FrontendComponents removed - UI is now bundled in fortuna-backend.exe -->
     </Feature>
 
     <StandardDirectory Id="ProgramFiles6432Folder">
@@ -29,39 +25,52 @@
         <Component Id="FortunaBackendService" Guid="a1b1a73a-4424-4221-897b-0331984639e2">
           <File Id="FortunaBackendExe"
                 Source="$(var.SourceDir)/fortuna-backend.exe"
-                KeyPath="yes" />
+                KeyPath="yes">
 
-          <util:ServiceInstall Id="InstallFortunaService"
-                               Name="FortunaBackendService"
-                               DisplayName="Fortuna Faucet Backend"
-                               Description="Handles data aggregation for Fortuna Faucet."
-                               Account="LocalService"
-                               Start="auto"
-                               Type="ownProcess"
-                               Vital="yes"
-                               ErrorControl="critical" />
+            <ServiceConfig
+              xmlns="http://wixtoolset.org/schemas/v4/wxs/util"
+            ServiceName="FortunaBackendService"
+            Id="FortunaServiceConfig"
+            FirstFailureActionType="restart"
+            SecondFailureActionType="restart"
+            ThirdFailureActionType="restart"
+            RestartServiceDelayInSeconds="60" />
 
-          <util:ServiceControl Id="StartFortunaService"
-                               Name="FortunaBackendService"
-                               Start="install"
-                               Stop="both"
-                               Remove="uninstall"
-                               Wait="yes" />
+            <ServiceInstall
+              xmlns="http://wixtoolset.org/schemas/v4/wxs/util"
+            Id="InstallFortunaService"
+            Name="FortunaBackendService"
+            DisplayName="Fortuna Faucet Backend"
+            Description="Handles data aggregation for Fortuna Faucet."
+            Account="NT AUTHORITY\LocalService"
+            Start="auto"
+            Type="ownProcess"
+            ErrorControl="normal" />
 
-          <firewall:FirewallException Id="FWException"
-                                      Name="Fortuna Faucet"
-                                      Port="8000"
-                                      Protocol="tcp"
-                                      Scope="any" />
+            <ServiceControl
+              xmlns="http://wixtoolset.org/schemas/v4/wxs/util"
+            Id="StartFortunaService"
+            Name="FortunaBackendService"
+            Start="install"
+            Stop="both"
+            Remove="uninstall" />
+
+            <FirewallException
+              xmlns="http://wixtoolset.org/schemas/v4/wxs/firewall"
+            Id="FWException"
+            Name="Fortuna Faucet"
+            Port="8000"
+            Protocol="tcp" />
+          </File>
         </Component>
 
         <Component Id="DataAndLogsFolders" Guid="f9e0a2d2-8533-4a6c-921c-55913e11f75b">
           <RegistryValue Root="HKLM" Key="Software\Fortuna Faucet" Name="FoldersCreated" Type="integer" Value="1" KeyPath="yes" />
           <CreateFolder Directory="DataFolder">
-            <util:PermissionEx User="LocalService" GenericAll="yes" />
+            <util:PermissionEx User="NT AUTHORITY\LocalService" GenericAll="yes" />
           </CreateFolder>
           <CreateFolder Directory="LogsFolder">
-            <util:PermissionEx User="LocalService" GenericAll="yes" />
+            <util:PermissionEx User="NT AUTHORITY\LocalService" GenericAll="yes" />
           </CreateFolder>
         </Component>
 
