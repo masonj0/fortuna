@@ -13,6 +13,7 @@
       <ComponentGroupRef Id="ServiceAndFirewall" />
       <ComponentGroupRef Id="DirectoryAndEnv" />
       <ComponentGroupRef Id="StartMenuShortcut" />
+      <!-- FrontendComponents removed - UI is now bundled in fortuna-backend.exe -->
     </Feature>
 
     <StandardDirectory Id="ProgramFiles6432Folder">
@@ -63,10 +64,10 @@
         <Component Id="DataAndLogsFolders" Guid="f9e0a2d2-8533-4a6c-921c-55913e11f75b">
           <RegistryValue Root="HKLM" Key="Software\Fortuna Faucet" Name="FoldersCreated" Type="integer" Value="1" KeyPath="yes" />
           <CreateFolder Directory="DataFolder">
-            <util:PermissionEx User="LocalService" GenericAll="yes" />
+            <util:PermissionEx User="NT AUTHORITY\LocalService" GenericAll="yes" />
           </CreateFolder>
           <CreateFolder Directory="LogsFolder">
-            <util:PermissionEx User="LocalService" GenericAll="yes" />
+            <util:PermissionEx User="NT AUTHORITY\LocalService" GenericAll="yes" />
           </CreateFolder>
         </Component>
 
