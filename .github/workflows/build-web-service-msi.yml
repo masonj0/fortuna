@@ -142,10 +142,10 @@ jobs:
           }
 
   # ============================================================================
-  # JOB 4: PACKAGE MSI & CREATE RELEASE
+  # JOB 4: PACKAGE MSI & CREATE RELEASE (The MSBuild Way)
   # ============================================================================
   package-and-release:
-    name: '💿 Package & Release MSI'
+    name: '💿 Package & Release MSI (MSBuild)'
     timeout-minutes: 20
     needs: [smoke-test-backend]
     runs-on: windows-latest
@@ -165,56 +165,59 @@ jobs:
         run: |
           $staging = "build_wix/staging"
           New-Item -ItemType Directory -Path $staging -Force | Out-Null
-
-          # The executable is now self-contained with the UI, so it's the only thing we need to stage.
           Move-Item -Path "./dist/fortuna-backend.exe" -Destination "$staging/fortuna-backend.exe" -Force
 
-          # Sanitize the branch/tag name for the MSI filename
           $msiName = "Fortuna-WebService-${{ github.ref_name }}.msi".Replace('/', '-')
-          echo "msi_name=$msiName" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-
+          echo "msi_name=$msiName" >> $env:GITHUB_OUTPUT
           Write-Host "✅ Staging Complete. MSI will be named: $msiName"
-          Get-ChildItem -Path $staging -Recurse
 
-      - name: Setup .NET and WiX v4 Toolset
+      - name: Setup .NET 8 SDK
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
-      - name: Install WiX v4 and Extensions
+
+      - name: Generate WiX Project File
+        working-directory: build_wix
         shell: pwsh
         run: |
-          dotnet tool install --global wix
-          wix extension add WixToolset.Util.wixext
-          wix extension add WixToolset.Firewall.wixext
+          $msiOutputName = "${{ steps.stage_files.outputs.msi_name }}".Replace('.msi', '')
+          $wixProjContent = @"
+          <Project Sdk="WixToolset.Sdk/4.0.5">
+            <PropertyGroup>
+              <OutputName>$msiOutputName</OutputName>
+              <OutputType>Package</OutputType>
+              <DefineConstants>SourceDir=staging</DefineConstants>
+            </PropertyGroup>
+            <ItemGroup>
+              <PackageReference Include="WixToolset.Util.wixext" Version="4.0.5" />
+              <PackageReference Include="WixToolset.Firewall.wixext" Version="4.0.5" />
+            </ItemGroup>
+            <ItemGroup>
+              <Compile Include="Product_WithService.wxs" />
+            </ItemGroup>
+          </Project>
+          "@
+          Set-Content -Path "Fortuna.wixproj" -Value $wixProjContent -Encoding UTF8
+          Write-Host "✅ Generated Fortuna.wixproj for self-contained executable." -ForegroundColor Green
 
-      - name: Build MSI with WiX v4
+      - name: Build MSI with dotnet build
+        working-directory: build_wix
         shell: pwsh
         run: |
-          $stagingDir = "$PWD/build_wix/staging"
-          $outputDir = "$PWD/dist"
-          New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
+          dotnet build Fortuna.wixproj -c Release
+          $msiPath = "bin/Release/${{ steps.stage_files.outputs.msi_name }}"
+          if (-not (Test-Path $msiPath)) { throw "❌ MSI was not created at '$msiPath'" }
 
-          # With a self-contained executable, we no longer need to harvest the UI components.
-          # The WXS file is now solely responsible for installing the service.
-          wix build build_wix/Product_WithService.wxs `
-            -ext WixToolset.Util.wixext `
-            -ext WixToolset.Firewall.wixext `
-            -d "SourceDir=$stagingDir" `
-            -o "$outputDir/${{ steps.stage_files.outputs.msi_name }}"
-
-      - name: Verify MSI Creation
-        shell: pwsh
-        run: |
-          $msiPath = "dist/${{ steps.stage_files.outputs.msi_name }}"
-          if (-not (Test-Path $msiPath)) { throw "❌ MSI was not created at $msiPath" }
-          $msiSize = (Get-Item $msiPath).Length / 1MB
-          Write-Host "✅ MSI created successfully (${msiSize:.1f} MB)" -ForegroundColor Green
+          # Move MSI to a predictable location for upload steps
+          New-Item -ItemType Directory -Path "dist" -Force | Out-Null
+          Move-Item -Path $msiPath -Destination "dist/${{ steps.stage_files.outputs.msi_name }}" -Force
+          Write-Host "✅ MSI moved to dist/ folder" -ForegroundColor Green
 
       - name: Upload MSI as Build Artifact
         uses: actions/upload-artifact@v4
         with:
           name: fortuna-webservice-installer
-          path: dist/*.msi
+          path: build_wix/dist/*.msi
           retention-days: 7
 
       - name: Create GitHub Release (on tags)
@@ -242,6 +245,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: dist/${{ steps.stage_files.outputs.msi_name }}
+          asset_path: build_wix/dist/${{ steps.stage_files.outputs.msi_name }}
           asset_name: ${{ steps.stage_files.outputs.msi_name }}
           asset_content_type: application/octet-stream
