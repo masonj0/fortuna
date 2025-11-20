@@ -1,5 +1,6 @@
 # python_service/config.py
 import os
+import sys
 from functools import lru_cache
 from pathlib import Path
 from typing import List
@@ -78,6 +79,10 @@ class Settings(BaseSettings):
     # --- CORS Configuration ---
     ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:3001"]
 
+    # --- Dynamic Path Configuration ---
+    # This determines the path to static files, crucial for PyInstaller builds
+    STATIC_FILES_DIR: Optional[str] = None
+
     model_config = {"env_file": ".env", "case_sensitive": True}
 
     @model_validator(mode="after")
@@ -103,6 +108,14 @@ class Settings(BaseSettings):
 
         # 2. Decrypt sensitive fields
         self.BETFAIR_APP_KEY = decrypt_value(self.BETFAIR_APP_KEY)
+
+        # 3. Set the static files directory for packaged apps
+        if getattr(sys, "frozen", False):
+            # Running in a PyInstaller bundle
+            self.STATIC_FILES_DIR = os.path.join(sys._MEIPASS, "ui")
+        else:
+            # Running in a normal Python environment
+            self.STATIC_FILES_DIR = None  # Not needed for local dev
 
         return self
 
