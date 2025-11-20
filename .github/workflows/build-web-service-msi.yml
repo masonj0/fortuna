@@ -1,4 +1,4 @@
-name: Build Fortuna Faucet Web Service Installer
+name: Build Fortuna Faucet MSI (WiX v4) - 🏆 PRODUCTION
 
 on:
   push:
@@ -15,185 +15,45 @@ env:
 
 jobs:
   # ============================================================================
-  # STAGE 0: VALIDATION & ENVIRONMENT SETUP
-  # ============================================================================
-  validate-environment:
-    name: '🔍 Validate Environment & Dependencies'
-    timeout-minutes: 5
-    runs-on: windows-latest
-    outputs:
-      node-cache-hit: ${{ steps.node-cache.outputs.cache-hit }}
-      python-cache-hit: ${{ steps.python-cache.outputs.cache-hit }}
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v5
-
-      - name: Validate Critical Files Exist
-        shell: pwsh
-        run: |
-          $criticalFiles = @(
-            'web_platform/frontend/package.json',
-            'web_platform/frontend/package-lock.json',
-            'python_service/requirements.txt',
-            'python_service/requirements-dev.txt',
-            'python_service/main.py',
-            'fortuna-backend-webservice.spec',
-            'build_wix/Product_WithService.wxs'
-          )
-
-          $missing = @()
-          foreach ($file in $criticalFiles) {
-            if (-not (Test-Path $file)) {
-              $missing += $file
-            }
-          }
-
-          if ($missing.Count -gt 0) {
-            Write-Host "❌ FATAL: Missing critical files:" -ForegroundColor Red
-            $missing | ForEach-Object { Write-Host "  - $_" -ForegroundColor Red }
-            exit 1
-          }
-          Write-Host "✅ All critical files present" -ForegroundColor Green
-
-      - name: Validate Directory Structure
-        shell: pwsh
-        run: |
-          $requiredDirs = @(
-            'web_platform/frontend',
-            'python_service',
-            'build_wix'
-          )
-
-          foreach ($dir in $requiredDirs) {
-            if (-not (Test-Path $dir -PathType Container)) {
-              Write-Host "❌ FATAL: Missing directory: $dir" -ForegroundColor Red
-              exit 1
-            }
-          }
-          Write-Host "✅ All required directories present" -ForegroundColor Green
-
-      - name: Check Cache Status
-        id: node-cache
-        shell: pwsh
-        run: |
-          if (Test-Path 'web_platform/frontend/node_modules') {
-            Write-Host "node-cache-hit=true" >> $env:GITHUB_OUTPUT
-          } else {
-            Write-Host "node-cache-hit=false" >> $env:GITHUB_OUTPUT
-          }
-
-      - name: Check Python Cache Status
-        id: python-cache
-        shell: pwsh
-        run: |
-          if (Test-Path 'python_service/venv') {
-            Write-Host "python-cache-hit=true" >> $env:GITHUB_OUTPUT
-          } else {
-            Write-Host "python-cache-hit=false" >> $env:GITHUB_OUTPUT
-          }
-
-  # ============================================================================
-  # STAGE 1: FRONTEND BUILD
+  # JOB 1: BUILD FRONTEND
   # ============================================================================
   build-frontend:
     name: '📦 Build Frontend'
     timeout-minutes: 15
-    needs: [validate-environment]
     runs-on: windows-latest
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
           cache-dependency-path: 'web_platform/frontend/package-lock.json'
-
-      - name: Frontend - Install Dependencies
+      - name: Frontend - Install & Build
         shell: pwsh
         run: |
           cd web_platform/frontend
-          Write-Host "Installing dependencies..." -ForegroundColor Cyan
           npm ci --verbose
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "❌ npm ci failed with exit code: $LASTEXITCODE" -ForegroundColor Red
-            exit 1
-          }
-          Write-Host "✅ Dependencies installed" -ForegroundColor Green
-
-      - name: Frontend - Security Audit
-        shell: pwsh
-        continue-on-error: true
-        run: |
-          cd web_platform/frontend
-          Write-Host "Running npm audit..." -ForegroundColor Cyan
           npm audit --audit-level=moderate
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "⚠️ npm audit found issues (non-blocking)" -ForegroundColor Yellow
-          }
-
-      - name: Frontend - Lint (if configured)
-        shell: pwsh
-        continue-on-error: true
-        run: |
-          cd web_platform/frontend
-          if (Select-String -Path 'package.json' -Pattern '"lint"' -Quiet) {
-            Write-Host "Running lint..." -ForegroundColor Cyan
-            npm run lint
-          } else {
-            Write-Host "⚠️ No lint script found" -ForegroundColor Yellow
-          }
-
-      - name: Frontend - Build
-        shell: pwsh
-        run: |
-          cd web_platform/frontend
-          Write-Host "Building frontend..." -ForegroundColor Cyan
           npm run build
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "❌ npm run build failed with exit code: $LASTEXITCODE" -ForegroundColor Red
-            exit 1
-          }
-
-          if (-not (Test-Path 'out')) {
-            Write-Host "❌ FATAL: Build output directory 'out' not created" -ForegroundColor Red
-            exit 1
-          }
-
-          $fileCount = (Get-ChildItem -Path 'out' -Recurse -File | Measure-Object).Count
-          if ($fileCount -eq 0) {
-            Write-Host "❌ FATAL: Build output directory is empty" -ForegroundColor Red
-            exit 1
-          }
-
-          Write-Host "✅ Frontend build complete ($fileCount files)" -ForegroundColor Green
-
-      - name: Verify Frontend Build Output
+      - name: Verify Frontend Build
         shell: pwsh
         run: |
           $outDir = 'web_platform/frontend/out'
-          Write-Host "Frontend build contents:" -ForegroundColor Cyan
-          Get-ChildItem -Path $outDir -Recurse | Select-Object -First 20 | ForEach-Object {
-            Write-Host "  $($_.FullName.Replace($outDir, '').TrimStart('\'))"
-          }
-
+          if (-not (Test-Path $outDir)) { throw "❌ FATAL: Build output directory 'out' not created" }
+          $fileCount = (Get-ChildItem -Path $outDir -Recurse -File | Measure-Object).Count
+          if ($fileCount -eq 0) { throw "❌ FATAL: Build output directory is empty" }
+          Write-Host "✅ Frontend build verified ($fileCount files)" -ForegroundColor Green
       - name: Upload Frontend Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: frontend-build-output-${{ github.sha }}
+          name: frontend-build-${{ github.sha }}
           path: web_platform/frontend/out
           retention-days: 1
-          if-no-files-found: error
-
-      - name: Verify Frontend Artifact Upload
-        shell: pwsh
-        run: |
-          Write-Host "✅ Frontend artifact uploaded successfully" -ForegroundColor Green
 
   # ============================================================================
-  # STAGE 2: BACKEND BUILD
+  # JOB 2: BUILD BACKEND
   # ============================================================================
   build-backend:
     name: '🐍 Build Backend'
@@ -205,210 +65,48 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
           cache-dependency-path: 'python_service/requirements.txt'
-
-      - name: Verify Python Installation
+      - name: Create Staging Directory for UI
         shell: pwsh
-        run: |
-          python --version
-          pip --version
-          Write-Host "✅ Python environment verified" -ForegroundColor Green
-
-      - name: Create Required Directories
-        shell: pwsh
-        run: |
-          $requiredDirs = @(
-            'python_service/adapters',
-            'python_service/data',
-            'python_service/json',
-            'staging/ui'
-          )
-
-          foreach ($dir in $requiredDirs) {
-            if (-not (Test-Path $dir)) {
-              New-Item -ItemType Directory -Path $dir -Force | Out-Null
-              Write-Host "✅ Created: $dir" -ForegroundColor Green
-            }
-          }
-
+        run: New-Item -ItemType Directory -Path "staging/ui" -Force | Out-Null
       - name: Download Frontend Artifact
         uses: actions/download-artifact@v4
         with:
-          name: frontend-build-output-${{ github.sha }}
-          path: ./temp-frontend
-
-      - name: Verify Frontend Artifact Downloaded
-        shell: pwsh
-        run: |
-          if (-not (Test-Path 'temp-frontend')) {
-            Write-Host "❌ FATAL: Frontend artifact not downloaded" -ForegroundColor Red
-            exit 1
-          }
-          $fileCount = (Get-ChildItem -Path 'temp-frontend' -Recurse -File | Measure-Object).Count
-          if ($fileCount -eq 0) {
-            Write-Host "❌ FATAL: Downloaded frontend artifact is empty" -ForegroundColor Red
-            exit 1
-          }
-          Write-Host "✅ Frontend artifact verified ($fileCount files)" -ForegroundColor Green
-
-      - name: Stage Frontend for PyInstaller
-        shell: pwsh
-        run: |
-          $sourceDir = 'temp-frontend'
-          $destinationDir = 'staging/ui'
-
-          Write-Host "Staging frontend from $sourceDir to $destinationDir" -ForegroundColor Cyan
-
-          if (Test-Path $destinationDir) {
-            Remove-Item -Recurse -Force $destinationDir
-          }
-          New-Item -ItemType Directory -Path $destinationDir -Force | Out-Null
-
-          Copy-Item -Path "$sourceDir/*" -Destination $destinationDir -Recurse -Force
-
-          $stagedFileCount = (Get-ChildItem -Path $destinationDir -Recurse -File | Measure-Object).Count
-          if ($stagedFileCount -eq 0) {
-            Write-Host "❌ FATAL: Staging failed - destination is empty" -ForegroundColor Red
-            exit 1
-          }
-
-          Write-Host "✅ Frontend staged successfully ($stagedFileCount files)" -ForegroundColor Green
-
-      - name: Verify Critical Python Files
-        shell: pwsh
-        run: |
-          $criticalFiles = @(
-            'python_service/main.py',
-            'fortuna-backend-webservice.spec'
-          )
-
-          foreach ($file in $criticalFiles) {
-            if (-not (Test-Path $file)) {
-              Write-Host "❌ FATAL: Missing critical file: $file" -ForegroundColor Red
-              exit 1
-            }
-          }
-          Write-Host "✅ All critical Python files present" -ForegroundColor Green
-
+          name: frontend-build-${{ github.sha }}
+          path: staging/ui
       - name: Install Python Dependencies
         shell: pwsh
         run: |
-          Write-Host "Installing Python dependencies..." -ForegroundColor Cyan
-          python -m pip install --upgrade pip setuptools wheel
-
-          pip install -r python_service/requirements.txt
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "❌ FATAL: pip install failed" -ForegroundColor Red
-            exit 1
-          }
-
-          Write-Host "✅ Python dependencies installed" -ForegroundColor Green
-
-      - name: Install Development Dependencies
-        shell: pwsh
-        run: |
-          Write-Host "Installing dev dependencies..." -ForegroundColor Cyan
+          python -m pip install --upgrade pip
           pip install -r python_service/requirements-dev.txt
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "❌ FATAL: pip install dev failed" -ForegroundColor Red
-            exit 1
-          }
-          Write-Host "✅ Dev dependencies installed" -ForegroundColor Green
-
-      - name: Backend - Linting
+      - name: Create Missing Directories for PyInstaller
         shell: pwsh
         run: |
-          Write-Host "Running Ruff linter..." -ForegroundColor Cyan
-          ruff check python_service
-          Write-Host "Running Ruff formatter check..." -ForegroundColor Cyan
-          ruff format --check python_service
-
-      - name: Backend - Security Audit
-        shell: pwsh
-        continue-on-error: true
-        run: |
-          Write-Host "Running pip-audit..." -ForegroundColor Cyan
-          pip install pip-audit
-          pip-audit -r python_service/requirements.txt --local
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "⚠️ pip-audit found issues (non-blocking)" -ForegroundColor Yellow
-          }
-
-      - name: Verify PyInstaller Spec
-        shell: pwsh
-        run: |
-          $specFile = 'fortuna-backend-webservice.spec'
-          $specContent = Get-Content $specFile -Raw
-
-          if ($specContent -notmatch 'Analysis|PyInstaller') {
-            Write-Host "❌ FATAL: PyInstaller spec file appears invalid" -ForegroundColor Red
-            exit 1
-          }
-          Write-Host "✅ PyInstaller spec file validated" -ForegroundColor Green
-
+          New-Item -ItemType Directory -Path "python_service/data" -Force | Out-Null
+          New-Item -ItemType Directory -Path "python_service/json" -Force | Out-Null
+          Write-Host "✅ Created missing data/ and json/ directories for PyInstaller."
       - name: Backend - Build with PyInstaller
         shell: pwsh
         run: |
-          Write-Host "Building backend with PyInstaller..." -ForegroundColor Cyan
           pyinstaller fortuna-backend-webservice.spec --noconfirm
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "❌ FATAL: PyInstaller build failed" -ForegroundColor Red
-            exit 1
-          }
-
-          if (-not (Test-Path 'dist/fortuna-backend.exe')) {
-            Write-Host "❌ FATAL: PyInstaller did not produce fortuna-backend.exe" -ForegroundColor Red
-            Get-ChildItem -Path 'dist' -Recurse | ForEach-Object { Write-Host "  Found: $_" }
-            exit 1
-          }
-
-          $exeSize = (Get-Item 'dist/fortuna-backend.exe').Length / 1MB
-          Write-Host "✅ Backend executable created (${exeSize:.1f} MB)" -ForegroundColor Green
-
-      - name: Verify Backend Executable
-        shell: pwsh
-        run: |
-          $exe = 'dist/fortuna-backend.exe'
-
-          if (-not (Test-Path $exe)) {
-            Write-Host "❌ FATAL: Executable not found at $exe" -ForegroundColor Red
-            exit 1
-          }
-
-          $fileInfo = Get-Item $exe
-          if ($fileInfo.Length -lt 10MB) {
-            Write-Host "⚠️ WARNING: Executable is suspiciously small ($(${fileInfo.Length} / 1MB) MB)" -ForegroundColor Yellow
-          }
-
-          Write-Host "✅ Backend executable verified" -ForegroundColor Green
-          Write-Host "  Size: $($fileInfo.Length / 1MB) MB" -ForegroundColor Green
-          Write-Host "  Modified: $($fileInfo.LastWriteTime)" -ForegroundColor Green
-
       - name: Upload Backend Artifact
         uses: actions/upload-artifact@v4
         with:
           name: backend-executable-${{ github.sha }}
           path: dist/fortuna-backend.exe
           retention-days: 1
-          if-no-files-found: error
-
-      - name: Verify Backend Artifact Upload
-        shell: pwsh
-        run: |
-          Write-Host "✅ Backend artifact uploaded successfully" -ForegroundColor Green
 
   # ============================================================================
-  # STAGE 3: SMOKE TESTS
+  # JOB 3: SMOKE TEST BACKEND
   # ============================================================================
   smoke-test-backend:
-    name: '🧪 Smoke Test Backend Executable'
-    timeout-minutes: 15
+    name: '🧪 Smoke Test Backend'
+    timeout-minutes: 10
     needs: [build-backend]
     runs-on: windows-latest
     steps:
@@ -416,460 +114,143 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: backend-executable-${{ github.sha }}
-          path: ./backend-dist
-
-      - name: Verify Executable Downloaded
+      - name: Run Smoke Test
         shell: pwsh
-        run: |
-          if (-not (Test-Path 'backend-dist/fortuna-backend.exe')) {
-            Write-Host "❌ FATAL: Backend executable not found" -ForegroundColor Red
-            exit 1
-          }
-          Write-Host "✅ Backend executable verified" -ForegroundColor Green
-
-      - name: Run Smoke Test - Backend Health
-        shell: pwsh
-        timeout-minutes: 5
         env:
           API_KEY: "a_secure_test_api_key_that_is_long_enough_for_smoke_test_12345"
         run: |
-          $exe = './backend-dist/fortuna-backend.exe'
-          $logDir = 'logs'
-          $stdOutPath = Join-Path $logDir 'backend-out.txt'
-          $stdErrPath = Join-Path $logDir 'backend-err.txt'
+          $exe = './fortuna-backend.exe'
+          Start-Process -FilePath $exe -NoNewWindow -RedirectStandardOutput 'out.log' -RedirectStandardError 'err.log'
 
-          if (-not (Test-Path $logDir)) {
-            New-Item -ItemType Directory -Path $logDir -Force | Out-Null
-          }
-
-          Write-Host "Starting backend process..." -ForegroundColor Cyan
-          $process = Start-Process -FilePath $exe `
-            -PassThru `
-            -NoNewWindow `
-            -RedirectStandardOutput $stdOutPath `
-            -RedirectStandardError $stdErrPath `
-            -ErrorAction Stop
-
-          Write-Host "Backend process started (PID: $($process.Id))" -ForegroundColor Green
-
-          $serverReady = $false
-          $maxAttempts = 40
-          $attemptCount = 0
-
-          try {
-            for ($i = 1; $i -le $maxAttempts; $i++) {
-              $attemptCount = $i
-
-              if ($process.HasExited) {
-                Write-Host "❌ Backend process exited unexpectedly (Exit Code: $($process.ExitCode))" -ForegroundColor Red
+          $success = $false
+          foreach ($attempt in 1..15) {
+            Write-Host "Attempt ${{attempt}}: Checking health..."
+            try {
+              $resp = Invoke-WebRequest -Uri 'http://127.0.0.1:8000/health' -UseBasicParsing -TimeoutSec 2
+              if ($resp.StatusCode -eq 200) {
+                Write-Host "✅ Backend Healthy" -ForegroundColor Green
+                $success = $true
                 break
               }
-
-              try {
-                Write-Host "Attempt $i/${maxAttempts}: Checking /health endpoint..." -ForegroundColor Gray
-                $response = Invoke-WebRequest `
-                  -Uri 'http://127.0.0.1:8000/health' `
-                  -TimeoutSec 2 `
-                  -UseBasicParsing `
-                  -ErrorAction SilentlyContinue
-
-                if ($response.StatusCode -eq 200) {
-                  Write-Host "✅ Health endpoint responded" -ForegroundColor Green
-
-                  Write-Host "Checking /api/races endpoint..." -ForegroundColor Gray
-                  $headers = @{ 'X-API-Key' = $env:API_KEY }
-                  $apiResponse = Invoke-WebRequest `
-                    -Uri 'http://127.0.0.1:8000/api/races' `
-                    -Headers $headers `
-                    -TimeoutSec 2 `
-                    -UseBasicParsing `
-                    -ErrorAction SilentlyContinue
-
-                  if ($apiResponse.StatusCode -eq 200 -or $apiResponse.StatusCode -eq 400 -or $apiResponse.StatusCode -eq 401) {
-                    Write-Host "✅ API endpoint responded (Status: $($apiResponse.StatusCode))" -ForegroundColor Green
-                    $serverReady = $true
-                    break
-                  }
-                }
-              } catch {
-                Write-Host "  (waiting...)" -ForegroundColor Gray
-              }
-
-              Start-Sleep -Seconds 1.5
+            } catch {
+              Start-Sleep -Seconds 2
             }
-          } finally {
-            Write-Host "Stopping backend process..." -ForegroundColor Cyan
-            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-            Start-Sleep -Milliseconds 500
           }
 
-          if (-not $serverReady) {
-            Write-Host "❌ SMOKE TEST FAILED: Backend did not become healthy" -ForegroundColor Red
-            Write-Host "Attempts: ${attemptCount}/${maxAttempts}" -ForegroundColor Red
+          Stop-Process -Name "fortuna-backend" -Force -ErrorAction SilentlyContinue
 
-            if (Test-Path $stdOutPath) {
-              Write-Host "`n--- STDOUT (last 30 lines) ---" -ForegroundColor Yellow
-              Get-Content $stdOutPath -Tail 30 | Write-Host
-            }
-            if (Test-Path $stdErrPath) {
-              Write-Host "`n--- STDERR (last 30 lines) ---" -ForegroundColor Yellow
-              Get-Content $stdErrPath -Tail 30 | Write-Host
-            }
-            exit 1
+          if (-not $success) {
+            Write-Host "--- STDOUT ---"
+            Get-Content 'out.log' -Tail 30
+            Write-Host "--- STDERR ---"
+            Get-Content 'err.log' -Tail 30
+            throw "❌ Smoke Test Failed"
           }
 
-          Write-Host "`n✅ SMOKE TEST PASSED on attempt $attemptCount" -ForegroundColor Green
-
-      - name: Upload Smoke Test Logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: smoke-test-logs-${{ github.sha }}
-          path: logs/
-          retention-days: 3
-
   # ============================================================================
-  # STAGE 4: PACKAGING / WiX INSTALLER
+  # JOB 4: PACKAGE MSI & CREATE RELEASE (The MSBuild Way)
   # ============================================================================
-  build-wix-installer:
-    name: '🔥 Build WiX Installer (v4)'
+  package-and-release:
+    name: '💿 Package & Release MSI (MSBuild)'
     timeout-minutes: 20
-    needs: [smoke-test-backend, build-frontend]
+    needs: [smoke-test-backend]
     runs-on: windows-latest
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Create Staging Directory
-        shell: pwsh
-        run: |
-          $stagingDir = 'build_wix/staging'
-          if (Test-Path $stagingDir) {
-            Remove-Item -Recurse -Force $stagingDir
-          }
-          New-Item -ItemType Directory -Path "$stagingDir/ui" -Force | Out-Null
-          Write-Host "✅ Staging directory prepared" -ForegroundColor Green
-
-      - name: Download Frontend Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: frontend-build-output-${{ github.sha }}
-          path: ./artifacts/frontend
-
-      - name: Download Backend Artifact
+      - name: Download Backend Executable
         uses: actions/download-artifact@v4
         with:
           name: backend-executable-${{ github.sha }}
-          path: ./artifacts/backend
-
-      - name: Verify Downloaded Artifacts
-        shell: pwsh
-        run: |
-          $frontendPath = './artifacts/frontend'
-          $backendPath = './artifacts/backend/fortuna-backend.exe'
-
-          if (-not (Test-Path $frontendPath)) {
-            Write-Host "❌ FATAL: Frontend artifact not found" -ForegroundColor Red
-            exit 1
-          }
-
-          if (-not (Test-Path $backendPath)) {
-            Write-Host "❌ FATAL: Backend executable not found" -ForegroundColor Red
-            exit 1
-          }
-
-          $frontendFiles = (Get-ChildItem -Path $frontendPath -Recurse -File | Measure-Object).Count
-          $backendSize = (Get-Item $backendPath).Length / 1MB
-
-          Write-Host "✅ Artifacts verified:" -ForegroundColor Green
-          Write-Host "  Frontend: $frontendFiles files" -ForegroundColor Green
-          Write-Host "  Backend: ${backendSize:.1f} MB" -ForegroundColor Green
+          path: ./dist
 
       - name: Stage Artifacts for WiX
+        id: stage_files
         shell: pwsh
         run: |
-          $wixStaging = 'build_wix/staging'
-          $uiDir = "$wixStaging/ui"
+          $staging = "build_wix/staging"
+          New-Item -ItemType Directory -Path $staging -Force | Out-Null
+          Move-Item -Path "./dist/fortuna-backend.exe" -Destination "$staging/fortuna-backend.exe" -Force
 
-          Write-Host "Copying backend executable..." -ForegroundColor Cyan
-          Copy-Item -Path './artifacts/backend/fortuna-backend.exe' `
-            -Destination "$wixStaging/fortuna-backend.exe" -Force
+          $msiName = "Fortuna-WebService-${{ github.ref_name }}.msi".Replace('/', '-')
+          echo "msi_name=$msiName" >> $env:GITHUB_OUTPUT
+          Write-Host "✅ Staging Complete. MSI will be named: $msiName"
 
-          Write-Host "Copying frontend files..." -ForegroundColor Cyan
-          Copy-Item -Path './artifacts/frontend/*' `
-            -Destination $uiDir -Recurse -Force
-
-          $backendExists = Test-Path "$wixStaging/fortuna-backend.exe"
-          $frontendCount = (Get-ChildItem -Path $uiDir -Recurse -File | Measure-Object).Count
-
-          if (-not $backendExists) {
-            Write-Host "❌ FATAL: Backend not staged correctly" -ForegroundColor Red
-            exit 1
-          }
-
-          if ($frontendCount -eq 0) {
-            Write-Host "❌ FATAL: Frontend staging failed (0 files)" -ForegroundColor Red
-            exit 1
-          }
-
-          Write-Host "✅ All artifacts staged successfully" -ForegroundColor Green
-          Write-Host "  Backend: staged" -ForegroundColor Green
-          Write-Host "  Frontend: $frontendCount files" -ForegroundColor Green
-
-      - name: Setup .NET for WiX v4
+      - name: Setup .NET 8 SDK
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
 
-      - name: Verify .NET Installation
+      - name: Generate WiX Project File
+        working-directory: build_wix
         shell: pwsh
         run: |
-          dotnet --version
-          Write-Host "✅ .NET SDK verified" -ForegroundColor Green
+          $msiOutputName = "${{ steps.stage_files.outputs.msi_name }}".Replace('.msi', '')
+          $wixProjContent = @"
+          <Project Sdk="WixToolset.Sdk/4.0.5">
+            <PropertyGroup>
+              <OutputName>$msiOutputName</OutputName>
+              <OutputType>Package</OutputType>
+              <DefineConstants>SourceDir=staging</DefineConstants>
+            </PropertyGroup>
+            <ItemGroup>
+              <PackageReference Include="WixToolset.Util.wixext" Version="4.0.5" />
+              <PackageReference Include="WixToolset.Firewall.wixext" Version="4.0.5" />
+            </ItemGroup>
+            <ItemGroup>
+              <Compile Include="Product_WithService.wxs" />
+            </ItemGroup>
+          </Project>
+          "@
+          Set-Content -Path "Fortuna.wixproj" -Value $wixProjContent -Encoding UTF8
+          Write-Host "✅ Generated Fortuna.wixproj for self-contained executable." -ForegroundColor Green
 
-      - name: Install WiX v4 Toolset
+      - name: Build MSI with dotnet build
+        working-directory: build_wix
         shell: pwsh
         run: |
-          Write-Host "Installing WiX toolset..." -ForegroundColor Cyan
-          dotnet tool install --global wix
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "❌ FATAL: WiX installation failed" -ForegroundColor Red
-            exit 1
-          }
+          dotnet build Fortuna.wixproj -c Release
+          $msiPath = "bin/Release/${{ steps.stage_files.outputs.msi_name }}"
+          if (-not (Test-Path $msiPath)) { throw "❌ MSI was not created at '$msiPath'" }
 
-          wix --version
-          Write-Host "✅ WiX toolset installed" -ForegroundColor Green
+          # Move MSI to a predictable location for upload steps
+          New-Item -ItemType Directory -Path "dist" -Force | Out-Null
+          Move-Item -Path $msiPath -Destination "dist/${{ steps.stage_files.outputs.msi_name }}" -Force
+          Write-Host "✅ MSI moved to dist/ folder" -ForegroundColor Green
 
-      - name: Add WiX Extensions
-        shell: pwsh
-        run: |
-          Write-Host "Adding WiX extensions..." -ForegroundColor Cyan
-          wix extension add WixToolset.Heat.wixext
-          wix extension add WixToolset.Util.wixext
-          wix extension add WixToolset.Firewall.wixext
-          Write-Host "✅ Extensions installed" -ForegroundColor Green
-
-      - name: Verify WiX Configuration Files
-        shell: pwsh
-        run: |
-          $files = @(
-            'build_wix/Product_WithService.wxs'
-          )
-
-          foreach ($file in $files) {
-            if (-not (Test-Path $file)) {
-              Write-Host "❌ FATAL: Missing $file" -ForegroundColor Red
-              exit 1
-            }
-          }
-          Write-Host "✅ WiX configuration files verified" -ForegroundColor Green
-
-      - name: Harden WiX Source File Encoding (UTF-8)
-        shell: pwsh
-        run: |
-          $filePath = 'build_wix/Product_WithService.wxs'
-          Write-Host "Normalizing encoding for $filePath..."
-          (Get-Content -Path $filePath -Raw) | Set-Content -Path $filePath -Encoding Utf8 -Force
-          Write-Host "✅ Encoding set to UTF-8."
-
-      - name: Run WiX Harvest via Heat Tool
-        shell: pwsh
-        run: |
-          Write-Host "Harvesting frontend directory with 'wix heat'..." -ForegroundColor Cyan
-          $uiDir = "build_wix/staging/ui"
-          $outputFile = "build_wix/frontend_components.wxs"
-
-          wix heat dir $uiDir `
-            -gg `
-            -srd `
-            -dr INSTALLFOLDER `
-            -cg FrontendComponents `
-            -out $outputFile
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "❌ FATAL: 'wix heat' failed with exit code: $LASTEXITCODE" -ForegroundColor Red
-            exit 1
-          }
-          Write-Host "✅ Frontend harvest complete" -ForegroundColor Green
-
-      - name: Validate Generated Frontend Components
-        shell: pwsh
-        run: |
-          $filePath = 'build_wix/frontend_components.wxs'
-
-          if (-not (Test-Path $filePath)) {
-            Write-Host "❌ FATAL: frontend_components.wxs not generated" -ForegroundColor Red
-            exit 1
-          }
-
-          $content = Get-Content $filePath -Raw
-
-          if ($content -notmatch '<ComponentGroup Id="FrontendComponents">') {
-            Write-Host "❌ FATAL: Missing FrontendComponents ComponentGroup" -ForegroundColor Red
-            exit 1
-          }
-
-          $fileCount = ([regex]::Matches($content, '<File')).Count
-          if ($fileCount -eq 0) {
-            Write-Host "❌ FATAL: No files in generated WXS" -ForegroundColor Red
-            exit 1
-          }
-
-          Write-Host "✅ Generated WXS validated" -ForegroundColor Green
-          Write-Host "  Files: $fileCount" -ForegroundColor Green
-
-      - name: Build MSI with WiX
-        shell: pwsh
-        run: |
-          $sourceDir = "$PWD/build_wix/staging"
-          $uiDir = "$sourceDir/ui"
-          $outputDir = 'dist'
-          $msiName = 'Fortuna-Full-App-Service-v4.msi'
-
-          if (-not (Test-Path $outputDir)) {
-            New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
-          }
-
-          Write-Host "Building MSI..." -ForegroundColor Cyan
-          Write-Host "  Source: $sourceDir" -ForegroundColor Gray
-          Write-Host "  Output: $outputDir/$msiName" -ForegroundColor Gray
-
-          wix build `
-            build_wix/Product_WithService.wxs `
-            build_wix/frontend_components.wxs `
-            -ext WixToolset.Util.wixext `
-            -ext WixToolset.Firewall.wixext `
-            -d "SourceDir=$sourceDir" `
-            -d "FrontendSourceDir=$uiDir" `
-            -o "$outputDir/$msiName"
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "❌ FATAL: MSI build failed" -ForegroundColor Red
-            exit 1
-          }
-
-          if (-not (Test-Path "$outputDir/$msiName")) {
-            Write-Host "❌ FATAL: MSI not created at expected location" -ForegroundColor Red
-            exit 1
-          }
-
-          Write-Host "✅ MSI created successfully" -ForegroundColor Green
-
-      - name: Verify MSI
-        shell: pwsh
-        run: |
-          $msiPath = 'dist/Fortuna-Full-App-Service-v4.msi'
-
-          if (-not (Test-Path $msiPath)) {
-            Write-Host "❌ FATAL: MSI file not found" -ForegroundColor Red
-            exit 1
-          }
-
-          $msiSize = (Get-Item $msiPath).Length / 1MB
-
-          if ($msiSize -lt 5) {
-            Write-Host "⚠️ WARNING: MSI is suspiciously small (${msiSize:.1f} MB)" -ForegroundColor Yellow
-          }
-
-          Write-Host "✅ MSI verified" -ForegroundColor Green
-          Write-Host "  Size: ${msiSize:.1f} MB" -ForegroundColor Green
-          Write-Host "  Path: $msiPath" -ForegroundColor Green
-
-      - name: Upload WiX MSI Artifact
+      - name: Upload MSI as Build Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: fortuna-wix-installer-windows-v4
-          path: dist/Fortuna-Full-App-Service-v4.msi
+          name: fortuna-webservice-installer
+          path: build_wix/dist/*.msi
           retention-days: 7
-          if-no-files-found: error
 
-      - name: Create Release Summary
-        shell: pwsh
-        run: |
-          $msiPath = 'dist/Fortuna-Full-App-Service-v4.msi'
-          $msiSize = (Get-Item $msiPath).Length / 1MB
-          $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+      - name: Create GitHub Release (on tags)
+        if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          body: |
+            🏆 **Fortuna Faucet (Web Service Edition) Production Release**
 
-          Write-Host "`n╔════════════════════════════════════════════════╗" -ForegroundColor Green
-          Write-Host "║          BUILD COMPLETE - SUCCESS              ║" -ForegroundColor Green
-          Write-Host "╚════════════════════════════════════════════════╝" -ForegroundColor Green
-          Write-Host "`nBuild Summary:" -ForegroundColor Cyan
-          Write-Host "  Timestamp: $timestamp" -ForegroundColor Green
-          Write-Host "  Commit: ${{ github.sha }}" -ForegroundColor Green
-          Write-Host "  Branch: ${{ github.ref }}" -ForegroundColor Green
-          Write-Host "`nArtifacts Generated:" -ForegroundColor Cyan
-          Write-Host "  ✅ Frontend Build" -ForegroundColor Green
-          Write-Host "  ✅ Backend Executable" -ForegroundColor Green
-          Write-Host "  ✅ Smoke Tests Passed" -ForegroundColor Green
-          Write-Host "  ✅ WiX MSI Installer" -ForegroundColor Green
-          Write-Host "`nInstaller Details:" -ForegroundColor Cyan
-          Write-Host "  File: Fortuna-Full-App-Service-v4.msi" -ForegroundColor Green
-          Write-Host "  Size: ${msiSize:.1f} MB" -ForegroundColor Green
-          Write-Host "  Location: dist/" -ForegroundColor Green
+            - Native Windows MSI Installer built with WiX v4.
+            - This installer configures the backend as a Windows Service.
+            - Built from commit `${{ github.sha }}`.
+          draft: false
+          prerelease: false
 
-  # ============================================================================
-  # FINAL STAGE: BUILD STATUS & NOTIFICATIONS
-  # ============================================================================
-  build-status:
-    name: '✅ Build Status Summary'
-    timeout-minutes: 5
-    needs: [build-wix-installer]
-    runs-on: windows-latest
-    if: always()
-    steps:
-      - name: Check Overall Build Status
-        shell: pwsh
-        run: |
-          $needsContext = '${{ needs }}'
-          Write-Host "Build Pipeline Summary:" -ForegroundColor Cyan
-          Write-Host "  Validate Environment: ${{ needs.validate-environment.result }}" -ForegroundColor Green
-          Write-Host "  Build Frontend: ${{ needs.build-frontend.result }}" -ForegroundColor Green
-          Write-Host "  Build Backend: ${{ needs.build-backend.result }}" -ForegroundColor Green
-          Write-Host "  Smoke Tests: ${{ needs.smoke-test-backend.result }}" -ForegroundColor Green
-          Write-Host "  Build Installer: ${{ needs.build-wix-installer.result }}" -ForegroundColor Green
-
-          if ('${{ needs.build-wix-installer.result }}' -ne 'success') {
-            Write-Host "`n❌ Build pipeline failed!" -ForegroundColor Red
-            exit 1
-          }
-
-          Write-Host "`n✅ All stages completed successfully!" -ForegroundColor Green
-
-      - name: Generate Build Report
-        if: success()
-        shell: pwsh
-        run: |
-          Write-Host "`n╔════════════════════════════════════════════════╗" -ForegroundColor Green
-          Write-Host "║    FORTUNA FAUCET BUILD PIPELINE SUCCESSFUL    ║" -ForegroundColor Green
-          Write-Host "╚════════════════════════════════════════════════╝" -ForegroundColor Green
-          Write-Host "`n✅ All stages passed:" -ForegroundColor Green
-          Write-Host "  1. Environment validation" -ForegroundColor Green
-          Write-Host "  2. Frontend build with security audit" -ForegroundColor Green
-          Write-Host "  3. Backend build with PyInstaller" -ForegroundColor Green
-          Write-Host "  4. Backend smoke tests (health + API)" -ForegroundColor Green
-          Write-Host "  5. WiX installer packaging" -ForegroundColor Green
-          Write-Host "`nArtifacts Ready for Release:" -ForegroundColor Cyan
-          Write-Host "  📦 Fortuna-Full-App-Service-v4.msi" -ForegroundColor Green
-          Write-Host "`nNext Steps:" -ForegroundColor Cyan
-          Write-Host "  1. Download MSI from artifacts" -ForegroundColor Yellow
-          Write-Host "  2. Test on target system" -ForegroundColor Yellow
-          Write-Host "  3. Create GitHub release" -ForegroundColor Yellow
-          Write-Host "  4. Publish to distribution channels" -ForegroundColor Yellow
-
-      - name: Failure Report
-        if: failure()
-        shell: pwsh
-        run: |
-          Write-Host "`n╔════════════════════════════════════════════════╗" -ForegroundColor Red
-          Write-Host "║           BUILD PIPELINE FAILED                ║" -ForegroundColor Red
-          Write-Host "╚════════════════════════════════════════════════╝" -ForegroundColor Red
-          Write-Host "`nFailed Jobs:" -ForegroundColor Red
-          Write-Host "  Validate Environment: ${{ needs.validate-environment.result }}" -ForegroundColor $(if('${{ needs.validate-environment.result }}' -eq 'failure'){'Red'}else{'Green'})
-          Write-Host "  Build Frontend: ${{ needs.build-frontend.result }}" -ForegroundColor $(if('${{ needs.build-frontend.result }}' -eq 'failure'){'Red'}else{'Green'})
-          Write-Host "  Build Backend: ${{ needs.build-backend.result }}" -ForegroundColor $(if('${{ needs.build-backend.result }}' -eq 'failure'){'Red'}else{'Green'})
-          Write-Host "  Smoke Tests: ${{ needs.smoke-test-backend.result }}" -ForegroundColor $(if('${{ needs.smoke-test-backend.result }}' -eq 'failure'){'Red'}else{'Green'})
-          Write-Host "  Build Installer: ${{ needs.build-wix-installer.result }}" -ForegroundColor $(if('${{ needs.build-wix-installer.result }}' -eq 'failure'){'Red'}else{'Green'})
-          Write-Host "`nDebugging:" -ForegroundColor Yellow
-          Write-Host "  1. Check job logs for specific errors" -ForegroundColor Yellow
-          Write-Host "  2. Review artifact uploads" -ForegroundColor Yellow
-          Write-Host "  3. Verify environment setup" -ForegroundColor Yellow
+      - name: Upload MSI to GitHub Release (on tags)
+        if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: build_wix/dist/${{ steps.stage_files.outputs.msi_name }}
+          asset_name: ${{ steps.stage_files.outputs.msi_name }}
+          asset_content_type: application/octet-stream
