@@ -58,10 +58,10 @@
                                       Scope="any" />
 
           <CreateFolder Directory="DataFolder">
-            <util:PermissionEx User="LocalService" GenericAll="yes" />
+            <util:PermissionEx User="NT AUTHORITY\LocalService" GenericAll="yes" />
           </CreateFolder>
           <CreateFolder Directory="LogsFolder">
-            <util:PermissionEx User="LocalService" GenericAll="yes" />
+            <util:PermissionEx User="NT AUTHORITY\LocalService" GenericAll="yes" />
           </CreateFolder>
         </Component>
       </Directory>
