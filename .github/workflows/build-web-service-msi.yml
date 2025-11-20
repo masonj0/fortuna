@@ -257,6 +257,7 @@ jobs:
             </PropertyGroup>
             <ItemGroup>
               <PackageReference Include="WixToolset.UI.wixext" Version="4.0.5" />
+              <PackageReference Include="WixToolset.Util.wixext" Version="4.0.5" />
             </ItemGroup>
             <ItemGroup>
               <Compile Include="Product_WithoutService.wxs" />
