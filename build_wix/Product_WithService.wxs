@@ -13,7 +13,6 @@
       <ComponentGroupRef Id="ServiceAndFirewall" />
       <ComponentGroupRef Id="DirectoryAndEnv" />
       <ComponentGroupRef Id="StartMenuShortcut" />
-      <ComponentGroupRef Id="FrontendComponents" />
     </Feature>
 
     <StandardDirectory Id="ProgramFiles6432Folder">
