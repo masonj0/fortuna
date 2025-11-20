@@ -5,13 +5,12 @@ on:
     branches: [main]
     tags:
       - 'v*'
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 env:
   NODE_VERSION: '20'
   PYTHON_VERSION: '3.12'
+  PYTHONUTF8: "1"
 
 jobs:
   # ============================================================================
@@ -19,7 +18,6 @@ jobs:
   # ============================================================================
   build-frontend:
     name: '📦 Build Frontend'
-    timeout-minutes: 15
     runs-on: windows-latest
     steps:
       - name: Checkout Repository
@@ -34,8 +32,7 @@ jobs:
         shell: pwsh
         run: |
           cd web_platform/frontend
-          npm ci --verbose
-          npm audit --audit-level=moderate
+          npm ci
           npm run build
       - name: Verify Frontend Build
         shell: pwsh
@@ -48,20 +45,17 @@ jobs:
       - name: Upload Frontend Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: frontend-build-${{ github.sha }}
+          name: frontend-build
           path: web_platform/frontend/out
           retention-days: 1
 
   # ============================================================================
-  # JOB 2: BUILD BACKEND
+  # JOB 2: BUILD BACKEND (Bundles Frontend)
   # ============================================================================
   build-backend:
     name: '🐍 Build Backend'
-    timeout-minutes: 25
     needs: [build-frontend]
     runs-on: windows-latest
-    env:
-      PYTHONUTF8: "1"
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -77,111 +71,102 @@ jobs:
       - name: Download Frontend Artifact
         uses: actions/download-artifact@v4
         with:
-          name: frontend-build-${{ github.sha }}
+          name: frontend-build
           path: staging/ui
       - name: Install Python Dependencies
         shell: pwsh
         run: |
           python -m pip install --upgrade pip
           pip install -r python_service/requirements-dev.txt
-      - name: Create Missing Directories for PyInstaller
+      - name: Create Missing Directories
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path "python_service/data" -Force | Out-Null
           New-Item -ItemType Directory -Path "python_service/json" -Force | Out-Null
-          Write-Host "✅ Created missing data/ and json/ directories for PyInstaller."
       - name: Backend - Build with PyInstaller
         shell: pwsh
-        run: |
-          pyinstaller fortuna-backend-webservice.spec --noconfirm
+        run: pyinstaller fortuna-backend-webservice.spec --noconfirm
       - name: Upload Backend Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: backend-executable-${{ github.sha }}
+          name: backend-executable
           path: dist/fortuna-backend.exe
           retention-days: 1
 
   # ============================================================================
-  # JOB 3: SMOKE TEST BACKEND
+  # JOB 2B: SMOKE TEST BACKEND
   # ============================================================================
   smoke-test-backend:
-    name: '🧪 Smoke Test Backend'
-    timeout-minutes: 10
+    name: '🔥 Smoke Test Backend'
     needs: [build-backend]
     runs-on: windows-latest
+    env:
+      FORTUNA_MODE: webservice
     steps:
       - name: Download Backend Executable
         uses: actions/download-artifact@v4
         with:
-          name: backend-executable-${{ github.sha }}
-      - name: Run Smoke Test
+          name: backend-executable
+          path: ./dist
+      - name: Run Backend and Test
         shell: pwsh
-        env:
-          API_KEY: "a_secure_test_api_key_that_is_long_enough_for_smoke_test_12345"
         run: |
-          $exe = './fortuna-backend.exe'
-          Start-Process -FilePath $exe -NoNewWindow -RedirectStandardOutput 'out.log' -RedirectStandardError 'err.log'
-
-          $success = $false
-          foreach ($attempt in 1..15) {
-            Write-Host "Attempt ${attempt}: Checking health..."
-            try {
-              $resp = Invoke-WebRequest -Uri 'http://127.0.0.1:8000/health' -UseBasicParsing -TimeoutSec 2
-              if ($resp.StatusCode -eq 200) {
-                Write-Host "✅ Backend Healthy" -ForegroundColor Green
-                $success = $true
-                break
+          Start-Process -FilePath "./dist/fortuna-backend.exe"
+          Write-Host "Waiting for backend to become available..."
+          $timeout = New-TimeSpan -Seconds 30
+          $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+          $healthCheckPassed = $false
+          while ($stopwatch.Elapsed -lt $timeout) {
+              try {
+                  $response = Invoke-WebRequest -Uri "http://localhost:8000/" -UseBasicParsing -TimeoutSec 2
+                  if ($response.StatusCode -eq 200) {
+                      Write-Host "✅ Health check passed!" -ForegroundColor Green
+                      $healthCheckPassed = $true
+                      break
+                  }
+              } catch {
+                  Write-Host "  - Backend not ready yet, retrying in 3 seconds..."
               }
-            } catch {
-              Start-Sleep -Seconds 2
-            }
+              Start-Sleep -Seconds 3
           }
-
-          Stop-Process -Name "fortuna-backend" -Force -ErrorAction SilentlyContinue
-
-          if (-not $success) {
-            Write-Host "--- STDOUT ---"
-            Get-Content 'out.log' -Tail 30
-            Write-Host "--- STDERR ---"
-            Get-Content 'err.log' -Tail 30
-            throw "❌ Smoke Test Failed"
+          $stopwatch.Stop()
+          if (-not $healthCheckPassed) {
+              throw "❌ FATAL: Backend health check timed out after $($timeout.TotalSeconds) seconds."
+          }
+          $process = Get-Process -Name "fortuna-backend" -ErrorAction SilentlyContinue
+          if ($process) {
+              Stop-Process -Name "fortuna-backend" -Force
           }
 
   # ============================================================================
-  # JOB 4: PACKAGE MSI & CREATE RELEASE (The MSBuild Way)
+  # JOB 3A: PACKAGE SERVICE MSI
   # ============================================================================
-  package-and-release:
-    name: '💿 Package & Release MSI (MSBuild)'
-    timeout-minutes: 20
+  package-msi-service:
+    name: '💿 Package Service MSI'
     needs: [smoke-test-backend]
     runs-on: windows-latest
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-
       - name: Download Backend Executable
         uses: actions/download-artifact@v4
         with:
-          name: backend-executable-${{ github.sha }}
+          name: backend-executable
           path: ./dist
-
-      - name: Stage Artifacts for WiX
+      - name: Stage Artifacts
         id: stage_files
         shell: pwsh
         run: |
           $staging = "build_wix/staging"
           New-Item -ItemType Directory -Path $staging -Force | Out-Null
           Move-Item -Path "./dist/fortuna-backend.exe" -Destination "$staging/fortuna-backend.exe" -Force
-
           $msiName = "Fortuna-WebService-${{ github.ref_name }}.msi".Replace('/', '-')
+          if ($msiName -match "main") { $msiName = "Fortuna-WebService-Nightly.msi" }
           echo "msi_name=$msiName" >> $env:GITHUB_OUTPUT
-          Write-Host "✅ Staging Complete. MSI will be named: $msiName"
-
       - name: Setup .NET 8 SDK
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
-
       - name: Generate WiX Project File
         working-directory: build_wix
         shell: pwsh
@@ -193,6 +178,7 @@ jobs:
               <OutputName>$msiOutputName</OutputName>
               <OutputType>Package</OutputType>
               <DefineConstants>SourceDir=staging</DefineConstants>
+              <Platforms>x64</Platforms>
             </PropertyGroup>
             <ItemGroup>
               <PackageReference Include="WixToolset.Util.wixext" Version="4.0.5" />
@@ -204,53 +190,111 @@ jobs:
           </Project>
           "@
           Set-Content -Path "Fortuna.wixproj" -Value $wixProjContent -Encoding UTF8
-          Write-Host "✅ Generated Fortuna.wixproj for self-contained executable." -ForegroundColor Green
-
-      - name: Build MSI with dotnet build
+      - name: Build MSI
         working-directory: build_wix
         shell: pwsh
         run: |
-          dotnet build Fortuna.wixproj -c Release
-          $msiPath = "bin/Release/${{ steps.stage_files.outputs.msi_name }}"
-          if (-not (Test-Path $msiPath)) { throw "❌ MSI was not created at '$msiPath'" }
-
-          # Move MSI to a predictable location for upload steps
+          dotnet build Fortuna.wixproj -c Release -p:Platform=x64
+          $msiPath = "bin/x64/Release/${{ steps.stage_files.outputs.msi_name }}"
+          if (-not (Test-Path $msiPath)) { throw "❌ Service MSI was not created." }
           New-Item -ItemType Directory -Path "dist" -Force | Out-Null
-          Move-Item -Path $msiPath -Destination "dist/${{ steps.stage_files.outputs.msi_name }}" -Force
-          Write-Host "✅ MSI moved to dist/ folder" -ForegroundColor Green
-
-      - name: Upload MSI as Build Artifact
+          Copy-Item -Path $msiPath -Destination "dist/" -Force
+      - name: Upload MSI Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: fortuna-webservice-installer
+          name: fortuna-installer-service
           path: build_wix/dist/*.msi
-          retention-days: 7
+          retention-days: 1
 
-      - name: Create GitHub Release (on tags)
-        if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  # ============================================================================
+  # JOB 3B: PACKAGE STANDALONE MSI
+  # ============================================================================
+  package-msi-standalone:
+    name: '💿 Package Standalone MSI'
+    needs: [smoke-test-backend]
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      - name: Download Backend Executable
+        uses: actions/download-artifact@v4
         with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          body: |
-            🏆 **Fortuna Faucet (Web Service Edition) Production Release**
+          name: backend-executable
+          path: ./dist
+      - name: Stage Artifacts
+        id: stage_files
+        shell: pwsh
+        run: |
+          $staging = "build_wix/staging"
+          New-Item -ItemType Directory -Path $staging -Force | Out-Null
+          Move-Item -Path "./dist/fortuna-backend.exe" -Destination "$staging/fortuna-backend.exe" -Force
+          $msiName = "Fortuna-Standalone-${{ github.ref_name }}.msi".Replace('/', '-')
+          if ($msiName -match "main") { $msiName = "Fortuna-Standalone-Nightly.msi" }
+          echo "msi_name=$msiName" >> $env:GITHUB_OUTPUT
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Generate WiX Project File
+        working-directory: build_wix
+        shell: pwsh
+        run: |
+          $msiOutputName = "${{ steps.stage_files.outputs.msi_name }}".Replace('.msi', '')
+          $wixProjContent = @"
+          <Project Sdk="WixToolset.Sdk/4.0.5">
+            <PropertyGroup>
+              <OutputName>$msiOutputName</OutputName>
+              <OutputType>Package</OutputType>
+              <DefineConstants>SourceDir=staging</DefineConstants>
+              <Platforms>x64</Platforms>
+            </PropertyGroup>
+            <ItemGroup>
+              <PackageReference Include="WixToolset.UI.wixext" Version="4.0.5" />
+            </ItemGroup>
+            <ItemGroup>
+              <Compile Include="Product_WithoutService.wxs" />
+            </ItemGroup>
+          </Project>
+          "@
+          Set-Content -Path "Fortuna.wixproj" -Value $wixProjContent -Encoding UTF8
+      - name: Build MSI
+        working-directory: build_wix
+        shell: pwsh
+        run: |
+          dotnet build Fortuna.wixproj -c Release -p:Platform=x64
+          $msiPath = "bin/x64/Release/${{ steps.stage_files.outputs.msi_name }}"
+          if (-not (Test-Path $msiPath)) { throw "❌ Standalone MSI was not created." }
+          New-Item -ItemType Directory -Path "dist" -Force | Out-Null
+          Copy-Item -Path $msiPath -Destination "dist/" -Force
+      - name: Upload MSI Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fortuna-installer-standalone
+          path: build_wix/dist/*.msi
+          retention-days: 1
 
-            - Native Windows MSI Installer built with WiX v4.
-            - This installer configures the backend as a Windows Service.
-            - Built from commit `${{ github.sha }}`.
+  # ============================================================================
+  # JOB 4: CREATE GITHUB RELEASE (TAGS ONLY)
+  # ============================================================================
+  create-release:
+    name: '🚀 Create GitHub Release'
+    needs: [package-msi-service, package-msi-standalone]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download All MSI Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: installers/
+      - name: List downloaded files
+        run: ls -R installers/
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: installers/*/*.msi
+          body: |
+            🏆 **Fortuna Faucet Production Release**
+            - Native Windows Service Installer
+            - Standalone Executable Installer
           draft: false
           prerelease: false
-
-      - name: Upload MSI to GitHub Release (on tags)
-        if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: build_wix/dist/${{ steps.stage_files.outputs.msi_name }}
-          asset_name: ${{ steps.stage_files.outputs.msi_name }}
-          asset_content_type: application/octet-stream
