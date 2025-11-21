@@ -126,7 +126,7 @@ jobs:
           Stop-Process -Name "fortuna-backend" -Force -ErrorAction SilentlyContinue
 
   # ============================================================================
-  # JOB 3: PACKAGE SERVICE MSI (Fixed: No Harvesting, No Conflicts)
+  # JOB 3: PACKAGE SERVICE MSI
   # ============================================================================
   package-msi-service:
     name: '💿 Package Service MSI'
@@ -155,7 +155,7 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      # CRITICAL FIX: Remove the conflicting WXS file
+      # CRITICAL FIX: Remove conflicting WXS file to prevent duplicate symbol errors
       - name: Remove Conflicting WXS File
         shell: pwsh
         run: |
@@ -164,7 +164,6 @@ jobs:
             Write-Host "✅ Removed conflicting Product_WithoutService.wxs" -ForegroundColor Green
           }
 
-      # CRITICAL FIX: EnableDefaultCompileItems=false prevents auto-inclusion
       - name: Generate WiX Project File
         working-directory: build_wix
         shell: pwsh
