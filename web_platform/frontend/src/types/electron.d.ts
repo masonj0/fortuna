@@ -35,6 +35,7 @@ declare global {
       generateApiKey: () => Promise<string>;
       saveApiKey: (apiKey: string) => Promise<{ success: boolean }>;
       saveBetfairCredentials: (credentials: { appKey: string; username: string; password: string }) => Promise<{ success: boolean }>;
+      getApiPort: () => Promise<number | null>;
     };
   }
 }
