@@ -44,7 +44,7 @@ def main():
     # --- Port Sanity Check ---
     # Before doing anything else, ensure the target port is not already in use.
     # This prevents a common and confusing crash scenario on startup.
-    check_port_and_exit_if_in_use(settings.UVICORN_PORT, settings.UVICORN_HOST)
+    check_port_and_exit_if_in_use(settings.FORTUNA_PORT, settings.UVICORN_HOST)
 
     # --- Conditional UI Serving for Web Service Mode ---
     # Only serve the UI if the FORTUNA_MODE environment variable is set to 'webservice'.
@@ -82,7 +82,7 @@ def main():
                     detail="Frontend not found. Please build the frontend and ensure it's in the correct location.",
                 )
 
-    uvicorn.run(app, host=settings.UVICORN_HOST, port=settings.UVICORN_PORT, log_level="info")
+    uvicorn.run(app, host=settings.UVICORN_HOST, port=settings.FORTUNA_PORT, log_level="info")
 
 
 if __name__ == "__main__":

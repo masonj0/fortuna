@@ -28,11 +28,11 @@ interface RaceFilterParams {
   minSecondFavoriteOdds: number;
 }
 
-const fetchAdapterStatuses = async (apiKey: string | null): Promise<SourceInfo[]> => {
-  if (!apiKey) {
-    throw new Error('API key not configured or retrieved.');
+const fetchAdapterStatuses = async (apiKey: string | null, port: number | null): Promise<SourceInfo[]> => {
+  if (!apiKey || !port) {
+    throw new Error('API key or port not available.');
   }
-  const response = await fetch('/api/adapters/status', {
+  const response = await fetch(`http://localhost:${port}/api/adapters/status`, {
     headers: { 'X-API-Key': apiKey, 'Content-Type': 'application/json' },
   });
   if (!response.ok) {
@@ -42,12 +42,11 @@ const fetchAdapterStatuses = async (apiKey: string | null): Promise<SourceInfo[]
   return response.json();
 };
 
-const fetchQualifiedRaces = async (apiKey: string | null, params: RaceFilterParams): Promise<AggregatedRacesResponse> => {
-  if (!apiKey) {
-    throw new Error('API key not available');
+const fetchQualifiedRaces = async (apiKey: string | null, port: number | null, params: RaceFilterParams): Promise<AggregatedRacesResponse> => {
+  if (!apiKey || !port) {
+    throw new Error('API key or port not available');
   }
-  // NOTE: The endpoint is now the general /api/races, not the qualified one.
-  const url = new URL('/api/races', window.location.origin);
+  const url = new URL(`http://localhost:${port}/api/races`);
 
   const response = await fetch(url.toString(), {
     headers: { 'X-API-Key': apiKey },
@@ -150,23 +149,26 @@ export const LiveRaceDashboard = React.memo(() => {
   const [adapterErrors, setAdapterErrors] = useState<AdapterError[]>([]);
   const backendStatus = useBackendStatus();
   const [apiKey, setApiKey] = useState<string | null>(null);
+  const [apiPort, setApiPort] = useState<number | null>(null);
   const queryClient = useQueryClient();
 
-  // Get API key on component mount
+  // Get API key and port on component mount
   useEffect(() => {
-    const fetchApiKey = async () => {
+    const fetchApiConfig = async () => {
       try {
         const key = window.electronAPI ? await window.electronAPI.getApiKey() : process.env.NEXT_PUBLIC_API_KEY;
-        if (key) {
-          setApiKey(key);
-        } else {
-          console.error('API key could not be retrieved.');
-        }
+        if (key) setApiKey(key);
+        else console.error('API key could not be retrieved.');
+
+        const port = window.electronAPI ? await window.electronAPI.getApiPort() : 8000;
+        if (port) setApiPort(port);
+        else console.error('API port could not be retrieved.');
+
       } catch (error) {
-        console.error('Error fetching API key:', error);
+        console.error('Error fetching API config:', error);
       }
     };
-    fetchApiKey();
+    fetchApiConfig();
   }, []);
 
   const [params, setParams] = useState<RaceFilterParams>({
@@ -181,9 +183,9 @@ export const LiveRaceDashboard = React.memo(() => {
     error: errorDetails,
     refetch,
   } = useQuery({
-    queryKey: ['aggregatedRaces', apiKey], // Simplified query key
-    queryFn: () => fetchQualifiedRaces(apiKey, params),
-    enabled: backendStatus.state === 'running' && !!apiKey,
+    queryKey: ['aggregatedRaces', apiKey, apiPort], // Updated query key
+    queryFn: () => fetchQualifiedRaces(apiKey, apiPort, params),
+    enabled: backendStatus.state === 'running' && !!apiKey && !!apiPort,
     refetchOnWindowFocus: true,
   });
 
@@ -197,8 +199,8 @@ export const LiveRaceDashboard = React.memo(() => {
   }, [data]);
 
   const { data: liveData, isConnected: isLiveConnected } = useWebSocket<AggregatedRacesResponse>(
-    apiKey ? '/ws/live-updates' : '',
-    { apiKey }
+    (apiKey && apiPort) ? '/ws/live-updates' : '',
+    { apiKey, port: apiPort }
   );
 
   // Effect to update state when new live data arrives

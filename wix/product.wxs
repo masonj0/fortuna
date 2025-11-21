@@ -31,11 +31,20 @@
       </Directory>
     </Directory>
 
+    <!-- Environment Variable -->
+    <ComponentGroup Id="EnvironmentComponentGroup" Directory="INSTALLFOLDER">
+      <Component Id="FortunaPortEnvironmentVar" Guid="*">
+        <Environment Id="FortunaPort" Name="FORTUNA_PORT" Value="8000" Permanent="no" Action="set" System="yes" />
+        <RegistryValue Root="HKLM" Key="Software\Fortuna Faucet" Name="Path" Type="string" Value="[INSTALLFOLDER]" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
     <!-- Features -->
     <Feature Id="ProductFeature" Title="Fortuna Faucet" Level="1">
         <ComponentGroupRef Id="BackendFileGroup"/>
         <ComponentGroupRef Id="FrontendFileGroup"/>
         <ComponentGroupRef Id="ShortcutsComponentGroup"/>
+        <ComponentGroupRef Id="EnvironmentComponentGroup"/>
     </Feature>
 
     <!-- Shortcuts -->
