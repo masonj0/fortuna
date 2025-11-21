@@ -209,14 +209,25 @@ CLASS OddsEngine:
 
     // Process results, separating successes from failures
     all_races <- []
+    errors <- []
     FOR result IN results:
-      IF result is a success:
+      IF result is an Exception OR result.status is "FAILED":
+        errors.append(new AdapterError(
+          adapter_name=result.source_name,
+          error_message=result.error_message,
+          attempted_url=result.attempted_url
+        ))
+      ELSE:
         all_races.extend(result.races)
 
     // Deduplicate and merge races from different sources
     deduped_races <- self._dedupe_races(all_races)
 
-    RETURN AggregatedResponse(races=deduped_races, source_statuses=...)
+    RETURN {
+      "races": deduped_races,
+      "errors": errors,
+      "source_info": ...
+    }
 ```
 
 ---
