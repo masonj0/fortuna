@@ -1,515 +1,398 @@
-# 🐎 Fortuna Faucet - Complete Pseudocode Blueprint
-
-**Status:** Comprehensive System Specification (Revised & Corrected)
-**Version:** 2.2.0
-**Last Updated:** November 7, 2025
+# Fortuna Faucet - Comprehensive Pseudocode Blueprint
+## Table of Contents
 
 ---
 
-## TABLE OF CONTENTS
+## 1. SYSTEM ARCHITECTURE & OVERVIEW
+**Pages: 1-3**
 
-1.  System Overview
-2.  Architecture Pillars
-3.  Backend Engine (Python) - Detailed
-4.  Frontend Interface (TypeScript/React) - Detailed
-5.  Electron Wrapper & Windows Integration - Detailed
-6.  Data Models & API Specification
-7.  Deployment & Automation (CI/CD)
-8.  End-to-End Workflows
+- Global System Overview
+- Two-Pillar Architecture (Python Backend + TypeScript Frontend)
+- Supporting Artifacts & Tooling Infrastructure
+- Deployment Model (Windows Service via MSI)
+- High-Level Data Flow Diagram
 
----
-
-## 1. SYSTEM OVERVIEW
-
-```
-╔════════════════════════════════════════════════════════════════╗
-║         FORTUNA FAUCET - Racing Analysis Platform             ║
-║  Unifying global horse/greyhound/harness racing intelligence   ║
-╚════════════════════════════════════════════════════════════════╝
-
-MISSION:
-  • Acquire race data from 20+ global sources (APIs + web scraping).
-  • Normalize and deduplicate data into a canonical Race format.
-  • Apply analytical filters to surface high-value betting opportunities.
-  • Serve results via a secure, local REST API to an interactive dashboard.
-  • Operate as a professional, standalone, native Windows application.
-
-CORE TENETS:
-  • UI-First Experience: The user interface is always responsive, even during backend startup or restarts.
-  • Resilient Process Management: The backend executable's lifecycle is robustly managed, with timeouts and crash detection.
-  • Asynchronous Initialization: The backend server starts instantly, deferring heavy, blocking I/O to background threads.
-  • Secure by Design: Communication between the frontend and the privileged main process is secured via a context-aware preload script.
-  • Automated & Repeatable Builds: The entire application is built, tested, and packaged via a deterministic CI/CD pipeline.
-
-STAKEHOLDERS:
-  • End User: Receives a professional MSI installer for a one-click, dependency-free launch.
-  • Developer: Works with clean, separated Python and TypeScript stacks, governed by this specification.
-```
+**Key Topics:**
+- System purpose and design philosophy
+- Project structure overview
+- Technology stack summary
+- Integration points between pillars
 
 ---
 
-## 2. ARCHITECTURE PILLARS
+## 2. BACKEND CORE PILLAR (python_service)
+**Pages: 4-22**
 
-### Pillar 1: Backend Engine (Python)
+### 2.1 Configuration & Logging
+- Settings module (Pydantic-based environment loading)
+- Logging configuration (structlog + JSON output)
+- Credential management (API keys, Betfair auth, adapter tokens)
 
-```
-PYTHON_BACKEND:
-  ├─ main.py
-  │  └─ Entry point for PyInstaller executable; starts the Uvicorn server.
-  │
-  ├─ api.py
-  │  └─ FastAPI application definition.
-  │     ├─ Lifespan Hook: Manages async startup/shutdown logic.
-  │     ├─ API Routes: /health, /api/status, /api/races, etc.
-  │     └─ Dependency Injection: Provides engine and security dependencies.
-  │
-  ├─ engine.py
-  │  └─ OddsEngine: Orchestrates all data fetching and processing.
-  │
-  ├─ adapters/
-  │  ├─ base_v3.py (Abstract Base Class for all data sources)
-  │  └─ [20+ specific adapter implementations]
-  │
-  ├─ config.py
-  │  └─ Pydantic settings management from .env file.
-  │
-  └─ requirements.txt
-     └─ Clean, de-duplicated, and conflict-free list of all Python dependencies.
-```
+### 2.2 Data Contracts & Models
+- OddsData (individual odds quotes)
+- Runner (race participant with metadata)
+- Race (complete race record)
+- SourceInfo & FetchMetadata (audit trail)
+- AggregatedResponse & QualifiedRacesResponse
 
-### Pillar 2: Frontend Interface (TypeScript/React)
+### 2.3 Adapter Framework
+- BaseAdapter abstract class
+- Resilience patterns (tenacity retry, exponential backoff)
+- Authentication mixin (Betfair token management)
+- Odds parsing utility (fractional, decimal, "evens" handling)
 
-```
-FRONTEND:
-  ├─ next.config.mjs
-  │  └─ Next.js config with `output: 'export'` for 100% static generation.
-  │
-  ├─ app/page.tsx
-  │  └─ Main application shell.
-  │
-  ├─ src/components/
-  │  ├─ LiveRaceDashboard.tsx (Main stateful component)
-  │  │  ├─ Manages connection state ('connecting', 'online', 'error').
-  │  │  ├─ Polls Electron main process for backend status via secure IPC.
-  │  │  └─ Fetches data from the local Python API when online.
-  │  │
-  │  ├─ RaceCard.tsx (Displays a single race)
-  │  └─ StatusIndicator.tsx (Shows backend connection status)
-  │
-  └─ src/types/
-     └─ racing.ts (TypeScript interfaces matching backend Pydantic models)
-```
+### 2.4 Adapter Inventory (12+ Active, 20+ Templates)
+- **Core Adapters**
+  - BetfairAdapter (API + auth)
+  - BetfairGreyhoundAdapter (API + auth)
 
-### Pillar 3: Electron Wrapper & Windows Integration
+- **Active Data Providers**
+  - TVGAdapter (API)
+  - RacingAndSportsAdapter (API)
+  - RacingAndSportsGreyhoundAdapter (API)
+  - TheRacingApiAdapter (API)
+  - HarnessAdapter (API)
+  - GreyhoundAdapter (API)
+  - GbgbApiAdapter (API)
 
-```
-ELECTRON_WRAPPER:
-  ├─ main.js (Electron main process)
-  │  ├─ Creates the BrowserWindow and loads the static frontend.
-  │  ├─ Implements robust lifecycle management for the backend executable.
-  │  ├─ Provides secure IPC handlers for status checks and restarts.
-  │  └─ Creates a system tray icon for background operation.
-  │
-  ├─ preload.js (Secure IPC Bridge)
-  │  └─ Uses `contextBridge` to safely expose specific functions to the frontend.
-  │
-  ├─ package.json
-  │  └─ Defines Node.js dependencies and build scripts.
-  │
-  ├─ electron-builder-config.yml
-  │  └─ Defines the configuration for creating the final MSI installer.
-  │
-  └─ .github/workflows/build-msi.yml
-     └─ GitHub Actions pipeline that automates the entire build, test, and package process.
-```
+- **HTML Scrapers**
+  - AtTheRacesAdapter
+  - SportingLifeAdapter
+  - TimeformAdapter
+  - OddscheckerAdapter
 
----
+- **Placeholder/Stubs**
+  - PointsBetGreyhoundAdapter
+  - BrisnetAdapter, DRFAdapter, EquibaseAdapter, FanDuelAdapter, etc.
 
-## 3. BACKEND ENGINE (PYTHON) - DETAILED
+### 2.5 Analyzer Layer
+- BaseAnalyzer abstract class
+- TrifectaAnalyzer implementation
+  - Filtering logic (field size, favorite odds, second favorite odds)
+  - Scoring algorithm (weighted combination)
+  - Parameterized configuration
+- AnalyzerEngine registry
 
-### 3.1 Entry Point & Server Startup (`main.py`)
+### 2.6 Engine Orchestration
+- OddsEngine class
+  - Adapter management
+  - Redis integration
+  - Race deduplication
+  - Parallel fetch orchestration
+  - Caching strategy (5-minute TTL)
 
-```pseudocode
-// This is the script executed by fortuna-backend.exe
+### 2.7 API Layer (FastAPI)
+- Application initialization (lifespan context manager)
+- Middleware (Rate limiting, CORS)
+- Security dependencies (API key verification)
+- Endpoints:
+  - `GET /health`
+  - `GET /api/adapters/status`
+  - `GET /api/races`
+  - `GET /api/races/qualified/{analyzer_name}`
 
-PROCEDURE Main_Python_Entry_Point
-  // Guard required for PyInstaller and multiprocessing on Windows
-  IF this script is the main entry point:
-    CALL multiprocessing.freeze_support()
+### 2.8 Security Module
+- X-API-Key header validation
+- Secure comparison via secrets.compare_digest
+- Error handling (HTTP 403 for invalid keys)
 
-    // Programmatically launch the FastAPI application using Uvicorn
-    // This call blocks and runs the server until the process is terminated
-    CALL uvicorn.run(
-      app="python_service.api:app",
-      host="0.0.0.0",
-      port=8000
-    )
-END PROCEDURE
-```
-
-### 3.2 Asynchronous Application Lifecycle (`api.py`)
-
-```pseudocode
-// --- Lifespan Management (The key to a non-blocking startup) ---
-ASYNC FUNCTION lifespan_manager(app: FastAPI):
-  // === ON STARTUP ===
-  LOG "Uvicorn server is online. Starting lifespan initialization."
-
-  // 1. Perform immediate, non-blocking tasks
-  CONNECT to Redis cache
-
-  // 2. Defer slow, blocking tasks to a background thread
-  //    This allows the server to start accepting requests instantly.
-  SCHEDULE function "initialize_heavy_resources(app)" to run in a ThreadPoolExecutor
-
-  LOG "Heavy resource initialization scheduled. Server is now responsive."
-
-  // 3. Yield control back to Uvicorn. The server is now live.
-  YIELD
-
-  // === ON SHUTDOWN ===
-  LOG "Shutdown signal received."
-  AWAIT app.state.engine.close() // Gracefully close HTTP client connections
-  DISCONNECT from Redis
-  SHUTDOWN ThreadPoolExecutor
-
-// --- Heavy Initialization (Runs in Background) ---
-FUNCTION initialize_heavy_resources(app: FastAPI):
-  TRY
-    LOG "Background initialization of OddsEngine has started."
-    settings <- get_settings_from_config()
-    engine <- create new OddsEngine(config=settings)
-    // This part is slow: it loads all ~25 adapters
-    app.state.engine <- engine
-    LOG "Background initialization complete. OddsEngine is now available."
-  CATCH Exception as e:
-    LOG_CRITICAL "Failed to initialize OddsEngine in the background.", error=e
-    app.state.engine <- null // Ensure the app knows initialization failed
-```
-
-### 3.3 Engine Orchestration (`engine.py`)
-
-```pseudocode
-CLASS OddsEngine:
-  INIT(config):
-    self.config <- config
-    self.adapters <- [List of all adapter instances]
-    self.http_client <- httpx.AsyncClient(...)
-    self.semaphore <- asyncio.Semaphore(config.MAX_CONCURRENT_REQUESTS)
-
-    // Inject the shared, persistent HTTP client into each adapter
-    FOR adapter IN self.adapters:
-      adapter.http_client <- self.http_client
-
-  @cache_async_result(ttl_seconds=300)
-  ASYNC FUNCTION fetch_all_odds(date_str):
-    // Create a list of concurrent fetching tasks, wrapped in the semaphore
-    tasks <- [self._fetch_with_semaphore(adapter, date_str) FOR adapter in self.adapters]
-    results <- AWAIT asyncio.gather(*tasks, return_exceptions=True)
-
-    // Process results, separating successes from failures
-    all_races <- []
-    errors <- []
-    FOR result IN results:
-      IF result is an Exception OR result.status is "FAILED":
-        errors.append(new AdapterError(
-          adapter_name=result.source_name,
-          error_message=result.error_message,
-          attempted_url=result.attempted_url
-        ))
-      ELSE:
-        all_races.extend(result.races)
-
-    // Deduplicate and merge races from different sources
-    deduped_races <- self._dedupe_races(all_races)
-
-    RETURN {
-      "races": deduped_races,
-      "errors": errors,
-      "source_info": ...
-    }
-```
+### 2.9 Testing Infrastructure
+- Test scenarios for TrifectaAnalyzer
+- Mock race generation
+- FastAPI TestClient usage
+- Legacy scenario validation
 
 ---
 
-## 4. FRONTEND INTERFACE (TYPESCRIPT/REACT) - DETAILED
+## 3. FRONTEND PILLAR (web_platform/frontend)
+**Pages: 23-30**
 
-### 4.1 LiveRaceDashboard Component
+### 3.1 Technology Stack & Configuration
+- Next.js 14 + React 18
+- TypeScript strict mode
+- Tailwind CSS styling
+- Environment variables (.env.local)
+- Build configuration (next.config.mjs)
+- Package management (npm with lock file)
 
-```pseudocode
-COMPONENT LiveRaceDashboard (client-side):
+### 3.2 LiveRaceDashboard Component
+- State management (races, criteria, loading, error, params)
+- LocalStorage persistence (user preferences)
+- Effect hooks (mount initialization, 30-second polling)
+- fetchQualifiedRaces() logic
+- Parameter adjustment handlers
 
-  STATE:
-    races: Race[] <- []
-    backendStatus: 'connecting' | 'online' | 'error' <- 'connecting'
-    lastLogs: string[] <- []
+### 3.3 RaceCard Component
+- Props interface (Race data structure)
+- Filtering & sorting (remove scratched, order by number)
+- Data enrichment (best odds, sources count, time-to-post)
+- Styling & color coding (qualification score badges)
+- Runner list with source-specific odds display
 
-  EFFECT on mount:
-    // Use the secure API exposed by preload.js
-    IF window.electronAPI exists:
-      // Set up a listener for status updates from the main process
-      window.electronAPI.onBackendStatus((update) => {
-        setBackendStatus(update.state)
-        setLastLogs(update.logs)
-      })
-
-    // Immediately request the current status
-    window.electronAPI.getBackendStatus().then((status) => {
-      setBackendStatus(status.state)
-      setLastLogs(status.logs)
-    })
-
-    // Set up a polling interval to keep status fresh
-    interval <- setInterval(() => {
-      window.electronAPI.getBackendStatus().then((status) => {
-        setBackendStatus(status.state)
-        setLastLogs(status.logs)
-      })
-    }, 3000) // Poll every 3 seconds
-
-    CLEANUP: clearInterval(interval)
-
-  EFFECT when backendStatus changes to 'online':
-    // Trigger data fetch only when the backend is confirmed to be running
-    fetchQualifiedRaces()
-
-  ASYNC FUNCTION fetchQualifiedRaces():
-    TRY:
-      // Make a standard HTTP call to the local Python server
-      response <- AWAIT fetch("http://127.0.0.1:8000/api/races/qualified/trifecta")
-      IF NOT response.ok:
-        RAISE new Error(`API returned status ${response.status}`)
-
-      data <- AWAIT response.json()
-      setRaces(data.races)
-
-    CATCH e:
-      // If the API call fails, update the status
-      setBackendStatus('error')
-      setLastLogs([...lastLogs, `API Fetch Error: ${e.message}`])
-
-  FUNCTION RENDER:
-    <div className="dashboard">
-      <StatusIndicator status={backendStatus} />
-      <RaceFilters />
-
-      IF backendStatus === 'error':
-        <ErrorDisplay logs={lastLogs} />
-      ELSE IF backendStatus === 'connecting':
-        <LoadingSkeleton />
-      ELSE IF races.length === 0:
-        <EmptyState message="No races matched your filters." />
-      ELSE:
-        <RaceGrid races={races} />
-    </div>
-```
+### 3.4 Build & Deployment
+- Development workflow (npm run dev, hot reload)
+- Production build (npm run build, npm start)
+- Static export option
+- Next.js API rewrites proxy (`/api/*` → backend:8000)
+- Browser auto-launch for user convenience
 
 ---
 
-## 5. ELECTRON WRAPPER & WINDOWS INTEGRATION - DETAILED
+## 4. SUPPORTING INFRASTRUCTURE & AUTOMATION
+**Pages: 31-40**
 
-### 5.1 Main Process (`main.js`) - With Robust Lifecycle Management
+### 4.1 Command Deck (Streamlit Dashboard)
+- Alternative developer/operator interface
+- 30-second cached API calls
+- Manual cache clear functionality
+- DataFrame visualization (races, adapter status)
+- Low-overhead monitoring tool
 
-```pseudocode
-CLASS FortunaDesktopApp:
-  INIT():
-    self.mainWindow <- null
-    self.backendState <- 'stopped'
-    self.backendLogs <- []
-    self.backendProcess <- null
+### 4.2 Data Processing Utilities
+- **ChartScraper** (Equibase pipeline)
+  - PDF download & decryption (pikepdf)
+  - Table extraction (tabula)
+  - CSV generation
+  - Throttling (1-second delays for courtesy)
 
-  FUNCTION createMainWindow():
-    // ... create BrowserWindow, load static frontend ...
+- **ChartParser** (results_parser.py)
+  - Runner count extraction
+  - Text pattern matching
+  - Past performance analysis
 
-  FUNCTION startBackend():
-    IF self.backendProcess is not null:
-      self.backendProcess.kill()
+### 4.3 Live Monitoring Tools
+- **LiveOddsMonitor** class
+  - Real-time odds augmentation from Betfair
+  - Race filtering (Betfair-sourced only)
+  - Market ID extraction
+  - Runner odds update logic
 
-    self.backendState <- 'starting'
-    self.backendLogs <- ['Attempting to start backend...']
-    self.sendBackendStatusUpdate() // Notify UI
+- **Fortuna Watchman** orchestrator
+  - Daily protocol executor
+  - Initial target acquisition
+  - Tactical monitoring loop
+  - Race lifecycle management (5-minute window)
+  - Graceful shutdown
 
-    // Get path to the packaged executable
-    exePath <- path.join(process.resourcesPath, 'fortuna-backend', 'fortuna-backend.exe')
+### 4.4 Windows Automation Scripts
+- **setup_windows.bat**
+  - Python environment verification
+  - Virtual environment creation
+  - Dependency installation (backend + frontend)
+  - Post-installation instructions
 
-    IF file at exePath does NOT exist:
-      self.backendState <- 'error'
-      self.backendLogs.push(`FATAL: Executable not found at ${exePath}`)
-      self.sendBackendStatusUpdate()
-      dialog.showErrorBox("Critical Error", "Backend is missing. Please reinstall.")
-      RETURN
+- **run_fortuna.bat**
+  - Dual-window process launch (backend + frontend)
+  - Auto-browser opening
+  - Development convenience automation
 
-    // Spawn the process
-    self.backendProcess <- spawn(exePath, [], { stdio: ['ignore', 'pipe', 'pipe'] })
-
-    // --- CRITICAL: Resiliency Logic ---
-    startupTimeout <- setTimeout(() => {
-      IF self.backendState === 'starting':
-        self.backendState <- 'error'
-        self.backendLogs.push('Error: Backend startup timed out after 30 seconds.')
-        self.backendProcess.kill()
-        self.sendBackendStatusUpdate()
-    }, 30000) // 30-second timeout
-
-    self.backendProcess.stdout.on('data', (data) => {
-      self.backendLogs.push(data.toString())
-      // A more robust check would be a successful health check poll
-      IF data.toString().includes("Uvicorn running"):
-        self.backendState <- 'online'
-        clearTimeout(startupTimeout)
-        self.sendBackendStatusUpdate()
-    })
-
-    self.backendProcess.stderr.on('data', (data) => {
-      self.backendLogs.push(`[STDERR] ${data.toString()}`)
-    })
-
-    self.backendProcess.on('exit', (code) => {
-      clearTimeout(startupTimeout)
-      IF self.backendState is not 'error': // Avoid duplicate error messages
-        self.backendState <- 'error'
-        self.backendLogs.push(`Backend process exited unexpectedly with code: ${code}`)
-        self.sendBackendStatusUpdate()
-    })
-
-  FUNCTION sendBackendStatusUpdate():
-    // Send the latest status to the frontend renderer process
-    IF self.mainWindow is not null:
-      self.mainWindow.webContents.send('backend-status-update', {
-        state: self.backendState,
-        logs: self.backendLogs.slice(-20) // Send last 20 log lines
-      })
-
-// --- IPC Handlers (Securely Defined) ---
-ipcMain.handle('get-backend-status', (event) => {
-  // SECURITY: Ensure the request is from our main window
-  IF event.sender is NOT self.mainWindow.webContents:
-    RETURN null
-
-  RETURN { state: self.backendState, logs: self.backendLogs.slice(-20) }
-})
-
-ipcMain.on('restart-backend', (event) => {
-  // SECURITY: Ensure the request is from our main window
-  IF event.sender is NOT self.mainWindow.webContents:
-    RETURN
-
-  self.startBackend()
-})
-```
-
-### 5.2 Preload Script (`preload.js`)
-
-```pseudocode
-// Expose a limited, secure API to the frontend renderer process
-contextBridge.exposeInMainWorld('electronAPI', {
-  getBackendStatus: () => ipcRenderer.invoke('get-backend-status'),
-  restartBackend: () => ipcRenderer.send('restart-backend'),
-  onBackendStatus: (callback) => ipcRenderer.on('backend-status-update', (_event, value) => callback(value))
-})
-```
+### 4.5 Redis & Caching Infrastructure
+- Async Redis client (redis.asyncio)
+- Namespace strategy (`fortuna:races:{date}`)
+- TTL management (300 seconds)
+- Validation on retrieval (Pydantic)
+- Error resilience (fallback to live fetch)
 
 ---
 
-## 6. DATA MODELS & API SPECIFICATION
+## 5. DOCUMENTATION & OPERATIONAL REFERENCE
+**Pages: 41-46**
 
-### 6.1 Core Data Models (Pydantic/TypeScript)
+### 5.1 Architectural Documents
+- **ARCHITECTURAL_MANDATE.md**
+  - Two-Pillar design rationale
+  - Prime Directive principles
+  - Core component responsibilities
 
-```
-MODEL Race:
-  id: str (unique identifier, e.g., "Betfair_USA_Aqueduct_2025-11-07_R1")
-  venue: str
-  race_number: int
-  start_time: datetime
-  runners: List[Runner]
-  source: str
+- **HISTORY.md**
+  - Project evolution ("Utopian" → "Liberation" eras)
+  - Environmental constraints & adaptations
+  - Shift toward portable architecture
 
-MODEL Runner:
-  name: str
-  odds: Optional[float]
-```
+- **ROADMAP_APPENDICES.md**
+  - Adapter backlog categories
+  - Intelligence leads pipeline
+  - Future expansion campaigns
+  - Analyst role & responsibilities
 
-### 6.2 Primary API Endpoints
+### 5.2 Operational Protocols
+- **WISDOM.md**
+  - Agent virtues (verification, incremental commits, deference to leadership)
+  - Operational best practices
+  - Debugging methodologies
 
-```
-ENDPOINT GET /health
-  Description: Simple health check, requires no authentication.
-  Response (200 OK): {"status": "ok"}
+- **README.md**
+  - Quick start (setup_windows.bat, run_fortuna.bat)
+  - API usage notes
+  - Credential configuration
+  - Frontend access instructions
 
-ENDPOINT GET /api/races/qualified/trifecta
-  Description: Fetches all race data, runs the Trifecta analyzer, and returns qualified races.
-  Headers:
-    - X-API-Key: (Required, not used in this local setup but good practice)
-  Query Params:
-    - max_field_size: int
-    - min_odds: float
-  Response (200 OK):
-    {
-      "qualified_races": List[Race],
-      "analysis_metadata": { ... }
-    }
-```
+### 5.3 Configuration Reference
+- **.env.example**
+  - Template for all credential fields
+  - Optional vs. required settings
+  - Default values & override examples
 
----
-
-## 7. DEPLOYMENT & AUTOMATION (CI/CD)
-
-```pseudocode
-WORKFLOW Build_MSI_Installer_on_GitHub_Actions:
-  // Phase 1: Setup
-  SETUP Node.js and Python environments
-
-  // Phase 2: Build Frontend
-  RUN "npm ci" and "npm run build" in /web_platform/frontend
-  COPY static output to /electron/web-ui-build/out
-
-  // Phase 3: Build Backend
-  RUN "pip install -r python_service/requirements.txt"
-  // CRITICAL: Use PyInstaller with a spec file or CLI flags that include
-  // necessary hidden imports to prevent runtime crashes.
-  // e.g., --hidden-import=keyring.backends.fail.Keyring
-  EXECUTE PyInstaller to create fortuna-backend.exe
-  PLACE executable in /electron/resources/fortuna-backend
-
-  // Phase 4: Deep Integration Test
-  START fortuna-backend.exe in the background
-  POLL http://127.0.0.1:8000/health until it responds with 200 OK or times out
-  IF timeout or crash THEN FAIL the build
-
-  // Phase 5: Package
-  RUN "npm ci" in /electron
-  EXECUTE "npx electron-builder" to create the MSI installer
-
-  // Phase 6: Publish
-  UPLOAD MSI as a build artifact
-  IF build was triggered by a git tag THEN CREATE a new GitHub Release
-```
+### 5.4 Windows Service Deployment
+- MSI installation instructions
+- Service registration details
+- Environment variable mapping
+- Firewall configuration
+- Permission model (NetworkService account)
+- Post-installation verification checklist
 
 ---
 
-## 8. END-TO-END WORKFLOWS
+## 6. END-TO-END OPERATIONS & WORKFLOWS
+**Pages: 47-52**
 
-### 8.1 Production Startup Workflow (Resilient)
+### 6.1 Daily Operation Flow
+- Settings initialization
+- Engine instantiation
+- HTTP client setup
+- Redis connection
+- API request cycle
 
-```
-WORKFLOW user_launches_application:
-  STEP 1: User executes Fortuna Faucet.exe -> Electron main.js starts.
-  STEP 2: UI appears instantly. The main process creates the BrowserWindow and loads the static index.html. The UI shows a 'connecting' state.
-  STEP 3: Backend starts asynchronously. The main process calls the robust `startBackend()` function.
-  STEP 4: `startBackend()` spawns `fortuna-backend.exe` and starts a 30-second timeout.
-  STEP 5: The frontend UI polls for status every 3 seconds via the secure `window.electronAPI.getBackendStatus()`.
-  STEP 6: The backend `.exe` starts, its `lifespan` hook runs, and the Uvicorn server comes online within seconds.
-  STEP 7: The main process detects the "Uvicorn running" message (or a successful health poll) and updates its internal state to 'online'. The startup timeout is cleared.
-  STEP 8: On its next poll, the frontend receives the 'online' status.
-  STEP 9: The frontend's state changes, triggering the `fetchQualifiedRaces()` API call to `localhost:8000`.
-  STEP 10: Data is returned from the now fully-initialized backend and rendered in the UI.
+### 6.2 Data Aggregation Pipeline
+- Multi-adapter parallel fetch
+- Race deduplication
+- Odds merging strategy
+- Cache storage (conditional)
+- Response serialization
 
-  FAILURE SCENARIO (Backend Crash):
-  STEP 6a: The backend `.exe` crashes on startup.
-  STEP 7a: The `on('exit')` handler in `main.js` fires. The state is set to 'error' with the exit code.
-  STEP 8a: On its next poll, the frontend receives the 'error' status and relevant logs.
-  STEP 9a: The UI renders an error message and a "Restart Backend" button.
-```
+### 6.3 Analysis & Qualification
+- Analyzer selection
+- Parameter override application
+- Race scoring algorithm
+- Filtering & ranking
+- Response composition
+
+### 6.4 Frontend User Experience
+- Dashboard initialization
+- Periodic polling (30-second intervals)
+- Parameter adjustment workflow
+- Real-time card rendering
+- Error recovery & fallbacks
+
+### 6.5 Automation Workflows
+- **Watchman Daily Protocol**
+  - Morning initialization
+  - Target acquisition
+  - Tactical monitoring loop
+  - Post-time odds refresh
+  - Graceful shutdown
+
+- **Chart Pipeline** (optional offline)
+  - Scheduled PDF scraping
+  - Historical CSV archival
+  - Text extraction for analysis
+
+### 6.6 Operational Troubleshooting
+- Service startup issues
+- Redis connection failures
+- Adapter authentication problems
+- Port/firewall conflicts
+- API rate limiting recovery
+- Database persistence strategies
+
+### 6.7 Extensibility Patterns
+- Adding new adapters
+- Creating custom analyzers
+- Integrating new data sources
+- Extending the frontend dashboard
+- Creating scheduled tasks
 
 ---
-*This concludes the revised and definitive blueprint for the Fortuna Faucet application.*
+
+## APPENDICES (Supporting References)
+
+### Appendix A: Glossary
+- Key terminology (OddsEngine, Adapter, Analyzer, etc.)
+- Acronyms (TVG, R&S, GBGB, etc.)
+- Technical concepts
+
+### Appendix B: Configuration Quick Reference
+- Environment variable matrix
+- Default values table
+- Required credentials checklist
+
+### Appendix C: API Reference Summary
+- Endpoint specifications
+- Request/response examples
+- Error codes & handling
+
+### Appendix D: Windows Service Reference
+- Service registration details
+- Registry entries
+- Performance monitoring
+- Log file locations
+
+### Appendix E: Frontend Component Tree
+- Component hierarchy
+- Props interface specifications
+- State management patterns
+
+---
+
+## 📊 Document Statistics
+
+| Section | Pages | Topics | Code Examples |
+|---------|-------|--------|---------------|
+| 1. Architecture | 3 | 5 | 2 |
+| 2. Backend Core | 19 | 28 | 40+ |
+| 3. Frontend | 8 | 4 | 8 |
+| 4. Infrastructure | 10 | 9 | 12+ |
+| 5. Documentation | 6 | 8 | 3 |
+| 6. Operations | 6 | 7 | 10+ |
+| **TOTAL** | **52** | **61** | **75+** |
+
+---
+
+## 🎯 How to Use This TOC
+
+**For System Overview:**
+→ Start with Chapter 1 (Global context)
+
+**For Backend Development:**
+→ Deep dive into Chapter 2 (all adapter logic, engine design, API routes)
+
+**For Frontend Development:**
+→ Focus on Chapter 3 (component structure, state management)
+
+**For Operations/Deployment:**
+→ Chapters 4, 5, 6 (infrastructure, docs, workflows)
+
+**For Adding Features:**
+→ Chapter 6 (extensibility patterns) + relevant sections in 2 or 3
+
+**For Troubleshooting:**
+→ Chapter 5 (documentation), Chapter 6 (troubleshooting section)
+
+---
+
+## 🔗 Cross-Reference Guide
+
+| Need | Location |
+|------|----------|
+| How OddsEngine works | 2.6 + 6.2 |
+| Adding a new adapter | 2.3, 2.4 + 6.7 |
+| Frontend state flow | 3.2 + 6.4 |
+| Windows Service setup | 5.4 + 6.1 |
+| API endpoints | 2.7 + Appendix C |
+| Troubleshooting | 6.6 |
+| Performance tuning | 4.5 + 6.5 |
+| Credential config | 2.1 + 5.3 |
+
+---
+
+## Summary: The Fortuna Blueprint
+
+This 52-page pseudocode document comprehensively covers:
+
+✅ **What** Fortuna does (racing data aggregation & analysis)
+✅ **How** it's architected (two pillars + infrastructure)
+✅ **Where** everything lives (backend, frontend, utilities)
+✅ **When** to use each component (deployment, monitoring, extension)
+✅ **Why** specific design decisions were made (history, constraints)
+
+**It's a complete specification for understanding, operating, extending, and deploying the entire Fortuna Faucet system.**
