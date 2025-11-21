@@ -38,7 +38,7 @@
                           Start="auto"
                           Type="ownProcess"
                           ErrorControl="normal"
-                          Account="LocalService" />
+                          Account="NetworkService" />
 
           <ServiceControl Id="StartFortunaService"
                           Name="FortunaBackendService"
@@ -54,10 +54,10 @@
                                       Scope="any" />
 
           <CreateFolder Directory="DataFolder">
-            <util:PermissionEx User="LocalService" GenericAll="yes" />
+            <util:PermissionEx User="NetworkService" GenericAll="yes" />
           </CreateFolder>
           <CreateFolder Directory="LogsFolder">
-            <util:PermissionEx User="LocalService" GenericAll="yes" />
+            <util:PermissionEx User="NetworkService" GenericAll="yes" />
           </CreateFolder>
         </Component>
       </Directory>

@@ -113,15 +113,35 @@ jobs:
           $stdOutLog = "backend-out.log"
           $stdErrLog = "backend-err.log"
           Start-Process -FilePath "./dist/fortuna-backend.exe" -RedirectStandardOutput $stdOutLog -RedirectStandardError $stdErrLog
-          Write-Host "Waiting for backend..."
-          Start-Sleep -Seconds 10
-          try {
-              $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/" -UseBasicParsing -TimeoutSec 2
-              if ($response.StatusCode -eq 200) { Write-Host "✅ Health check passed!" -ForegroundColor Green }
-          } catch {
-              if (Test-Path $stdOutLog) { Get-Content $stdOutLog -Tail 20 }
-              if (Test-Path $stdErrLog) { Get-Content $stdErrLog -Tail 20 }
-              throw "❌ Backend health check failed."
+          Write-Host "Waiting for backend to become available..."
+          $timeout = New-TimeSpan -Seconds 30
+          $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+          $healthCheckPassed = $false
+          while ($stopwatch.Elapsed -lt $timeout) {
+              try {
+                  $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/health" -UseBasicParsing -TimeoutSec 2
+                  if ($response.StatusCode -eq 200) {
+                      Write-Host "✅ Health check passed!" -ForegroundColor Green
+                      $healthCheckPassed = $true
+                      break
+                  }
+              } catch {
+                  Write-Host "  - Backend not ready yet, retrying in 3 seconds..."
+              }
+              Start-Sleep -Seconds 3
+          }
+          $stopwatch.Stop()
+          if (-not $healthCheckPassed) {
+              Write-Host "❌ FATAL: Backend health check timed out after $($timeout.TotalSeconds) seconds." -ForegroundColor Red
+              if (Test-Path $stdOutLog) {
+                  Write-Host "--- Backend Standard Output (last 50 lines) ---"
+                  Get-Content $stdOutLog -Tail 50
+              }
+              if (Test-Path $stdErrLog) {
+                  Write-Host "--- Backend Standard Error (last 50 lines) ---"
+                  Get-Content $stdErrLog -Tail 50
+              }
+              throw "Backend health check failed."
           }
           Stop-Process -Name "fortuna-backend" -Force -ErrorAction SilentlyContinue
 
