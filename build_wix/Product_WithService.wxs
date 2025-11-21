@@ -34,17 +34,15 @@
           <Environment Id="FortunaLogDir" Name="FORTUNA_LOG_DIR" Value="[LogsFolder]" Action="set" System="yes" />
           <Environment Id="FortunaMode" Name="FORTUNA_MODE" Value="webservice" Action="set" System="yes" />
 
-          <util:ServiceInstall Id="InstallFortunaService"
+          <ServiceInstall Id="InstallFortunaService"
                                Name="FortunaBackendService"
                                DisplayName="Fortuna Faucet Backend"
                                Description="Handles data aggregation for Fortuna Faucet."
-                               Account="LocalService"
                                Start="auto"
                                Type="ownProcess"
-                               Vital="yes"
                                ErrorControl="normal" />
 
-          <util:ServiceControl Id="StartFortunaService"
+          <ServiceControl Id="StartFortunaService"
                                Name="FortunaBackendService"
                                Start="install"
                                Stop="both"
