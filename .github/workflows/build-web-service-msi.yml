@@ -41,7 +41,6 @@ jobs:
           if (-not (Test-Path $outDir)) { throw "❌ FATAL: Build output directory 'out' not created" }
           $fileCount = (Get-ChildItem -Path $outDir -Recurse -File | Measure-Object).Count
           if ($fileCount -eq 0) { throw "❌ FATAL: Build output directory is empty" }
-          Write-Host "✅ Frontend build verified ($fileCount files)" -ForegroundColor Green
       - name: Upload Frontend Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -50,7 +49,7 @@ jobs:
           retention-days: 1
 
   # ============================================================================
-  # JOB 2: BUILD BACKEND (Bundles Frontend)
+  # JOB 2: BUILD BACKEND (Bundles Frontend inside EXE)
   # ============================================================================
   build-backend:
     name: '🐍 Build Backend'
@@ -114,45 +113,26 @@ jobs:
           $stdOutLog = "backend-out.log"
           $stdErrLog = "backend-err.log"
           Start-Process -FilePath "./dist/fortuna-backend.exe" -RedirectStandardOutput $stdOutLog -RedirectStandardError $stdErrLog
-          Write-Host "Waiting for backend to become available..."
-          $timeout = New-TimeSpan -Seconds 30
-          $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-          $healthCheckPassed = $false
-          while ($stopwatch.Elapsed -lt $timeout) {
-              try {
-                  $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/" -UseBasicParsing -TimeoutSec 2
-                  if ($response.StatusCode -eq 200) {
-                      Write-Host "✅ Health check passed!" -ForegroundColor Green
-                      $healthCheckPassed = $true
-                      break
-                  }
-              } catch {
-                  Write-Host "  - Backend not ready yet, retrying in 3 seconds..."
-              }
-              Start-Sleep -Seconds 3
-          }
-          $stopwatch.Stop()
-          if (-not $healthCheckPassed) {
-              Write-Host "❌ FATAL: Backend health check timed out after $($timeout.TotalSeconds) seconds." -ForegroundColor Red
+          Write-Host "Waiting for backend..."
+          Start-Sleep -Seconds 10
+          try {
+              $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/" -UseBasicParsing -TimeoutSec 2
+              if ($response.StatusCode -eq 200) { Write-Host "✅ Health check passed!" -ForegroundColor Green }
+          } catch {
               if (Test-Path $stdOutLog) {
-                  Write-Host "--- Backend Standard Output ---"
-                  Get-Content $stdOutLog
-                  Write-Host "--- End of Standard Output ---"
+                  Write-Host "--- Backend Standard Output (tail) ---"
+                  Get-Content $stdOutLog -Tail 50
               }
               if (Test-Path $stdErrLog) {
-                  Write-Host "--- Backend Standard Error ---"
-                  Get-Content $stdErrLog
-                  Write-Host "--- End of Standard Error ---"
+                  Write-Host "--- Backend Standard Error (tail) ---"
+                  Get-Content $stdErrLog -Tail 50
               }
-              throw "Backend health check failed."
+              throw "❌ Backend health check failed."
           }
-          $process = Get-Process -Name "fortuna-backend" -ErrorAction SilentlyContinue
-          if ($process) {
-              Stop-Process -Name "fortuna-backend" -Force
-          }
+          Stop-Process -Name "fortuna-backend" -Force -ErrorAction SilentlyContinue
 
   # ============================================================================
-  # JOB 3A: PACKAGE SERVICE MSI
+  # JOB 3A: PACKAGE SERVICE MSI (Fixed: No Harvesting)
   # ============================================================================
   package-msi-service:
     name: '💿 Package Service MSI'
@@ -196,6 +176,7 @@ jobs:
             <ItemGroup>
               <PackageReference Include="WixToolset.Util.wixext" Version="4.0.5" />
               <PackageReference Include="WixToolset.Firewall.wixext" Version="4.0.5" />
+              <PackageReference Include="WixToolset.UI.wixext" Version="4.0.5" />
             </ItemGroup>
             <ItemGroup>
               <Compile Include="Product_WithService.wxs" />
@@ -220,79 +201,11 @@ jobs:
           retention-days: 1
 
   # ============================================================================
-  # JOB 3B: PACKAGE STANDALONE MSI
-  # ============================================================================
-  package-msi-standalone:
-    name: '💿 Package Standalone MSI'
-    needs: [smoke-test-backend]
-    runs-on: windows-latest
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-      - name: Download Backend Executable
-        uses: actions/download-artifact@v4
-        with:
-          name: backend-executable
-          path: ./dist
-      - name: Stage Artifacts
-        id: stage_files
-        shell: pwsh
-        run: |
-          $staging = "build_wix/staging"
-          New-Item -ItemType Directory -Path $staging -Force | Out-Null
-          Move-Item -Path "./dist/fortuna-backend.exe" -Destination "$staging/fortuna-backend.exe" -Force
-          $msiName = "Fortuna-Standalone-${{ github.ref_name }}.msi".Replace('/', '-')
-          if ($msiName -match "main") { $msiName = "Fortuna-Standalone-Nightly.msi" }
-          echo "msi_name=$msiName" >> $env:GITHUB_OUTPUT
-      - name: Setup .NET 8 SDK
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '8.0.x'
-      - name: Generate WiX Project File
-        working-directory: build_wix
-        shell: pwsh
-        run: |
-          $msiOutputName = "${{ steps.stage_files.outputs.msi_name }}".Replace('.msi', '')
-          $wixProjContent = @"
-          <Project Sdk="WixToolset.Sdk/4.0.5">
-            <PropertyGroup>
-              <OutputName>$msiOutputName</OutputName>
-              <OutputType>Package</OutputType>
-              <DefineConstants>SourceDir=staging</DefineConstants>
-              <Platforms>x64</Platforms>
-            </PropertyGroup>
-            <ItemGroup>
-              <PackageReference Include="WixToolset.UI.wixext" Version="4.0.5" />
-              <PackageReference Include="WixToolset.Util.wixext" Version="4.0.5" />
-            </ItemGroup>
-            <ItemGroup>
-              <Compile Include="Product_WithoutService.wxs" />
-            </ItemGroup>
-          </Project>
-          "@
-          Set-Content -Path "Fortuna.wixproj" -Value $wixProjContent -Encoding UTF8
-      - name: Build MSI
-        working-directory: build_wix
-        shell: pwsh
-        run: |
-          dotnet build Fortuna.wixproj -c Release -p:Platform=x64
-          $msiPath = "bin/x64/Release/${{ steps.stage_files.outputs.msi_name }}"
-          if (-not (Test-Path $msiPath)) { throw "❌ Standalone MSI was not created." }
-          New-Item -ItemType Directory -Path "dist" -Force | Out-Null
-          Copy-Item -Path $msiPath -Destination "dist/" -Force
-      - name: Upload MSI Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: fortuna-installer-standalone
-          path: build_wix/dist/*.msi
-          retention-days: 1
-
-  # ============================================================================
-  # JOB 4: CREATE GITHUB RELEASE (TAGS ONLY)
+  # JOB 4: CREATE GITHUB RELEASE
   # ============================================================================
   create-release:
     name: '🚀 Create GitHub Release'
-    needs: [package-msi-service, package-msi-standalone]
+    needs: [package-msi-service]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     steps:
@@ -300,15 +213,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: installers/
-      - name: List downloaded files
-        run: ls -R installers/
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           files: installers/*/*.msi
           body: |
             🏆 **Fortuna Faucet Production Release**
-            - Native Windows Service Installer
-            - Standalone Executable Installer
+            Native Windows Service Installer.
           draft: false
           prerelease: false
