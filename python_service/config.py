@@ -45,7 +45,7 @@ class Settings(BaseSettings):
 
     # --- API Gateway Configuration ---
     UVICORN_HOST: str = "127.0.0.1"
-    UVICORN_PORT: int = 8000
+    FORTUNA_PORT: int = 8000
     UVICORN_RELOAD: bool = True
 
     # --- Database Configuration ---

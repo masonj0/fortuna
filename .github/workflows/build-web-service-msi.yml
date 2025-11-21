@@ -101,6 +101,7 @@ jobs:
     runs-on: windows-latest
     env:
       FORTUNA_MODE: webservice
+      FORTUNA_PORT: 8088
     steps:
       - name: Download Backend Executable
         uses: actions/download-artifact@v4
@@ -112,6 +113,7 @@ jobs:
         run: |
           $stdOutLog = "backend-out.log"
           $stdErrLog = "backend-err.log"
+          Write-Host "Starting backend on port $env:FORTUNA_PORT"
           Start-Process -FilePath "./dist/fortuna-backend.exe" -RedirectStandardOutput $stdOutLog -RedirectStandardError $stdErrLog
           Write-Host "Waiting for backend to become available..."
           $timeout = New-TimeSpan -Seconds 30
@@ -119,9 +121,9 @@ jobs:
           $healthCheckPassed = $false
           while ($stopwatch.Elapsed -lt $timeout) {
               try {
-                  $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/health" -UseBasicParsing -TimeoutSec 2
+                  $response = Invoke-WebRequest -Uri "http://127.0.0.1:$env:FORTUNA_PORT/health" -UseBasicParsing -TimeoutSec 2
                   if ($response.StatusCode -eq 200) {
-                      Write-Host "✅ Health check passed!" -ForegroundColor Green
+                      Write-Host "✅ Health check passed on port $env:FORTUNA_PORT!" -ForegroundColor Green
                       $healthCheckPassed = $true
                       break
                   }

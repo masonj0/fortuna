@@ -37,12 +37,47 @@ class FortunaDesktopApp {
  }
  }
 
+  checkPortInUse(port) {
+    return new Promise((resolve, reject) => {
+      const server = net.createServer();
+      server.once('error', (err) => {
+        if (err.code === 'EADDRINUSE') {
+          resolve(true); // Port is in use
+        } else {
+          reject(err);
+        }
+      });
+      server.once('listening', () => {
+        server.close(() => {
+          resolve(false); // Port is free
+        });
+      });
+      server.listen(port, '127.0.0.1');
+    });
+  }
+
   async startBackend() {
     if (this.isBackendStarting) {
       console.log('Backend start already in progress. Ignoring request.');
       return;
     }
     this.isBackendStarting = true;
+
+    const port = process.env.FORTUNA_PORT || 8000;
+    const isPortInUse = await this.checkPortInUse(port);
+    if (isPortInUse) {
+      const errorMsg = `FATAL: Port ${port} is already in use. Another process may be running.`;
+      console.error(errorMsg);
+      this.backendState = 'error';
+      this.backendLogs.push(errorMsg);
+      this.sendBackendStatusUpdate();
+      dialog.showErrorBox(
+        'Backend Conflict',
+        `Port ${port} is already in use. Please close any other running instances of Fortuna Faucet or the backend service and try again.`
+      );
+      this.isBackendStarting = false;
+      return;
+    }
 
  this.backendState = 'starting';
  this.backendLogs = ['Attempting to start backend process...'];
@@ -58,10 +93,11 @@ class FortunaDesktopApp {
  let backendArgs = [];
  let backendCwd = process.cwd();
 
+ const port = process.env.FORTUNA_PORT || 8000;
  if (isDev) {
  console.log('[DEV MODE] Configuring backend to run from Python venv...');
  backendCommand = path.join(__dirname, '..', '.venv', 'Scripts', 'python.exe');
- backendArgs = ['-m', 'uvicorn', 'api:app', '--host', '127.0.0.1', '--port', '8000'];
+ backendArgs = ['-m', 'uvicorn', 'api:app', '--host', '127.0.0.1', '--port', port];
  backendCwd = path.join(__dirname, '..', 'python_service');
 
  if (!fs.existsSync(backendCommand)) {
@@ -91,10 +127,11 @@ class FortunaDesktopApp {
  }
  }
 
- console.log(`Spawning backend: ${backendCommand} ${backendArgs.join(' ')}`);
+ const port = process.env.FORTUNA_PORT || '8000';
+ console.log(`Spawning backend: ${backendCommand} ${backendArgs.join(' ')} on port ${port}`);
  this.backendProcess = spawn(backendCommand, backendArgs, {
  cwd: backendCwd,
- env: { ...process.env, HOST: '127.0.0.1', PORT: '8000' },
+ env: { ...process.env, HOST: '127.0.0.1', FORTUNA_PORT: port },
  stdio: ['ignore', 'pipe', 'pipe']
  });
 
@@ -201,6 +238,9 @@ class FortunaDesktopApp {
  }
 
  initialize() {
+  ipcMain.handle('get-api-port', () => {
+    return process.env.FORTUNA_PORT || 8000;
+  });
  this.createMainWindow();
  this.createSystemTray();
  this.startBackend();

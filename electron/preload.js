@@ -61,5 +61,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => {
       ipcRenderer.removeListener('backend-status-update', subscription);
     };
-  }
+  },
+
+  /**
+   * Gets the port the backend API is running on.
+   * @returns {Promise<number>} A promise that resolves with the port number.
+   */
+  getApiPort: () => ipcRenderer.invoke('get-api-port'),
 });

@@ -54,6 +54,20 @@ npm run dev --prefix web_platform/frontend
 
 ---
 
+## Configuration
+
+The backend server port can be configured using an environment variable.
+
+*   **`FORTUNA_PORT`**: Sets the port for the backend API service. Defaults to `8000` if not specified.
+
+**Example (PowerShell):**
+```powershell
+$env:FORTUNA_PORT=8088
+python run_backend.py
+```
+
+---
+
 ## Key Scripts & Tooling
 
 *   **`run_dev_environment.bat`**: The master script for the **initial one-time setup** of the development environment.

@@ -5,26 +5,25 @@ import { useState, useEffect, useRef } from 'react';
 
 interface WebSocketOptions {
   apiKey: string | null;
+  port: number | null;
 }
 
-export const useWebSocket = <T>(url: string, options: WebSocketOptions) => {
+export const useWebSocket = <T>(path: string, options: WebSocketOptions) => {
   const [data, setData] = useState<T | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const webSocketRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    if (!url || !options.apiKey) {
+    if (!path || !options.apiKey || !options.port) {
       if (webSocketRef.current) {
         webSocketRef.current.close();
       }
       return;
     }
 
-    const wsUrl = new URL(url, window.location.href);
-    wsUrl.protocol = wsUrl.protocol.replace('http', 'ws');
-    wsUrl.searchParams.append('api_key', options.apiKey);
+    const wsUrl = `ws://localhost:${options.port}${path}?api_key=${options.apiKey}`;
 
-    const ws = new WebSocket(wsUrl.toString());
+    const ws = new WebSocket(wsUrl);
     webSocketRef.current = ws;
 
     ws.onopen = () => {
