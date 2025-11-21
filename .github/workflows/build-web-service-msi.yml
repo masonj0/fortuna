@@ -180,18 +180,6 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
-      - name: Harvest Frontend Files
-        working-directory: build_wix/harvester
-        shell: pwsh
-        run: dotnet build harvest.wixproj -c Release -p:Platform=x64
-      - name: Verify Harvested File
-        shell: pwsh
-        run: |
-          $harvestedFile = "build_wix/frontend_components.wxs"
-          if (-not (Test-Path $harvestedFile)) {
-            throw "❌ FATAL: Harvested file '$harvestedFile' was not created."
-          }
-          Write-Host "✅ WiX harvester ran successfully." -ForegroundColor Green
       - name: Generate WiX Project File
         working-directory: build_wix
         shell: pwsh
@@ -211,7 +199,6 @@ jobs:
             </ItemGroup>
             <ItemGroup>
               <Compile Include="Product_WithService.wxs" />
-              <Compile Include="frontend_components.wxs" />
             </ItemGroup>
           </Project>
           "@
