@@ -42,10 +42,10 @@
 
           <ServiceControl Id="StartFortunaService"
                           Name="FortunaBackendService"
-                          Start="install"
+                          Start="demand"
                           Stop="both"
                           Remove="uninstall"
-                          Wait="yes" />
+                          Wait="no" />
 
           <firewall:FirewallException Id="FWException"
                                       Name="Fortuna Faucet"
