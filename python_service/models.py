@@ -75,8 +75,15 @@ class SourceInfo(FortunaBaseModel):
     attempted_url: Optional[str] = Field(None, alias="attemptedUrl")
 
 
+class AdapterError(FortunaBaseModel):
+    adapter_name: str = Field(..., alias="adapterName")
+    error_message: str = Field(..., alias="errorMessage")
+    attempted_url: Optional[str] = Field(None, alias="attemptedUrl")
+
+
 class AggregatedResponse(FortunaBaseModel):
     races: List[Race]
+    errors: List[AdapterError]
     source_info: List[SourceInfo] = Field(..., alias="sourceInfo")
 
 

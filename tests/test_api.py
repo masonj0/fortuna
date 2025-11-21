@@ -27,6 +27,7 @@ async def test_get_races_endpoint_success(mock_fetch_all_odds, client):
     mock_response = AggregatedResponse(
         date=today,
         races=[],
+            errors=[],
         sources=[],
         metadata={},
         # This was the missing field causing the validation error

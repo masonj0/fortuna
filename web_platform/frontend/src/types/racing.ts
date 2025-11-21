@@ -47,14 +47,16 @@ export interface SourceInfo {
   attemptedUrl?: string;
 }
 
-// --- Adapter Status Interface ---
-export interface AdapterStatus {
-  adapter_name: string;
-  status: 'SUCCESS' | 'OK' | 'FAILED' | 'ERROR';
-  races_fetched?: number;
-  fetch_duration?: number;
-  error_message?: string;
-  last_updated?: string;
+export interface AdapterError {
+  adapterName: string;
+  errorMessage: string;
+  attemptedUrl?: string;
+}
+
+export interface AggregatedRacesResponse {
+  races: Race[];
+  errors: AdapterError[];
+  source_info: SourceInfo[];
 }
 
 // --- Analysis Factor Interfaces (retained from previous version) ---

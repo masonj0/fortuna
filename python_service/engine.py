@@ -321,29 +321,48 @@ class OddsEngine:
 
         source_infos = []
         all_races = []
+        errors = []
 
-        for result in results:
+        for i, result in enumerate(results):
+            adapter = target_adapters[i]
             if isinstance(result, Exception):
-                log.error("Adapter fetch task failed", error=result, exc_info=False)
-                continue
-
-            _adapter_name, adapter_result, _duration = result
-            source_info = adapter_result.get("source_info", {})
-            source_infos.append(source_info)
-            if source_info.get("status") == "SUCCESS":
-                all_races.extend(adapter_result.get("races", []))
+                log.error("Adapter fetch task failed with an unhandled exception", adapter=adapter.source_name, error=result)
+                errors.append({
+                    "adapter_name": adapter.source_name,
+                    "error_message": f"Unhandled exception: {str(result)}",
+                    "attempted_url": "Unknown"
+                })
+                source_infos.append({
+                    "name": adapter.source_name,
+                    "status": "FAILED",
+                    "error_message": f"Unhandled exception: {str(result)}",
+                })
+            else:
+                _adapter_name, adapter_result, _duration = result
+                source_info = adapter_result.get("source_info", {})
+                source_infos.append(source_info)
+                if source_info.get("status") == "SUCCESS":
+                    all_races.extend(adapter_result.get("races", []))
+                else:
+                    errors.append({
+                        "adapter_name": adapter.source_name,
+                        "error_message": source_info.get("error_message", "Unknown error"),
+                        "attempted_url": source_info.get("attempted_url")
+                    })
 
         deduped_races = self._dedupe_races(all_races)
 
         response_obj = AggregatedResponse(
             date=datetime.strptime(date, "%Y-%m-%d").date(),
             races=deduped_races,
+            errors=errors,
             source_info=source_infos,
             metadata={
                 "fetch_time": datetime.now(),
                 "sources_queried": [a.source_name for a in target_adapters],
                 "sources_successful": len([s for s in source_infos if s["status"] == "SUCCESS"]),
                 "total_races": len(deduped_races),
+                "total_errors": len(errors),
             },
         )
 

@@ -8,7 +8,7 @@ import { RaceCard } from './RaceCard';
 import { RaceCardSkeleton } from './RaceCardSkeleton';
 import { EmptyState } from './EmptyState';
 import { ErrorDisplay } from './ErrorDisplay';
-import { Race, SourceInfo } from '../types/racing';
+import { Race, SourceInfo, AdapterError, AggregatedRacesResponse } from '../types/racing';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { StatusDetailModal } from './StatusDetailModal';
 import ManualOverridePanel from './ManualOverridePanel';
@@ -42,16 +42,12 @@ const fetchAdapterStatuses = async (apiKey: string | null): Promise<SourceInfo[]
   return response.json();
 };
 
-const fetchQualifiedRaces = async (apiKey: string | null, params: RaceFilterParams) => {
+const fetchQualifiedRaces = async (apiKey: string | null, params: RaceFilterParams): Promise<AggregatedRacesResponse> => {
   if (!apiKey) {
     throw new Error('API key not available');
   }
-  const url = new URL('/api/races/qualified/trifecta', window.location.origin);
-  Object.entries(params).forEach(([key, value]) => {
-    if (value !== undefined && value !== null) {
-      url.searchParams.append(key, value.toString());
-    }
-  });
+  // NOTE: The endpoint is now the general /api/races, not the qualified one.
+  const url = new URL('/api/races', window.location.origin);
 
   const response = await fetch(url.toString(), {
     headers: { 'X-API-Key': apiKey },
@@ -151,7 +147,7 @@ const useBackendStatus = () => {
 
 export const LiveRaceDashboard = React.memo(() => {
   const [races, setRaces] = useState<Race[]>([]);
-  const [failedSources, setFailedSources] = useState<SourceInfo[]>([]);
+  const [adapterErrors, setAdapterErrors] = useState<AdapterError[]>([]);
   const backendStatus = useBackendStatus();
   const [apiKey, setApiKey] = useState<string | null>(null);
   const queryClient = useQueryClient();
@@ -185,13 +181,22 @@ export const LiveRaceDashboard = React.memo(() => {
     error: errorDetails,
     refetch,
   } = useQuery({
-    queryKey: ['qualifiedRaces', apiKey, params],
+    queryKey: ['aggregatedRaces', apiKey], // Simplified query key
     queryFn: () => fetchQualifiedRaces(apiKey, params),
     enabled: backendStatus.state === 'running' && !!apiKey,
     refetchOnWindowFocus: true,
   });
 
-  const { data: liveData, isConnected: isLiveConnected } = useWebSocket<{ races: Race[], source_info: SourceInfo[] }>(
+  // Update state when data is successfully fetched
+  useEffect(() => {
+    if (data) {
+      setRaces(data.races || []);
+      setAdapterErrors(data.errors || []);
+      setLastUpdate(new Date());
+    }
+  }, [data]);
+
+  const { data: liveData, isConnected: isLiveConnected } = useWebSocket<AggregatedRacesResponse>(
     apiKey ? '/ws/live-updates' : '',
     { apiKey }
   );
@@ -200,10 +205,13 @@ export const LiveRaceDashboard = React.memo(() => {
   useEffect(() => {
     if (liveData) {
       console.log('Received live data update:', liveData);
-      queryClient.setQueryData(['qualifiedRaces', apiKey, params], liveData);
+      // Update the query cache and local state with the new data
+      queryClient.setQueryData(['aggregatedRaces', apiKey], liveData);
+      setRaces(liveData.races || []);
+      setAdapterErrors(liveData.errors || []);
       setLastUpdate(new Date());
     }
-  }, [liveData, queryClient, apiKey, params]);
+  }, [liveData, queryClient, apiKey]);
 
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -324,11 +332,11 @@ export const LiveRaceDashboard = React.memo(() => {
 
         <RaceFilters onParamsChange={handleParamsChange} isLoading={connectionStatus === 'pending'} refetch={refetch} />
 
-        {failedSources.map(source => (
+        {adapterErrors.map(error => (
           <ManualOverridePanel
-            key={source.name}
-            adapterName={source.name}
-            attemptedUrl={source.attemptedUrl || 'URL not available'}
+            key={error.adapterName}
+            adapterName={error.adapterName}
+            attemptedUrl={error.attemptedUrl || 'URL not available'}
             apiKey={apiKey}
             onParseSuccess={handleParseSuccess}
           />
