@@ -156,16 +156,37 @@ export const LiveRaceDashboard = React.memo(() => {
   useEffect(() => {
     const fetchApiConfig = async () => {
       try {
-        const key = window.electronAPI ? await window.electronAPI.getApiKey() : process.env.NEXT_PUBLIC_API_KEY;
-        if (key) setApiKey(key);
-        else console.error('API key could not be retrieved.');
+        // Use a single check for electronAPI
+        const isElectron = typeof window.electronAPI !== 'undefined';
 
-        const port = window.electronAPI ? await window.electronAPI.getApiPort() : 8000;
-        if (port) setApiPort(port);
-        else console.error('API port could not be retrieved.');
+        const key = isElectron
+          ? await window.electronAPI.getApiKey()
+          : process.env.NEXT_PUBLIC_API_KEY;
+
+        if (key) {
+          setApiKey(key);
+        } else {
+          console.error('API key could not be retrieved.');
+          // Fallback to a default or test key if necessary for web-only mode
+          setApiKey("a_secure_test_api_key_that_is_long_enough");
+        }
+
+        const port = isElectron
+          ? await window.electronAPI.getApiPort()
+          : 8000; // Default port for web-only development
+
+        if (port) {
+          setApiPort(port);
+        } else {
+          console.error('API port could not be retrieved, defaulting to 8000.');
+          setApiPort(8000);
+        }
 
       } catch (error) {
         console.error('Error fetching API config:', error);
+        // Provide fallbacks in case of an error during retrieval
+        setApiKey("a_secure_test_api_key_that_is_long_enough");
+        setApiPort(8000);
       }
     };
     fetchApiConfig();
@@ -199,7 +220,7 @@ export const LiveRaceDashboard = React.memo(() => {
   }, [data]);
 
   const { data: liveData, isConnected: isLiveConnected } = useWebSocket<AggregatedRacesResponse>(
-    (apiKey && apiPort) ? '/ws/live-updates' : '',
+    '/ws/live-updates',
     { apiKey, port: apiPort }
   );
 

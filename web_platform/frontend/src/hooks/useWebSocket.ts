@@ -14,7 +14,13 @@ export const useWebSocket = <T>(path: string, options: WebSocketOptions) => {
   const webSocketRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
+    console.log(
+      `[useWebSocket] useEffect triggered. Path: ${path}, API Key: ${options.apiKey}, Port: ${options.port}`,
+    );
     if (!path || !options.apiKey || !options.port) {
+      console.log(
+        '[useWebSocket] Missing path, API key, or port. Aborting connection.',
+      );
       if (webSocketRef.current) {
         webSocketRef.current.close();
       }
@@ -22,6 +28,7 @@ export const useWebSocket = <T>(path: string, options: WebSocketOptions) => {
     }
 
     const wsUrl = `ws://localhost:${options.port}${path}?api_key=${options.apiKey}`;
+    console.log(`[useWebSocket] Attempting to connect to: ${wsUrl}`);
 
     const ws = new WebSocket(wsUrl);
     webSocketRef.current = ws;
@@ -55,7 +62,7 @@ export const useWebSocket = <T>(path: string, options: WebSocketOptions) => {
         ws.close();
       }
     };
-  }, [url, options.apiKey]);
+  }, [path, options.apiKey, options.port]);
 
   return { data, isConnected };
 };
