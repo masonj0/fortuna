@@ -111,15 +111,16 @@ jobs:
       - name: Run Backend and Test
         shell: pwsh
         run: |
-          $logFile = "backend-log.txt"
-          Start-Process -FilePath "./dist/fortuna-backend.exe" -RedirectStandardOutput $logFile -RedirectStandardError $logFile
+          $stdOutLog = "backend-out.log"
+          $stdErrLog = "backend-err.log"
+          Start-Process -FilePath "./dist/fortuna-backend.exe" -RedirectStandardOutput $stdOutLog -RedirectStandardError $stdErrLog
           Write-Host "Waiting for backend to become available..."
           $timeout = New-TimeSpan -Seconds 30
           $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
           $healthCheckPassed = $false
           while ($stopwatch.Elapsed -lt $timeout) {
               try {
-                  $response = Invoke-WebRequest -Uri "http://localhost:8000/" -UseBasicParsing -TimeoutSec 2
+                  $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/" -UseBasicParsing -TimeoutSec 2
                   if ($response.StatusCode -eq 200) {
                       Write-Host "✅ Health check passed!" -ForegroundColor Green
                       $healthCheckPassed = $true
@@ -133,10 +134,15 @@ jobs:
           $stopwatch.Stop()
           if (-not $healthCheckPassed) {
               Write-Host "❌ FATAL: Backend health check timed out after $($timeout.TotalSeconds) seconds." -ForegroundColor Red
-              if (Test-Path $logFile) {
-                  Write-Host "--- Backend Log ---"
-                  Get-Content $logFile
-                  Write-Host "--- End of Log ---"
+              if (Test-Path $stdOutLog) {
+                  Write-Host "--- Backend Standard Output ---"
+                  Get-Content $stdOutLog
+                  Write-Host "--- End of Standard Output ---"
+              }
+              if (Test-Path $stdErrLog) {
+                  Write-Host "--- Backend Standard Error ---"
+                  Get-Content $stdErrLog
+                  Write-Host "--- End of Standard Error ---"
               }
               throw "Backend health check failed."
           }
@@ -257,6 +263,7 @@ jobs:
             </PropertyGroup>
             <ItemGroup>
               <PackageReference Include="WixToolset.UI.wixext" Version="4.0.5" />
+              <PackageReference Include="WixToolset.Util.wixext" Version="4.0.5" />
             </ItemGroup>
             <ItemGroup>
               <Compile Include="Product_WithoutService.wxs" />
