@@ -39,6 +39,7 @@ a = Analysis(
         'slowapi.middleware',
         'slowapi.util',
         'pydantic_settings',
+        'httpx',
     ],
     hookspath=[],
     hooksconfig={},
