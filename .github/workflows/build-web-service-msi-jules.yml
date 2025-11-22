@@ -86,6 +86,12 @@ jobs:
         shell: pwsh
         run: |
           pip-audit -r web_service/backend/requirements.txt --local
+      - name: Create Missing Directories for PyInstaller
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path "web_service/backend/data" -Force | Out-Null
+          New-Item -ItemType Directory -Path "web_service/backend/json" -Force | Out-Null
+          Write-Host "✅ Created missing data and json directories." -ForegroundColor Green
       - name: Backend - Build with PyInstaller
         shell: pwsh
         run: |
@@ -169,6 +175,7 @@ jobs:
                   Write-Host "✅ Root endpoint served HTML" -ForegroundColor Green
                   $serverReady = $true
                   break
+                }
                 }
               } catch {
                 Write-Host "  (waiting...)" -ForegroundColor Gray
