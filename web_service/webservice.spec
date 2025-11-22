@@ -15,9 +15,7 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[
-        ('backend/data', 'data'),
-        ('backend/json', 'json'),
-        ('python_service', 'python_service'),
+        ('../python_service', 'python_service'),
         *frontend_datas,
     ],
     hiddenimports=[
