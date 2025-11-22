@@ -6,17 +6,17 @@ block_cipher = None
 
 # Collect frontend build output
 frontend_datas = []
-frontend_out = 'web_service/frontend/out'
+frontend_out = 'frontend/out'
 if os.path.exists(frontend_out):
     frontend_datas = [(frontend_out, 'ui')]
 
 a = Analysis(
-    ['web_service/backend/main.py'],
+    ['backend/main.py'],
     pathex=[],
     binaries=[],
     datas=[
-        ('web_service/backend/data', 'data'),
-        ('web_service/backend/json', 'json'),
+        ('backend/data', 'data'),
+        ('backend/json', 'json'),
         ('python_service', 'python_service'),
         *frontend_datas,
     ],
