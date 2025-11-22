@@ -182,6 +182,7 @@ jobs:
                   $serverReady = $true
                   break
                 }
+                }
               } catch {
                 Write-Host "  (waiting...)" -ForegroundColor Gray
               }
