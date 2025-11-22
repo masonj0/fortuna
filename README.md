@@ -79,11 +79,11 @@ This section details the setup for the new web service architecture, which is in
     python main.py
     ```
 
-### Frontend (`web_platform/frontend/`)
+### Frontend (`web_service/frontend/`)
 
 1.  **Navigate to the frontend directory:**
     ```bash
-    cd web_platform/frontend
+    cd web_service/frontend
     ```
 2.  **Install dependencies:**
     ```bash
