@@ -1,15 +1,13 @@
 [
-    "config.ini",
+    "VERSION.txt",
     "electron/resources/.gitkeep",
-    "package.json",
-    "pg_schemas/quarantined_races.sql",
-    "python_service/core/__init__.py",
-    "python_service/middleware/__init__.py",
-    "python_service/requirements_minimal.txt",
-    "python_service/utils/__init__.py",
-    "tests/test_api/test_endpoints.py",
-    "tests/test_engine/test_orchestration.py",
-    "web_platform/frontend/next.config.mjs",
-    "web_platform/frontend/package-lock.json",
-    "web_platform/frontend/postcss.config.js"
+    "fortuna-backend-webservice.spec",
+    "pyproject.toml",
+    "python_service/core/exceptions.py",
+    "python_service/middleware/error_handler.py",
+    "web_platform/frontend/app/Providers.tsx",
+    "web_platform/frontend/src/components/RaceCard.tsx",
+    "web_service/frontend/public/workbox-4754cb34.js",
+    "web_service/frontend/src/hooks/useWebSocket.ts",
+    "wix/product_webservice.wxs"
 ]
