@@ -35,6 +35,7 @@ a = Analysis(
         'structlog',
         'fastapi.middleware',
         'fastapi.middleware.cors',
+        'slowapi',
     ],
     hookspath=[],
     hooksconfig={},
