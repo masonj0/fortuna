@@ -40,11 +40,29 @@
     </ComponentGroup>
 
     <!-- Features -->
+    <!-- Service Installation -->
+    <ComponentGroup Id="ServiceComponentGroup" Directory="INSTALLFOLDER">
+        <Component Id="FortunaBackendService" Guid="*">
+            <File Id="fortuna-backend.exe" Source="$(var.BackendPath)" KeyPath="yes" />
+            <ServiceInstall
+                Id="FortunaServiceInstall"
+                Type="ownProcess"
+                Name="Fortuna"
+                DisplayName="Fortuna Faucet Backend"
+                Description="Data aggregation and analysis engine for horse racing."
+                Start="auto"
+                Account="LocalSystem"
+                ErrorControl="normal" />
+            <ServiceControl Id="StartFortunaService" Start="install" Stop="uninstall" Remove="uninstall" Name="Fortuna" Wait="no" />
+        </Component>
+    </ComponentGroup>
+
     <Feature Id="ProductFeature" Title="Fortuna Faucet" Level="1">
         <ComponentGroupRef Id="BackendFileGroup"/>
         <ComponentGroupRef Id="FrontendFileGroup"/>
         <ComponentGroupRef Id="ShortcutsComponentGroup"/>
         <ComponentGroupRef Id="EnvironmentComponentGroup"/>
+        <ComponentGroupRef Id="ServiceComponentGroup"/>
     </Feature>
 
     <!-- Shortcuts -->

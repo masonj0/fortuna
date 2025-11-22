@@ -161,7 +161,7 @@ export const LiveRaceDashboard = React.memo(() => {
 
         const key = isElectron
           ? await window.electronAPI.getApiKey()
-          : process.env.NEXT_PUBLIC_API_KEY;
+          : null;
 
         if (key) {
           setApiKey(key);
