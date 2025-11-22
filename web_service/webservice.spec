@@ -1,16 +1,24 @@
-# -*- mode: python ; coding: utf-8 -*-
+# webservice.spec
+from PyInstaller.utils.hooks import collect_data_files
+import os
 
 block_cipher = None
 
+# Collect frontend build output
+frontend_datas = []
+frontend_out = 'web_service/frontend/out'
+if os.path.exists(frontend_out):
+    frontend_datas = [(frontend_out, 'ui')]
+
 a = Analysis(
-    ['backend/main.py'],
+    ['web_service/backend/main.py'],
     pathex=[],
     binaries=[],
     datas=[
-        ('backend/data', 'data'),
-        ('backend/json', 'json'),
-        ('backend/adapters', 'adapters'),
-        ('frontend/out', 'ui'),
+        ('web_service/backend/data', 'data'),
+        ('web_service/backend/json', 'json'),
+        ('python_service', 'python_service'),
+        *frontend_datas,
     ],
     hiddenimports=[
         'uvicorn.logging',

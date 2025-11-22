@@ -53,6 +53,47 @@ npm run dev --prefix web_platform/frontend
 ```
 
 ---
+## Web Service Development Environment
+
+This section details the setup for the new web service architecture, which is independent of the original Electron application.
+
+### Backend (`web_service/backend/`)
+
+1.  **Navigate to the backend directory:**
+    ```bash
+    cd web_service/backend
+    ```
+2.  **Create a virtual environment:**
+    ```bash
+    python -m venv .venv
+    ```
+3.  **Activate the virtual environment:**
+    *   Windows: `.venv\Scripts\activate`
+    *   macOS/Linux: `source .venv/bin/activate`
+4.  **Install dependencies:**
+    ```bash
+    pip install -r requirements-dev.txt
+    ```
+5.  **Run the development server:**
+    ```bash
+    python main.py
+    ```
+
+### Frontend (`web_service/frontend/`)
+
+1.  **Navigate to the frontend directory:**
+    ```bash
+    cd web_service/frontend
+    ```
+2.  **Install dependencies:**
+    ```bash
+    npm install
+    ```
+3.  **Run the development server:**
+    ```bash
+    npm run dev
+    ```
+---
 
 ## Configuration
 
