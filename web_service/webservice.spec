@@ -33,6 +33,8 @@ a = Analysis(
         'pandas',
         'aiosqlite',
         'structlog',
+        'fastapi.middleware',
+        'fastapi.middleware.cors',
     ],
     hookspath=[],
     hooksconfig={},
