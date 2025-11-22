@@ -52,3 +52,7 @@ ReviewableJSON/
 
 # Image files
 *.png
+
+# Executables
+*.exe
+fortuna-backend.exe

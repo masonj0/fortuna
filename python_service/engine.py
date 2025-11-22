@@ -22,7 +22,6 @@ from .adapters.betfair_adapter import BetfairAdapter
 # from .adapters.betfair_datascientist_adapter import BetfairDataScientistAdapter
 from .adapters.betfair_greyhound_adapter import BetfairGreyhoundAdapter
 from .adapters.brisnet_adapter import BrisnetAdapter
-from .adapters.drf_adapter import DRFAdapter
 from .adapters.equibase_adapter import EquibaseAdapter
 from .adapters.fanduel_adapter import FanDuelAdapter
 from .adapters.gbgb_api_adapter import GbgbApiAdapter
@@ -93,7 +92,6 @@ class OddsEngine:
                 BetfairAdapter,
                 BetfairGreyhoundAdapter,
                 BrisnetAdapter,
-                DRFAdapter,
                 EquibaseAdapter,
                 FanDuelAdapter,
                 GbgbApiAdapter,
@@ -119,7 +117,9 @@ class OddsEngine:
 
             for adapter_cls in adapter_classes:
                 try:
+                    self.logger.info(f"Attempting to initialize adapter: {adapter_cls.__name__}")
                     adapter_instance = adapter_cls(config=self.config)
+                    self.logger.info(f"Successfully initialized adapter: {adapter_cls.__name__}")
                     if manual_override_manager and getattr(adapter_instance, "supports_manual_override", False):
                         adapter_instance.enable_manual_override(manual_override_manager)
                     self.adapters.append(adapter_instance)
