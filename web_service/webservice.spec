@@ -31,6 +31,7 @@ a = Analysis(
         'uvicorn.lifespan.on',
         'numpy',
         'pandas',
+        'aiosqlite',
     ],
     hookspath=[],
     hooksconfig={},
