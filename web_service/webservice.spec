@@ -4,7 +4,7 @@ block_cipher = None
 
 a = Analysis(
     ['backend/main.py'],
-    pathex=[],
+    pathex=['backend'],
     binaries=[],
     datas=[
         ('backend/data', 'data'),
