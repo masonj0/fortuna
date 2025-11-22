@@ -7,8 +7,6 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[
-        ('backend/data', 'data'),
-        ('backend/json', 'json'),
         ('backend/adapters', 'adapters'),
         ('frontend/out', 'ui'),
     ],
