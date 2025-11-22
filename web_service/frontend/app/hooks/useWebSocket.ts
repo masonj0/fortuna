@@ -5,7 +5,7 @@ import { useState, useEffect, useRef } from 'react';
 
 interface WebSocketOptions {
   apiKey: string | null;
-  port: number | null;
+  port?: number | null; // Port is now optional
 }
 
 export const useWebSocket = <T>(path: string, options: WebSocketOptions) => {
@@ -14,20 +14,19 @@ export const useWebSocket = <T>(path: string, options: WebSocketOptions) => {
   const webSocketRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    console.log(
-      `[useWebSocket] useEffect triggered. Path: ${path}, API Key: ${options.apiKey}, Port: ${options.port}`,
-    );
-    if (!path || !options.apiKey || !options.port) {
-      console.log(
-        '[useWebSocket] Missing path, API key, or port. Aborting connection.',
-      );
+    if (!path || !options.apiKey) {
+      console.log('[useWebSocket] Missing path or API key. Aborting connection.');
       if (webSocketRef.current) {
         webSocketRef.current.close();
       }
       return;
     }
 
-    const wsUrl = `ws://localhost:${options.port}${path}?api_key=${options.apiKey}`;
+    // Use relative URL for same-origin, or build full URL if port is provided
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = options.port ? `localhost:${options.port}` : window.location.host;
+    const wsUrl = `${protocol}//${host}${path}?api_key=${options.apiKey}`;
+
     console.log(`[useWebSocket] Attempting to connect to: ${wsUrl}`);
 
     const ws = new WebSocket(wsUrl);
