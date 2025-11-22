@@ -1,11 +1,11 @@
 'use client';
 import dynamic from 'next/dynamic';
 import React from 'react';
-import { Tabs } from '../src/components/Tabs';
-import { SettingsPage } from '../src/components/SettingsPage';
+import { Tabs } from './components/Tabs';
+import { SettingsPage } from './components/SettingsPage';
 
 const LiveRaceDashboard = dynamic(
-  () => import('../src/components/LiveRaceDashboard').then((mod) => mod.LiveRaceDashboard),
+  () => import('./components/LiveRaceDashboard').then((mod) => mod.LiveRaceDashboard),
   {
     ssr: false,
     loading: () => <p className="text-center text-xl mt-8">Loading Dashboard...</p>
