@@ -32,6 +32,7 @@ a = Analysis(
         'numpy',
         'pandas',
         'aiosqlite',
+        'structlog',
     ],
     hookspath=[],
     hooksconfig={},
