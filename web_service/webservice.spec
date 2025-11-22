@@ -3,14 +3,14 @@
 block_cipher = None
 
 a = Analysis(
-    ['web_service/backend/main.py'],
+    ['backend/main.py'],
     pathex=[],
     binaries=[],
     datas=[
-        ('web_service/backend/data', 'data'),
-        ('web_service/backend/json', 'json'),
-        ('web_service/backend/adapters', 'adapters'),
-        ('web_service/frontend/out', 'ui'),
+        ('backend/data', 'data'),
+        ('backend/json', 'json'),
+        ('backend/adapters', 'adapters'),
+        ('frontend/out', 'ui'),
     ],
     hiddenimports=[
         'uvicorn.logging',
