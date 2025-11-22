@@ -1,3 +1,12 @@
 [
-    "tests/fixtures/at_the_races_greyhound_sample.html"
+    "ARCHITECTURAL_MANDATE.md",
+    "python_service/tests/test_manual_override.py",
+    "python_service/utils/odds.py",
+    "web_platform/api_gateway/src/services/DatabaseService.ts",
+    "web_platform/frontend/public/workbox-4754cb34.js",
+    "web_platform/frontend/src/lib/queryClient.ts",
+    "web_platform/frontend/src/types/electron.d.ts",
+    "web_platform/frontend/src/utils/exportManager.ts",
+    "web_service/frontend/src/components/RaceCard.tsx",
+    "web_service/frontend/tsconfig.json"
 ]
