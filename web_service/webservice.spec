@@ -38,6 +38,7 @@ a = Analysis(
         'slowapi',
         'slowapi.middleware',
         'slowapi.util',
+        'pydantic_settings',
     ],
     hookspath=[],
     hooksconfig={},
