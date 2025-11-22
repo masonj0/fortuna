@@ -37,6 +37,7 @@ a = Analysis(
         'fastapi.middleware.cors',
         'slowapi',
         'slowapi.middleware',
+        'slowapi.util',
     ],
     hookspath=[],
     hooksconfig={},
