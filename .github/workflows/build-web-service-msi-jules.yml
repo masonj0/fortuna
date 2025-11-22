@@ -1,0 +1,265 @@
+name: Build Fortuna Web Service MSI Installer
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '20'
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  build-frontend:
+    name: '📦 Build Frontend'
+    timeout-minutes: 15
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'web_service/frontend/package-lock.json'
+      - name: Frontend - Install & Build
+        shell: pwsh
+        run: |
+          cd web_service/frontend
+          npm ci
+          npm audit --audit-level=moderate
+          npm run build
+      - name: Verify Frontend Build
+        shell: pwsh
+        run: |
+          $outDir = 'web_service/frontend/out'
+          if (-not (Test-Path $outDir)) {
+            Write-Host "❌ FATAL: Build output directory 'out' not created" -ForegroundColor Red
+            exit 1
+          }
+          $fileCount = (Get-ChildItem -Path $outDir -Recurse -File | Measure-Object).Count
+          if ($fileCount -eq 0) {
+            Write-Host "❌ FATAL: Build output directory is empty" -ForegroundColor Red
+            exit 1
+          }
+          Write-Host "✅ Frontend build verified ($fileCount files)" -ForegroundColor Green
+      - name: Upload Frontend Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build-output-${{ github.sha }}
+          path: web_service/frontend/out
+          retention-days: 1
+
+  build-backend:
+    name: '🐍 Build Web Service Backend'
+    needs: [build-frontend]
+    timeout-minutes: 20
+    runs-on: windows-latest
+    env:
+      PYTHONUTF8: "1"
+      FORTUNA_MODE: "webservice"
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+      - name: Download Frontend Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build-output-${{ github.sha }}
+          path: web_service/frontend/out
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: 'web_service/backend/requirements.txt'
+      - name: Backend - Install Dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r web_service/backend/requirements-dev.txt
+      - name: Backend - Security Audit
+        shell: pwsh
+        run: |
+          pip-audit -r web_service/backend/requirements.txt --local
+      - name: Backend - Build with PyInstaller
+        shell: pwsh
+        run: |
+          pyinstaller web_service/webservice.spec --noconfirm
+      - name: Upload Backend Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-webservice-executable-${{ github.sha }}
+          path: dist/fortuna-webservice.exe
+          retention-days: 1
+          if-no-files-found: error
+
+  smoke-test-backend:
+    name: '🧪 Smoke Test Web Service Executable'
+    timeout-minutes: 10
+    needs: [build-backend]
+    runs-on: windows-latest
+    steps:
+      - name: Download Backend Executable
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-webservice-executable-${{ github.sha }}
+      - name: Run Smoke Test
+        shell: pwsh
+        timeout-minutes: 5
+        env:
+          API_KEY: "a_secure_test_api_key_that_is_long_enough_for_smoke_test"
+          FORTUNA_MODE: "webservice"
+        run: |
+          $exe = './fortuna-webservice.exe'
+          $logDir = 'logs'
+          $stdOutPath = Join-Path $logDir 'backend-out.txt'
+          $stdErrPath = Join-Path $logDir 'backend-err.txt'
+
+          if (-not (Test-Path $logDir)) {
+            New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+          }
+
+          Write-Host "Starting backend process..." -ForegroundColor Cyan
+          $process = Start-Process -FilePath $exe `
+            -PassThru `
+            -NoNewWindow `
+            -RedirectStandardOutput $stdOutPath `
+            -RedirectStandardError $stdErrPath `
+            -ErrorAction Stop
+
+          Write-Host "Backend process started (PID: $($process.Id))" -ForegroundColor Green
+
+          $serverReady = $false
+          $maxAttempts = 40
+          $attemptCount = 0
+
+          try {
+            for ($i = 1; $i -le $maxAttempts; $i++) {
+              $attemptCount = $i
+
+              if ($process.HasExited) {
+                Write-Host "❌ Backend process exited unexpectedly (Exit Code: $($process.ExitCode))" -ForegroundColor Red
+                break
+              }
+
+              try {
+                Write-Host "Attempt $i/${maxAttempts}: Checking /health endpoint..." -ForegroundColor Gray
+                $response = Invoke-WebRequest `
+                  -Uri 'http://127.0.0.1:8000/health' `
+                  -TimeoutSec 2 `
+                  -UseBasicParsing `
+                  -ErrorAction SilentlyContinue
+
+                if ($response.StatusCode -eq 200) {
+                  Write-Host "✅ Health endpoint responded" -ForegroundColor Green
+
+                Write-Host "Checking root endpoint for frontend..." -ForegroundColor Gray
+                $rootResponse = Invoke-WebRequest `
+                  -Uri 'http://127.0.0.1:8000/' `
+                  -TimeoutSec 2 `
+                  -UseBasicParsing `
+                  -ErrorAction SilentlyContinue
+
+                if ($rootResponse.StatusCode -eq 200 -and $rootResponse.Content.Contains('<html')) {
+                  Write-Host "✅ Root endpoint served HTML" -ForegroundColor Green
+                  $serverReady = $true
+                  break
+                }
+              } catch {
+                Write-Host "  (waiting...)" -ForegroundColor Gray
+              }
+
+              Start-Sleep -Seconds 1.5
+            }
+          } finally {
+            Write-Host "Stopping backend process..." -ForegroundColor Cyan
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Milliseconds 500
+          }
+
+          if (-not $serverReady) {
+            Write-Host "❌ SMOKE TEST FAILED: Backend did not become healthy" -ForegroundColor Red
+            Write-Host "Attempts: ${attemptCount}/${maxAttempts}" -ForegroundColor Red
+
+            if (Test-Path $stdOutPath) {
+              Write-Host "`n--- STDOUT (last 30 lines) ---" -ForegroundColor Yellow
+              Get-Content $stdOutPath -Tail 30 | Write-Host
+            }
+            if (Test-Path $stdErrPath) {
+              Write-Host "`n--- STDERR (last 30 lines) ---" -ForegroundColor Yellow
+              Get-Content $stdErrPath -Tail 30 | Write-Host
+            }
+            exit 1
+          }
+
+          Write-Host "`n✅ SMOKE TEST PASSED on attempt $attemptCount" -ForegroundColor Green
+      - name: Upload Smoke Test Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-test-logs-${{ github.sha }}
+          path: logs/
+          retention-days: 3
+
+  package-msi-installer:
+    name: '🏆 Package Web Service Installer'
+    timeout-minutes: 15
+    needs: [smoke-test-backend]
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+      - name: Setup WiX Toolset
+        run: choco install wixtoolset -y
+      - name: Download Backend Executable
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-webservice-executable-${{ github.sha }}
+          path: ./staging/
+      - name: Verify Staged Executable
+        shell: pwsh
+        run: |
+          $exePath = "./staging/fortuna-webservice.exe"
+          if (-not (Test-Path $exePath)) {
+            throw "❌ FATAL: Web service executable not found at $exePath after download."
+          }
+          Write-Host "✅ Web service executable staged successfully."
+      - name: Build MSI with WiX
+        shell: pwsh
+        run: |
+          wix build wix/product_webservice.wxs -ext WixToolset.UI.wixext -o fortuna-webservice.msi
+      - name: Upload Final MSI Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fortuna-webservice-installer-${{ github.sha }}
+          path: fortuna-webservice.msi
+          retention-days: 7
+      - name: Create GitHub Release
+        if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }} (Web Service)
+          body: |
+            MSI Installer for the Fortuna Faucet Web Service.
+            Built from commit ${{ github.sha }}.
+          draft: false
+          prerelease: false
+      - name: Upload Release Asset
+        if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: fortuna-webservice.msi
+          asset_name: fortuna-webservice-${{ github.ref_name }}.msi
+          asset_content_type: application/octet-stream

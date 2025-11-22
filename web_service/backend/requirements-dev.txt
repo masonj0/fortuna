@@ -1,0 +1,22 @@
+#
+# Development & Build-Time Dependencies
+# This file should be used for setting up a development or CI/CD environment.
+#
+
+-r requirements.txt
+
+# --- Build Tools ---
+pyinstaller==6.6.0
+pip-tools
+
+# --- Testing Tools ---
+pytest
+pytest-asyncio
+fakeredis
+respx
+
+# --- Linting & Auditing ---
+black
+ruff
+pip-audit
+setuptools<81

@@ -8,6 +8,19 @@ ROOT_DIR = Path(".")
 OUTPUT_DIR = Path(".")
 NUM_MANIFESTS = 5 # We will create 5 balanced manifests
 
+# --- Inclusion/Exclusion Rules ---
+# To keep the manifests clean and focused, we define specific directories to include.
+# Everything else will be ignored.
+INCLUDE_ONLY_DIRS = {
+    "python_service",
+    "web_platform",
+    "electron",
+    "scripts",
+    "wix",
+    ".github",
+    "web_service", # Include the new web service architecture
+}
+
 EXCLUDE_DIRS = {
     ".git",
     ".idea",
@@ -50,15 +63,33 @@ EXCLUDE_FILES = {
 
 
 def get_all_project_files():
-    """Walk the directory to find all files, respecting exclusions."""
+    """Walk the directory to find all files, respecting inclusions and exclusions."""
     all_files_with_size = []
-    for root, dirs, files in os.walk(ROOT_DIR, topdown=True):
-        # Prevent walking into excluded directories
-        dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS and not d.startswith("PREV_")]
 
-        for name in files:
-            if name in EXCLUDE_FILES or name.endswith((".bmp", ".png", ".ico")):
-                continue
+    # Start with a curated list of top-level files to include
+    top_level_files = [
+        "AGENTS.md", "ARCHITECTURAL_MANDATE.md", "HISTORY.md", "README.md",
+        "WISDOM.md", "PSEUDOCODE.MD", "VERSION.txt", "fortuna-backend-electron.spec",
+        "fortuna-backend-webservice.spec", "pyproject.toml", "pytest.ini",
+        "requirements.txt", "requirements-dev.txt", "package.json", "package-lock.json"
+    ]
+    for file_name in top_level_files:
+        file_path = ROOT_DIR / file_name
+        if file_path.exists():
+            all_files_with_size.append((str(file_path.as_posix()), os.path.getsize(file_path)))
+
+    # Walk through the explicitly included directories
+    for include_dir in INCLUDE_ONLY_DIRS:
+        walk_path = ROOT_DIR / include_dir
+        if not walk_path.is_dir():
+            continue
+        for root, dirs, files in os.walk(walk_path, topdown=True):
+            # Still respect the nested exclude directories like __pycache__
+            dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS]
+
+            for name in files:
+                if name in EXCLUDE_FILES or name.endswith((".bmp", ".png", ".ico")):
+                    continue
 
             file_path = Path(root) / name
             try:
@@ -70,7 +101,8 @@ def get_all_project_files():
                 print(f"[WARNING] File not found while scanning: {file_path}")
                 continue
 
-    return all_files_with_size
+    # Consolidate and remove duplicates that might arise from overlapping rules
+    return list(set(all_files_with_size))
 
 
 def balance_files_by_size(files_with_size, num_bins):
