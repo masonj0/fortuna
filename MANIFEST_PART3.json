@@ -1,13 +1,15 @@
 [
     "PSEUDOCODE.MD",
     "README.md",
-    "electron/assets/license.rtf",
-    "fortuna-backend-webservice.spec",
-    "fortuna-webservice-electron.spec",
+    "VERSION.txt",
+    "electron/resources/.gitkeep",
+    "electron/secure-settings-manager.js",
+    "fortuna-webservice-service.spec",
+    "pytest.ini",
     "python_service/adapters/betfair_greyhound_adapter.py",
-    "python_service/core/exceptions.py",
-    "web_platform/api_gateway/tsconfig.json",
-    "web_service/backend/db/init.py",
-    "web_service/backend/fortuna_service.py",
-    "web_service/backend/middleware/error_handler.py"
+    "python_service/fortuna_service.py",
+    "python_service/utils/odds.py",
+    "web_platform/frontend/src/hooks/useWebSocket.ts",
+    "web_service/backend/core/exceptions.py",
+    "web_service/frontend/app/Providers.tsx"
 ]

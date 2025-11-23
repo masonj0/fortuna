@@ -1,12 +1,12 @@
 [
-    "electron/secure-settings-manager.js",
-    "python_service/db/init.py",
-    "python_service/tests/test_manual_override.py",
-    "python_service/utils/odds.py",
+    "electron/assets/license.rtf",
+    "fortuna-backend-electron.spec",
+    "fortuna-backend-webservice.spec",
     "requirements-dev.txt",
     "web_platform/frontend/src/components/RaceCard.tsx",
-    "web_platform/frontend/src/lib/queryClient.ts",
-    "web_service/frontend/app/utils/exportManager.ts",
+    "web_service/frontend/app/hooks/useWebSocket.ts",
+    "web_service/frontend/app/lib/queryClient.ts",
+    "web_service/frontend/app/types/electron.d.ts",
     "web_service/frontend/public/workbox-4754cb34.js",
-    "web_service/frontend/tsconfig.json"
+    "web_service/webservice.spec"
 ]
