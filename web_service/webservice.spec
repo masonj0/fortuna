@@ -41,6 +41,7 @@ a = Analysis(
         'pydantic_settings',
         'httpx',
         'tenacity',
+        'selectolax',
     ],
     hookspath=[],
     hooksconfig={},
