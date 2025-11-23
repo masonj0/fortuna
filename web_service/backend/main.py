@@ -32,21 +32,22 @@ def main():
         # Also add the parent directory to allow for relative imports.
         sys.path.append(os.path.join(application_path, ".."))
 
-    # It's critical to import the app object *after* the path has been manipulated.
-    from python_service.api import app, HTTPException
-    from python_service.config import get_settings
-    from fastapi.staticfiles import StaticFiles
-    from fastapi.responses import FileResponse
-    from python_service.port_check import check_port_and_exit_if_in_use
+    # It's critical to import dependencies *after* the path has been manipulated.
+    from web_service.backend.config import get_settings
+    from web_service.backend.port_check import check_port_and_exit_if_in_use
 
     settings = get_settings()
 
     # --- Port Sanity Check ---
-    # Before doing anything else, ensure the target port is not already in use.
-    # This prevents a common and confusing crash scenario on startup.
     check_port_and_exit_if_in_use(settings.FORTUNA_PORT, settings.UVICORN_HOST)
 
-    uvicorn.run(app, host=settings.UVICORN_HOST, port=settings.FORTUNA_PORT, log_level="info")
+    # Use string-based app import for PyInstaller compatibility
+    uvicorn.run(
+        "web_service.backend.api:app",
+        host=settings.UVICORN_HOST,
+        port=settings.FORTUNA_PORT,
+        log_level="info"
+    )
 
 
 if __name__ == "__main__":
