@@ -1,15 +1,13 @@
 [
     "PSEUDOCODE.MD",
     "README.md",
-    "VERSION.txt",
-    "electron/resources/.gitkeep",
-    "electron/secure-settings-manager.js",
-    "fortuna-webservice-service.spec",
-    "pytest.ini",
-    "python_service/adapters/betfair_greyhound_adapter.py",
-    "python_service/fortuna_service.py",
-    "python_service/utils/odds.py",
+    "pyproject.toml",
+    "python_service/tests/test_manual_override.py",
+    "web_platform/api_gateway/src/services/DatabaseService.ts",
     "web_platform/frontend/src/hooks/useWebSocket.ts",
+    "web_platform/frontend/src/types/electron.d.ts",
+    "web_service/backend/adapters/betfair_greyhound_adapter.py",
     "web_service/backend/core/exceptions.py",
+    "web_service/backend/fortuna_service.py",
     "web_service/frontend/app/Providers.tsx"
 ]
