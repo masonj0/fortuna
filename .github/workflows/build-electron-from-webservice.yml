@@ -198,6 +198,15 @@ jobs:
         run: |
           if (Test-Path "backend.pid") { Get-Content "backend.pid" | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } }
           if (Test-Path "frontend.pid") { Get-Content "frontend.pid" | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } }
+      - name: Upload Backend Logs for Diagnosis
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-logs-electron-${{ github.sha }}
+          path: |
+            backend-out.log
+            backend-err.log
+          if-no-files-found: ignore
 
   package-and-test:
     name: '🏆 Package & Test Electron Installer (Web Service)'
