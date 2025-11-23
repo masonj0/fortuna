@@ -62,104 +62,83 @@ class FortunaDesktopApp {
       return;
     }
     this.isBackendStarting = true;
+    this.backendState = 'starting';
+    this.backendLogs = ['Attempting to start backend...'];
+    this.sendBackendStatusUpdate();
 
     const port = process.env.FORTUNA_PORT || 8000;
-    const isPortInUse = await this.checkPortInUse(port);
-    if (isPortInUse) {
-      const errorMsg = `FATAL: Port ${port} is already in use. Another process may be running.`;
+
+    try {
+      const isPortInUse = await this.checkPortInUse(port);
+      if (isPortInUse) {
+        console.log(`Port ${port} is already in use. Assuming backend is running.`);
+        this.backendState = 'running';
+        this.backendLogs.push(`Port ${port} is already in use. Assuming backend is running.`);
+        this.isBackendStarting = false;
+        this.sendBackendStatusUpdate();
+        return; // The most important change: we just stop here.
+      }
+    } catch (error) {
+        const errorMsg = `Error checking port ${port}: ${error.message}`;
+        console.error(errorMsg);
+        this.backendState = 'error';
+        this.backendLogs.push(errorMsg);
+        this.isBackendStarting = false;
+        this.sendBackendStatusUpdate();
+        dialog.showErrorBox('Network Error', `Could not check port ${port}. Please check your network configuration.`);
+        return;
+    }
+
+    if (this.backendProcess && !this.backendProcess.killed) {
+      console.log('An old backend process was found. Terminating it before starting a new one.');
+      this.backendProcess.kill();
+    }
+
+    const isDev = !app.isPackaged;
+    let backendCommand;
+    const backendArgs = [];
+    let backendCwd = process.cwd();
+
+    if (isDev) {
+      // This logic remains the same for development
+      console.log('[DEV MODE] Configuring backend to run from Python venv...');
+      backendCommand = path.join(__dirname, '..', '.venv', 'Scripts', 'python.exe');
+      backendArgs.push('-m', 'uvicorn', 'api:app', '--host', '127.0.0.1', '--port', port);
+      backendCwd = path.join(__dirname, '..', 'python_service');
+    } else {
+      console.log('[PROD MODE] Configuring backend to run from packaged executable...');
+      backendCommand = path.join(process.resourcesPath, 'fortuna-backend.exe');
+    }
+
+    if (!fs.existsSync(backendCommand)) {
+      const errorMsg = `FATAL: Backend executable not found at ${backendCommand}`;
       console.error(errorMsg);
       this.backendState = 'error';
       this.backendLogs.push(errorMsg);
-      this.sendBackendStatusUpdate();
-      dialog.showErrorBox(
-        'Backend Conflict',
-        `Port ${port} is already in use. Please close any other running instances of Fortuna Faucet or the backend service and try again.`
-      );
       this.isBackendStarting = false;
+      this.sendBackendStatusUpdate();
+      dialog.showErrorBox('Backend Missing', 'The backend service executable is missing. Please try reinstalling Fortuna Faucet.');
       return;
     }
 
- this.backendState = 'starting';
- this.backendLogs = ['Attempting to start backend process...'];
- this.sendBackendStatusUpdate();
+    console.log(`Spawning backend: ${backendCommand} ${backendArgs.join(' ')}`);
+    this.backendProcess = spawn(backendCommand, backendArgs, {
+      cwd: backendCwd,
+      env: { ...process.env, FORTUNA_PORT: port.toString() },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
 
- if (this.backendProcess && !this.backendProcess.killed) {
- console.log('Backend process already running. Killing old process.');
- this.backendProcess.kill();
- }
-
- const isDev = !app.isPackaged;
- let backendCommand;
- let backendArgs = [];
- let backendCwd = process.cwd();
-
- const port = process.env.FORTUNA_PORT || 8000;
- if (isDev) {
- console.log('[DEV MODE] Configuring backend to run from Python venv...');
- backendCommand = path.join(__dirname, '..', '.venv', 'Scripts', 'python.exe');
- backendArgs = ['-m', 'uvicorn', 'api:app', '--host', '127.0.0.1', '--port', port];
- backendCwd = path.join(__dirname, '..', 'python_service');
-
- if (!fs.existsSync(backendCommand)) {
- const errorMsg = `FATAL: Python executable for dev not found at ${backendCommand}. Run setup first.`;
- this.backendState = 'error';
- this.backendLogs.push(errorMsg);
- this.sendBackendStatusUpdate();
- this.isBackendStarting = false;
- return;
- }
- } else {
- console.log('[PROD MODE] Configuring backend to run from packaged executable...');
- backendCommand = path.join(process.resourcesPath, 'fortuna-backend.exe');
- if (!fs.existsSync(backendCommand)) {
- const errorMsg = `FATAL: Backend executable missing at ${backendCommand}`;
- console.error(errorMsg);
- this.backendState = 'error';
- this.backendLogs.push(errorMsg);
- this.sendBackendStatusUpdate();
- const { dialog } = require('electron');
- dialog.showErrorBox(
- 'Backend Missing',
- 'The backend service is missing. Please reinstall Fortuna Faucet.'
- );
- this.isBackendStarting = false;
- return;
- }
- }
-
- const port = process.env.FORTUNA_PORT || '8000';
- console.log(`Spawning backend: ${backendCommand} ${backendArgs.join(' ')} on port ${port}`);
- this.backendProcess = spawn(backendCommand, backendArgs, {
- cwd: backendCwd,
- env: { ...process.env, HOST: '127.0.0.1', FORTUNA_PORT: port },
- stdio: ['ignore', 'pipe', 'pipe']
- });
-
- // Common event handlers for the backend process
- this.backendProcess.stdout.on('data', (data) => {
- const output = data.toString().trim();
- console.log(`[Backend] ${output}`);
- this.backendLogs.push(output);
-
- // CRITICAL: Check for the specific port conflict error message from the Python script.
- if (output.includes('FATAL ERROR')) {
- dialog.showErrorBox(
- 'Backend Port Conflict',
- 'Port 8000 is already in use. Please close any other running instances of Fortuna Faucet or the backend service and try again.'
- );
- this.backendState = 'error';
- this.isBackendStarting = false;
- // Ensure the process is terminated.
- if (this.backendProcess && !this.backendProcess.killed) {
- this.backendProcess.kill();
- }
- } else if (this.backendState !== 'running' && (output.includes('Uvicorn running') || output.includes('Application startup complete'))) {
- console.log('✅ Backend is ready!');
- this.backendState = 'running';
- this.isBackendStarting = false;
- }
- this.sendBackendStatusUpdate();
- });
+    this.backendProcess.stdout.on('data', (data) => {
+      const output = data.toString().trim();
+      console.log(`[Backend] ${output}`);
+      this.backendLogs.push(output);
+      if (this.backendState !== 'running' && output.includes('Application startup complete')) {
+        console.log('✅ Backend is ready!');
+        this.backendState = 'running';
+        this.isBackendStarting = false;
+      }
+      this.sendBackendStatusUpdate();
+    });
 
  this.backendProcess.stderr.on('data', (data) => {
  const errorOutput = data.toString().trim();
