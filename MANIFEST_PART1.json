@@ -1,12 +1,14 @@
 [
-    "electron/assets/license.rtf",
-    "fortuna-backend-electron.spec",
-    "fortuna-backend-webservice.spec",
+    "VERSION.txt",
+    "electron/resources/.gitkeep",
+    "fortuna-webservice-electron.spec",
+    "pytest.ini",
+    "python_service/utils/odds.py",
     "requirements-dev.txt",
     "web_platform/frontend/src/components/RaceCard.tsx",
+    "web_service/backend/db/init.py",
+    "web_service/backend/middleware/error_handler.py",
+    "web_service/frontend/app/Providers.tsx",
     "web_service/frontend/app/hooks/useWebSocket.ts",
-    "web_service/frontend/app/lib/queryClient.ts",
-    "web_service/frontend/app/types/electron.d.ts",
-    "web_service/frontend/public/workbox-4754cb34.js",
-    "web_service/webservice.spec"
+    "web_service/frontend/public/workbox-4754cb34.js"
 ]
