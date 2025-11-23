@@ -1,15 +1,14 @@
 [
-    ".github/dependabot.yml",
     ".github/workflows/build-web-service-msi.yml",
     "AGENTS.md",
-    "README.md",
     "WISDOM.md",
-    "package.json",
-    "pytest.ini",
-    "web_service/backend/adapters/betfair_greyhound_adapter.py",
-    "web_service/backend/db/init.py",
+    "pyproject.toml",
+    "python_service/db/init.py",
+    "requirements.txt",
+    "web_platform/frontend/src/lib/queryClient.ts",
+    "web_platform/frontend/src/utils/exportManager.ts",
+    "web_platform/frontend/tsconfig.json",
     "web_service/backend/middleware/error_handler.py",
-    "web_service/backend/utils/odds.py",
-    "web_service/frontend/src/lib/queryClient.ts",
-    "web_service/frontend/src/utils/exportManager.ts"
+    "web_service/backend/tests/test_manual_override.py",
+    "wix/product_webservice.wxs"
 ]

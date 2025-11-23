@@ -17,36 +17,37 @@ def main():
     It's crucial to launch the app this way to ensure PyInstaller's bootloader
     can correctly resolve the package context.
     """
-    # When packaged, the executable's path needs to be added to sys.path
-    # to ensure that modules can be found.
+    # When packaged, we need to adjust the Python path to ensure that the
+    # top-level 'web_service' package can be found.
     if getattr(sys, "frozen", False):
-        # CRITICAL: This is required for multiprocessing to work correctly when
-        # the application is frozen with PyInstaller on Windows.
+        # CRITICAL for multiprocessing support in frozen mode on Windows.
         freeze_support()
 
-        # If the application is run as a bundle, the PyInstaller bootloader
-        # extends the sys module by a flag frozen=True and sets the app
-        # path into variable _MEIPASS'.
-        application_path = os.path.dirname(sys.executable)
-        sys.path.append(application_path)
-        # Also add the parent directory to allow for relative imports.
-        sys.path.append(os.path.join(application_path, ".."))
+        # Add the directory containing the executable to the path.
+        # This is the most reliable way to ensure the package is found.
+        project_root = os.path.dirname(os.path.abspath(sys.executable))
+        sys.path.insert(0, project_root)
 
-    # It's critical to import the app object *after* the path has been manipulated.
-    from python_service.api import app, HTTPException
-    from python_service.config import get_settings
-    from fastapi.staticfiles import StaticFiles
-    from fastapi.responses import FileResponse
-    from python_service.port_check import check_port_and_exit_if_in_use
+        # Also add the parent directory in case the executable is nested.
+        parent_dir = os.path.abspath(os.path.join(project_root, os.pardir))
+        sys.path.insert(0, parent_dir)
+
+    # It's critical to import dependencies *after* the path has been manipulated.
+    from web_service.backend.config import get_settings
+    from web_service.backend.port_check import check_port_and_exit_if_in_use
 
     settings = get_settings()
 
     # --- Port Sanity Check ---
-    # Before doing anything else, ensure the target port is not already in use.
-    # This prevents a common and confusing crash scenario on startup.
     check_port_and_exit_if_in_use(settings.FORTUNA_PORT, settings.UVICORN_HOST)
 
-    uvicorn.run(app, host=settings.UVICORN_HOST, port=settings.FORTUNA_PORT, log_level="info")
+    # Use string-based app import for PyInstaller compatibility
+    uvicorn.run(
+        "web_service.backend.api:app",
+        host=settings.UVICORN_HOST,
+        port=settings.FORTUNA_PORT,
+        log_level="info"
+    )
 
 
 if __name__ == "__main__":

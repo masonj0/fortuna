@@ -1,0 +1,192 @@
+name: Build Web Service as a Service MSI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '20'
+  PYTHON_VERSION: '3.12'
+  PYTHONUTF8: "1"
+
+jobs:
+  build-frontend:
+    name: '📦 Build Frontend (Web Service)'
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'web_service/frontend/package-lock.json'
+      - name: Frontend - Install & Build
+        shell: pwsh
+        run: |
+          cd web_service/frontend
+          npm ci
+          npm run build
+      - name: Verify Frontend Build
+        shell: pwsh
+        run: |
+          $outDir = 'web_service/frontend/out'
+          if (-not (Test-Path $outDir)) { throw "❌ FATAL: Build output directory 'out' not created" }
+      - name: Upload Frontend Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build-ws-service
+          path: web_service/frontend/out
+          retention-days: 1
+
+  build-backend:
+    name: '🐍 Build Backend (Web Service for Service)'
+    needs: [build-frontend]
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: 'web_service/backend/requirements.txt'
+      - name: Create Staging Directory for UI
+        shell: pwsh
+        run: New-Item -ItemType Directory -Path "staging/ui" -Force | Out-Null
+      - name: Download Frontend Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build-ws-service
+          path: staging/ui
+      - name: Install Python Dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r web_service/backend/requirements-dev.txt
+      - name: Verify Frontend Files Exist Before PyInstaller
+        shell: pwsh
+        run: |
+          $frontendOut = 'staging/ui'
+          if (-not (Test-Path $frontendOut)) {
+            Write-Host "❌ FATAL: Frontend build output missing at expected path!" -ForegroundColor Red
+            Write-Host "Expected: $frontendOut" -ForegroundColor Red
+            exit 1
+          }
+          $fileCount = (Get-ChildItem -Path $frontendOut -Recurse -File | Measure-Object).Count
+          if ($fileCount -eq 0) {
+            Write-Host "❌ FATAL: Frontend directory exists but is empty!" -ForegroundColor Red
+            exit 1
+          }
+          Write-Host "✅ Frontend files present: $fileCount files" -ForegroundColor Green
+
+          # Show first few files for debugging
+          Write-Host "`nFirst 5 frontend files:" -ForegroundColor Cyan
+          Get-ChildItem -Path $frontendOut -Recurse -File | Select-Object -First 5 | ForEach-Object {
+            Write-Host "  - $($_.FullName)" -ForegroundColor Gray
+          }
+      - name: Backend - Build with PyInstaller
+        shell: pwsh
+        run: pyinstaller fortuna-webservice-service.spec --noconfirm
+      - name: Upload Backend Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-executable-ws-service
+          path: dist/fortuna-webservice.exe
+          retention-days: 1
+
+  smoke-test-backend:
+    name: '🔥 Smoke Test Backend'
+    needs: [build-backend]
+    runs-on: windows-latest
+    env:
+      FORTUNA_MODE: webservice
+      FORTUNA_PORT: 8089 # Use a different port to avoid conflicts
+    steps:
+      - name: Download Backend Executable
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-executable-ws-service
+          path: ./dist
+      - name: Run Backend and Test
+        shell: pwsh
+        run: |
+          Start-Process -FilePath "./dist/fortuna-webservice.exe"
+          Write-Host "Waiting for backend to become available..."
+          Start-Sleep -Seconds 20
+          try {
+            $response = Invoke-WebRequest -Uri "http://127.0.0.1:$env:FORTUNA_PORT/health" -UseBasicParsing
+            if ($response.StatusCode -ne 200) { throw "Health check failed." }
+            $rootResponse = Invoke-WebRequest -Uri "http://127.0.0.1:$env:FORTUNA_PORT/" -UseBasicParsing
+            if ($rootResponse.StatusCode -ne 200 -or !$rootResponse.Content.Contains('<html')) { throw "Root HTML check failed." }
+            Write-Host "✅ Health and Root checks passed on port $env:FORTUNA_PORT!" -ForegroundColor Green
+          } catch {
+            throw "Smoke test failed."
+          } finally {
+            Stop-Process -Name "fortuna-webservice" -Force -ErrorAction SilentlyContinue
+          }
+
+  package-msi-service:
+    name: '💿 Package Service MSI (Web Service)'
+    needs: [smoke-test-backend]
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      - name: Download Backend Executable
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-executable-ws-service
+          path: ./dist
+      - name: Stage Artifacts
+        id: stage_files
+        shell: pwsh
+        run: |
+          $staging = "build_wix/staging"
+          New-Item -ItemType Directory -Path $staging -Force
+          Move-Item -Path "./dist/fortuna-webservice.exe" -Destination "$staging/fortuna-webservice.exe" -Force
+          $msiName = "Fortuna-As-A-Service-${{ github.ref_name }}.msi".Replace('/', '-')
+          if ($msiName -match "main") { $msiName = "Fortuna-As-A-Service-Nightly.msi" }
+          echo "msi_name=$msiName" >> $env:GITHUB_OUTPUT
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build MSI
+        working-directory: build_wix
+        shell: pwsh
+        run: |
+          # Use the Product_WithService.wxs configuration
+          $wixProjContent = @"
+          <Project Sdk="WixToolset.Sdk/4.0.5">
+            <PropertyGroup>
+              <OutputName>${{ steps.stage_files.outputs.msi_name }}</OutputName>
+              <OutputType>Package</OutputType>
+              <DefineConstants>SourceDir=staging</DefineConstants>
+              <Platforms>x64</Platforms>
+            </PropertyGroup>
+            <ItemGroup>
+              <PackageReference Include="WixToolset.Util.wixext" Version="4.0.5" />
+              <PackageReference Include="WixToolset.Firewall.wixext" Version="4.0.5" />
+              <PackageReference Include="WixToolset.UI.wixext" Version="4.0.5" />
+              <Compile Include="Product_WithService.wxs" />
+            </ItemGroup>
+          </Project>
+          "@
+          Set-Content -Path "FortunaWebService.wixproj" -Value $wixProjContent -Encoding UTF8
+          dotnet build FortunaWebService.wixproj -c Release -p:Platform=x64
+          $msiPath = "bin/x64/Release/Package.msi" # Default name
+          if (-not (Test-Path $msiPath)) { throw "❌ Service MSI was not created." }
+          New-Item -ItemType Directory -Path "dist" -Force
+          Copy-Item -Path $msiPath -Destination "dist/${{ steps.stage_files.outputs.msi_name }}" -Force
+      - name: Upload MSI Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fortuna-installer-webservice-as-a-service
+          path: build_wix/dist/*.msi
+          retention-days: 1

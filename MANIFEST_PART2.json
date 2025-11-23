@@ -1,13 +1,13 @@
 [
-    "VERSION.txt",
-    "electron/resources/.gitkeep",
-    "fortuna-backend-webservice.spec",
-    "pyproject.toml",
+    ".github/dependabot.yml",
+    "ARCHITECTURAL_MANDATE.md",
+    "fortuna-webservice-electron.spec",
+    "package.json",
     "python_service/core/exceptions.py",
-    "python_service/middleware/error_handler.py",
+    "python_service/tests/test_manual_override.py",
+    "web_platform/api_gateway/src/services/DatabaseService.ts",
     "web_platform/frontend/app/Providers.tsx",
-    "web_platform/frontend/src/components/RaceCard.tsx",
-    "web_service/frontend/public/workbox-4754cb34.js",
-    "web_service/frontend/src/hooks/useWebSocket.ts",
-    "wix/product_webservice.wxs"
+    "web_platform/frontend/public/workbox-4754cb34.js",
+    "web_service/backend/db/init.py",
+    "web_service/frontend/app/components/RaceCard.tsx"
 ]

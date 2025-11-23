@@ -70,7 +70,8 @@ def get_all_project_files():
     top_level_files = [
         "AGENTS.md", "ARCHITECTURAL_MANDATE.md", "HISTORY.md", "README.md",
         "WISDOM.md", "PSEUDOCODE.MD", "VERSION.txt", "fortuna-backend-electron.spec",
-        "fortuna-backend-webservice.spec", "pyproject.toml", "pytest.ini",
+        "fortuna-backend-webservice.spec", "fortuna-webservice-electron.spec",
+        "fortuna-webservice-service.spec", "pyproject.toml", "pytest.ini",
         "requirements.txt", "requirements-dev.txt", "package.json", "package-lock.json"
     ]
     for file_name in top_level_files:
