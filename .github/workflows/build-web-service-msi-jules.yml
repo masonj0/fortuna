@@ -2,9 +2,8 @@ name: Build Fortuna Web Service MSI Installer
 
 on:
   push:
-    branches: [main]
-    tags:
-      - 'v*'
+    branches:
+      - main
   workflow_dispatch:
 
 env:

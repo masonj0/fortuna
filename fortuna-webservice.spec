@@ -59,7 +59,7 @@ hiddenimports = [
 ]
 
 a = Analysis(
-    ['web_service/backend/run_web_service_backend.py'],
+    ['run_web_service.py'],
     pathex=[],
     binaries=[],
     datas=datas,
