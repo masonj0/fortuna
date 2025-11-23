@@ -3,13 +3,11 @@
     "AGENTS.md",
     "WISDOM.md",
     "fortuna-backend-electron.spec",
-    "package.json",
-    "pytest.ini",
     "requirements.txt",
-    "scripts/install_fortuna_gui.bat",
-    "web_platform/frontend/app/Providers.tsx",
+    "web_platform/frontend/src/types/electron.d.ts",
     "web_service/backend/utils/odds.py",
-    "web_service/frontend/app/types/electron.d.ts",
+    "web_service/frontend/app/lib/queryClient.ts",
     "web_service/frontend/app/utils/exportManager.ts",
+    "web_service/frontend/tsconfig.json",
     "wix/product_webservice.wxs"
 ]

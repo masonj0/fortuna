@@ -4,11 +4,11 @@
     "fortuna-backend-webservice.spec",
     "package-lock.json",
     "python_service/adapters/betfair_greyhound_adapter.py",
+    "python_service/db/init.py",
     "python_service/fortuna_service.py",
+    "python_service/tests/test_manual_override.py",
     "web_platform/api_gateway/src/server.ts",
-    "web_platform/frontend/src/lib/queryClient.ts",
-    "web_platform/frontend/src/utils/exportManager.ts",
-    "web_service/backend/tests/test_web_service_manual_override.py",
-    "web_service/frontend/tsconfig.json",
+    "web_platform/api_gateway/tsconfig.json",
+    "web_platform/frontend/tsconfig.json",
     "web_service/webservice.spec"
 ]

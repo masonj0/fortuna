@@ -122,10 +122,10 @@ jobs:
       - name: Run Backend and Frontend
         shell: pwsh
         run: |
-          $backendProcess = Start-Process -FilePath "./fortuna-webservice-backend.exe" -PassThru -RedirectStandardOutput "backend.log" -RedirectStandardError "backend.log"
+          $backendProcess = Start-Process -FilePath "./fortuna-webservice-backend.exe" -PassThru -RedirectStandardOutput "backend-out.log" -RedirectStandardError "backend-err.log"
           Set-Content -Path "backend.pid" -Value $backendProcess.Id
           Push-Location ./frontend
-          $frontendProcess = Start-Process python -ArgumentList "-m http.server ${{ env.SMOKE_FRONTEND_PORT }}" -PassThru -RedirectStandardOutput "../frontend.log" -RedirectStandardError "../frontend.log"
+          $frontendProcess = Start-Process python -ArgumentList "-m http.server ${{ env.SMOKE_FRONTEND_PORT }}" -PassThru -RedirectStandardOutput "../frontend-out.log" -RedirectStandardError "../frontend-err.log"
           Pop-Location
           Set-Content -Path "frontend.pid" -Value $frontendProcess.Id
           Start-Sleep -Seconds 10
