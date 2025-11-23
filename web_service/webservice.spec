@@ -40,6 +40,7 @@ a = Analysis(
         'slowapi.util',
         'pydantic_settings',
         'httpx',
+        'tenacity',
     ],
     hookspath=[],
     hooksconfig={},
