@@ -187,53 +187,38 @@ app.add_middleware(
 )
 
 # --- Conditional UI Serving for Web Service Mode ---
-# This block is critical for the web service deployment. It mounts the static
-# frontend files only when the application is running in 'webservice' mode.
 if os.environ.get("FORTUNA_MODE") == "webservice":
     import sys
     from fastapi.staticfiles import StaticFiles
     from starlette.responses import FileResponse
+    from starlette.middleware.base import BaseHTTPMiddleware
 
-    log.info("Application running in 'webservice' mode, attempting to mount static UI.")
+    log.info("Application running in 'webservice' mode, configuring static file serving.")
 
-    # Determine the directory for static files based on whether the app is frozen
     if getattr(sys, "frozen", False):
-        # In a PyInstaller bundle, static files are in the 'ui' directory
         static_files_dir = os.path.join(sys._MEIPASS, "ui")
     else:
-        # In development, they are in the frontend's output directory
         static_files_dir = os.path.abspath(
             os.path.join(os.path.dirname(__file__), "..", "web_service", "frontend", "out")
         )
 
-    log.info(f"Serving static files from: {static_files_dir}")
+    log.info(f"Static file directory set to: {static_files_dir}")
 
     if not os.path.exists(static_files_dir):
-        log.warning(
-            "Static files directory not found. Frontend will not be served.",
-            path=static_files_dir
-        )
+        log.error("Static files directory not found! UI will not be served.", path=static_files_dir)
     else:
-        # Mount the '_next' directory for Next.js assets
-        app.mount(
-            "/_next",
-            StaticFiles(directory=os.path.join(static_files_dir, "_next")),
-            name="next",
-        )
+        class SpaMiddleware(BaseHTTPMiddleware):
+            async def dispatch(self, request, call_next):
+                response = await call_next(request)
+                if response.status_code == 404 and not request.url.path.startswith('/api'):
+                    index_path = os.path.join(static_files_dir, "index.html")
+                    if os.path.exists(index_path):
+                        return FileResponse(index_path)
+                return response
 
-        # Catch-all route to serve the main index.html for any non-API path
-        # This is the key to making the single-page application routing work
-        @app.get("/{full_path:path}", include_in_schema=False)
-        async def serve_frontend_app(request: Request):
-            # Let previously defined API routes take precedence
-            if request.scope.get("route"):
-                return await request.scope["route"].handle(request)
+        app.add_middleware(SpaMiddleware)
 
-            index_path = os.path.join(static_files_dir, "index.html")
-            if os.path.exists(index_path):
-                return FileResponse(index_path)
-            else:
-                return HTTPException(status_code=404, detail="Frontend entry point not found.")
+        app.mount("/", StaticFiles(directory=static_files_dir), name="static")
 
 def get_engine(request: Request) -> OddsEngine:
     return request.app.state.engine
