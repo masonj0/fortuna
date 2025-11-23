@@ -94,10 +94,10 @@ jobs:
           retention-days: 1
 
   # ============================================================================
-  # JOB 2B: SMOKE TEST BACKEND
+  # JOB 2B: SMOKE TEST SERVICE (BACKEND + FRONTEND)
   # ============================================================================
-  smoke-test-backend:
-    name: '🔥 Smoke Test Backend'
+  smoke-test-service:
+    name: '🔥 Smoke Test Service'
     needs: [build-backend]
     runs-on: windows-latest
     env:
@@ -109,13 +109,13 @@ jobs:
         with:
           name: backend-executable
           path: ./dist
-      - name: Run Backend and Test
+      - name: Run Backend Health Check
         shell: pwsh
         run: |
           $stdOutLog = "backend-out.log"
           $stdErrLog = "backend-err.log"
           Write-Host "Starting backend on port $env:FORTUNA_PORT"
-          Start-Process -FilePath "./dist/fortuna-backend.exe" -RedirectStandardOutput $stdOutLog -RedirectStandardError $stdErrLog
+          Start-Process -FilePath "./dist/fortuna-backend.exe" -RedirectStandardOutput $stdOutLog -RedirectStandardError $stdErrLog -PassThru
           Write-Host "Waiting for backend to become available..."
           $timeout = New-TimeSpan -Seconds 30
           $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
@@ -124,7 +124,7 @@ jobs:
               try {
                   $response = Invoke-WebRequest -Uri "http://127.0.0.1:$env:FORTUNA_PORT/health" -UseBasicParsing -TimeoutSec 2
                   if ($response.StatusCode -eq 200) {
-                      Write-Host "✅ Health check passed on port $env:FORTUNA_PORT!" -ForegroundColor Green
+                      Write-Host "✅ Backend health check passed on port $env:FORTUNA_PORT!" -ForegroundColor Green
                       $healthCheckPassed = $true
                       break
                   }
@@ -146,14 +146,77 @@ jobs:
               }
               throw "Backend health check failed."
           }
-          Stop-Process -Name "fortuna-backend" -Force -ErrorAction SilentlyContinue
+      - name: Frontend UI Verification
+        shell: pwsh
+        run: |
+          Write-Host "Installing Playwright..."
+          pip install playwright
+          python -m playwright install --with-deps
+          Write-Host "Creating Playwright verification script..."
+          $scriptContent = @"
+          import sys
+          from playwright.sync_api import sync_playwright, expect
+
+          def run_verification():
+              with sync_playwright() as p:
+                  try:
+                      browser = p.chromium.launch()
+                      page = browser.new_page()
+                      url = "http://127.0.0.1:${{ env.FORTUNA_PORT }}"
+                      print(f"Navigating to {url}...")
+                      page.goto(url, wait_until='networkidle', timeout=20000)
+
+                      print("Checking for dashboard heading...")
+                      heading = page.locator("h1:has-text('Fortuna Faucet')")
+                      expect(heading).to_be_visible(timeout=10000)
+                      print("✅ Dashboard heading found!")
+
+                      print("Taking screenshot...")
+                      page.screenshot(path='smoke-test-screenshot.png')
+                      print("✅ Screenshot captured.")
+
+                      browser.close()
+                      print("✅ Frontend verification successful!")
+                      sys.exit(0)
+                  except Exception as e:
+                      print(f"❌ An error occurred during frontend verification: {e}", file=sys.stderr)
+                      # Still try to take a screenshot on failure for debugging
+                      try:
+                          page.screenshot(path='smoke-test-screenshot-FAILURE.png')
+                          print("📸 Captured failure screenshot.")
+                      except:
+                          pass # Ignore if screenshot fails in a failed state
+                      sys.exit(1)
+
+          if __name__ == "__main__":
+              run_verification()
+          "@
+          Set-Content -Path "verify_frontend.py" -Value $scriptContent
+          Write-Host "Executing Playwright verification script..."
+          python verify_frontend.py
+      - name: Upload Verification Screenshot
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-test-screenshot
+          path: |
+            smoke-test-screenshot.png
+            smoke-test-screenshot-FAILURE.png
+          retention-days: 7
+      - name: Teardown Backend Process
+        if: always()
+        shell: pwsh
+        run: |
+            Stop-Process -Name "fortuna-backend" -Force -ErrorAction SilentlyContinue
+            Write-Host "Backend process has been stopped."
+
 
   # ============================================================================
   # JOB 3: PACKAGE SERVICE MSI
   # ============================================================================
   package-msi-service:
     name: '💿 Package Service MSI'
-    needs: [smoke-test-backend]
+    needs: [smoke-test-service]
     runs-on: windows-latest
     steps:
       - name: Checkout Repository

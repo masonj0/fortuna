@@ -102,120 +102,84 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
-  smoke-test-backend:
-    name: '🧪 Smoke Test Backend Executable'
-    timeout-minutes: 10
-    needs: [build-backend]
+  smoke-test-service:
+    name: '🧪 Smoke Test Service (Backend + Frontend)'
+    timeout-minutes: 15
+    needs: [build-backend, build-frontend]
     runs-on: windows-latest
     steps:
-      - name: Download Backend Executable
+      - name: Download Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: backend-executable-${{ github.sha }}
-      - name: Run Smoke Test
+          path: ./artifacts
+      - name: Stage Files
         shell: pwsh
-        timeout-minutes: 5
+        run: |
+          Get-ChildItem -Path ./artifacts -Recurse
+          Move-Item -Path "./artifacts/backend-executable-${{ github.sha }}/fortuna-backend.exe" -Destination "./fortuna-backend.exe"
+          New-Item -ItemType Directory -Path "./frontend" -Force
+          Move-Item -Path "./artifacts/frontend-build-output-${{ github.sha }}/*" -Destination "./frontend"
+      - name: Run Backend and Frontend
+        shell: pwsh
         env:
           API_KEY: "a_secure_test_api_key_that_is_long_enough_for_smoke_test"
+          FORTUNA_PORT: 8000
         run: |
-          $exe = './fortuna-backend.exe'
-          $logDir = 'logs'
-          $stdOutPath = Join-Path $logDir 'backend-out.txt'
-          $stdErrPath = Join-Path $logDir 'backend-err.txt'
+          $backendLog = "backend.log"
+          $frontendLog = "frontend.log"
+          Start-Process -FilePath "./fortuna-backend.exe" -RedirectStandardOutput $backendLog -RedirectStandardError $backendLog
+          Push-Location ./frontend
+          Start-Process python -ArgumentList "-m http.server 3000" -RedirectStandardOutput $frontendLog -RedirectStandardError $frontendLog
+          Pop-Location
+          Start-Sleep -Seconds 10
+      - name: Frontend UI Verification
+        shell: pwsh
+        run: |
+          pip install playwright
+          python -m playwright install --with-deps
+          $scriptContent = @"
+          import sys
+          from playwright.sync_api import sync_playwright, expect
 
-          if (-not (Test-Path $logDir)) {
-            New-Item -ItemType Directory -Path $logDir -Force | Out-Null
-          }
+          def run_verification():
+              with sync_playwright() as p:
+                  try:
+                      browser = p.chromium.launch()
+                      page = browser.new_page()
+                      url = "http://127.0.0.1:3000"
+                      page.goto(url, wait_until='networkidle', timeout=20000)
+                      heading = page.locator("h1:has-text('Fortuna Faucet')")
+                      expect(heading).to_be_visible(timeout=10000)
+                      page.screenshot(path='smoke-test-screenshot.png')
+                      browser.close()
+                      sys.exit(0)
+                  except Exception as e:
+                      print(f"Error: {e}", file=sys.stderr)
+                      sys.exit(1)
 
-          Write-Host "Starting backend process..." -ForegroundColor Cyan
-          $process = Start-Process -FilePath $exe `
-            -PassThru `
-            -NoNewWindow `
-            -RedirectStandardOutput $stdOutPath `
-            -RedirectStandardError $stdErrPath `
-            -ErrorAction Stop
-
-          Write-Host "Backend process started (PID: $($process.Id))" -ForegroundColor Green
-
-          $serverReady = $false
-          $maxAttempts = 40
-          $attemptCount = 0
-
-          try {
-            for ($i = 1; $i -le $maxAttempts; $i++) {
-              $attemptCount = $i
-
-              if ($process.HasExited) {
-                Write-Host "❌ Backend process exited unexpectedly (Exit Code: $($process.ExitCode))" -ForegroundColor Red
-                break
-              }
-
-              try {
-                Write-Host "Attempt $i/${maxAttempts}: Checking /health endpoint..." -ForegroundColor Gray
-                $response = Invoke-WebRequest `
-                  -Uri 'http://127.0.0.1:8000/health' `
-                  -TimeoutSec 2 `
-                  -UseBasicParsing `
-                  -ErrorAction SilentlyContinue
-
-                if ($response.StatusCode -eq 200) {
-                  Write-Host "✅ Health endpoint responded" -ForegroundColor Green
-
-                  Write-Host "Checking /api/races endpoint..." -ForegroundColor Gray
-                  $headers = @{ 'X-API-Key' = $env:API_KEY }
-                  $apiResponse = Invoke-WebRequest `
-                    -Uri 'http://127.0.0.1:8000/api/races' `
-                    -Headers $headers `
-                    -TimeoutSec 2 `
-                    -UseBasicParsing `
-                    -ErrorAction SilentlyContinue
-
-                  if ($apiResponse.StatusCode -eq 200 -or $apiResponse.StatusCode -eq 400 -or $apiResponse.StatusCode -eq 401) {
-                    Write-Host "✅ API endpoint responded (Status: $($apiResponse.StatusCode))" -ForegroundColor Green
-                    $serverReady = $true
-                    break
-                  }
-                }
-              } catch {
-                Write-Host "  (waiting...)" -ForegroundColor Gray
-              }
-
-              Start-Sleep -Seconds 1.5
-            }
-          } finally {
-            Write-Host "Stopping backend process..." -ForegroundColor Cyan
-            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-            Start-Sleep -Milliseconds 500
-          }
-
-          if (-not $serverReady) {
-            Write-Host "❌ SMOKE TEST FAILED: Backend did not become healthy" -ForegroundColor Red
-            Write-Host "Attempts: ${attemptCount}/${maxAttempts}" -ForegroundColor Red
-
-            if (Test-Path $stdOutPath) {
-              Write-Host "`n--- STDOUT (last 30 lines) ---" -ForegroundColor Yellow
-              Get-Content $stdOutPath -Tail 30 | Write-Host
-            }
-            if (Test-Path $stdErrPath) {
-              Write-Host "`n--- STDERR (last 30 lines) ---" -ForegroundColor Yellow
-              Get-Content $stdErrPath -Tail 30 | Write-Host
-            }
-            exit 1
-          }
-
-          Write-Host "`n✅ SMOKE TEST PASSED on attempt $attemptCount" -ForegroundColor Green
-      - name: Upload Smoke Test Logs
+          if __name__ == "__main__":
+              run_verification()
+          "@
+          Set-Content -Path "verify_frontend.py" -Value $scriptContent
+          python verify_frontend.py
+      - name: Upload Verification Screenshot
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: smoke-test-logs-${{ github.sha }}
-          path: logs/
-          retention-days: 3
+          name: smoke-test-screenshot-${{ github.sha }}
+          path: smoke-test-screenshot.png
+          retention-days: 7
+      - name: Teardown Processes
+        if: always()
+        shell: pwsh
+        run: |
+          Stop-Process -Name "fortuna-backend" -Force -ErrorAction SilentlyContinue
+          Stop-Process -Name "python" -Force -ErrorAction SilentlyContinue
 
   package-and-test:
     name: '🏆 Package & Test Electron Installer'
     timeout-minutes: 25
-    needs: [build-frontend, smoke-test-backend]
+    needs: [build-frontend, smoke-test-service]
     runs-on: windows-latest
     steps:
       - name: Checkout Repository
