@@ -83,6 +83,23 @@ jobs:
         run: |
           New-Item -ItemType Directory -Path "python_service/data" -Force | Out-Null
           New-Item -ItemType Directory -Path "python_service/json" -Force | Out-Null
+      - name: Verify PyInstaller Entry Point
+        shell: pwsh
+        run: |
+          $specFile = "fortuna-backend-webservice.spec"
+          if (-not (Test-Path $specFile)) { throw "❌ FATAL: Spec file not found: $specFile" }
+          $specContent = Get-Content $specFile -Raw
+          if ($specContent -match "Analysis\(\s*\[?'([^']+)'") {
+            $entryPoint = $matches[1]
+            $entryPointPath = $entryPoint -replace '/', '\'
+            if (Test-Path $entryPointPath) {
+              Write-Host "✅ Entry point file exists: $entryPointPath" -ForegroundColor Green
+            } else {
+              throw "❌ FATAL: Entry point file NOT found: $entryPointPath"
+            }
+          } else {
+            throw "⚠️ WARNING: Could not parse entry point from spec file"
+          }
       - name: Backend - Build with PyInstaller
         shell: pwsh
         run: pyinstaller fortuna-backend-webservice.spec --noconfirm
@@ -94,66 +111,89 @@ jobs:
           retention-days: 1
 
   # ============================================================================
-  # JOB 2B: SMOKE TEST BACKEND
+  # JOB 2B: SMOKE TEST SERVICE (BACKEND + FRONTEND)
   # ============================================================================
-  smoke-test-backend:
-    name: '🔥 Smoke Test Backend'
+  smoke-test-service:
+    name: '🧪 Smoke Test Service (Backend + Frontend)'
+    timeout-minutes: 15
     needs: [build-backend]
     runs-on: windows-latest
     env:
-      FORTUNA_MODE: webservice
+      API_KEY: "a_secure_test_api_key_that_is_long_enough_for_smoke_test"
+      FORTUNA_MODE: "webservice"
       FORTUNA_PORT: 8088
+      SMOKE_FRONTEND_URL: "http://127.0.0.1:8088"
+      SMOKE_HEADING_SELECTOR: "h1:has-text('Fortuna Faucet')"
+      SMOKE_SCREENSHOT_PATH: "smoke-test-screenshot.png"
+      SMOKE_FAILURE_SCREENSHOT_PATH: "smoke-test-screenshot-FAILURE.png"
     steps:
-      - name: Download Backend Executable
+      - name: Download Artifacts
         uses: actions/download-artifact@v4
         with:
           name: backend-executable
-          path: ./dist
-      - name: Run Backend and Test
+          path: .
+      - name: Run Backend
         shell: pwsh
         run: |
-          $stdOutLog = "backend-out.log"
-          $stdErrLog = "backend-err.log"
-          Write-Host "Starting backend on port $env:FORTUNA_PORT"
-          Start-Process -FilePath "./dist/fortuna-backend.exe" -RedirectStandardOutput $stdOutLog -RedirectStandardError $stdErrLog
-          Write-Host "Waiting for backend to become available..."
-          $timeout = New-TimeSpan -Seconds 30
-          $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-          $healthCheckPassed = $false
-          while ($stopwatch.Elapsed -lt $timeout) {
-              try {
-                  $response = Invoke-WebRequest -Uri "http://127.0.0.1:$env:FORTUNA_PORT/health" -UseBasicParsing -TimeoutSec 2
-                  if ($response.StatusCode -eq 200) {
-                      Write-Host "✅ Health check passed on port $env:FORTUNA_PORT!" -ForegroundColor Green
-                      $healthCheckPassed = $true
-                      break
-                  }
-              } catch {
-                  Write-Host "  - Backend not ready yet, retrying in 3 seconds..."
-              }
-              Start-Sleep -Seconds 3
-          }
-          $stopwatch.Stop()
-          if (-not $healthCheckPassed) {
-              Write-Host "❌ FATAL: Backend health check timed out after $($timeout.TotalSeconds) seconds." -ForegroundColor Red
-              if (Test-Path $stdOutLog) {
-                  Write-Host "--- Backend Standard Output (last 50 lines) ---"
-                  Get-Content $stdOutLog -Tail 50
-              }
-              if (Test-Path $stdErrLog) {
-                  Write-Host "--- Backend Standard Error (last 50 lines) ---"
-                  Get-Content $stdErrLog -Tail 50
-              }
-              throw "Backend health check failed."
-          }
-          Stop-Process -Name "fortuna-backend" -Force -ErrorAction SilentlyContinue
+          $backendProcess = Start-Process -FilePath "./fortuna-backend.exe" -PassThru -RedirectStandardOutput "backend.log" -RedirectStandardError "backend.log"
+          Set-Content -Path "backend.pid" -Value $backendProcess.Id
+          Start-Sleep -Seconds 10
+      - name: Frontend UI Verification
+        shell: pwsh
+        run: |
+          pip install playwright
+          if ($LASTEXITCODE -ne 0) { throw "Playwright installation via pip failed." }
+          python -m playwright install --with-deps
+          if ($LASTEXITCODE -ne 0) { throw "Playwright browser installation failed." }
+          $scriptContent = @"
+          import sys, os
+          from playwright.sync_api import sync_playwright, expect
+
+          def run_verification():
+              with sync_playwright() as p:
+                  browser = p.chromium.launch()
+                  page = browser.new_page()
+                  try:
+                      url = os.environ["SMOKE_FRONTEND_URL"]
+                      page.goto(url, wait_until='networkidle', timeout=20000)
+                      heading = page.locator(os.environ["SMOKE_HEADING_SELECTOR"])
+                      expect(heading).to_be_visible(timeout=10000)
+                      page.screenshot(path=os.environ["SMOKE_SCREENSHOT_PATH"])
+                      sys.exit(0)
+                  except Exception as e:
+                      print(f"Error: {e}", file=sys.stderr)
+                      page.screenshot(path=os.environ["SMOKE_FAILURE_SCREENSHOT_PATH"])
+                      sys.exit(1)
+                  finally:
+                      browser.close()
+
+          if __name__ == "__main__":
+              run_verification()
+          "@
+          Set-Content -Path "verify_frontend.py" -Value $scriptContent
+          python verify_frontend.py
+      - name: Upload Verification Screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-test-screenshot-${{ github.sha }}
+          path: |
+            ${{ env.SMOKE_SCREENSHOT_PATH }}
+            ${{ env.SMOKE_FAILURE_SCREENSHOT_PATH }}
+          if-no-files-found: warn
+      - name: Teardown Processes
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path "backend.pid") { Get-Content "backend.pid" | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } }
+
 
   # ============================================================================
   # JOB 3: PACKAGE SERVICE MSI
   # ============================================================================
   package-msi-service:
     name: '💿 Package Service MSI'
-    needs: [smoke-test-backend]
+    needs: [smoke-test-service]
     runs-on: windows-latest
     steps:
       - name: Checkout Repository

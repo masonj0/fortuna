@@ -3,7 +3,7 @@
 block_cipher = None
 
 a = Analysis(
-    ['web_service/backend/main.py'],
+    ['web_service/backend/run_web_service_backend.py'],
     pathex=[],
     binaries=[],
     datas=[
@@ -11,17 +11,24 @@ a = Analysis(
         ('staging/ui', 'ui'),
     ],
     hiddenimports=[
-        'uvicorn.logging', 'uvicorn.loops', 'uvicorn.loops.auto', 'uvicorn.protocols',
-        'uvicorn.protocols.http', 'uvicorn.protocols.http.auto', 'uvicorn.protocols.websockets',
-        'uvicorn.protocols.websockets.auto', 'uvicorn.lifespan', 'uvicorn.lifespan.on',
-        'fastapi.middleware', 'fastapi.middleware.cors',
-        'starlette.middleware', 'starlette.middleware.cors',
-        'pydantic_settings',
+        'uvicorn.logging',
+        'uvicorn.loops.auto',
+        'uvicorn.protocols.http.h11_impl',
+        'uvicorn.protocols.http.httptools_impl',
+        'uvicorn.protocols.websockets.wsproto_impl',
+        'uvicorn.protocols.websockets.websockets_impl',
+        'uvicorn.lifespan.on',
+        'fastapi.routing',
+        'fastapi.middleware.cors',
+        'starlette.staticfiles',
+        'starlette.middleware.cors',
+        'pydantic_core',
+        'pydantic_settings.sources',
+        'anyio._backends._asyncio',
+        'httpcore',
+        'python_multipart',
         'slowapi', 'slowapi.middleware', 'slowapi.util', 'slowapi.errors',
-        'structlog', 'tenacity', 'httpx', 'aiosqlite',
-        'uvicorn.protocols.http.h11_impl', 'uvicorn.protocols.http.httptools_impl',
-        'uvicorn.protocols.websockets.wsproto_impl', 'uvicorn.protocols.websockets.websockets_impl',
-        'anyio._backends._asyncio', 'httpcore', 'python_multipart'
+        'structlog', 'tenacity', 'httpx', 'aiosqlite'
     ],
     hookspath=[],
     hooksconfig={},
