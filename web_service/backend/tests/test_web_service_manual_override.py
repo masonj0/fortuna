@@ -1,7 +1,7 @@
 # python_service/tests/test_manual_override.py
 import pytest
 
-from python_service.manual_override_manager import ManualOverrideManager
+from manual_override_manager import ManualOverrideManager
 
 
 @pytest.fixture
