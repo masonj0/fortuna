@@ -1,13 +1,12 @@
 [
-    ".github/dependabot.yml",
     "ARCHITECTURAL_MANDATE.md",
-    "fortuna-webservice-electron.spec",
-    "package.json",
+    "electron/assets/license.rtf",
+    "fortuna-webservice-service.spec",
     "python_service/core/exceptions.py",
-    "python_service/tests/test_manual_override.py",
-    "web_platform/api_gateway/src/services/DatabaseService.ts",
-    "web_platform/frontend/app/Providers.tsx",
-    "web_platform/frontend/public/workbox-4754cb34.js",
-    "web_service/backend/db/init.py",
-    "web_service/frontend/app/components/RaceCard.tsx"
+    "python_service/db/init.py",
+    "python_service/utils/odds.py",
+    "web_platform/api_gateway/tsconfig.json",
+    "web_service/backend/middleware/error_handler.py",
+    "web_service/frontend/app/components/RaceCard.tsx",
+    "web_service/frontend/public/workbox-4754cb34.js"
 ]
