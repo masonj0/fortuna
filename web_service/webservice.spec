@@ -11,7 +11,7 @@ if os.path.exists(frontend_out):
     frontend_datas = [(frontend_out, 'ui')]
 
 a = Analysis(
-    ['backend/main.py'],
+    ['run_web_service.py'],
     pathex=[],
     binaries=[],
     datas=[

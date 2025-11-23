@@ -17,22 +17,11 @@ def main():
     It's crucial to launch the app this way to ensure PyInstaller's bootloader
     can correctly resolve the package context.
     """
-    # When packaged, the executable's path needs to be added to sys.path
-    # to ensure that modules can be found.
+    # When packaged, we need to ensure multiprocessing works correctly.
     if getattr(sys, "frozen", False):
-        # CRITICAL: This is required for multiprocessing to work correctly when
-        # the application is frozen with PyInstaller on Windows.
+        # CRITICAL for multiprocessing support in frozen mode on Windows.
         freeze_support()
 
-        # If the application is run as a bundle, the PyInstaller bootloader
-        # extends the sys module by a flag frozen=True and sets the app
-        # path into variable _MEIPASS'.
-        application_path = os.path.dirname(sys.executable)
-        sys.path.append(application_path)
-        # Also add the parent directory to allow for relative imports.
-        sys.path.append(os.path.join(application_path, ".."))
-
-    # It's critical to import the app object *after* the path has been manipulated.
     from python_service.api import app, HTTPException
     from python_service.config import get_settings
     from fastapi.staticfiles import StaticFiles
