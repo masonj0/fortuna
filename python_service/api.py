@@ -1,6 +1,7 @@
 # python_service/api.py
 
 import asyncio
+import os
 import time
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
@@ -185,6 +186,39 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --- Conditional UI Serving for Web Service Mode ---
+if os.environ.get("FORTUNA_MODE") == "webservice":
+    import sys
+    from fastapi.staticfiles import StaticFiles
+    from starlette.responses import FileResponse
+    from starlette.middleware.base import BaseHTTPMiddleware
+
+    log.info("Application running in 'webservice' mode, configuring static file serving.")
+
+    if getattr(sys, "frozen", False):
+        static_files_dir = os.path.join(sys._MEIPASS, "ui")
+    else:
+        static_files_dir = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..", "web_service", "frontend", "out")
+        )
+
+    log.info(f"Static file directory set to: {static_files_dir}")
+
+    if not os.path.exists(static_files_dir):
+        log.error("Static files directory not found! UI will not be served.", path=static_files_dir)
+    else:
+        class SpaMiddleware(BaseHTTPMiddleware):
+            async def dispatch(self, request, call_next):
+                response = await call_next(request)
+                if response.status_code == 404 and not request.url.path.startswith('/api'):
+                    index_path = os.path.join(static_files_dir, "index.html")
+                    if os.path.exists(index_path):
+                        return FileResponse(index_path)
+                return response
+
+        app.add_middleware(SpaMiddleware)
+
+        app.mount("/", StaticFiles(directory=static_files_dir), name="static")
 
 def get_engine(request: Request) -> OddsEngine:
     return request.app.state.engine
