@@ -1,13 +1,17 @@
 name: Build Fortuna Faucet MSI Installer - 🏆 PRODUCTION FORTRESS
 
-on:
-  push:
-    branches: [main]
-    tags:
-      - 'v*'
-  pull_request:
-    branches: [main]
-  workflow_dispatch:
+#
+# Manually deactivated by JB's request on 2025-11-23 to prevent it from running.
+# This workflow is preserved for reference but is not currently in use.
+#
+# on:
+#   push:
+#     branches: [main]
+#     tags:
+#       - 'v*'
+#   pull_request:
+#     branches: [main]
+#   workflow_dispatch:
 
 env:
   NODE_VERSION: '20'
