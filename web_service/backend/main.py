@@ -17,20 +17,20 @@ def main():
     It's crucial to launch the app this way to ensure PyInstaller's bootloader
     can correctly resolve the package context.
     """
-    # When packaged, the executable's path needs to be added to sys.path
-    # to ensure that modules can be found.
+    # When packaged, we need to adjust the Python path to ensure that the
+    # top-level 'web_service' package can be found.
     if getattr(sys, "frozen", False):
-        # CRITICAL: This is required for multiprocessing to work correctly when
-        # the application is frozen with PyInstaller on Windows.
+        # CRITICAL for multiprocessing support in frozen mode on Windows.
         freeze_support()
 
-        # If the application is run as a bundle, the PyInstaller bootloader
-        # extends the sys module by a flag frozen=True and sets the app
-        # path into variable _MEIPASS'.
-        application_path = os.path.dirname(sys.executable)
-        sys.path.append(application_path)
-        # Also add the parent directory to allow for relative imports.
-        sys.path.append(os.path.join(application_path, ".."))
+        # Add the directory containing the executable to the path.
+        # This is the most reliable way to ensure the package is found.
+        project_root = os.path.dirname(os.path.abspath(sys.executable))
+        sys.path.insert(0, project_root)
+
+        # Also add the parent directory in case the executable is nested.
+        parent_dir = os.path.abspath(os.path.join(project_root, os.pardir))
+        sys.path.insert(0, parent_dir)
 
     # It's critical to import dependencies *after* the path has been manipulated.
     from web_service.backend.config import get_settings
