@@ -1,12 +1,12 @@
 [
-    "ARCHITECTURAL_MANDATE.md",
+    "electron/secure-settings-manager.js",
+    "python_service/db/init.py",
     "python_service/tests/test_manual_override.py",
     "python_service/utils/odds.py",
-    "web_platform/api_gateway/src/services/DatabaseService.ts",
-    "web_platform/frontend/public/workbox-4754cb34.js",
+    "requirements-dev.txt",
+    "web_platform/frontend/src/components/RaceCard.tsx",
     "web_platform/frontend/src/lib/queryClient.ts",
-    "web_platform/frontend/src/types/electron.d.ts",
-    "web_platform/frontend/src/utils/exportManager.ts",
-    "web_service/frontend/src/components/RaceCard.tsx",
+    "web_service/frontend/app/utils/exportManager.ts",
+    "web_service/frontend/public/workbox-4754cb34.js",
     "web_service/frontend/tsconfig.json"
 ]
