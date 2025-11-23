@@ -3,7 +3,7 @@
 block_cipher = None
 
 a = Analysis(
-    ['python_service/main.py'],
+a = Analysis(['python_service/run_electron_service.py'],
     pathex=[],
     binaries=[],
     datas=[

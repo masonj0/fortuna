@@ -78,43 +78,84 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
-  smoke-test-backend:
-    name: '🧪 Smoke Test Backend Executable'
-    timeout-minutes: 10
-    needs: [build-backend]
+  smoke-test-service:
+    name: '🧪 Smoke Test Service (Backend + Frontend)'
+    timeout-minutes: 15
+    needs: [build-backend, build-frontend]
     runs-on: windows-latest
     steps:
-      - name: Download Backend Executable
+      - name: Download Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: backend-ws-executable-${{ github.sha }}
-      - name: Run Smoke Test
+          path: ./artifacts
+      - name: Stage Files
         shell: pwsh
-        timeout-minutes: 5
+        run: |
+          Get-ChildItem -Path ./artifacts -Recurse
+          Move-Item -Path "./artifacts/backend-ws-executable-${{ github.sha }}/fortuna-webservice-backend.exe" -Destination "./fortuna-webservice-backend.exe"
+          New-Item -ItemType Directory -Path "./frontend" -Force
+          Move-Item -Path "./artifacts/frontend-build-ws-output-${{ github.sha }}/*" -Destination "./frontend"
+      - name: Run Backend and Frontend
+        shell: pwsh
         env:
           API_KEY: "a_secure_test_api_key_that_is_long_enough_for_smoke_test"
+          FORTUNA_PORT: 8000
         run: |
-          $exe = './fortuna-webservice-backend.exe'
-          Start-Process -FilePath $exe -NoNewWindow
-          Start-Sleep -Seconds 15 # Wait for the server to start
-          try {
-            $response = Invoke-WebRequest -Uri 'http://127.0.0.1:8000/health' -UseBasicParsing
-            if ($response.StatusCode -eq 200) {
-              Write-Host "✅ Health check passed!"
-            } else {
-              throw "Health check failed with status $($response.StatusCode)"
-            }
-          } catch {
-            Write-Host "❌ Smoke test failed: $($_.Exception.Message)"
-            Get-Process "fortuna-webservice-backend" | Stop-Process -Force
-            exit 1
-          }
-          Get-Process "fortuna-webservice-backend" | Stop-Process -Force
+          $backendLog = "backend.log"
+          $frontendLog = "frontend.log"
+          Start-Process -FilePath "./fortuna-webservice-backend.exe" -RedirectStandardOutput $backendLog -RedirectStandardError $backendLog
+          Push-Location ./frontend
+          Start-Process python -ArgumentList "-m http.server 3000" -RedirectStandardOutput $frontendLog -RedirectStandardError $frontendLog
+          Pop-Location
+          Start-Sleep -Seconds 10
+      - name: Frontend UI Verification
+        shell: pwsh
+        run: |
+          pip install playwright
+          python -m playwright install --with-deps
+          $scriptContent = @"
+          import sys
+          from playwright.sync_api import sync_playwright, expect
+
+          def run_verification():
+              with sync_playwright() as p:
+                  try:
+                      browser = p.chromium.launch()
+                      page = browser.new_page()
+                      url = "http://127.0.0.1:3000"
+                      page.goto(url, wait_until='networkidle', timeout=20000)
+                      heading = page.locator("h1:has-text('Fortuna Faucet')")
+                      expect(heading).to_be_visible(timeout=10000)
+                      page.screenshot(path='smoke-test-screenshot.png')
+                      browser.close()
+                      sys.exit(0)
+                  except Exception as e:
+                      print(f"Error: {e}", file=sys.stderr)
+                      sys.exit(1)
+
+          if __name__ == "__main__":
+              run_verification()
+          "@
+          Set-Content -Path "verify_frontend.py" -Value $scriptContent
+          python verify_frontend.py
+      - name: Upload Verification Screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-test-screenshot-${{ github.sha }}
+          path: smoke-test-screenshot.png
+          retention-days: 7
+      - name: Teardown Processes
+        if: always()
+        shell: pwsh
+        run: |
+          Stop-Process -Name "fortuna-webservice-backend" -Force -ErrorAction SilentlyContinue
+          Stop-Process -Name "python" -Force -ErrorAction SilentlyContinue
 
   package-and-test:
     name: '🏆 Package & Test Electron Installer (Web Service)'
     timeout-minutes: 25
-    needs: [build-frontend, smoke-test-backend]
+    needs: [build-frontend, smoke-test-service]
     runs-on: windows-latest
     steps:
       - name: Checkout Repository

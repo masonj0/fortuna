@@ -100,8 +100,8 @@ jobs:
           path: dist/fortuna-webservice.exe
           retention-days: 1
 
-  smoke-test-backend:
-    name: '🔥 Smoke Test Backend'
+  smoke-test-service:
+    name: '🔥 Smoke Test Service'
     needs: [build-backend]
     runs-on: windows-latest
     env:
@@ -119,21 +119,52 @@ jobs:
           Start-Process -FilePath "./dist/fortuna-webservice.exe"
           Write-Host "Waiting for backend to become available..."
           Start-Sleep -Seconds 20
-          try {
-            $response = Invoke-WebRequest -Uri "http://127.0.0.1:$env:FORTUNA_PORT/health" -UseBasicParsing
-            if ($response.StatusCode -ne 200) { throw "Health check failed." }
-            $rootResponse = Invoke-WebRequest -Uri "http://127.0.0.1:$env:FORTUNA_PORT/" -UseBasicParsing
-            if ($rootResponse.StatusCode -ne 200 -or !$rootResponse.Content.Contains('<html')) { throw "Root HTML check failed." }
-            Write-Host "✅ Health and Root checks passed on port $env:FORTUNA_PORT!" -ForegroundColor Green
-          } catch {
-            throw "Smoke test failed."
-          } finally {
-            Stop-Process -Name "fortuna-webservice" -Force -ErrorAction SilentlyContinue
-          }
+      - name: Frontend UI Verification
+        shell: pwsh
+        run: |
+          pip install playwright
+          python -m playwright install --with-deps
+          $scriptContent = @"
+          import sys
+          from playwright.sync_api import sync_playwright, expect
+
+          def run_verification():
+              with sync_playwright() as p:
+                  try:
+                      browser = p.chromium.launch()
+                      page = browser.new_page()
+                      url = "http://127.0.0.1:8089"
+                      page.goto(url, wait_until='networkidle', timeout=20000)
+                      heading = page.locator("h1:has-text('Fortuna Faucet')")
+                      expect(heading).to_be_visible(timeout=10000)
+                      page.screenshot(path='smoke-test-screenshot.png')
+                      browser.close()
+                      sys.exit(0)
+                  except Exception as e:
+                      print(f"Error: {e}", file=sys.stderr)
+                      sys.exit(1)
+
+          if __name__ == "__main__":
+              run_verification()
+          "@
+          Set-Content -Path "verify_frontend.py" -Value $scriptContent
+          python verify_frontend.py
+      - name: Upload Verification Screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-test-screenshot-${{ github.sha }}
+          path: smoke-test-screenshot.png
+          retention-days: 7
+      - name: Teardown Processes
+        if: always()
+        shell: pwsh
+        run: |
+          Stop-Process -Name "fortuna-webservice" -Force -ErrorAction SilentlyContinue
 
   package-msi-service:
     name: '💿 Package Service MSI (Web Service)'
-    needs: [smoke-test-backend]
+    needs: [smoke-test-service]
     runs-on: windows-latest
     steps:
       - name: Checkout Repository
