@@ -83,6 +83,14 @@ jobs:
     timeout-minutes: 15
     needs: [build-backend, build-frontend]
     runs-on: windows-latest
+    env:
+      API_KEY: "a_secure_test_api_key_that_is_long_enough_for_smoke_test"
+      FORTUNA_PORT: 8101
+      SMOKE_FRONTEND_PORT: 3301
+      SMOKE_FRONTEND_URL: "http://127.0.0.1:3301"
+      SMOKE_HEADING_SELECTOR: "h1:has-text('Fortuna Faucet')"
+      SMOKE_SCREENSHOT_PATH: "smoke-test-screenshot.png"
+      SMOKE_FAILURE_SCREENSHOT_PATH: "smoke-test-screenshot-FAILURE.png"
     steps:
       - name: Download Artifacts
         uses: actions/download-artifact@v4
@@ -91,47 +99,47 @@ jobs:
       - name: Stage Files
         shell: pwsh
         run: |
-          Get-ChildItem -Path ./artifacts -Recurse
-          Move-Item -Path "./artifacts/backend-ws-executable-${{ github.sha }}/fortuna-webservice-backend.exe" -Destination "./fortuna-webservice-backend.exe"
+          Get-ChildItem -Path "./artifacts/backend-ws-executable-${{ github.sha }}" | ForEach-Object { Move-Item -Path $_.FullName -Destination "." -Force }
           New-Item -ItemType Directory -Path "./frontend" -Force
-          Move-Item -Path "./artifacts/frontend-build-ws-output-${{ github.sha }}/*" -Destination "./frontend"
+          Get-ChildItem -Path "./artifacts/frontend-build-ws-output-${{ github.sha }}" | ForEach-Object { Move-Item -Path $_.FullName -Destination "./frontend" -Force }
       - name: Run Backend and Frontend
         shell: pwsh
-        env:
-          API_KEY: "a_secure_test_api_key_that_is_long_enough_for_smoke_test"
-          FORTUNA_PORT: 8000
         run: |
-          $backendLog = "backend.log"
-          $frontendLog = "frontend.log"
-          Start-Process -FilePath "./fortuna-webservice-backend.exe" -RedirectStandardOutput $backendLog -RedirectStandardError $backendLog
+          $backendProcess = Start-Process -FilePath "./fortuna-webservice-backend.exe" -PassThru -RedirectStandardOutput "backend.log" -RedirectStandardError "backend.log"
+          Set-Content -Path "backend.pid" -Value $backendProcess.Id
           Push-Location ./frontend
-          Start-Process python -ArgumentList "-m http.server 3000" -RedirectStandardOutput $frontendLog -RedirectStandardError $frontendLog
+          $frontendProcess = Start-Process python -ArgumentList "-m http.server ${{ env.SMOKE_FRONTEND_PORT }}" -PassThru -RedirectStandardOutput "../frontend.log" -RedirectStandardError "../frontend.log"
           Pop-Location
+          Set-Content -Path "frontend.pid" -Value $frontendProcess.Id
           Start-Sleep -Seconds 10
       - name: Frontend UI Verification
         shell: pwsh
         run: |
           pip install playwright
+          if ($LASTEXITCODE -ne 0) { throw "Playwright installation via pip failed." }
           python -m playwright install --with-deps
+          if ($LASTEXITCODE -ne 0) { throw "Playwright browser installation failed." }
           $scriptContent = @"
-          import sys
+          import sys, os
           from playwright.sync_api import sync_playwright, expect
 
           def run_verification():
               with sync_playwright() as p:
+                  browser = p.chromium.launch()
+                  page = browser.new_page()
                   try:
-                      browser = p.chromium.launch()
-                      page = browser.new_page()
-                      url = "http://127.0.0.1:3000"
+                      url = os.environ["SMOKE_FRONTEND_URL"]
                       page.goto(url, wait_until='networkidle', timeout=20000)
-                      heading = page.locator("h1:has-text('Fortuna Faucet')")
+                      heading = page.locator(os.environ["SMOKE_HEADING_SELECTOR"])
                       expect(heading).to_be_visible(timeout=10000)
-                      page.screenshot(path='smoke-test-screenshot.png')
-                      browser.close()
+                      page.screenshot(path=os.environ["SMOKE_SCREENSHOT_PATH"])
                       sys.exit(0)
                   except Exception as e:
                       print(f"Error: {e}", file=sys.stderr)
+                      page.screenshot(path=os.environ["SMOKE_FAILURE_SCREENSHOT_PATH"])
                       sys.exit(1)
+                  finally:
+                      browser.close()
 
           if __name__ == "__main__":
               run_verification()
@@ -143,14 +151,16 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: smoke-test-screenshot-${{ github.sha }}
-          path: smoke-test-screenshot.png
-          retention-days: 7
+          path: |
+            ${{ env.SMOKE_SCREENSHOT_PATH }}
+            ${{ env.SMOKE_FAILURE_SCREENSHOT_PATH }}
+          if-no-files-found: warn
       - name: Teardown Processes
         if: always()
         shell: pwsh
         run: |
-          Stop-Process -Name "fortuna-webservice-backend" -Force -ErrorAction SilentlyContinue
-          Stop-Process -Name "python" -Force -ErrorAction SilentlyContinue
+          if (Test-Path "backend.pid") { Get-Content "backend.pid" | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } }
+          if (Test-Path "frontend.pid") { Get-Content "frontend.pid" | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } }
 
   package-and-test:
     name: '🏆 Package & Test Electron Installer (Web Service)'
