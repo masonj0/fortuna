@@ -66,6 +66,23 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r web_service/backend/requirements-dev.txt
+      - name: Verify PyInstaller Entry Point
+        shell: pwsh
+        run: |
+          $specFile = "fortuna-webservice-electron.spec"
+          if (-not (Test-Path $specFile)) { throw "❌ FATAL: Spec file not found: $specFile" }
+          $specContent = Get-Content $specFile -Raw
+          if ($specContent -match "Analysis\(\s*\[?'([^']+)'") {
+            $entryPoint = $matches[1]
+            $entryPointPath = $entryPoint -replace '/', '\'
+            if (Test-Path $entryPointPath) {
+              Write-Host "✅ Entry point file exists: $entryPointPath" -ForegroundColor Green
+            } else {
+              throw "❌ FATAL: Entry point file NOT found: $entryPointPath"
+            }
+          } else {
+            throw "⚠️ WARNING: Could not parse entry point from spec file"
+          }
       - name: Backend - Build with PyInstaller
         shell: pwsh
         run: |
