@@ -1,0 +1,146 @@
+name: Build Electron App from Web Service Code
+
+on:
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '20'
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  build-frontend:
+    name: '📦 Build Frontend (Web Service)'
+    timeout-minutes: 15
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'web_service/frontend/package-lock.json'
+      - name: Frontend - Install & Build
+        shell: pwsh
+        run: |
+          cd web_service/frontend
+          npm ci
+          npm run build
+      - name: Verify Frontend Build
+        shell: pwsh
+        run: |
+          $outDir = 'web_service/frontend/out'
+          if (-not (Test-Path $outDir)) {
+            Write-Host "❌ FATAL: Build output directory 'out' not created" -ForegroundColor Red
+            exit 1
+          }
+      - name: Upload Frontend Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build-ws-output-${{ github.sha }}
+          path: web_service/frontend/out
+          retention-days: 1
+
+  build-backend:
+    name: '🐍 Build Backend (Web Service for Electron)'
+    timeout-minutes: 20
+    runs-on: windows-latest
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: 'web_service/backend/requirements.txt'
+      - name: Backend - Install Dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r web_service/backend/requirements-dev.txt
+      - name: Backend - Build with PyInstaller
+        shell: pwsh
+        run: |
+          pyinstaller fortuna-webservice-electron.spec --noconfirm
+      - name: Upload Backend Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-ws-executable-${{ github.sha }}
+          path: dist/fortuna-webservice-backend.exe
+          retention-days: 1
+          if-no-files-found: error
+
+  smoke-test-backend:
+    name: '🧪 Smoke Test Backend Executable'
+    timeout-minutes: 10
+    needs: [build-backend]
+    runs-on: windows-latest
+    steps:
+      - name: Download Backend Executable
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-ws-executable-${{ github.sha }}
+      - name: Run Smoke Test
+        shell: pwsh
+        timeout-minutes: 5
+        env:
+          API_KEY: "a_secure_test_api_key_that_is_long_enough_for_smoke_test"
+        run: |
+          $exe = './fortuna-webservice-backend.exe'
+          Start-Process -FilePath $exe -NoNewWindow
+          Start-Sleep -Seconds 15 # Wait for the server to start
+          try {
+            $response = Invoke-WebRequest -Uri 'http://127.0.0.1:8000/health' -UseBasicParsing
+            if ($response.StatusCode -eq 200) {
+              Write-Host "✅ Health check passed!"
+            } else {
+              throw "Health check failed with status $($response.StatusCode)"
+            }
+          } catch {
+            Write-Host "❌ Smoke test failed: $($_.Exception.Message)"
+            Get-Process "fortuna-webservice-backend" | Stop-Process -Force
+            exit 1
+          }
+          Get-Process "fortuna-webservice-backend" | Stop-Process -Force
+
+  package-and-test:
+    name: '🏆 Package & Test Electron Installer (Web Service)'
+    timeout-minutes: 25
+    needs: [build-frontend, smoke-test-backend]
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+      - name: Setup Node.js for Electron
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'electron/package-lock.json'
+      - name: Download All Build Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./temp-artifacts
+      - name: Stage Artifacts for Packaging
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path "./electron/web-ui-build" -Force
+          New-Item -ItemType Directory -Path "./electron/resources" -Force
+          Move-Item -Path "./temp-artifacts/frontend-build-ws-output-${{ github.sha }}/*" -Destination "./electron/web-ui-build/out" -Force
+          Move-Item -Path "./temp-artifacts/backend-ws-executable-${{ github.sha }}/fortuna-webservice-backend.exe" -Destination "./electron/resources/fortuna-backend.exe" -Force
+      - name: Electron - Install & Package MSI
+        working-directory: electron
+        shell: pwsh
+        run: |
+          npm ci
+          npx electron-builder --config electron-builder-config.yml --publish never
+      - name: Upload Final MSI Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fortuna-installer-electron-ws-${{ github.sha }}
+          path: electron/dist/*.msi
+          retention-days: 7
