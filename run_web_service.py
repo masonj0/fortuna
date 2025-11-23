@@ -1,40 +1,28 @@
+# run_web_service.py
+# This is the official, root-level entry point for the PyInstaller-built web service.
+
 import sys
 import os
 
-# This script is the official entry point for the PyInstaller-built web service.
-# Its sole purpose is to correctly configure the system path to ensure the
-# 'web_service' package can be found, then execute the application.
-
 def launch():
     """
-    Configures sys.path and launches the main application.
+    Configures sys.path to include the application's root directory
+    and launches the main web service application.
     """
-    # When the application is a frozen executable, the directory containing the
-    # .exe is the effective root for our package.
+    # When running as a PyInstaller bundle, the sys.executable is the path to the .exe.
+    # The 'web_service' package is in the same directory, so we need to add this
+    # directory to the path.
     if getattr(sys, 'frozen', False):
-        # The `_MEIPASS` attribute is a special path created by PyInstaller
-        # that points to the temporary folder where bundled files are extracted.
-        # However, for package resolution, we need the directory *containing*
-        # the executable itself.
-        project_root = os.path.dirname(os.path.abspath(sys.executable))
+        project_root = os.path.dirname(sys.executable)
+        sys.path.insert(0, project_root)
     else:
-        # In a normal development environment, the project root is the
-        # directory containing this script.
-        project_root = os.path.dirname(os.path.abspath(__file__))
+        # In a development environment, the project root is the current directory.
+        project_root = os.path.abspath(os.path.dirname(__file__))
+        sys.path.insert(0, project_root)
 
-    # Add the project root to the Python path.
-    # This allows the interpreter to find the 'web_service' package.
-    sys.path.insert(0, project_root)
-
-    # Now that the path is configured, we can safely import and run the main application.
-    try:
-        from web_service.backend.main import main
-    except ModuleNotFoundError:
-        print("Fatal Error: Could not find the 'web_service' package.", file=sys.stderr)
-        print(f"Current sys.path: {sys.path}", file=sys.stderr)
-        sys.exit(1)
-
-    main()
+    # Now that the path is correctly configured, we can import and run the app.
+    from web_service.backend.run_web_service_backend import launch as launch_app
+    launch_app()
 
 if __name__ == "__main__":
     launch()
