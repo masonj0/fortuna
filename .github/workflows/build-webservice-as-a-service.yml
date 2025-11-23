@@ -69,6 +69,27 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r web_service/backend/requirements-dev.txt
+      - name: Verify Frontend Files Exist Before PyInstaller
+        shell: pwsh
+        run: |
+          $frontendOut = 'staging/ui'
+          if (-not (Test-Path $frontendOut)) {
+            Write-Host "❌ FATAL: Frontend build output missing at expected path!" -ForegroundColor Red
+            Write-Host "Expected: $frontendOut" -ForegroundColor Red
+            exit 1
+          }
+          $fileCount = (Get-ChildItem -Path $frontendOut -Recurse -File | Measure-Object).Count
+          if ($fileCount -eq 0) {
+            Write-Host "❌ FATAL: Frontend directory exists but is empty!" -ForegroundColor Red
+            exit 1
+          }
+          Write-Host "✅ Frontend files present: $fileCount files" -ForegroundColor Green
+
+          # Show first few files for debugging
+          Write-Host "`nFirst 5 frontend files:" -ForegroundColor Cyan
+          Get-ChildItem -Path $frontendOut -Recurse -File | Select-Object -First 5 | ForEach-Object {
+            Write-Host "  - $($_.FullName)" -ForegroundColor Gray
+          }
       - name: Backend - Build with PyInstaller
         shell: pwsh
         run: pyinstaller fortuna-webservice-service.spec --noconfirm
