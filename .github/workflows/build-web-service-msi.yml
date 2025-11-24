@@ -28,18 +28,18 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: 'web_platform/frontend/package-lock.json'
+          cache-dependency-path: 'web_service/frontend/package-lock.json'
       - name: Frontend - Install & Build
         shell: pwsh
         run: |
-          cd web_platform/frontend
+          cd web_service/frontend
           npm ci
           npm run build
       - name: Verify Frontend Build
         continue-on-error: true
         shell: pwsh
         run: |
-          $outDir = 'web_platform/frontend/out'
+          $outDir = 'web_service/frontend/out'
           if (-not (Test-Path $outDir)) { throw "❌ FATAL: Build output directory 'out' not created" }
           $fileCount = (Get-ChildItem -Path $outDir -Recurse -File | Measure-Object).Count
           if ($fileCount -eq 0) { throw "❌ FATAL: Build output directory is empty" }
@@ -47,7 +47,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: frontend-build
-          path: web_platform/frontend/out
+          path: web_service/frontend/out
           retention-days: 1
 
   # ============================================================================
@@ -68,14 +68,11 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
           cache-dependency-path: 'python_service/requirements.txt'
-      - name: Create Staging Directory for UI
-        shell: pwsh
-        run: New-Item -ItemType Directory -Path "staging/ui" -Force | Out-Null
       - name: Download Frontend Artifact
         uses: actions/download-artifact@v4
         with:
           name: frontend-build
-          path: staging/ui
+          path: web_service/frontend/out
       - name: Install Python Dependencies
         shell: pwsh
         run: |

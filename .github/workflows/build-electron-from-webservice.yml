@@ -127,8 +127,8 @@ jobs:
         shell: pwsh
         run: |
           Get-ChildItem -Path "./artifacts/backend-ws-executable-${{ github.sha }}" | ForEach-Object { Move-Item -Path $_.FullName -Destination "." -Force }
-          New-Item -ItemType Directory -Path "./frontend" -Force
-          Get-ChildItem -Path "./artifacts/frontend-build-ws-output-${{ github.sha }}" | ForEach-Object { Move-Item -Path $_.FullName -Destination "./frontend" -Force }
+          New-Item -ItemType Directory -Path "./web_service/frontend/out" -Force
+          Get-ChildItem -Path "./artifacts/frontend-build-ws-output-${{ github.sha }}" | ForEach-Object { Move-Item -Path $_.FullName -Destination "./web_service/frontend/out" -Force }
       - name: Run Backend and Frontend
         shell: pwsh
         run: |
