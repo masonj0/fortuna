@@ -1,5 +1,7 @@
 import sys
 import os
+import asyncio
+import multiprocessing
 
 # This script is the official entry point for the PyInstaller-built electron service.
 # Its sole purpose is to correctly configure the system path to ensure the
@@ -9,6 +11,10 @@ def launch():
     """
     Configures sys.path and launches the main application.
     """
+    # Required for PyInstaller on Windows when using multiprocessing.
+    if getattr(sys, 'frozen', False):
+        multiprocessing.freeze_support()
+
     # When the application is a frozen executable, the directory containing the
     # .exe is the effective root for our package.
     if getattr(sys, 'frozen', False):
@@ -34,6 +40,11 @@ def launch():
         print("Fatal Error: Could not find the 'python_service' package.", file=sys.stderr)
         print(f"Current sys.path: {sys.path}", file=sys.stderr)
         sys.exit(1)
+
+    # CRITICAL FIX FOR PYINSTALLER on WINDOWS: Force event loop policy
+    if sys.platform == "win32" and getattr(sys, 'frozen', False):
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+        print("[BOOT] Applied WindowsSelectorEventLoopPolicy for PyInstaller", file=sys.stderr)
 
     main()
 

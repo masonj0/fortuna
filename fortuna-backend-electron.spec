@@ -3,8 +3,8 @@
 block_cipher = None
 
 a = Analysis(
-    ['python_service/run_electron_service.py'],
-    pathex=[],
+    ['python_service/main.py'],  # ✅ CHANGED from run_electron_service.py
+    pathex=['.'],
     binaries=[],
     datas=[
         ('python_service/data', 'data'),
@@ -12,6 +12,12 @@ a = Analysis(
         ('python_service/adapters', 'adapters'),
     ],
     hiddenimports=[
+        # Event loop support
+        'asyncio',
+        'asyncio.windows_events',
+        'asyncio.selector_events',
+
+        # Uvicorn/FastAPI
         'uvicorn.logging',
         'uvicorn.loops.auto',
         'uvicorn.protocols.http.h11_impl',
@@ -29,10 +35,11 @@ a = Analysis(
         'httpcore',
         'python_multipart',
 
-    # Explicit package imports to resolve ModuleNotFoundError
-    'python_service',
-    'python_service.backend',
-    'python_service.backend.api',
+        # Package structure
+        'python_service',
+        'python_service.backend',
+        'python_service.backend.api',
+
         'numpy',
         'pandas'
     ],
