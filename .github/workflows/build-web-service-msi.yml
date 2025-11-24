@@ -1,12 +1,10 @@
 name: Build Fortuna Faucet MSI (WiX v4) - 🏆 PRODUCTION
 
-# Manually deactivated by setting a trigger that will never fire.
-# This keeps the workflow file valid but prevents it from running automatically.
-# Preserved for reference by JB's request on 2025-11-23.
 on:
   push:
     branches:
-      - 'deactivated/do-not-run'
+      - main
+  workflow_dispatch:
 
 env:
   NODE_VERSION: '20'
