@@ -287,14 +287,14 @@ jobs:
             <PropertyGroup>
               <OutputName>${{ steps.stage_files.outputs.msi_name }}</OutputName>
               <OutputType>Package</OutputType>
-              <DefineConstants>SourceDir=staging</DefineConstants>
+              <DefineConstants>SourceDir=./staging</DefineConstants>
               <Platforms>x64</Platforms>
             </PropertyGroup>
             <ItemGroup>
               <PackageReference Include="WixToolset.Util.wixext" Version="4.0.5" />
               <PackageReference Include="WixToolset.Firewall.wixext" Version="4.0.5" />
               <PackageReference Include="WixToolset.UI.wixext" Version="4.0.5" />
-              <Compile Include="Product_WithService.wxs" />
+              <Compile Include="./Product_WithService.wxs" />
             </ItemGroup>
           </Project>
           "@

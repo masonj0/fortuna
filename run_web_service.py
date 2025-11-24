@@ -41,7 +41,8 @@ def main():
         "web_service.backend.api:app",
         host="0.0.0.0",
         port=int(os.getenv("FORTUNA_PORT", 8088)),
-        reload=False
+        reload=False,
+        workers=1
     )
 
 if __name__ == "__main__":
