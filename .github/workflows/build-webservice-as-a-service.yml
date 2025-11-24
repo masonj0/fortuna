@@ -161,6 +161,15 @@ jobs:
           }
           Write-Host "❌ Health check failed after $maxAttempts attempts."
           exit 1
+      - name: '🕵️‍♀️ Diagnose Backend Failure'
+        if: failure()
+        shell: pwsh
+        run: |
+          Write-Host "--- Backend STDOUT (backend-out.log) ---"
+          if (Test-Path backend-out.log) { Get-Content backend-out.log | ForEach-Object { Write-Host $_ } }
+          Write-Host "--- Backend STDERR (backend-err.log) ---"
+          if (Test-Path backend-err.log) { Get-Content backend-err.log | ForEach-Object { Write-Host $_ } }
+          Write-Host "----------------------------------------"
       - name: Frontend UI Verification
         shell: pwsh
         run: |
