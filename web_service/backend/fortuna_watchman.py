@@ -13,11 +13,11 @@ from typing import List
 
 import structlog
 
-from python_service.analyzer import AnalyzerEngine
-from python_service.config import get_settings
-from python_service.engine import OddsEngine
-from python_service.etl import run_etl_for_yesterday
-from python_service.models import Race
+from .analyzer import AnalyzerEngine
+from .config import get_settings
+from .engine import OddsEngine
+from .etl import run_etl_for_yesterday
+from .models import Race
 
 log = structlog.get_logger(__name__)
 
@@ -126,7 +126,7 @@ class Watchman:
 
 
 async def main():
-    from python_service.logging_config import configure_logging
+    from .logging_config import configure_logging
 
     configure_logging()
     watchman = Watchman()

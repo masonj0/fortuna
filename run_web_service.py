@@ -1,40 +1,42 @@
+# run_web_service.py
+# This is the single, authoritative entry point for the PyInstaller-built web service.
 import sys
 import os
+import uvicorn
+import multiprocessing
 
-# This script is the official entry point for the PyInstaller-built web service.
-# Its sole purpose is to correctly configure the system path to ensure the
-# 'web_service' package can be found, then execute the application.
+def main():
+    """
+    Configures sys.path and launches the Uvicorn server for the web service.
+    This script is designed to be the single entry point for the PyInstaller executable.
+    """
+    # Required for PyInstaller on Windows when using multiprocessing, which Uvicorn might.
+    multiprocessing.freeze_support()
 
-def launch():
-    """
-    Configures sys.path and launches the main application.
-    """
-    # When the application is a frozen executable, the directory containing the
-    # .exe is the effective root for our package.
+    # When running as a PyInstaller bundle, sys.executable is the path to the .exe.
+    # The 'web_service' package is bundled relative to this location. We need to ensure
+    # the root is on the path so that 'import web_service' works.
     if getattr(sys, 'frozen', False):
-        # The `_MEIPASS` attribute is a special path created by PyInstaller
-        # that points to the temporary folder where bundled files are extracted.
-        # However, for package resolution, we need the directory *containing*
-        # the executable itself.
-        project_root = os.path.dirname(os.path.abspath(sys.executable))
+        # In a frozen app, the root is the directory containing the executable.
+        project_root = os.path.dirname(sys.executable)
+        sys.path.insert(0, project_root)
+        # The _MEIPASS directory is where bundled files are, ensure it's on the path too.
+        if hasattr(sys, '_MEIPASS'):
+             sys.path.insert(0, sys._MEIPASS)
     else:
-        # In a normal development environment, the project root is the
-        # directory containing this script.
-        project_root = os.path.dirname(os.path.abspath(__file__))
+        # In a development environment, the project root is the current directory.
+        project_root = os.path.abspath(os.path.dirname(__file__))
+        if project_root not in sys.path:
+            sys.path.insert(0, project_root)
 
-    # Add the project root to the Python path.
-    # This allows the interpreter to find the 'web_service' package.
-    sys.path.insert(0, project_root)
-
-    # Now that the path is configured, we can safely import and run the main application.
-    try:
-        from web_service.backend.main import main
-    except ModuleNotFoundError:
-        print("Fatal Error: Could not find the 'web_service' package.", file=sys.stderr)
-        print(f"Current sys.path: {sys.path}", file=sys.stderr)
-        sys.exit(1)
-
-    main()
+    # Directly run the Uvicorn server with the correct application import string.
+    # This avoids intermediate import scripts that can confuse the PyInstaller loader.
+    uvicorn.run(
+        "web_service.backend.api:app",
+        host="0.0.0.0",
+        port=int(os.getenv("FORTUNA_PORT", 8088)),
+        reload=False
+    )
 
 if __name__ == "__main__":
-    launch()
+    main()
