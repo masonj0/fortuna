@@ -302,6 +302,8 @@ jobs:
             throw "❌ FATAL: Web service executable not found at $exePath after download."
           }
           Write-Host "✅ Web service executable staged successfully."
+      - name: Setup WiX Toolset
+        run: choco install wixtoolset -y
       - name: Build MSI with WiX
         shell: pwsh
         run: |
