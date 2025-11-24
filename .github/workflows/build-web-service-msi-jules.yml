@@ -182,7 +182,7 @@ jobs:
           Write-Host "❌ Health check failed after $maxAttempts attempts."
           exit 1
       - name: '🕵️‍♀️ Enhanced Forensic Analysis'
-        if: failure()
+        if: always()
         shell: pwsh
         run: |
           $logFile = "forensic-analysis.log"
@@ -213,7 +213,7 @@ jobs:
           "`n--- END OF FORENSIC ANALYSIS ---" | Out-File $logFile -Append -Encoding utf8
           Write-Host "✅ Forensic analysis written to $logFile"
       - name: Upload Forensic Analysis
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: forensic-analysis-jules-${{ github.sha }}

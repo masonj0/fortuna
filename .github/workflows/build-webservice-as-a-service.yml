@@ -171,7 +171,7 @@ jobs:
           Write-Host "❌ Health check failed after $maxAttempts attempts."
           exit 1
       - name: '🕵️‍♀️ Enhanced Forensic Analysis'
-        if: failure()
+        if: always()
         shell: pwsh
         run: |
           $logFile = "forensic-analysis.log"
@@ -202,7 +202,7 @@ jobs:
           "`n--- END OF FORENSIC ANALYSIS ---" | Out-File $logFile -Append -Encoding utf8
           Write-Host "✅ Forensic analysis written to $logFile"
       - name: Upload Forensic Analysis
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: forensic-analysis-service-${{ github.sha }}
@@ -316,7 +316,7 @@ jobs:
           "@
           Set-Content -Path "FortunaWebService.wixproj" -Value $wixProjContent -Encoding UTF8
           dotnet build FortunaWebService.wixproj -c Release -p:Platform=x64
-          $msiPath = "bin/x64/Release/Package.msi" # Default name
+          $msiPath = "bin/x64/Release/${{ steps.stage_files.outputs.msi_name }}"
           if (-not (Test-Path $msiPath)) { throw "❌ Service MSI was not created." }
           New-Item -ItemType Directory -Path "dist" -Force
           Copy-Item -Path $msiPath -Destination "dist/${{ steps.stage_files.outputs.msi_name }}" -Force
