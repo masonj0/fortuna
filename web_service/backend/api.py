@@ -67,7 +67,7 @@ app.include_router(health_router)
 # Add CORS middleware for frontend development
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=get_settings().ALLOWED_ORIGINS.split(','),
+    allow_origins=get_settings().ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

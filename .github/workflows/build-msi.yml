@@ -173,15 +173,33 @@ jobs:
           }
           Write-Host "❌ Health check failed after $maxAttempts attempts."
           exit 1
-      - name: '🕵️‍♀️ Diagnose Backend Failure'
+      - name: '🕵️‍♀️ Enhanced Forensic Analysis'
         if: failure()
         shell: pwsh
         run: |
-          Write-Host "--- Backend STDOUT (backend-out.log) ---"
-          if (Test-Path backend-out.log) { Get-Content backend-out.log | ForEach-Object { Write-Host $_ } }
-          Write-Host "--- Backend STDERR (backend-err.log) ---"
-          if (Test-Path backend-err.log) { Get-Content backend-err.log | ForEach-Object { Write-Host $_ } }
-          Write-Host "----------------------------------------"
+          Write-Host "--- 🕵️‍♀️ FORENSIC ANALYSIS 🕵️‍♀️ ---"
+
+          Write-Host "`n--- 1. ENVIRONMENT VARIABLES ---"
+          Get-ChildItem Env: | Sort-Object Name | Format-Table -AutoSize | Out-String -Width 4096
+
+          Write-Host "`n--- 2. FILE SYSTEM SNAPSHOT ---"
+          Get-ChildItem -Recurse | Out-String -Width 4096
+
+          Write-Host "`n--- 3. NETWORK PORT USAGE (netstat) ---"
+          try {
+            netstat -anb
+          } catch {
+            Write-Host "  (netstat -anb failed, attempting without -b)"
+            netstat -an
+          }
+
+          Write-Host "`n--- 4. BACKEND STDOUT (backend-out.log) ---"
+          if (Test-Path backend-out.log) { Get-Content backend-out.log -Raw }
+
+          Write-Host "`n--- 5. BACKEND STDERR (backend-err.log) ---"
+          if (Test-Path backend-err.log) { Get-Content backend-err.log -Raw }
+
+          Write-Host "`n--- END OF FORENSIC ANALYSIS ---"
       - name: Frontend UI Verification
         shell: pwsh
         run: |
