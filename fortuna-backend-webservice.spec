@@ -3,16 +3,20 @@
 block_cipher = None
 
 a = Analysis(
-    ['python_service/run_electron_service.py'],
-    pathex=[],
+    ['run_web_service.py'],  # ✅ CHANGED from run_electron_service.py
+    pathex=['web_service'],
     binaries=[],
     datas=[
-        ('python_service/data', 'data'),
-        ('python_service/json', 'json'),
-        ('python_service/adapters', 'adapters'),
-        ('staging/ui', 'ui'),
+        ('web_service/frontend/out', 'ui'),
+        ('web_service/backend/adapters', 'adapters'),
     ],
     hiddenimports=[
+        # Event loop support
+        'asyncio',
+        'asyncio.windows_events',
+        'asyncio.selector_events',
+
+        # Uvicorn/FastAPI
         'uvicorn.logging',
         'uvicorn.loops.auto',
         'uvicorn.protocols.http.h11_impl',
@@ -28,12 +32,22 @@ a = Analysis(
         'pydantic_settings.sources',
         'anyio._backends._asyncio',
         'httpcore',
+        'httpx',
         'python_multipart',
+        'slowapi',
+        'slowapi.middleware',
+        'slowapi.util',
+        'slowapi.errors',
+        'structlog',
+        'tenacity',
+        'aiosqlite',
+        'selectolax',
 
-    # Explicit package imports to resolve ModuleNotFoundError
-    'python_service',
-    'python_service.backend',
-    'python_service.backend.api',
+        # Package structure
+        'web_service',
+        'web_service.backend',
+        'web_service.backend.api',
+
         'numpy',
         'pandas'
     ],
@@ -56,7 +70,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='fortuna-backend',
+    name='fortuna-webservice',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
