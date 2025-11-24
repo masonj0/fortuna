@@ -1,6 +1,8 @@
 # python_service/tests/test_manual_override.py
 import pytest
 
+# Use an absolute import as a workaround for the broken test environment.
+# Pytest is not recognizing this directory as part of a package, so relative imports fail.
 from manual_override_manager import ManualOverrideManager
 
 
