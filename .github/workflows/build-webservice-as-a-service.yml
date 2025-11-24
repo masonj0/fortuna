@@ -2,9 +2,8 @@ name: Build Web Service as a Service MSI
 
 on:
   push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+    branches:
+      - main
   workflow_dispatch:
 
 env:
@@ -93,7 +92,7 @@ jobs:
       - name: Verify PyInstaller Entry Point
         shell: pwsh
         run: |
-          $specFile = "fortuna-webservice-service.spec"
+          $specFile = "fortuna-webservice.spec"
           if (-not (Test-Path $specFile)) { throw "❌ FATAL: Spec file not found: $specFile" }
           $specContent = Get-Content $specFile -Raw
           if ($specContent -match "Analysis\(\s*\[?'([^']+)'") {
@@ -109,7 +108,7 @@ jobs:
           }
       - name: Backend - Build with PyInstaller
         shell: pwsh
-        run: pyinstaller fortuna-webservice-service.spec --noconfirm
+        run: pyinstaller fortuna-webservice.spec --noconfirm
       - name: Upload Backend Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -142,6 +141,26 @@ jobs:
           $backendProcess = Start-Process -FilePath "./fortuna-webservice.exe" -PassThru -RedirectStandardOutput "backend-out.log" -RedirectStandardError "backend-err.log"
           Set-Content -Path "backend.pid" -Value $backendProcess.Id
           Start-Sleep -Seconds 10
+      - name: Deep Integration Test (Poll Health Endpoint)
+        shell: pwsh
+        run: |
+          $healthUrl = "${{ env.SMOKE_FRONTEND_URL }}/health"
+          $maxAttempts = 15
+          $delaySeconds = 2
+          For ($i=1; $i -le $maxAttempts; $i++) {
+            try {
+              $response = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 2
+              if ($response.StatusCode -eq 200) {
+                Write-Host "✅ Health check passed on attempt $i."
+                return
+              }
+            } catch {
+              Write-Host "Attempt $i of $maxAttempts failed. Retrying in $delaySeconds seconds..."
+              Start-Sleep -Seconds $delaySeconds
+            }
+          }
+          Write-Host "❌ Health check failed after $maxAttempts attempts."
+          exit 1
       - name: Frontend UI Verification
         shell: pwsh
         run: |
@@ -190,6 +209,15 @@ jobs:
         shell: pwsh
         run: |
           if (Test-Path "backend.pid") { Get-Content "backend.pid" | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } }
+      - name: Upload Backend Logs for Diagnosis
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-logs-service-${{ github.sha }}
+          path: |
+            backend-out.log
+            backend-err.log
+          if-no-files-found: ignore
 
   package-msi-service:
     name: '💿 Package Service MSI (Web Service)'
