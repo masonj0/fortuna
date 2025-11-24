@@ -30,6 +30,11 @@ hiddenimports = [
     'uvicorn.lifespan.on',
     'fastapi.routing',
     'fastapi.middleware.cors',
+
+    # Explicit package imports to resolve ModuleNotFoundError
+    'web_service',
+    'web_service.backend',
+    'web_service.backend.api',
     'starlette.staticfiles',
     'starlette.middleware.cors',
 
