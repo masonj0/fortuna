@@ -103,7 +103,7 @@ jobs:
       API_KEY: "a_secure_test_api_key_that_is_long_enough_for_smoke_test"
       FORTUNA_PORT: 8101
       SMOKE_FRONTEND_PORT: 3301
-      SMOKE_FRONTEND_URL: "http://127.0.0.1:3301"
+      SMOKE_FRONTEND_URL: "http://localhost:3301"
       SMOKE_HEADING_SELECTOR: "h1:has-text('Fortuna Faucet')"
       SMOKE_SCREENSHOT_PATH: "smoke-test-screenshot.png"
       SMOKE_FAILURE_SCREENSHOT_PATH: "smoke-test-screenshot-FAILURE.png"
@@ -112,6 +112,11 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: ./artifacts
+      - name: '🛡️ Configure Firewall for Smoke Test'
+        shell: pwsh
+        run: |
+          New-NetFirewallRule -DisplayName "Allow Fortuna Smoke Test" -Direction Inbound -Action Allow -Protocol TCP -LocalPort ${{ env.FORTUNA_PORT }}
+          Write-Host "✅ Firewall rule added for port ${{ env.FORTUNA_PORT }}."
       - name: Stage Files
         shell: pwsh
         run: |
@@ -121,7 +126,7 @@ jobs:
       - name: Run Backend and Frontend
         shell: pwsh
         run: |
-          $backendProcess = Start-Process -FilePath "./fortuna-webservice-backend.exe" -PassThru -RedirectStandardOutput "backend-out.log" -RedirectStandardError "backend-err.log"
+          $backendProcess = Start-Process -FilePath "./fortuna-webservice.exe" -PassThru -RedirectStandardOutput "backend-out.log" -RedirectStandardError "backend-err.log"
           Set-Content -Path "backend.pid" -Value $backendProcess.Id
           Push-Location ./frontend
           $frontendProcess = Start-Process python -ArgumentList "-m http.server ${{ env.SMOKE_FRONTEND_PORT }}" -PassThru -RedirectStandardOutput "../frontend-out.log" -RedirectStandardError "../frontend-err.log"
@@ -148,6 +153,33 @@ jobs:
           }
           Write-Host "❌ Health check failed after $maxAttempts attempts."
           exit 1
+      - name: '🕵️‍♀️ Enhanced Forensic Analysis'
+        if: failure()
+        shell: pwsh
+        run: |
+          Write-Host "--- 🕵️‍♀️ FORENSIC ANALYSIS 🕵️‍♀️ ---"
+
+          Write-Host "`n--- 1. ENVIRONMENT VARIABLES ---"
+          Get-ChildItem Env: | Sort-Object Name | Format-Table -AutoSize | Out-String -Width 4096
+
+          Write-Host "`n--- 2. FILE SYSTEM SNAPSHOT ---"
+          Get-ChildItem -Recurse | Out-String -Width 4096
+
+          Write-Host "`n--- 3. NETWORK PORT USAGE (netstat) ---"
+          try {
+            netstat -anb
+          } catch {
+            Write-Host "  (netstat -anb failed, attempting without -b)"
+            netstat -an
+          }
+
+          Write-Host "`n--- 4. BACKEND STDOUT (backend-out.log) ---"
+          if (Test-Path backend-out.log) { Get-Content backend-out.log -Raw }
+
+          Write-Host "`n--- 5. BACKEND STDERR (backend-err.log) ---"
+          if (Test-Path backend-err.log) { Get-Content backend-err.log -Raw }
+
+          Write-Host "`n--- END OF FORENSIC ANALYSIS ---"
       - name: Frontend UI Verification
         shell: pwsh
         run: |
