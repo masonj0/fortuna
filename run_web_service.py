@@ -30,11 +30,6 @@ def main():
         if project_root not in sys.path:
             sys.path.insert(0, project_root)
 
-    # Directly import the app object. This ensures the import happens while the
-    # sys.path is correctly configured, avoiding the deferred string import
-    # issue with PyInstaller.
-    from web_service.backend.api import app
-
     # CRITICAL FIX FOR PYINSTALLER on WINDOWS: Force event loop policy
     # This resolves a silent network binding failure where Uvicorn reports startup
     # but the OS never actually binds the port.
@@ -43,10 +38,11 @@ def main():
         print("[BOOT] Applied WindowsSelectorEventLoopPolicy for PyInstaller", file=sys.stderr)
 
     uvicorn.run(
-        app,
+        "web_service.backend.api:app",
         host="0.0.0.0",
         port=int(os.getenv("FORTUNA_PORT", 8088)),
-        reload=False
+        reload=False,
+        workers=1
     )
 
 if __name__ == "__main__":
