@@ -121,7 +121,7 @@ jobs:
       - name: Run Backend and Frontend
         shell: pwsh
         run: |
-          $backendProcess = Start-Process -FilePath "./fortuna-webservice-backend.exe" -PassThru -RedirectStandardOutput "backend-out.log" -RedirectStandardError "backend-err.log"
+          $backendProcess = Start-Process -FilePath "./fortuna-webservice.exe" -PassThru -RedirectStandardOutput "backend-out.log" -RedirectStandardError "backend-err.log"
           Set-Content -Path "backend.pid" -Value $backendProcess.Id
           Push-Location ./frontend
           $frontendProcess = Start-Process python -ArgumentList "-m http.server ${{ env.SMOKE_FRONTEND_PORT }}" -PassThru -RedirectStandardOutput "../frontend-out.log" -RedirectStandardError "../frontend-err.log"
@@ -148,6 +148,15 @@ jobs:
           }
           Write-Host "❌ Health check failed after $maxAttempts attempts."
           exit 1
+      - name: '🕵️‍♀️ Diagnose Backend Failure'
+        if: failure()
+        shell: pwsh
+        run: |
+          Write-Host "--- Backend STDOUT (backend-out.log) ---"
+          if (Test-Path backend-out.log) { Get-Content backend-out.log | ForEach-Object { Write-Host $_ } }
+          Write-Host "--- Backend STDERR (backend-err.log) ---"
+          if (Test-Path backend-err.log) { Get-Content backend-err.log | ForEach-Object { Write-Host $_ } }
+          Write-Host "----------------------------------------"
       - name: Frontend UI Verification
         shell: pwsh
         run: |
