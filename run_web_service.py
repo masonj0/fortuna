@@ -29,10 +29,13 @@ def main():
         if project_root not in sys.path:
             sys.path.insert(0, project_root)
 
-    # Directly run the Uvicorn server with the correct application import string.
-    # This avoids intermediate import scripts that can confuse the PyInstaller loader.
+    # Directly import the app object. This ensures the import happens while the
+    # sys.path is correctly configured, avoiding the deferred string import
+    # issue with PyInstaller.
+    from web_service.backend.api import app
+
     uvicorn.run(
-        "web_service.backend.api:app",
+        app,
         host="0.0.0.0",
         port=int(os.getenv("FORTUNA_PORT", 8088)),
         reload=False
