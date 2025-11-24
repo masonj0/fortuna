@@ -153,6 +153,35 @@ jobs:
           Pop-Location
           Set-Content -Path "frontend.pid" -Value $frontendProcess.Id
           Start-Sleep -Seconds 10
+      - name: Deep Integration Test (Poll Health Endpoint)
+        shell: pwsh
+        run: |
+          $healthUrl = "http://127.0.0.1:${{ env.FORTUNA_PORT }}/health"
+          $maxAttempts = 15
+          $delaySeconds = 2
+          For ($i=1; $i -le $maxAttempts; $i++) {
+            try {
+              $response = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 2
+              if ($response.StatusCode -eq 200) {
+                Write-Host "✅ Health check passed on attempt $i."
+                return
+              }
+            } catch {
+              Write-Host "Attempt $i of $maxAttempts failed. Retrying in $delaySeconds seconds..."
+              Start-Sleep -Seconds $delaySeconds
+            }
+          }
+          Write-Host "❌ Health check failed after $maxAttempts attempts."
+          exit 1
+      - name: '🕵️‍♀️ Diagnose Backend Failure'
+        if: failure()
+        shell: pwsh
+        run: |
+          Write-Host "--- Backend STDOUT (backend-out.log) ---"
+          if (Test-Path backend-out.log) { Get-Content backend-out.log | ForEach-Object { Write-Host $_ } }
+          Write-Host "--- Backend STDERR (backend-err.log) ---"
+          if (Test-Path backend-err.log) { Get-Content backend-err.log | ForEach-Object { Write-Host $_ } }
+          Write-Host "----------------------------------------"
       - name: Frontend UI Verification
         shell: pwsh
         run: |
