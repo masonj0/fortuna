@@ -103,7 +103,7 @@ jobs:
       API_KEY: "a_secure_test_api_key_that_is_long_enough_for_smoke_test"
       FORTUNA_PORT: 8101
       SMOKE_FRONTEND_PORT: 3301
-      SMOKE_FRONTEND_URL: "http://127.0.0.1:3301"
+      SMOKE_FRONTEND_URL: "http://localhost:3301"
       SMOKE_HEADING_SELECTOR: "h1:has-text('Fortuna Faucet')"
       SMOKE_SCREENSHOT_PATH: "smoke-test-screenshot.png"
       SMOKE_FAILURE_SCREENSHOT_PATH: "smoke-test-screenshot-FAILURE.png"
@@ -112,6 +112,11 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: ./artifacts
+      - name: '🛡️ Configure Firewall for Smoke Test'
+        shell: pwsh
+        run: |
+          New-NetFirewallRule -DisplayName "Allow Fortuna Smoke Test" -Direction Inbound -Action Allow -Protocol TCP -LocalPort ${{ env.FORTUNA_PORT }}
+          Write-Host "✅ Firewall rule added for port ${{ env.FORTUNA_PORT }}."
       - name: Stage Files
         shell: pwsh
         run: |
