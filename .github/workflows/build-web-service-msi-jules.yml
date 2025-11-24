@@ -133,7 +133,7 @@ jobs:
       API_KEY: "a_secure_test_api_key_that_is_long_enough_for_smoke_test"
       FORTUNA_MODE: "webservice"
       FORTUNA_PORT: 8102
-      SMOKE_FRONTEND_URL: "http://127.0.0.1:8102"
+      SMOKE_FRONTEND_URL: "http://localhost:8102"
       SMOKE_HEADING_SELECTOR: "h1:has-text('Fortuna Faucet')"
       SMOKE_SCREENSHOT_PATH: "smoke-test-screenshot.png"
       SMOKE_FAILURE_SCREENSHOT_PATH: "smoke-test-screenshot-FAILURE.png"
@@ -143,6 +143,11 @@ jobs:
         with:
           name: backend-webservice-executable-${{ github.sha }}
           path: .
+      - name: '🛡️ Configure Firewall for Smoke Test'
+        shell: pwsh
+        run: |
+          New-NetFirewallRule -DisplayName "Allow Fortuna Smoke Test" -Direction Inbound -Action Allow -Protocol TCP -LocalPort ${{ env.FORTUNA_PORT }}
+          Write-Host "✅ Firewall rule added for port ${{ env.FORTUNA_PORT }}."
       - name: Run Backend
         shell: pwsh
         run: |
@@ -163,12 +168,50 @@ jobs:
                 return
               }
             } catch {
-              Write-Host "Attempt $i of $maxAttempts failed. Retrying in $delaySeconds seconds..."
+              Write-Host "Attempt $i of $maxAttempts failed. Full error:"
+              Write-Host ($_ | Out-String)
+              Write-Host "Retrying in $delaySeconds seconds..."
               Start-Sleep -Seconds $delaySeconds
             }
           }
           Write-Host "❌ Health check failed after $maxAttempts attempts."
           exit 1
+      - name: '🕵️‍♀️ Enhanced Forensic Analysis'
+        if: failure()
+        shell: pwsh
+        run: |
+          $logFile = "forensic-analysis.log"
+          "--- 🕵️‍♀️ FORENSIC ANALYSIS 🕵️‍♀️ ---" | Out-File $logFile -Encoding utf8
+
+          "`n--- 1. ENVIRONMENT VARIABLES ---" | Out-File $logFile -Append -Encoding utf8
+          Get-ChildItem Env: | Sort-Object Name | Format-Table -AutoSize | Out-String -Width 4096 | Out-File $logFile -Append -Encoding utf8
+
+          "`n--- 2. FILE SYSTEM SNAPSHOT ---" | Out-File $logFile -Append -Encoding utf8
+          Get-ChildItem -Recurse | Out-String -Width 4096 | Out-File $logFile -Append -Encoding utf8
+
+          "`n--- 3. NETWORK PORT USAGE (netstat) ---" | Out-File $logFile -Append -Encoding utf8
+          try {
+            netstat -anb | Out-File $logFile -Append -Encoding utf8
+          } catch {
+            "  (netstat -anb failed, attempting without -b)" | Out-File $logFile -Append -Encoding utf8
+            netstat -an | Out-File $logFile -Append -Encoding utf8
+          }
+
+          "`n--- 4. BACKEND STDOUT (backend-out.log) ---" | Out-File $logFile -Append -Encoding utf8
+          if (Test-Path backend-out.log) { Get-Content backend-out.log -Raw | Out-File $logFile -Append -Encoding utf8 }
+
+          "`n--- 5. BACKEND STDERR (backend-err.log) ---" | Out-File $logFile -Append -Encoding utf8
+          if (Test-Path backend-err.log) { Get-Content backend-err.log -Raw | Out-File $logFile -Append -Encoding utf8 }
+
+          "`n--- END OF FORENSIC ANALYSIS ---" | Out-File $logFile -Append -Encoding utf8
+          Write-Host "✅ Forensic analysis written to $logFile"
+      - name: Upload Forensic Analysis
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forensic-analysis-jules-${{ github.sha }}
+          path: forensic-analysis.log
+          retention-days: 7
       - name: Frontend UI Verification
         shell: pwsh
         run: |
