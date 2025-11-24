@@ -186,6 +186,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --- Robust Pathing for Frozen Executables ---
+def resource_path(relative_path: str) -> str:
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    if getattr(sys, 'frozen', False):
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    else:
+        # In development, the base path is the project root.
+        # This assumes the script is run from the project root.
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
 # --- Conditional UI Serving for Web Service Mode ---
 if os.environ.get("FORTUNA_MODE") == "webservice":
     import sys
@@ -195,14 +207,11 @@ if os.environ.get("FORTUNA_MODE") == "webservice":
 
     log.info("Application running in 'webservice' mode, configuring static file serving.")
 
-    if getattr(sys, "frozen", False):
-        static_files_dir = os.path.join(sys._MEIPASS, "ui")
-    else:
-        static_files_dir = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "..", "web_service", "frontend", "out")
-        )
-
-    log.info(f"Static file directory set to: {static_files_dir}")
+    # Use the robust resource_path function to find the 'ui' directory.
+    # The spec file bundles 'staging/ui' into the 'ui' folder in the executable's root.
+    static_dir_key = "ui" if getattr(sys, 'frozen', False) else "staging/ui"
+    static_files_dir = resource_path(static_dir_key)
+    log.info("Resolved static files directory", path=static_files_dir)
 
     if not os.path.exists(static_files_dir):
         log.error("Static files directory not found! UI will not be served.", path=static_files_dir)
