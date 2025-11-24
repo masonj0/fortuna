@@ -28,6 +28,11 @@ a = Analysis(
         'anyio._backends._asyncio',
         'httpcore',
         'python_multipart',
+
+    # Explicit package imports to resolve ModuleNotFoundError
+    'python_service',
+    'python_service.backend',
+    'python_service.backend.api',
         'numpy',
         'pandas'
     ],

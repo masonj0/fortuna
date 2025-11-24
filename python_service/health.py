@@ -92,4 +92,4 @@ async def get_detailed_health():
 @router.get("/health", tags=["Health"])
 async def get_basic_health():
     """Provides a basic health check for load balancers and uptime monitoring."""
-    return {"status": "ok", "timestamp": datetime.now().isoformat()}
+    return {"status": "healthy"}

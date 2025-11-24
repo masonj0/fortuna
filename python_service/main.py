@@ -1,6 +1,7 @@
 import uvicorn
 import sys
 import os
+import asyncio
 from multiprocessing import freeze_support
 
 # Force UTF-8 encoding for stdout and stderr, crucial for PyInstaller on Windows
@@ -70,6 +71,13 @@ def main():
                     status_code=404,
                     detail="Frontend not found. Please build the frontend and ensure it's in the correct location.",
                 )
+
+    # CRITICAL FIX FOR PYINSTALLER on WINDOWS: Force event loop policy
+    # This resolves a silent network binding failure where Uvicorn reports startup
+    # but the OS never actually binds the port.
+    if sys.platform == "win32" and getattr(sys, 'frozen', False):
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+        print("[BOOT] Applied WindowsSelectorEventLoopPolicy for PyInstaller", file=sys.stderr)
 
     uvicorn.run(app, host=settings.UVICORN_HOST, port=settings.FORTUNA_PORT, log_level="info")
 
