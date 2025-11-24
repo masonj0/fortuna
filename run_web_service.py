@@ -4,6 +4,7 @@ import sys
 import os
 import uvicorn
 import multiprocessing
+import asyncio
 
 def main():
     """
@@ -33,6 +34,13 @@ def main():
     # sys.path is correctly configured, avoiding the deferred string import
     # issue with PyInstaller.
     from web_service.backend.api import app
+
+    # CRITICAL FIX FOR PYINSTALLER on WINDOWS: Force event loop policy
+    # This resolves a silent network binding failure where Uvicorn reports startup
+    # but the OS never actually binds the port.
+    if sys.platform == "win32" and getattr(sys, 'frozen', False):
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+        print("[BOOT] Applied WindowsSelectorEventLoopPolicy for PyInstaller", file=sys.stderr)
 
     uvicorn.run(
         app,

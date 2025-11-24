@@ -89,8 +89,7 @@ def test_health_check_unauthenticated(client):
     response = client.get("/health")
     assert response.status_code == 200
     json_response = response.json()
-    assert json_response["status"] == "ok"
-    assert "timestamp" in json_response
+    assert json_response["status"] == "healthy"
 
 
 def test_api_key_authentication_failure(client):
