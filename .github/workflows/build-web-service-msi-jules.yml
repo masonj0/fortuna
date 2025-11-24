@@ -168,7 +168,9 @@ jobs:
                 return
               }
             } catch {
-              Write-Host "Attempt $i of $maxAttempts failed. Retrying in $delaySeconds seconds..."
+              Write-Host "Attempt $i of $maxAttempts failed. Full error:"
+              Write-Host ($_ | Out-String)
+              Write-Host "Retrying in $delaySeconds seconds..."
               Start-Sleep -Seconds $delaySeconds
             }
           }
@@ -178,29 +180,38 @@ jobs:
         if: failure()
         shell: pwsh
         run: |
-          Write-Host "--- 🕵️‍♀️ FORENSIC ANALYSIS 🕵️‍♀️ ---"
+          $logFile = "forensic-analysis.log"
+          "--- 🕵️‍♀️ FORENSIC ANALYSIS 🕵️‍♀️ ---" | Out-File $logFile -Encoding utf8
 
-          Write-Host "`n--- 1. ENVIRONMENT VARIABLES ---"
-          Get-ChildItem Env: | Sort-Object Name | Format-Table -AutoSize | Out-String -Width 4096
+          "`n--- 1. ENVIRONMENT VARIABLES ---" | Out-File $logFile -Append -Encoding utf8
+          Get-ChildItem Env: | Sort-Object Name | Format-Table -AutoSize | Out-String -Width 4096 | Out-File $logFile -Append -Encoding utf8
 
-          Write-Host "`n--- 2. FILE SYSTEM SNAPSHOT ---"
-          Get-ChildItem -Recurse | Out-String -Width 4096
+          "`n--- 2. FILE SYSTEM SNAPSHOT ---" | Out-File $logFile -Append -Encoding utf8
+          Get-ChildItem -Recurse | Out-String -Width 4096 | Out-File $logFile -Append -Encoding utf8
 
-          Write-Host "`n--- 3. NETWORK PORT USAGE (netstat) ---"
+          "`n--- 3. NETWORK PORT USAGE (netstat) ---" | Out-File $logFile -Append -Encoding utf8
           try {
-            netstat -anb
+            netstat -anb | Out-File $logFile -Append -Encoding utf8
           } catch {
-            Write-Host "  (netstat -anb failed, attempting without -b)"
-            netstat -an
+            "  (netstat -anb failed, attempting without -b)" | Out-File $logFile -Append -Encoding utf8
+            netstat -an | Out-File $logFile -Append -Encoding utf8
           }
 
-          Write-Host "`n--- 4. BACKEND STDOUT (backend-out.log) ---"
-          if (Test-Path backend-out.log) { Get-Content backend-out.log -Raw }
+          "`n--- 4. BACKEND STDOUT (backend-out.log) ---" | Out-File $logFile -Append -Encoding utf8
+          if (Test-Path backend-out.log) { Get-Content backend-out.log -Raw | Out-File $logFile -Append -Encoding utf8 }
 
-          Write-Host "`n--- 5. BACKEND STDERR (backend-err.log) ---"
-          if (Test-Path backend-err.log) { Get-Content backend-err.log -Raw }
+          "`n--- 5. BACKEND STDERR (backend-err.log) ---" | Out-File $logFile -Append -Encoding utf8
+          if (Test-Path backend-err.log) { Get-Content backend-err.log -Raw | Out-File $logFile -Append -Encoding utf8 }
 
-          Write-Host "`n--- END OF FORENSIC ANALYSIS ---"
+          "`n--- END OF FORENSIC ANALYSIS ---" | Out-File $logFile -Append -Encoding utf8
+          Write-Host "✅ Forensic analysis written to $logFile"
+      - name: Upload Forensic Analysis
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forensic-analysis-jules-${{ github.sha }}
+          path: forensic-analysis.log
+          retention-days: 7
       - name: Frontend UI Verification
         shell: pwsh
         run: |
