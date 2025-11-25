@@ -1,13 +1,12 @@
 [
-    ".github/workflows/build-web-service-msi.yml",
     "AGENTS.md",
+    "HISTORY.md",
     "WISDOM.md",
-    "fortuna-backend-electron.spec",
-    "requirements.txt",
-    "web_platform/frontend/src/types/electron.d.ts",
-    "web_service/backend/utils/odds.py",
-    "web_service/frontend/app/lib/queryClient.ts",
-    "web_service/frontend/app/utils/exportManager.ts",
-    "web_service/frontend/tsconfig.json",
+    "electron/secure-settings-manager.js",
+    "pytest.ini",
+    "python_service/adapters/betfair_greyhound_adapter.py",
+    "python_service/middleware/error_handler.py",
+    "web_platform/api_gateway/tsconfig.json",
+    "web_service/backend/db/init.py",
     "wix/product_webservice.wxs"
 ]
