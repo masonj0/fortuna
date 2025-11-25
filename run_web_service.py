@@ -36,10 +36,16 @@ def main():
         print("[BOOT] Configuring Uvicorn server...", file=sys.stderr)
         # Use the port from the CI environment, defaulting to 8102
         port = int(os.getenv("FORTUNA_PORT", 8102))
+        host = os.getenv("UVICORN_HOST", "127.0.0.1")
+
+        # Use the shared, robust port checker
+        from python_service.port_check import check_port_and_exit_if_in_use
+        check_port_and_exit_if_in_use(port, host)
+        print(f"[BOOT] Port {port} is available. Proceeding with server startup.", file=sys.stderr)
 
         config = uvicorn.Config(
             "web_service.backend.api:app",
-            host="0.0.0.0",
+            host=host,
             port=port,
             log_level="info",
             workers=1
