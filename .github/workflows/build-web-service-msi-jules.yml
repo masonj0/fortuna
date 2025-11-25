@@ -6,6 +6,14 @@ on:
       - main
   workflow_dispatch:
 
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   NODE_VERSION: '20'
   PYTHON_VERSION: '3.12'
@@ -17,11 +25,11 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
@@ -29,6 +37,7 @@ jobs:
       - name: Frontend - Install & Build
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           cd web_service/frontend
           npm ci
           npm audit --audit-level=moderate
@@ -37,6 +46,7 @@ jobs:
         continue-on-error: true
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           $outDir = 'web_service/frontend/out'
           if (-not (Test-Path $outDir)) {
             Write-Host "❌ FATAL: Build output directory 'out' not created" -ForegroundColor Red
@@ -51,7 +61,7 @@ jobs:
       - name: Upload Frontend Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: frontend-build-output-${{ github.sha }}
+          name: frontend-build-output
           path: web_service/frontend/out
           retention-days: 1
 
@@ -65,16 +75,16 @@ jobs:
       FORTUNA_MODE: "webservice"
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
       - name: Download Frontend Artifact
         uses: actions/download-artifact@v4
         with:
-          name: frontend-build-output-${{ github.sha }}
+          name: frontend-build-output
           path: web_service/frontend/out
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5.0.0 # Pinned to SHA
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
@@ -82,17 +92,20 @@ jobs:
       - name: Backend - Install Dependencies
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           python -m pip install --upgrade pip
           pip install -r web_service/backend/requirements-dev.txt
       - name: Backend - Security Audit
         continue-on-error: true
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           pip-audit -r web_service/backend/requirements.txt --local
       - name: Verify Frontend Files in Executable Package
         continue-on-error: true
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           # PyInstaller creates a temporary extraction - we can't easily inspect the exe
           # But we can verify the frontend source exists before building
           $frontendOut = 'web_service/frontend/out'
@@ -106,6 +119,7 @@ jobs:
         continue-on-error: true
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           $specFile = "fortuna-webservice.spec"
           if (-not (Test-Path $specFile)) { throw "❌ FATAL: Spec file not found: $specFile" }
           $specContent = Get-Content $specFile -Raw
@@ -123,11 +137,12 @@ jobs:
       - name: Backend - Build with PyInstaller
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           pyinstaller fortuna-webservice.spec --noconfirm
       - name: Upload Backend Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: backend-webservice-executable-${{ github.sha }}
+          name: backend-webservice-executable
           path: dist/fortuna-webservice.exe
           retention-days: 1
           if-no-files-found: error
@@ -149,16 +164,18 @@ jobs:
       - name: Download Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: backend-webservice-executable-${{ github.sha }}
+          name: backend-webservice-executable
           path: .
       - name: '🛡️ Configure Firewall for Smoke Test'
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           New-NetFirewallRule -DisplayName "Allow Fortuna Smoke Test" -Direction Inbound -Action Allow -Protocol TCP -LocalPort ${{ env.FORTUNA_PORT }}
           Write-Host "✅ Firewall rule added for port ${{ env.FORTUNA_PORT }}."
       - name: Run Backend
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           $backendProcess = Start-Process -FilePath "./fortuna-webservice.exe" -PassThru -RedirectStandardOutput "backend-out.log" -RedirectStandardError "backend-err.log"
           Set-Content -Path "backend.pid" -Value $backendProcess.Id
           Start-Sleep -Seconds 10
@@ -166,6 +183,7 @@ jobs:
         continue-on-error: true
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           $healthUrl = "${{ env.SMOKE_FRONTEND_URL }}/health"
           $maxAttempts = 15
           $delaySeconds = 2
@@ -189,6 +207,7 @@ jobs:
         if: always()
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           $logFile = "forensic-analysis.log"
           "--- 🕵️‍♀️ FORENSIC ANALYSIS 🕵️‍♀️ ---" | Out-File $logFile -Encoding utf8
           "`n--- 1. SYSTEM INFORMATION ---" | Out-File $logFile -Append -Encoding utf8
@@ -227,6 +246,7 @@ jobs:
         continue-on-error: true
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           pip install playwright
           if ($LASTEXITCODE -ne 0) { throw "Playwright installation via pip failed." }
           python -m playwright install --with-deps
@@ -271,6 +291,7 @@ jobs:
         if: always()
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           if (Test-Path "backend.pid") { Get-Content "backend.pid" | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } }
       - name: Upload Backend Logs for Diagnosis
         if: always()
@@ -295,12 +316,13 @@ jobs:
       - name: Download Backend Executable
         uses: actions/download-artifact@v4
         with:
-          name: backend-webservice-executable-${{ github.sha }}
+          name: backend-webservice-executable
           path: ./dist
       - name: Stage Artifacts
         id: stage_files
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           $staging = "build_wix/staging"
           New-Item -ItemType Directory -Path $staging -Force
           Move-Item -Path "./dist/fortuna-webservice.exe" -Destination "$staging/fortuna-webservice.exe" -Force
@@ -315,6 +337,7 @@ jobs:
         working-directory: build_wix
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           # Use the Product_WithService.wxs configuration
           $wixProjContent = @"
           <Project Sdk="WixToolset.Sdk/4.0.5">

@@ -6,6 +6,14 @@ on:
       - main
   workflow_dispatch:
 
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   NODE_VERSION: '20'
   PYTHON_VERSION: '3.12'
@@ -17,11 +25,11 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4.1.1 # Pinned to SHA
         with:
           fetch-depth: 0
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4.0.2 # Pinned to SHA
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
@@ -29,6 +37,7 @@ jobs:
       - name: Frontend - Install & Build
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           cd web_service/frontend
           npm ci
           npm run build
@@ -36,6 +45,7 @@ jobs:
         continue-on-error: true
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           $outDir = 'web_service/frontend/out'
           if (-not (Test-Path $outDir)) {
             Write-Host "❌ FATAL: Build output directory 'out' not created" -ForegroundColor Red
@@ -44,23 +54,29 @@ jobs:
       - name: Upload Frontend Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: frontend-build-ws-output-${{ github.sha }}
+          name: frontend-build-ws-output
           path: web_service/frontend/out
           retention-days: 1
 
   build-backend:
     name: '🐍 Build Backend (Web Service for Electron)'
+    needs: [build-frontend]
     timeout-minutes: 20
     runs-on: windows-latest
     env:
       PYTHONUTF8: "1"
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4.1.1 # Pinned to SHA
         with:
           fetch-depth: 0
+      - name: Download Frontend Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build-ws-output
+          path: web_service/frontend/out
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5.0.0 # Pinned to SHA
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
@@ -68,12 +84,14 @@ jobs:
       - name: Backend - Install Dependencies
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           python -m pip install --upgrade pip
           pip install -r web_service/backend/requirements-dev.txt
       - name: Verify PyInstaller Entry Point
         continue-on-error: true
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           $specFile = "fortuna-webservice.spec"
           if (-not (Test-Path $specFile)) { throw "❌ FATAL: Spec file not found: $specFile" }
           $specContent = Get-Content $specFile -Raw
@@ -91,11 +109,12 @@ jobs:
       - name: Backend - Build with PyInstaller
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           pyinstaller fortuna-webservice.spec --noconfirm
       - name: Upload Backend Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: backend-ws-executable-${{ github.sha }}
+          name: backend-ws-executable
           path: dist/fortuna-webservice.exe
           retention-days: 1
           if-no-files-found: error
@@ -121,17 +140,20 @@ jobs:
       - name: '🛡️ Configure Firewall for Smoke Test'
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           New-NetFirewallRule -DisplayName "Allow Fortuna Smoke Test" -Direction Inbound -Action Allow -Protocol TCP -LocalPort ${{ env.FORTUNA_PORT }}
           Write-Host "✅ Firewall rule added for port ${{ env.FORTUNA_PORT }}."
       - name: Stage Files
         shell: pwsh
         run: |
-          Get-ChildItem -Path "./artifacts/backend-ws-executable-${{ github.sha }}" | ForEach-Object { Move-Item -Path $_.FullName -Destination "." -Force }
+          $ErrorActionPreference = "Stop"
+          Get-ChildItem -Path "./artifacts/backend-ws-executable" | ForEach-Object { Move-Item -Path $_.FullName -Destination "." -Force }
           New-Item -ItemType Directory -Path "./web_service/frontend/out" -Force
-          Get-ChildItem -Path "./artifacts/frontend-build-ws-output-${{ github.sha }}" | ForEach-Object { Move-Item -Path $_.FullName -Destination "./web_service/frontend/out" -Force }
+          Get-ChildItem -Path "./artifacts/frontend-build-ws-output" | ForEach-Object { Move-Item -Path $_.FullName -Destination "./web_service/frontend/out" -Force }
       - name: Run Backend and Frontend
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           $backendProcess = Start-Process -FilePath "./fortuna-webservice.exe" -PassThru -RedirectStandardOutput "backend-out.log" -RedirectStandardError "backend-err.log"
           Set-Content -Path "backend.pid" -Value $backendProcess.Id
           $frontendProcess = Start-Process python -ArgumentList "-m http.server ${{ env.SMOKE_FRONTEND_PORT }} --directory ./web_service/frontend/out" -PassThru -RedirectStandardOutput "frontend-out.log" -RedirectStandardError "frontend-err.log"
@@ -141,6 +163,7 @@ jobs:
         continue-on-error: true
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           $healthUrl = "http://127.0.0.1:${{ env.FORTUNA_PORT }}/health"
           $maxAttempts = 15
           $delaySeconds = 2
@@ -162,6 +185,7 @@ jobs:
         if: always()
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           $logFile = "forensic-analysis.log"
           "--- 🕵️‍♀️ FORENSIC ANALYSIS 🕵️‍♀️ ---" | Out-File $logFile -Encoding utf8
           "`n--- 1. SYSTEM INFORMATION ---" | Out-File $logFile -Append -Encoding utf8
@@ -200,6 +224,7 @@ jobs:
         continue-on-error: true
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           pip install playwright
           if ($LASTEXITCODE -ne 0) { throw "Playwright installation via pip failed." }
           python -m playwright install --with-deps
@@ -244,6 +269,7 @@ jobs:
         if: always()
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           if (Test-Path "backend.pid") { Get-Content "backend.pid" | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } }
           if (Test-Path "frontend.pid") { Get-Content "frontend.pid" | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } }
       - name: Upload Backend Logs for Diagnosis
@@ -263,11 +289,11 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4.1.1 # Pinned to SHA
         with:
           fetch-depth: 0
       - name: Setup Node.js for Electron
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4.0.2 # Pinned to SHA
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
@@ -279,15 +305,17 @@ jobs:
       - name: Stage Artifacts for Packaging
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           New-Item -ItemType Directory -Path "./electron/web-ui-build" -Force
           New-Item -ItemType Directory -Path "./electron/resources" -Force
-          Move-Item -Path "./temp-artifacts/frontend-build-ws-output-${{ github.sha }}/*" -Destination "./electron/web-ui-build/out" -Force
+          Move-Item -Path "./temp-artifacts/frontend-build-ws-output/*" -Destination "./electron/web-ui-build/out" -Force
           # The unified spec file produces 'fortuna-webservice.exe'. Rename it to what Electron expects.
-          Move-Item -Path "./temp-artifacts/backend-ws-executable-${{ github.sha }}/fortuna-webservice.exe" -Destination "./electron/resources/fortuna-backend.exe" -Force
+          Move-Item -Path "./temp-artifacts/backend-ws-executable/fortuna-webservice.exe" -Destination "./electron/resources/fortuna-backend.exe" -Force
       - name: Electron - Install & Package MSI
         working-directory: electron
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           npm ci
           npx electron-builder --config electron-builder-config.yml --publish never
       - name: Upload Final MSI Artifact
