@@ -127,15 +127,15 @@ jobs:
         shell: pwsh
         run: |
           Get-ChildItem -Path "./artifacts/backend-ws-executable-${{ github.sha }}" | ForEach-Object { Move-Item -Path $_.FullName -Destination "." -Force }
-          New-Item -ItemType Directory -Path "./frontend" -Force
-          Get-ChildItem -Path "./artifacts/frontend-build-ws-output-${{ github.sha }}" | ForEach-Object { Move-Item -Path $_.FullName -Destination "./frontend" -Force }
+          New-Item -ItemType Directory -Path "./web_service/frontend/out" -Force
+          Get-ChildItem -Path "./artifacts/frontend-build-ws-output-${{ github.sha }}" | ForEach-Object { Move-Item -Path $_.FullName -Destination "./web_service/frontend/out" -Force }
       - name: Run Backend and Frontend
         shell: pwsh
         run: |
           $backendProcess = Start-Process -FilePath "./fortuna-webservice.exe" -PassThru -RedirectStandardOutput "backend-out.log" -RedirectStandardError "backend-err.log"
           Set-Content -Path "backend.pid" -Value $backendProcess.Id
-          Push-Location ./frontend
-          $frontendProcess = Start-Process python -ArgumentList "-m http.server ${{ env.SMOKE_FRONTEND_PORT }}" -PassThru -RedirectStandardOutput "../frontend-out.log" -RedirectStandardError "../frontend-err.log"
+          Push-Location ./web_service/frontend/out
+          $frontendProcess = Start-Process python -ArgumentList "-m http.server ${{ env.SMOKE_FRONTEND_PORT }}" -PassThru -RedirectStandardOutput "../../frontend-out.log" -RedirectStandardError "../../frontend-err.log"
           Pop-Location
           Set-Content -Path "frontend.pid" -Value $frontendProcess.Id
           Start-Sleep -Seconds 10
