@@ -60,7 +60,7 @@ jobs:
       - name: Upload Frontend Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: frontend-build-output-${{ github.sha }}
+          name: frontend-build-output
           path: web_platform/frontend/out
           retention-days: 1
 
@@ -130,7 +130,7 @@ jobs:
       - name: Upload Backend Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: backend-executable-${{ github.sha }}
+          name: backend-executable
           path: dist/fortuna-webservice.exe
           retention-days: 1
           if-no-files-found: error
@@ -276,7 +276,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: smoke-test-artifacts-${{ github.sha }}
+          name: smoke-test-artifacts
           path: |
             ${{ env.SMOKE_SCREENSHOT_PATH }}
             ${{ env.SMOKE_FAILURE_SCREENSHOT_PATH }}
@@ -298,9 +298,9 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4.1.1 # Pinned to SHA
       - name: Setup Node.js for Electron
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4.0.2 # Pinned to SHA
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
@@ -314,8 +314,8 @@ jobs:
         run: |
           New-Item -ItemType Directory -Path "./electron/web-ui-build" -Force | Out-Null
           New-Item -ItemType Directory -Path "./electron/resources" -Force | Out-Null
-          Move-Item -Path "./temp-artifacts/frontend-build-output-${{ github.sha }}/*" -Destination "./electron/web-ui-build/out" -Force
-          Move-Item -Path "./temp-artifacts/backend-executable-${{ github.sha }}/fortuna-webservice.exe" -Destination "./electron/resources/fortuna-backend.exe" -Force
+          Move-Item -Path "./temp-artifacts/frontend-build-output/*" -Destination "./electron/web-ui-build/out" -Force
+          Move-Item -Path "./temp-artifacts/backend-executable/fortuna-webservice.exe" -Destination "./electron/resources/fortuna-backend.exe" -Force
       - name: Verify Staged Artifacts
         shell: pwsh
         run: |
