@@ -1,4 +1,4 @@
-name: Build Fortuna Faucet MSI (WiX v4) - 🏆 PRODUCTION
+name: Build Fortuna Faucet MSI (Web Service) - PRODUCTION
 
 on:
   push:
@@ -17,11 +17,10 @@ env:
   NODE_VERSION: '20'
   PYTHON_VERSION: '3.12'
   PYTHONUTF8: "1"
+  FORTUNA_PORT: 8000
+  FORTUNA_MODE: webservice
 
 jobs:
-  # ============================================================================
-  # JOB 1: BUILD FRONTEND
-  # ============================================================================
   build-frontend:
     name: '📦 Build Frontend'
     runs-on: windows-latest
@@ -54,29 +53,24 @@ jobs:
           path: web_service/frontend/out
           retention-days: 1
 
-  # ============================================================================
-  # JOB 2: BUILD BACKEND & SMOKE TEST
-  # ============================================================================
   build-and-test:
     name: '🐍 Build & Smoke Test'
     needs: [build-frontend]
     runs-on: windows-latest
     env:
-      FORTUNA_PORT: 8088
-      SMOKE_FRONTEND_URL: "http://localhost:8088"
+      SMOKE_FRONTEND_URL: "http://localhost:${{ env.FORTUNA_PORT }}"
       SMOKE_HEADING_SELECTOR: "h1"
       SMOKE_SCREENSHOT_PATH: "smoke-test.png"
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # --- SETUP PYTHON ---
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
-          cache-dependency-path: 'python_service/requirements.txt'
+          cache-dependency-path: 'requirements.txt'
 
       - name: Download Frontend Artifact
         uses: actions/download-artifact@v4
@@ -87,10 +81,9 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r python_service/requirements-dev.txt
+          pip install -r requirements.txt
           pip install playwright pytest-playwright
 
-      # --- CACHE PLAYWRIGHT BROWSERS ---
       - name: Get Playwright Version
         id: playwright-version
         shell: pwsh
@@ -107,39 +100,43 @@ jobs:
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: python -m playwright install --with-deps chromium
 
-      # --- BUILD EXE ---
+      - name: Create Web Service PyInstaller Spec
+        shell: pwsh
+        run: |
+          cp fortuna-backend-electron.spec fortuna-webservice.spec
+          (Get-Content fortuna-webservice.spec) -replace 'python_service/main.py', 'web_service/backend/main.py' | Set-Content fortuna-webservice.spec
+          (Get-Content fortuna-webservice.spec) -replace 'python_service/data', 'web_service/backend/data' | Set-Content fortuna-webservice.spec
+          (Get-Content fortuna-webservice.spec) -replace 'python_service/json', 'web_service/backend/json' | Set-Content fortuna-webservice.spec
+          (Get-Content fortuna-webservice.spec) -replace 'python_service/adapters', 'web_service/backend/adapters' | Set-Content fortuna-webservice.spec
+          (Get-Content fortuna-webservice.spec) -replace 'fortuna-backend', 'fortuna-webservice' | Set-Content fortuna-webservice.spec
+
       - name: Backend - Build with PyInstaller
         run: pyinstaller fortuna-webservice.spec --clean --noconfirm
 
-      # --- SMOKE TEST ---
-      - name: '🛡️ Open Firewall'
+      - name: '🔒 Open Firewall'
         shell: pwsh
         run: New-NetFirewallRule -DisplayName "SmokeTest" -Direction Inbound -Action Allow -Protocol TCP -LocalPort ${{ env.FORTUNA_PORT }}
 
       - name: Run Backend (Background)
         shell: pwsh
         run: |
-          # 1. Create required runtime directories to prevent immediate crash
           New-Item -ItemType Directory -Path "data" -Force | Out-Null
           New-Item -ItemType Directory -Path "logs" -Force | Out-Null
           New-Item -ItemType Directory -Path "json" -Force | Out-Null
 
-          Write-Host "📂 Runtime directories created."
+          Write-Host "📁 Runtime directories created."
 
-          # 2. Start the Service
-          # Use Start-Process with explicit Environment Variables to ensure Port binding works
           $env:FORTUNA_PORT = "${{ env.FORTUNA_PORT }}"
-          $env:FORTUNA_MODE = "webservice"
+          $env:FORTUNA_MODE = "${{ env.FORTUNA_MODE }}"
 
           $p = Start-Process -FilePath "dist/fortuna-webservice.exe" -PassThru -RedirectStandardOutput "backend.log" -RedirectStandardError "backend.err"
           $p.Id | Out-File "backend.pid"
 
           Write-Host "🚀 Service started with PID $($p.Id) on port $env:FORTUNA_PORT"
 
-          # 3. Wait a moment for startup (prevents race condition with Playwright)
           Start-Sleep -Seconds 5
 
-      - name: 📸 Playwright Verification
+      - name: '📸 Playwright Verification'
         shell: pwsh
         run: |
           $script = @"
@@ -153,20 +150,15 @@ jobs:
               browser = p.chromium.launch()
               page = browser.new_page()
               try:
-                  # RETRY LOGIC: Wait for network AND DOM readiness
                   for i in range(10):
                       try:
-                          # wait_until='domcontentloaded' prevents firing before HTML is parsed
                           page.goto(url, wait_until='domcontentloaded', timeout=5000)
                           break
                       except:
                           print(f"Waiting for server... ({i+1}/10)")
                           time.sleep(2)
 
-                  # ROBUST ASSERTION: Allow 10s for React/Vue hydration
                   expect(page.locator("body")).to_be_visible(timeout=10000)
-
-                  # Capture success
                   page.screenshot(path=os.environ["SMOKE_SCREENSHOT_PATH"])
                   print("✅ Screenshot captured.")
               except Exception as e:
@@ -179,7 +171,7 @@ jobs:
           Set-Content -Path "verify.py" -Value $script
           python verify.py
 
-      - name: Upload Screenshot
+      - name: Upload Screenshot & Logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -189,7 +181,7 @@ jobs:
             backend.log
             backend.err
 
-      - name: 🕵️ Inspect Backend Logs (On Failure)
+      - name: '🕵️ Inspect Backend Logs (On Failure)'
         if: failure()
         shell: pwsh
         run: |
@@ -214,11 +206,8 @@ jobs:
           if (Test-Path "backend.pid") { Stop-Process -Id (Get-Content "backend.pid") -Force -ErrorAction SilentlyContinue }
           Remove-NetFirewallRule -DisplayName "SmokeTest" -ErrorAction SilentlyContinue
 
-  # ============================================================================
-  # JOB 3: PACKAGE MSI
-  # ============================================================================
   package-msi-service:
-    name: '💿 Package Service MSI'
+    name: '📦 Package Web Service MSI'
     needs: [build-and-test]
     runs-on: windows-latest
     steps:
@@ -240,12 +229,16 @@ jobs:
         shell: pwsh
         run: |
            if (Test-Path "build_wix/Product_WithoutService.wxs") { Remove-Item "build_wix/Product_WithoutService.wxs" -Force }
+           if (Test-Path "build_wix/Product_WithService.wxs") { Remove-Item "build_wix/Product_WithService.wxs" -Force }
+
+      - name: Copy WXS File
+        shell: pwsh
+        run: cp wix/product_webservice.wxs build_wix/Product_WithService.wxs
 
       - name: Generate WiX Project File (Dynamic Name)
         working-directory: build_wix
         shell: pwsh
         run: |
-          # DYNAMIC NAMING: Appends Run Number for traceability
           $msiName = "Fortuna-WebService-${{ github.run_number }}"
 
           $wixProjContent = @"
@@ -275,6 +268,10 @@ jobs:
           $version = "1.0.${{ github.run_number }}.0"
           dotnet build Fortuna.wixproj -c Release -p:Platform=x64 -p:Version=$version
 
+      - name: Verify MSI
+        shell: pwsh
+        run: if (-not (Test-Path "bin/x64/Release/*.msi")) { throw "❌ MSI build failed" }
+
       - name: Upload MSI
         uses: actions/upload-artifact@v4
         with:
@@ -282,9 +279,6 @@ jobs:
           path: build_wix/bin/x64/Release/*.msi
           if-no-files-found: error
 
-  # ============================================================================
-  # JOB 4: RELEASE
-  # ============================================================================
   create-release:
     name: '🚀 Create Release'
     needs: [package-msi-service]
