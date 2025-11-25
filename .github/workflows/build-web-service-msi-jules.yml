@@ -292,28 +292,53 @@ jobs:
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - name: Setup WiX Toolset
-        run: choco install wixtoolset -y
       - name: Download Backend Executable
         uses: actions/download-artifact@v4
         with:
           name: backend-webservice-executable-${{ github.sha }}
-          path: ./staging/
-      - name: Verify Staged Executable
-        continue-on-error: true
+          path: ./dist
+      - name: Stage Artifacts
+        id: stage_files
         shell: pwsh
         run: |
-          $exePath = "./staging/fortuna-webservice.exe"
-          if (-not (Test-Path $exePath)) {
-            throw "❌ FATAL: Web service executable not found at $exePath after download."
-          }
-          Write-Host "✅ Web service executable staged successfully."
-      - name: Setup WiX Toolset
-        run: choco install wixtoolset -y
-      - name: Build MSI with WiX
+          $staging = "build_wix/staging"
+          New-Item -ItemType Directory -Path $staging -Force
+          Move-Item -Path "./dist/fortuna-webservice.exe" -Destination "$staging/fortuna-webservice.exe" -Force
+          $msiName = "Fortuna-Jules-${{ github.ref_name }}.msi".Replace('/', '-')
+          if ($msiName -match "main") { $msiName = "Fortuna-Jules-Nightly.msi" }
+          echo "msi_name=$msiName" >> $env:GITHUB_OUTPUT
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build MSI
+        working-directory: build_wix
         shell: pwsh
         run: |
-          wix build wix/product_webservice.wxs -ext WixToolset.UI.wixext -o fortuna-webservice.msi
+          # Use the Product_WithService.wxs configuration
+          $wixProjContent = @"
+          <Project Sdk="WixToolset.Sdk/4.0.5">
+            <PropertyGroup>
+              <OutputName>${{ steps.stage_files.outputs.msi_name }}</OutputName>
+              <OutputType>Package</OutputType>
+              <DefineConstants>SourceDir=./staging</DefineConstants>
+              <Platforms>x64</Platforms>
+              <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+            </PropertyGroup>
+            <ItemGroup>
+              <PackageReference Include="WixToolset.Util.wixext" Version="4.0.5" />
+              <PackageReference Include="WixToolset.Firewall.wixext" Version="4.0.5" />
+              <PackageReference Include="WixToolset.UI.wixext" Version="4.0.5" />
+              <Compile Include="./Product_WithService.wxs" />
+            </ItemGroup>
+          </Project>
+          "@
+          Set-Content -Path "FortunaWebService.wixproj" -Value $wixProjContent -Encoding UTF8
+          dotnet build FortunaWebService.wixproj -c Release -p:Platform=x64
+          $msiPath = "bin/x64/Release/${{ steps.stage_files.outputs.msi_name }}"
+          if (-not (Test-Path $msiPath)) { throw "❌ Service MSI was not created." }
+          New-Item -ItemType Directory -Path "dist" -Force
+          Copy-Item -Path $msiPath -Destination "dist/${{ steps.stage_files.outputs.msi_name }}" -Force
       - name: Upload Final MSI Artifact
         uses: actions/upload-artifact@v4
         with:
