@@ -72,11 +72,12 @@ jobs:
 
       # --- SETUP PYTHON ---
       - name: Setup Python
+        id: setup-python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
-          cache-dependency-path: 'python_service/requirements.txt'
+          cache-dependency-path: 'web_service/backend/requirements-dev.txt'
 
       - name: Download Frontend Artifact
         uses: actions/download-artifact@v4
@@ -85,16 +86,18 @@ jobs:
           path: web_service/frontend/out
 
       - name: Install Dependencies
+        shell: pwsh
         run: |
-          python -m pip install --upgrade pip
-          pip install -r python_service/requirements-dev.txt
-          pip install playwright pytest-playwright
+          $ErrorActionPreference = "Stop"
+          ${{ steps.setup-python.outputs.python-path }} -m pip install --upgrade pip
+          ${{ steps.setup-python.outputs.python-path }} -m pip install -r web_service/backend/requirements-dev.txt
+          ${{ steps.setup-python.outputs.python-path }} -m pip install playwright pytest-playwright
 
       # --- CACHE PLAYWRIGHT BROWSERS ---
       - name: Get Playwright Version
         id: playwright-version
         shell: pwsh
-        run: echo "VERSION=$(python -c 'from importlib.metadata import version; print(version("playwright"))')" >> $env:GITHUB_OUTPUT
+        run: echo "VERSION=$(${{ steps.setup-python.outputs.python-path }} -c 'from importlib.metadata import version; print(version("playwright"))')" >> $env:GITHUB_OUTPUT
 
       - name: Cache Playwright Browsers
         uses: actions/cache@v4
@@ -105,11 +108,13 @@ jobs:
 
       - name: Install Playwright Browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: python -m playwright install --with-deps chromium
+        shell: pwsh
+        run: ${{ steps.setup-python.outputs.python-path }} -m playwright install --with-deps chromium
 
       # --- BUILD EXE ---
       - name: Backend - Build with PyInstaller
-        run: pyinstaller fortuna-webservice.spec --clean --noconfirm
+        shell: pwsh
+        run: ${{ steps.setup-python.outputs.python-path }} -m pyinstaller fortuna-webservice.spec --clean --noconfirm
 
       # --- SMOKE TEST ---
       - name: '🛡️ Open Firewall'
