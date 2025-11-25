@@ -6,6 +6,14 @@ on:
       - main
   workflow_dispatch:
 
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   NODE_VERSION: '20'
   PYTHON_VERSION: '3.12'
@@ -20,11 +28,11 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.1.1 # Pinned to SHA
         with:
           fetch-depth: 0
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v4.0.2 # Pinned to SHA
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
@@ -32,6 +40,7 @@ jobs:
       - name: Frontend - Install & Build
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           cd web_service/frontend
           npm ci
           npm run build
@@ -39,6 +48,7 @@ jobs:
         continue-on-error: true
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           $outDir = 'web_service/frontend/out'
           if (-not (Test-Path $outDir)) { throw "❌ FATAL: Build output directory 'out' not created" }
           $fileCount = (Get-ChildItem -Path $outDir -Recurse -File | Measure-Object).Count
@@ -59,11 +69,11 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.1.1 # Pinned to SHA
         with:
           fetch-depth: 0
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v5.0.0 # Pinned to SHA
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
@@ -76,17 +86,20 @@ jobs:
       - name: Install Python Dependencies
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           python -m pip install --upgrade pip
           pip install -r python_service/requirements-dev.txt
       - name: Create Missing Directories
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           New-Item -ItemType Directory -Path "python_service/data" -Force | Out-Null
           New-Item -ItemType Directory -Path "python_service/json" -Force | Out-Null
       - name: Verify PyInstaller Entry Point
         continue-on-error: true
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           $specFile = "fortuna-webservice.spec"
           if (-not (Test-Path $specFile)) { throw "❌ FATAL: Spec file not found: $specFile" }
           $specContent = Get-Content $specFile -Raw
@@ -103,7 +116,9 @@ jobs:
           }
       - name: Backend - Build with PyInstaller
         shell: pwsh
-        run: pyinstaller fortuna-webservice.spec --noconfirm
+        run: |
+          $ErrorActionPreference = "Stop"
+          pyinstaller fortuna-webservice.spec --noconfirm
       - name: Upload Backend Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -136,11 +151,13 @@ jobs:
       - name: '🛡️ Configure Firewall for Smoke Test'
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           New-NetFirewallRule -DisplayName "Allow Fortuna Smoke Test" -Direction Inbound -Action Allow -Protocol TCP -LocalPort ${{ env.FORTUNA_PORT }}
           Write-Host "✅ Firewall rule added for port ${{ env.FORTUNA_PORT }}."
       - name: Run Backend
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           $backendProcess = Start-Process -FilePath "./fortuna-webservice.exe" -PassThru -RedirectStandardOutput "backend-out.log" -RedirectStandardError "backend-err.log"
           Set-Content -Path "backend.pid" -Value $backendProcess.Id
           Start-Sleep -Seconds 10
@@ -148,6 +165,7 @@ jobs:
         continue-on-error: true
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           $healthUrl = "${{ env.SMOKE_FRONTEND_URL }}/health"
           $maxAttempts = 15
           $delaySeconds = 2
@@ -169,6 +187,7 @@ jobs:
         if: always()
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           $logFile = "forensic-analysis.log"
           "--- 🕵️‍♀️ FORENSIC ANALYSIS 🕵️‍♀️ ---" | Out-File $logFile -Encoding utf8
           "`n--- 1. SYSTEM INFORMATION ---" | Out-File $logFile -Append -Encoding utf8
@@ -211,6 +230,7 @@ jobs:
         continue-on-error: true
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           pip install playwright
           if ($LASTEXITCODE -ne 0) { throw "Playwright installation via pip failed." }
           python -m playwright install --with-deps
@@ -255,6 +275,7 @@ jobs:
         if: always()
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           if (Test-Path "backend.pid") { Get-Content "backend.pid" | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } }
 
 
@@ -279,6 +300,7 @@ jobs:
         id: stage_files
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           $staging = "build_wix/staging"
           New-Item -ItemType Directory -Path $staging -Force | Out-Null
           Move-Item -Path "./dist/fortuna-webservice.exe" -Destination "$staging/fortuna-webservice.exe" -Force
@@ -294,6 +316,7 @@ jobs:
       - name: Remove Conflicting WXS File
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           if (Test-Path "build_wix/Product_WithoutService.wxs") {
             Remove-Item "build_wix/Product_WithoutService.wxs" -Force
             Write-Host "✅ Removed conflicting Product_WithoutService.wxs" -ForegroundColor Green
@@ -303,6 +326,7 @@ jobs:
         working-directory: build_wix
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           $msiOutputName = "${{ steps.stage_files.outputs.msi_name }}".Replace('.msi', '')
           $wixProjContent = @"
           <Project Sdk="WixToolset.Sdk/4.0.5">
@@ -329,6 +353,7 @@ jobs:
         working-directory: build_wix
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           dotnet build Fortuna.wixproj -c Release -p:Platform=x64
           $msiPath = "bin/x64/Release/${{ steps.stage_files.outputs.msi_name }}"
           if (-not (Test-Path $msiPath)) { throw "❌ Service MSI was not created." }
