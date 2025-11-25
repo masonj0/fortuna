@@ -308,6 +308,7 @@ jobs:
               <OutputType>Package</OutputType>
               <DefineConstants>SourceDir=./staging</DefineConstants>
               <Platforms>x64</Platforms>
+              <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
             </PropertyGroup>
             <ItemGroup>
               <PackageReference Include="WixToolset.Util.wixext" Version="4.0.5" />

@@ -134,9 +134,7 @@ jobs:
         run: |
           $backendProcess = Start-Process -FilePath "./fortuna-webservice.exe" -PassThru -RedirectStandardOutput "backend-out.log" -RedirectStandardError "backend-err.log"
           Set-Content -Path "backend.pid" -Value $backendProcess.Id
-          Push-Location ./web_service/frontend/out
-          $frontendProcess = Start-Process python -ArgumentList "-m http.server ${{ env.SMOKE_FRONTEND_PORT }}" -PassThru -RedirectStandardOutput "../../frontend-out.log" -RedirectStandardError "../../frontend-err.log"
-          Pop-Location
+          $frontendProcess = Start-Process python -ArgumentList "-m http.server ${{ env.SMOKE_FRONTEND_PORT }} --directory ./web_service/frontend/out" -PassThru -RedirectStandardOutput "frontend-out.log" -RedirectStandardError "frontend-err.log"
           Set-Content -Path "frontend.pid" -Value $frontendProcess.Id
           Start-Sleep -Seconds 10
       - name: Deep Integration Test (Poll Health Endpoint)
