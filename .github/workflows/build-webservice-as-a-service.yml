@@ -60,14 +60,11 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
           cache-dependency-path: 'web_service/backend/requirements.txt'
-      - name: Create Staging Directory for UI
-        shell: pwsh
-        run: New-Item -ItemType Directory -Path "staging/ui" -Force | Out-Null
       - name: Download Frontend Artifact
         uses: actions/download-artifact@v4
         with:
           name: frontend-build-ws-service
-          path: staging/ui
+          path: web_service/frontend/out
       - name: Install Python Dependencies
         shell: pwsh
         run: |
