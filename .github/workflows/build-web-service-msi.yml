@@ -94,7 +94,7 @@ jobs:
       - name: Get Playwright Version
         id: playwright-version
         shell: pwsh
-        run: echo "VERSION=$(python -c 'import playwright; print(playwright.__version__)')" >> $env:GITHUB_OUTPUT
+        run: echo "VERSION=$(python -c 'from importlib.metadata import version; print(version("playwright"))')" >> $env:GITHUB_OUTPUT
 
       - name: Cache Playwright Browsers
         uses: actions/cache@v4

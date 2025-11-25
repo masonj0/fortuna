@@ -1,7 +1,6 @@
 [
     "VERSION.txt",
     "electron/resources/.gitkeep",
-    "fortuna-webservice-electron.spec",
     "pytest.ini",
     "python_service/utils/odds.py",
     "requirements-dev.txt",
