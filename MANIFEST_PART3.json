@@ -1,13 +1,14 @@
 [
     "PSEUDOCODE.MD",
     "README.md",
-    "package-lock.json",
-    "python_service/db/init.py",
-    "python_service/fortuna_service.py",
-    "python_service/tests/test_manual_override.py",
-    "requirements.txt",
-    "web_platform/api_gateway/src/services/DatabaseService.ts",
+    "electron/assets/license.rtf",
+    "pyproject.toml",
+    "python_service/core/exceptions.py",
+    "scripts/install_fortuna_gui.bat",
+    "web_platform/frontend/src/lib/queryClient.ts",
     "web_platform/frontend/src/utils/exportManager.ts",
-    "web_platform/frontend/tsconfig.json",
-    "web_service/frontend/app/lib/queryClient.ts"
+    "web_service/backend/adapters/betfair_greyhound_adapter.py",
+    "web_service/backend/fortuna_service.py",
+    "web_service/backend/tests/test_web_service_manual_override.py",
+    "web_service/frontend/app/types/electron.d.ts"
 ]
