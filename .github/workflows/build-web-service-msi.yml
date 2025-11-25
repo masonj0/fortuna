@@ -87,7 +87,7 @@ jobs:
         continue-on-error: true
         shell: pwsh
         run: |
-          $specFile = "fortuna-backend-webservice.spec"
+          $specFile = "fortuna-webservice.spec"
           if (-not (Test-Path $specFile)) { throw "❌ FATAL: Spec file not found: $specFile" }
           $specContent = Get-Content $specFile -Raw
           if ($specContent -match "Analysis\(\s*\[?'([^']+)'") {
@@ -103,7 +103,7 @@ jobs:
           }
       - name: Backend - Build with PyInstaller
         shell: pwsh
-        run: pyinstaller fortuna-backend-webservice.spec --noconfirm
+        run: pyinstaller fortuna-webservice.spec --noconfirm
       - name: Upload Backend Artifact
         uses: actions/upload-artifact@v4
         with:
