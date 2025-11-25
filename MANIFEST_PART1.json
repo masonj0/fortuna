@@ -1,15 +1,14 @@
 [
     "VERSION.txt",
     "electron/resources/.gitkeep",
-    "fortuna-webservice-electron.spec",
-    "pytest.ini",
+    "fortuna-backend-electron.spec",
+    "package.json",
+    "pyproject.toml",
     "python_service/utils/odds.py",
     "requirements-dev.txt",
+    "web_platform/api_gateway/src/server.ts",
+    "web_platform/frontend/app/Providers.tsx",
     "web_platform/frontend/public/workbox-4754cb34.js",
-    "web_platform/frontend/src/components/RaceCard.tsx",
-    "web_service/backend/db/init.py",
-    "web_service/backend/middleware/error_handler.py",
-    "web_service/frontend/app/Providers.tsx",
-    "web_service/frontend/app/hooks/useWebSocket.ts",
-    "web_service/frontend/public/workbox-4754cb34.js"
+    "web_platform/frontend/src/types/electron.d.ts",
+    "web_service/frontend/app/hooks/useWebSocket.ts"
 ]

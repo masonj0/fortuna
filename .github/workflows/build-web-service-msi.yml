@@ -27,11 +27,11 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.1.1 # Pinned to SHA
         with:
           fetch-depth: 0
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v4.0.2 # Pinned to SHA
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
@@ -72,7 +72,7 @@ jobs:
 
       # --- SETUP PYTHON ---
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v5.0.0 # Pinned to SHA
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
@@ -86,6 +86,7 @@ jobs:
 
       - name: Install Dependencies
         run: |
+          $ErrorActionPreference = "Stop"
           python -m pip install --upgrade pip
           pip install -r python_service/requirements-dev.txt
           pip install playwright pytest-playwright
