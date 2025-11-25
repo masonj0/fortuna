@@ -108,7 +108,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: backend-executable
-          path: dist/fortuna-backend.exe
+          path: dist/fortuna-webservice.exe
           retention-days: 1
 
   # ============================================================================
@@ -141,7 +141,7 @@ jobs:
       - name: Run Backend
         shell: pwsh
         run: |
-          $backendProcess = Start-Process -FilePath "./fortuna-backend.exe" -PassThru -RedirectStandardOutput "backend-out.log" -RedirectStandardError "backend-err.log"
+          $backendProcess = Start-Process -FilePath "./fortuna-webservice.exe" -PassThru -RedirectStandardOutput "backend-out.log" -RedirectStandardError "backend-err.log"
           Set-Content -Path "backend.pid" -Value $backendProcess.Id
           Start-Sleep -Seconds 10
       - name: Deep Integration Test (Poll Health Endpoint)
@@ -277,7 +277,7 @@ jobs:
         run: |
           $staging = "build_wix/staging"
           New-Item -ItemType Directory -Path $staging -Force | Out-Null
-          Move-Item -Path "./dist/fortuna-backend.exe" -Destination "$staging/fortuna-backend.exe" -Force
+          Move-Item -Path "./dist/fortuna-webservice.exe" -Destination "$staging/fortuna-webservice.exe" -Force
           $msiName = "Fortuna-WebService-${{ github.ref_name }}.msi".Replace('/', '-')
           if ($msiName -match "main") { $msiName = "Fortuna-WebService-Nightly.msi" }
           echo "msi_name=$msiName" >> $env:GITHUB_OUTPUT
