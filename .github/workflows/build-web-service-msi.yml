@@ -187,7 +187,11 @@ jobs:
             netstat -an | Out-File $logFile -Append -Encoding utf8
           }
           "`n--- 6. FIREWALL RULES ---" | Out-File $logFile -Append -Encoding utf8
-          Get-NetFirewallRule -DisplayName "Allow Fortuna Smoke Test" | Format-Table -AutoSize | Out-String -Width 4096 | Out-File $logFile -Append -Encoding utf8
+          try {
+            Get-NetFirewallRule -DisplayName "Allow Fortuna Smoke Test" | Format-Table -AutoSize | Out-String -Width 4096 | Out-File $logFile -Append -Encoding utf8
+          } catch {
+            "  (Firewall rule not found or error retrieving it.)" | Out-File $logFile -Append -Encoding utf8
+          }
           "`n--- 7. FATAL BOOT ERROR LOG (fatal_boot_error.log) ---" | Out-File $logFile -Append -Encoding utf8
           if (Test-Path fatal_boot_error.log) { Get-Content fatal_boot_error.log -Raw | Out-File $logFile -Append -Encoding utf8 }
           "`n--- 8. BACKEND STDOUT (backend-out.log) ---" | Out-File $logFile -Append -Encoding utf8
