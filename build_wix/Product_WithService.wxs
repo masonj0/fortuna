@@ -24,7 +24,7 @@
 
         <Component Id="FortunaBackendService" Guid="a1b1a73a-4424-4221-897b-0331984639e2">
           <File Id="FortunaBackendExe"
-                Source="$(var.SourceDir)/fortuna-backend.exe"
+                Source="$(var.SourceDir)/fortuna-webservice.exe"
                 KeyPath="yes" />
 
           <Environment Id="FortunaDataDir" Name="FORTUNA_DATA_DIR" Value="[DataFolder]" Action="set" System="yes" />
