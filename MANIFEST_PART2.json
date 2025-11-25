@@ -1,7 +1,6 @@
 [
     "ARCHITECTURAL_MANDATE.md",
     "electron/secure-settings-manager.js",
-    "fortuna-webservice-service.spec",
     "package.json",
     "python_service/middleware/error_handler.py",
     "web_platform/api_gateway/src/services/DatabaseService.ts",

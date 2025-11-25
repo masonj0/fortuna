@@ -1,11 +1,8 @@
 # fortuna-webservice.spec
-# This is the single, authoritative PyInstaller spec file for building the web service.
 import os
 
 block_cipher = None
 
-# Consolidate all data assets required by any of the build targets.
-# The path is relative to the root, where this spec file lives.
 datas = []
 
 # 1. Add frontend assets
@@ -18,49 +15,15 @@ adapters_path = 'web_service/backend/adapters'
 if os.path.exists(adapters_path):
     datas.append((adapters_path, 'adapters'))
 
-# Consolidate all hidden imports from all previous spec files into a single superset.
 hiddenimports = [
-    # Core Uvicorn/FastAPI
-    'uvicorn.logging',
-    'uvicorn.loops.auto',
-    'uvicorn.protocols.http.h11_impl',
-    'uvicorn.protocols.http.httptools_impl',
-    'uvicorn.protocols.websockets.wsproto_impl',
-    'uvicorn.protocols.websockets.websockets_impl',
-    'uvicorn.lifespan.on',
-    'fastapi.routing',
-    'fastapi.middleware.cors',
-
-    # Explicit package imports to resolve ModuleNotFoundError
-    'web_service',
-    'web_service.backend',
-    'web_service.backend.api',
-    'starlette.staticfiles',
-    'starlette.middleware.cors',
-
-    # Core Pydantic
-    'pydantic_core',
-    'pydantic_settings.sources',
-
-    # Core Async/HTTP
-    'anyio._backends._asyncio',
-    'httpcore',
-    'httpx',
-
-    # Utility Libraries
-    'python_multipart',
-    'slowapi',
-    'slowapi.middleware',
-    'slowapi.util',
-    'slowapi.errors',
-    'structlog',
-    'tenacity',
-    'aiosqlite',
-    'selectolax',
-
-    # Data Science Libraries (from older spec files, included for safety)
-    'numpy',
-    'pandas',
+    'uvicorn.logging', 'uvicorn.loops.auto', 'uvicorn.protocols.http.h11_impl',
+    'uvicorn.protocols.http.httptools_impl', 'uvicorn.protocols.websockets.wsproto_impl',
+    'uvicorn.protocols.websockets.websockets_impl', 'uvicorn.lifespan.on',
+    'fastapi.routing', 'fastapi.middleware.cors',
+    'web_service', 'web_service.backend', 'web_service.backend.api',
+    'anyio._backends._asyncio', 'httpcore', 'httpx',
+    'python_multipart', 'slowapi', 'structlog', 'tenacity', 'aiosqlite', 'selectolax',
+    'pydantic_core', 'pydantic_settings.sources'
 ]
 
 a = Analysis(
@@ -92,10 +55,10 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,          # CRITICAL for Service stability
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=True,
+    console=False,      # CRITICAL: No window for Services
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

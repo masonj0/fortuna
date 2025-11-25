@@ -1,7 +1,6 @@
 [
     ".github/dependabot.yml",
     "HISTORY.md",
-    "fortuna-backend-webservice.spec",
     "package-lock.json",
     "python_service/adapters/betfair_greyhound_adapter.py",
     "python_service/db/init.py",
@@ -9,6 +8,5 @@
     "python_service/tests/test_manual_override.py",
     "web_platform/api_gateway/src/server.ts",
     "web_platform/api_gateway/tsconfig.json",
-    "web_platform/frontend/tsconfig.json",
-    "web_service/webservice.spec"
+    "web_platform/frontend/tsconfig.json"
 ]
