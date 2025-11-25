@@ -60,14 +60,11 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
           cache-dependency-path: 'web_service/backend/requirements.txt'
-      - name: Create Staging Directory for UI
-        shell: pwsh
-        run: New-Item -ItemType Directory -Path "staging/ui" -Force | Out-Null
       - name: Download Frontend Artifact
         uses: actions/download-artifact@v4
         with:
           name: frontend-build-ws-service
-          path: staging/ui
+          path: web_service/frontend/out
       - name: Install Python Dependencies
         shell: pwsh
         run: |
@@ -77,7 +74,7 @@ jobs:
         continue-on-error: true
         shell: pwsh
         run: |
-          $frontendOut = 'staging/ui'
+          $frontendOut = 'web_service/frontend/out'
           if (-not (Test-Path $frontendOut)) {
             Write-Host "❌ FATAL: Frontend build output missing at expected path!" -ForegroundColor Red
             Write-Host "Expected: $frontendOut" -ForegroundColor Red
@@ -311,6 +308,7 @@ jobs:
               <OutputType>Package</OutputType>
               <DefineConstants>SourceDir=./staging</DefineConstants>
               <Platforms>x64</Platforms>
+              <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
             </PropertyGroup>
             <ItemGroup>
               <PackageReference Include="WixToolset.Util.wixext" Version="4.0.5" />
