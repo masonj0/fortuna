@@ -2,9 +2,10 @@
 
 import os
 from pathlib import Path
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 block_cipher = None
-project_root = Path(SPECPATH).parent
+project_root = Path(SPECPATH)
 
 def include_tree(rel_path: str, target: str, store: list):
     absolute = project_root / rel_path
@@ -14,48 +15,34 @@ def include_tree(rel_path: str, target: str, store: list):
     else:
         print(f"[spec] Skipping missing include: {absolute}")
 
-# 1. Add frontend assets
-frontend_path = project_root / 'web_service/frontend/out'
-if frontend_path.exists():
-    datas.append((str(frontend_path), 'ui'))
+datas = []
+hiddenimports = set()
 
-# 2. Add backend adapters
-adapters_path = project_root / 'web_service/backend/adapters'
-if adapters_path.exists():
-    datas.append((str(adapters_path), 'adapters'))
+# === ADAPTED PATHS FOR YOUR REPO ===
+include_tree('staging/ui', 'ui', datas)
+include_tree('web_service/backend/adapters', 'adapters', datas)
+include_tree('web_service/backend/data', 'data', datas)
+include_tree('web_service/backend/json', 'json', datas)
 
+# Collect all potential dependencies
 datas += collect_data_files('uvicorn', includes=['*.html', '*.json'])
 datas += collect_data_files('slowapi', includes=['*.json', '*.yaml'])
 datas += collect_data_files('structlog', includes=['*.json'])
-hiddenimports.update(collect_submodules('web_service'))
+
 hiddenimports.update(collect_submodules('web_service.backend'))
 hiddenimports.update([
-    'uvicorn.logging',
-    'uvicorn.loops.auto',
-    'uvicorn.protocols.http.h11_impl',
-    'uvicorn.protocols.http.httptools_impl',
-    'uvicorn.protocols.websockets.wsproto_impl',
-    'uvicorn.protocols.websockets.websockets_impl',
-    'uvicorn.lifespan.on',
-    'fastapi.routing',
-    'fastapi.middleware.cors',
-    'starlette.staticfiles',
-    'starlette.middleware.cors',
-    'anyio._backends._asyncio',
-    'httpcore',
-    'httpx',
-    'python_multipart',
-    'slowapi',
-    'structlog',
-    'tenacity',
-    'aiosqlite',
-    'selectolax',
-    'pydantic_core',
-    'pydantic_settings.sources',
+    'uvicorn.logging', 'uvicorn.loops.auto', 'uvicorn.lifespan.on',
+    'uvicorn.protocols.http.h11_impl', 'uvicorn.protocols.http.httptools_impl',
+    'uvicorn.protocols.websockets.wsproto_impl', 'uvicorn.protocols.websockets.websockets_impl',
+    'fastapi.routing', 'fastapi.middleware.cors',
+    'starlette.staticfiles', 'starlette.middleware.cors',
+    'anyio._backends._asyncio', 'httpcore', 'httpx', 'python_multipart',
+    'slowapi', 'structlog', 'tenacity', 'aiosqlite', 'selectolax',
+    'pydantic_core', 'pydantic_settings.sources'
 ])
 
 a = Analysis(
-    ['run_web_service.py'],
+    ['web_service/backend/main.py'],  # ✅ Corrected Entry Point
     pathex=[str(project_root)],
     binaries=[],
     datas=datas,
@@ -79,7 +66,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='fortuna-webservice',
+    name='fortuna-backend', # Matches workflow expectation
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

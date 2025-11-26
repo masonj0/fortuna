@@ -146,16 +146,6 @@ jobs:
           pip install playwright
           python -m playwright install chromium
 
-      - name: Launch Electron App in Background
-        working-directory: electron
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          $process = Start-Process "npm" -ArgumentList "start" -PassThru -RedirectStandardOutput "electron-out.log" -RedirectStandardError "electron-err.log"
-          Set-Content -Path "electron.pid" -Value $process.Id
-          Write-Host "✅ Electron app launched with PID: $($process.Id)"
-          Start-Sleep -Seconds 15 # Wait for app to initialize
-
       - name: Verify Electron App with Playwright
         shell: pwsh
         run: |
@@ -166,22 +156,23 @@ jobs:
 
           async def run_verification():
               async with async_playwright() as p:
-                  # Electron apps launch on a random port, so we can't connect via URL.
-                  # Instead, we launch a browser context and assume the Electron window is the first one.
-                  browser = await p.chromium.launch(headless=False) # Must be headful to see window
-                  page = browser.contexts[0].pages[0]
-                  await page.wait_for_load_state('domcontentloaded', timeout=20000)
-
                   try:
-                      await expect(page.locator("h1:has-text('Fortuna Faucet')")).to_be_visible(timeout=10000)
+                      # Correctly launch and connect to the Electron app
+                      app = await p._electron.launch(args=['electron/main.js'])
+                      page = await app.first_window()
+                      await page.wait_for_load_state('domcontentloaded', timeout=30000)
+
+                      # Perform verification on the Electron window content
+                      await expect(page.locator("h1:has-text('Fortuna Faucet')")).to_be_visible(timeout=15000)
                       await page.screenshot(path=os.environ["SMOKE_SCREENSHOT_PATH"])
                       print("✅ Electron UI verification successful")
-                      await browser.close()
+                      await app.close()
                       sys.exit(0)
                   except Exception as e:
                       print(f"❌ Error during Electron verification: {e}", file=sys.stderr)
-                      await page.screenshot(path=os.environ["SMOKE_FAILURE_SCREENSHOT_PATH"])
-                      await browser.close()
+                      # No need to take a failure screenshot here as the context might be invalid
+                      if 'app' in locals() and app:
+                          await app.close()
                       sys.exit(1)
 
           if __name__ == "__main__":
