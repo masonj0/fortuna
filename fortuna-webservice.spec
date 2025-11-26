@@ -24,35 +24,19 @@ adapters_path = project_root / 'web_service/backend/adapters'
 if adapters_path.exists():
     datas.append((str(adapters_path), 'adapters'))
 
-datas += collect_data_files('uvicorn', includes=['*.html', '*.json'])
-datas += collect_data_files('slowapi', includes=['*.json', '*.yaml'])
-datas += collect_data_files('structlog', includes=['*.json'])
-hiddenimports.update(collect_submodules('web_service'))
-hiddenimports.update(collect_submodules('web_service.backend'))
-hiddenimports.update([
-    'uvicorn.logging',
-    'uvicorn.loops.auto',
-    'uvicorn.protocols.http.h11_impl',
-    'uvicorn.protocols.http.httptools_impl',
-    'uvicorn.protocols.websockets.wsproto_impl',
-    'uvicorn.protocols.websockets.websockets_impl',
-    'uvicorn.lifespan.on',
-    'fastapi.routing',
-    'fastapi.middleware.cors',
-    'starlette.staticfiles',
-    'starlette.middleware.cors',
-    'anyio._backends._asyncio',
-    'httpcore',
-    'httpx',
-    'python_multipart',
-    'slowapi',
-    'structlog',
-    'tenacity',
-    'aiosqlite',
-    'selectolax',
-    'pydantic_core',
-    'pydantic_settings.sources',
-])
+from PyInstaller.utils.hooks import collect_submodules
+
+hiddenimports = [
+    'uvicorn.logging', 'uvicorn.loops.auto', 'uvicorn.protocols.http.h11_impl',
+    'uvicorn.protocols.http.httptools_impl', 'uvicorn.protocols.websockets.wsproto_impl',
+    'uvicorn.protocols.websockets.websockets_impl', 'uvicorn.lifespan.on',
+    'fastapi.routing', 'fastapi.middleware.cors',
+    'anyio._backends._asyncio', 'httpcore', 'httpx',
+    'python_multipart', 'slowapi', 'structlog', 'tenacity', 'aiosqlite', 'selectolax',
+    'pydantic_core', 'pydantic_settings.sources',
+    'python_service.port_check'  # Added from run_web_service.py
+]
+hiddenimports += collect_submodules('web_service')
 
 a = Analysis(
     ['run_web_service.py'],

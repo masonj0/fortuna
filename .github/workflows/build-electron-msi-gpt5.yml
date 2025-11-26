@@ -3,7 +3,7 @@ name: Build Electron App (Zero-Fail Overkill Edition)
 on:
   push:
     branches:
-      - main
+      - "main"
   workflow_dispatch:
 
 permissions:

@@ -3,7 +3,7 @@ name: Build Fortuna Faucet Web Service Installer (Overkill Edition)
 on:
   push:
     branches:
-      - main
+      - "main"
     tags:
       - 'v*'
   workflow_dispatch:

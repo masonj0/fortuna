@@ -1,9 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 from pathlib import Path
 
-from pathlib import Path
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
-
 block_cipher = None
 project_root = Path(SPECPATH).parent
 
