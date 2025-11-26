@@ -87,7 +87,7 @@ jobs:
           cache-dependency-path: '${{ env.FRONTEND_DIR }}/package-lock.json'
 
       - name: Prime npm Cache
-        uses: actions/cache@13aac4eb96b248b8c2ff6f5d0d88d3ad1cf5a177 # v4.0.2
+        uses: actions/cache@88522ab9f39a2ea568f7027ed67a8d8f9e9d59c3 # v4.0.2
         with:
           path: |
             ~\AppData\Local\npm-cache
@@ -140,7 +140,7 @@ jobs:
           cache-dependency-path: 'python_service/requirements-dev.txt'
 
       - name: Prime pip Cache
-        uses: actions/cache@13aac4eb96b248b8c2ff6f5d0d88d3ad1cf5a177 # v4.0.2
+        uses: actions/cache@88522ab9f39a2ea568f7027ed67a8d8f9e9d59c3 # v4.0.2
         with:
           path: |
             ~\AppData\Local\pip\Cache
