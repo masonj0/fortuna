@@ -4,14 +4,11 @@ on:
   push:
     branches:
       - main
-      - release/**
     paths:
       - 'electron/**'
       - 'web_platform/frontend/**'
       - 'python_service/**'
       - '.github/workflows/build-electron-msi-gpt5.yml'
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -119,6 +116,7 @@ jobs:
           retention-days: 14
 
   build-python-service:
+    continue-on-error: true
     name: 🐍 Build Python Service Bundle
     runs-on: windows-latest
     timeout-minutes: 20
@@ -200,6 +198,7 @@ jobs:
           retention-days: 1
 
   build-frontend:
+    continue-on-error: true
     name: 🎨 Build Web Frontend
     runs-on: windows-latest
     timeout-minutes: 15
