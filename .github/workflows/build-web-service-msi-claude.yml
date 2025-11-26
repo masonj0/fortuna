@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - main
-    tags:
-      - 'v*'
   workflow_dispatch:
 
 # Restrict permissions to minimum necessary
@@ -24,7 +22,7 @@ env:
   PYTHONUTF8: "1"
   # Cache keys for better cache hits
   FRONTEND_CACHE_KEY: ${{ hashFiles('web_service/frontend/package-lock.json') }}
-  BACKEND_CACHE_KEY: ${{ hashFiles('python_service/requirements.txt') }}
+  BACKEND_CACHE_KEY: ${{ hashFiles('web_service/backend/requirements-dev.txt') }}
 
 jobs:
   # ============================================================================
@@ -104,14 +102,14 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
-          cache-dependency-path: 'python_service/requirements.txt'
+          cache-dependency-path: 'web_service/backend/requirements-dev.txt'
 
       - name: Backend - Install Dependencies
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           python -m pip install --upgrade pip
-          pip install -r python_service/requirements-dev.txt
+          pip install -r web_service/backend/requirements-dev.txt
 
       - name: Verify PyInstaller Entry Point
         shell: pwsh

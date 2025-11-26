@@ -2,7 +2,8 @@ name: Build Fortuna Faucet MSI (WiX v4) - Grok
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -24,11 +25,11 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
@@ -45,7 +46,7 @@ jobs:
         run: |
           if (-not (Test-Path 'web_service/frontend/out/index.html')) { throw "❌ Missing index.html" }
       - name: Upload Frontend Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         with:
           name: frontend-build
           path: web_service/frontend/out
@@ -62,18 +63,18 @@ jobs:
       SMOKE_SCREENSHOT_PATH: "smoke-test.png"
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Setup Python
         id: setup-python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
           cache-dependency-path: 'web_service/backend/requirements-dev.txt'
 
       - name: Download Frontend Artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
         with:
           name: frontend-build
           path: web_service/frontend/out
@@ -92,7 +93,7 @@ jobs:
         run: echo "VERSION=$(${{ steps.setup-python.outputs.python-path }} -c 'from importlib.metadata import version; print(version("playwright"))')" >> $env:GITHUB_OUTPUT
 
       - name: Cache Playwright Browsers
-        uses: actions/cache@v4
+        uses: actions/cache@88522ab9f39a2ea568f7027ed67a8d8f9e9d59c3 # v4.0.2
         id: playwright-cache
         with:
           path: C:\Users\runneradmin\AppData\Local\ms-playwright
@@ -204,7 +205,7 @@ jobs:
 
       - name: Upload Screenshot
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         with:
           name: smoke-test-evidence
           path: |
@@ -226,7 +227,7 @@ jobs:
           Write-Host "::endgroup::"
 
       - name: Upload Validated EXE
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         with:
           name: backend-executable
           path: dist/fortuna-webservice.exe
@@ -245,16 +246,16 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Download Validated Executable
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
         with:
           name: backend-executable
           path: build_wix/staging
 
       - name: Setup .NET 8 (for WiX)
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@3e891b0cb619bf60e2c25674b222b8940e2c1c25 # v4.1.0
         with:
           dotnet-version: '8.0.x'
 
@@ -301,7 +302,7 @@ jobs:
           dotnet build Fortuna.wixproj -c Release -p:Platform=x64 -p:Version=$packageVersion
 
       - name: Upload MSI
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         with:
           name: fortuna-installer
           path: build_wix/bin/x64/Release/*.msi
@@ -314,13 +315,12 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
     steps:
       - name: Download MSI
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
         with:
           name: fortuna-installer
           path: dist
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@c062e08bd532815e2082a85e87e3ef29c3e6d191 # v2.2.0
         with:
           files: dist/*.msi
           generate_release_notes: true
-echo "" >> .github/workflows/build-web-service-msi-grok.yml
