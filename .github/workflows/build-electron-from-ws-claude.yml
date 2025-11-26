@@ -3,7 +3,7 @@ name: Build Electron App (Claude's Hardened Version)
 on:
   push:
     branches:
-      - main
+      - deactivated
   workflow_dispatch:
 
 permissions:
