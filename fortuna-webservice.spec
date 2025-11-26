@@ -1,30 +1,35 @@
 # fortuna-webservice.spec
 import os
+from pathlib import Path
 
 block_cipher = None
+project_root = Path(SPECPATH).parent
 
 datas = []
 
 # 1. Add frontend assets
-frontend_path = 'web_service/frontend/out'
-if os.path.exists(frontend_path):
-    datas.append((frontend_path, 'ui'))
+frontend_path = project_root / 'web_service/frontend/out'
+if frontend_path.exists():
+    datas.append((str(frontend_path), 'ui'))
 
 # 2. Add backend adapters
-adapters_path = 'web_service/backend/adapters'
-if os.path.exists(adapters_path):
-    datas.append((adapters_path, 'adapters'))
+adapters_path = project_root / 'web_service/backend/adapters'
+if adapters_path.exists():
+    datas.append((str(adapters_path), 'adapters'))
+
+from PyInstaller.utils.hooks import collect_submodules
 
 hiddenimports = [
     'uvicorn.logging', 'uvicorn.loops.auto', 'uvicorn.protocols.http.h11_impl',
     'uvicorn.protocols.http.httptools_impl', 'uvicorn.protocols.websockets.wsproto_impl',
     'uvicorn.protocols.websockets.websockets_impl', 'uvicorn.lifespan.on',
     'fastapi.routing', 'fastapi.middleware.cors',
-    'web_service', 'web_service.backend', 'web_service.backend.api',
     'anyio._backends._asyncio', 'httpcore', 'httpx',
     'python_multipart', 'slowapi', 'structlog', 'tenacity', 'aiosqlite', 'selectolax',
-    'pydantic_core', 'pydantic_settings.sources'
+    'pydantic_core', 'pydantic_settings.sources',
+    'python_service.port_check'  # Added from run_web_service.py
 ]
+hiddenimports += collect_submodules('web_service')
 
 a = Analysis(
     ['run_web_service.py'],
