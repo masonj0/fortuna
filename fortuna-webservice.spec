@@ -2,10 +2,9 @@
 
 import os
 from pathlib import Path
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 block_cipher = None
-project_root = Path(SPECPATH)
+project_root = Path(SPECPATH).parent
 
 def include_tree(rel_path: str, target: str, store: list):
     absolute = project_root / rel_path
@@ -15,14 +14,15 @@ def include_tree(rel_path: str, target: str, store: list):
     else:
         print(f"[spec] Skipping missing include: {absolute}")
 
-datas = []
-hiddenimports = set()
+# 1. Add frontend assets
+frontend_path = project_root / 'web_service/frontend/out'
+if frontend_path.exists():
+    datas.append((str(frontend_path), 'ui'))
 
-include_tree('web_service/frontend/out', 'ui', datas)
-include_tree('web_service/backend/adapters', 'adapters', datas)
-include_tree('web_service/backend/data', 'data', datas)
-include_tree('web_service/backend/json', 'json', datas)
-include_tree('web_service/backend/templates', 'templates', datas)
+# 2. Add backend adapters
+adapters_path = project_root / 'web_service/backend/adapters'
+if adapters_path.exists():
+    datas.append((str(adapters_path), 'adapters'))
 
 datas += collect_data_files('uvicorn', includes=['*.html', '*.json'])
 datas += collect_data_files('slowapi', includes=['*.json', '*.yaml'])

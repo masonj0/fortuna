@@ -1,18 +1,26 @@
 # -*- mode: python ; coding: utf-8 -*-
+from pathlib import Path
 
 from pathlib import Path
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 block_cipher = None
-project_root = Path(SPECPATH)
+project_root = Path(SPECPATH).parent
 
-def include(rel_path: str, target: str, container: list):
-    source = project_root / rel_path
-    if source.exists():
-        container.append((str(source), target))
-        print(f"[spec] Including {source} -> {target}")
-    else:
-        print(f"[spec] Missing optional path: {source}")
+a = Analysis(
+    ['python_service/main.py'],  # ✅ CHANGED from run_electron_service.py
+    pathex=['.'],
+    binaries=[],
+    datas=[
+        (str(project_root / 'python_service/data'), 'data'),
+        (str(project_root / 'python_service/json'), 'json'),
+        (str(project_root / 'python_service/adapters'), 'adapters'),
+    ],
+    hiddenimports=[
+        # Event loop support
+        'asyncio',
+        'asyncio.windows_events',
+        'asyncio.selector_events',
 
 datas = []
 hiddenimports = set()
