@@ -1,0 +1,218 @@
+name: Build Fortuna Faucet MSI (Electron) - Grok
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '20'
+  PYTHON_VERSION: '3.12'
+  PYTHONUTF8: "1"
+
+jobs:
+  build-frontend:
+    name: '📦 Build Frontend'
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'web_platform/frontend/package-lock.json'
+      - name: Frontend - Install & Build
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          cd web_platform/frontend
+          npm ci
+          npm run build
+      - name: Verify Frontend Build
+        shell: pwsh
+        run: |
+          if (-not (Test-Path 'web_platform/frontend/out/index.html')) { throw "❌ Missing index.html" }
+      - name: Upload Frontend Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: web_platform/frontend/out
+          retention-days: 1
+
+  build-and-test:
+    name: '🐍 Build & Smoke Test'
+    needs: [build-frontend]
+    runs-on: windows-latest
+    env:
+      SMOKE_FRONTEND_URL: "http://localhost:3000"
+      SMOKE_HEADING_SELECTOR: "h1"
+      SMOKE_SCREENSHOT_PATH: "smoke-test.png"
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: 'python_service/requirements.txt'
+
+      - name: Download Frontend Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build
+          path: web_platform/frontend/out
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r python_service/requirements.txt
+          pip install playwright pytest-playwright
+
+      - name: Get Playwright Version
+        id: playwright-version
+        shell: pwsh
+        run: echo "VERSION=$(python -c 'from importlib.metadata import version; print(version("playwright"))')" >> $env:GITHUB_OUTPUT
+
+      - name: Cache Playwright Browsers
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: C:\Users\runneradmin\AppData\Local\ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.VERSION }}
+
+      - name: Install Playwright Browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: python -m playwright install --with-deps chromium
+
+      - name: Backend - Build with PyInstaller
+        run: pyinstaller fortuna-backend-electron.spec --clean --log-level WARN --noconfirm
+
+      - name: Run Electron App (Background)
+        shell: pwsh
+        run: |
+          cd electron
+          npm ci
+          $p = Start-Process -FilePath "npm" -ArgumentList "start" -PassThru -RedirectStandardOutput "electron.log" -RedirectStandardError "electron.err"
+          $p.Id | Out-File "electron.pid"
+          Start-Sleep -Seconds 10
+
+      - name: '📸 Playwright Verification'
+        shell: pwsh
+        run: |
+          $script = @"
+          import sys, os, time
+          from playwright.sync_api import sync_playwright, expect
+
+          url = os.environ["SMOKE_FRONTEND_URL"]
+          print(f"Testing URL: {url}")
+
+          with sync_playwright() as p:
+              browser = p.chromium.launch()
+              context = browser.new_context()
+              context.tracing.start(screenshots=True, snapshots=True)
+              page = context.new_page()
+              try:
+                  page.goto(url, wait_until='domcontentloaded', timeout=10000)
+                  expect(page.locator("body")).to_be_visible(timeout=10000)
+                  page.screenshot(path=os.environ["SMOKE_SCREENSHOT_PATH"])
+                  print("✅ Screenshot captured.")
+                  context.tracing.stop(path="trace.zip")
+              except Exception as e:
+                  print(f"❌ Error: {e}")
+                  page.screenshot(path="FAILURE.png")
+                  context.tracing.stop(path="trace.zip")
+                  sys.exit(1)
+              finally:
+                  browser.close()
+          "@
+          Set-Content -Path "verify.py" -Value $script
+          python verify.py
+
+      - name: Upload Screenshot & Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-test-evidence
+          path: |
+            *.png
+            electron.log
+            electron.err
+            trace.zip
+
+      - name: Cleanup Process
+        if: always()
+        shell: pwsh
+        run: if (Test-Path "electron.pid") { Stop-Process -Id (Get-Content "electron.pid") -Force -ErrorAction SilentlyContinue }
+
+      - name: Upload Validated EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-executable
+          path: dist/fortuna-backend.exe
+
+  package-electron-msi:
+    name: '📦 Package Electron MSI'
+    needs: [build-and-test]
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Download Validated Executable
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-executable
+          path: electron/resources
+
+      - name: Setup Node.js for Electron Builder
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'electron/package.json'
+
+      - name: Build Electron MSI
+        working-directory: electron
+        run: npx electron-builder --win --publish=never
+
+      - name: Verify MSI
+        shell: pwsh
+        run: if (-not (Test-Path "dist/*.msi")) { throw "❌ MSI build failed" }
+
+      - name: Upload MSI
+        uses: actions/upload-artifact@v4
+        with:
+          name: fortuna-installer
+          path: electron/dist/*.msi
+          if-no-files-found: error
+
+  create-release:
+    name: '🚀 Create Release'
+    needs: [package-electron-msi]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download MSI
+        uses: actions/download-artifact@v4
+        with:
+          name: fortuna-installer
+          path: dist
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dist/*.msi
+          generate_release_notes: true
