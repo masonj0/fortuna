@@ -1,21 +1,40 @@
 appId: com.fortuna.faucet
 productName: "Fortuna Faucet"
+artifactName: "Fortuna-Faucet-${version}-${arch}.${ext}"
 directories:
+  app: "."
   buildResources: "assets"
   output: "dist"
 files:
   - "main.js"
   - "preload.js"
-  - "package.json"
   - "secure-settings-manager.js"
-  - "web-ui-build/out/**/*"
+  - "package.json"
+  - "web-ui-build/**/*"
   - "assets/**/*"
+  - "!**/node_modules/*/{test,__mocks__,__tests__}/**"
 extraResources:
   - from: "resources/fortuna-backend.exe"
     to: "fortuna-backend.exe"
+asar: true
+protocols:
+  - name: "Fortuna Faucet Protocol"
+    schemes:
+      - "fortuna"
+fileAssociations:
+  - ext: "faucet"
+    name: "Fortuna Project File"
+    role: "Editor"
+    description: "Opens Fortuna Faucet project payloads"
 win:
-  target: "msi"
+  target:
+    - target: "msi"
+      arch:
+        - x64
   icon: "assets/icon.ico"
+  legalTrademarks: "Fortuna Labs"
+  publisherName:
+    - "Fortuna Labs LLC"
 msi:
   oneClick: false
   perMachine: true
@@ -23,3 +42,5 @@ msi:
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: "Fortuna Faucet"
+  warningsAsErrors: true
+publish: []
