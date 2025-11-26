@@ -43,11 +43,20 @@ jobs:
         # See https://docs.github.com/en/code-security/code-scanning/automatically-scanning-your-code-for-vulnerabilities-and-errors/configuring-code-scanning#using-queries-in-ql-packs
         # queries: security-extended,security-and-quality
 
-    - name: Install dependencies
+    - name: Install Python dependencies
+      if: matrix.language == 'python'
       run: |
         python -m pip install --upgrade pip
-        pip install -r python_service/requirements-dev.txt
-        npm install --prefix web_service/frontend
+        if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+        if [ -f python_service/requirements-dev.txt ]; then pip install -r python_service/requirements-dev.txt; fi
+        if [ -f web_service/backend/requirements-dev.txt ]; then pip install -r web_service/backend/requirements-dev.txt; fi
+
+    - name: Install Javascript dependencies and build
+      if: matrix.language == 'javascript'
+      run: |
+        if [ -f web_service/frontend/package.json ]; then (cd web_service/frontend && npm install && npm run build); fi
+        if [ -f web_platform/frontend/package.json ]; then (cd web_platform/frontend && npm install && npm run build); fi
+        if [ -f electron/package.json ]; then (cd electron && npm install); fi
 
     # ℹ️ Command-line programs to run using the OS shell.
     # 📚 See https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#jobsjob_idstepsrun
