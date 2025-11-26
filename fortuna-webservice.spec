@@ -1,19 +1,21 @@
 # fortuna-webservice.spec
 import os
+from pathlib import Path
 
 block_cipher = None
+project_root = Path(SPECPATH).parent
 
 datas = []
 
 # 1. Add frontend assets
-frontend_path = 'web_service/frontend/out'
-if os.path.exists(frontend_path):
-    datas.append((frontend_path, 'ui'))
+frontend_path = project_root / 'web_service/frontend/out'
+if frontend_path.exists():
+    datas.append((str(frontend_path), 'ui'))
 
 # 2. Add backend adapters
-adapters_path = 'web_service/backend/adapters'
-if os.path.exists(adapters_path):
-    datas.append((adapters_path, 'adapters'))
+adapters_path = project_root / 'web_service/backend/adapters'
+if adapters_path.exists():
+    datas.append((str(adapters_path), 'adapters'))
 
 hiddenimports = [
     'uvicorn.logging', 'uvicorn.loops.auto', 'uvicorn.protocols.http.h11_impl',
