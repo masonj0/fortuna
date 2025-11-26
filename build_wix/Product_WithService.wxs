@@ -1,89 +1,96 @@
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
-     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
-     xmlns:firewall="http://wixtoolset.org/schemas/v4/wxs/firewall"
-     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
+     xmlns:fire="http://schemas.microsoft.com/wix/FirewallExtension"
+     xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
 
-  <Package Name="Fortuna Faucet Web Service"
-           Manufacturer="Fortuna Development Team"
+  <Product Id="*"
+           Name="Fortuna Web Service"
+           Language="1033"
            Version="$(var.Version)"
-           UpgradeCode="d8ba82a4-1215-4c83-9369-5254165563e4"
-           Scope="perMachine">
+           Manufacturer="Fortuna Development Team"
+           UpgradeCode="A3A4A3B6-2313-4375-9A97-15206C81454A">
 
-    <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
+    <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
     <MediaTemplate EmbedCab="yes" />
 
-    <Feature Id="MainApplication" Title="Main Application" Level="1">
-      <ComponentGroupRef Id="ServiceComponents" />
-      <ComponentGroupRef Id="ShortcutsComponentGroup" />
+    <Property Id="ARPNOREPAIR" Value="no" />
+    <Property Id="ARPNOMODIFY" Value="yes" />
+
+    <UI>
+      <UIRef Id="WixUI_Minimal" />
+    </UI>
+
+    <!-- Fallback images if specific assets are missing -->
+    <WixVariable Id="WixUILicenseRtf" Value="build_wix/license.rtf"/>
+
+    <Feature Id="ProductFeature" Title="Fortuna Web Service" Level="1">
+      <ComponentGroupRef Id="WebServiceComponents" />
+      <ComponentRef Id="ApplicationShortcut" />
     </Feature>
+  </Product>
 
-    <StandardDirectory Id="ProgramFiles64Folder">
-      <Directory Id="INSTALLFOLDER" Name="Fortuna">
-        <Directory Id="DataFolder" Name="data" />
-        <Directory Id="LogsFolder" Name="logs" />
-
-        <Component Id="FortunaBackendService" Guid="a1b1a73a-4424-4221-897b-0331984639e2">
-          <File Id="FortunaBackendExe"
-                Source="$(var.SourceDir)/fortuna-webservice.exe"
-                KeyPath="yes" />
-
-          <Environment Id="FortunaDataDir" Name="FORTUNA_DATA_DIR" Value="[DataFolder]" Action="set" System="yes" />
-          <Environment Id="FortunaLogDir" Name="FORTUNA_LOG_DIR" Value="[LogsFolder]" Action="set" System="yes" />
-          <Environment Id="FortunaMode" Name="FORTUNA_MODE" Value="webservice" Action="set" System="yes" />
-
-          <ServiceInstall Id="InstallFortunaService"
-                          Name="FortunaBackendService"
-                          DisplayName="Fortuna Faucet Backend"
-                          Description="Handles data aggregation for Fortuna Faucet."
-                          Start="auto"
-                          Type="ownProcess"
-                          ErrorControl="normal"
-                          Account="NetworkService" />
-
-          <ServiceControl Id="StartFortunaService"
-                          Name="FortunaBackendService"
-                          Start="demand"
-                          Stop="both"
-                          Remove="uninstall"
-                          Wait="no" />
-
-          <firewall:FirewallException Id="FWException"
-                                      Name="Fortuna Faucet"
-                                      Port="8000"
-                                      Protocol="tcp"
-                                      Scope="any" />
-
-          <CreateFolder Directory="DataFolder">
-            <util:PermissionEx User="NetworkService" GenericAll="yes" />
-          </CreateFolder>
-          <CreateFolder Directory="LogsFolder">
-            <util:PermissionEx User="NetworkService" GenericAll="yes" />
-          </CreateFolder>
-
-          <RemoveFile Id="PurgeLogs" Directory="LogsFolder" Name="*.*" On="uninstall" />
-          <RemoveFile Id="PurgeData" Directory="DataFolder" Name="*.*" On="uninstall" />
-        </Component>
+  <Fragment>
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFilesFolder">
+        <Directory Id="INSTALLDIR" Name="FortunaWebService"/>
       </Directory>
-    </StandardDirectory>
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="ApplicationProgramsFolder" Name="Fortuna Web Service"/>
+      </Directory>
+    </Directory>
+  </Fragment>
 
-    <StandardDirectory Id="ProgramMenuFolder">
-      <Directory Id="ApplicationProgramsFolder" Name="Fortuna Service" />
-    </StandardDirectory>
+  <Fragment>
+    <ComponentGroup Id="WebServiceComponents" Directory="INSTALLDIR">
+      <Component Id="WebServiceExecutable" Guid="3F2A4A9C-4055-4D62-812E-B715A0123594">
+        <!-- Matches the 'staging' rename step in the workflow -->
+        <File Id="WebServiceExe" Source="staging/fortuna-webservice.exe" KeyPath="yes"/>
 
-    <ComponentGroup Id="ServiceComponents">
-      <ComponentRef Id="FortunaBackendService" />
-    </ComponentGroup>
+        <ServiceInstall Id="FortunaWebService"
+                        Name="FortunaWebService"
+                        DisplayName="Fortuna Web Service"
+                        Description="Provides live odds and race data via a web interface."
+                        Start="auto"
+                        Type="ownProcess"
+                        ErrorControl="normal"
+                        Account="NetworkService"/>
 
-    <ComponentGroup Id="ShortcutsComponentGroup" Directory="ApplicationProgramsFolder">
-      <Component Id="ApplicationShortcuts" Guid="0fe34ea7-c144-465a-8ab7-7eef33ccfd5c">
-        <util:InternetShortcut Id="DashboardShortcut" Name="Fortuna Faucet Dashboard" Target="http://localhost:8000" />
-        <Shortcut Id="UninstallShortcut" Name="Uninstall Fortuna Service" Description="Remove this application" Target="[System64Folder]msiexec.exe" Arguments="/x [ProductCode]" />
-        <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall" />
-        <RegistryValue Root="HKCU" Key="Software\Fortuna Faucet Service" Name="Installed" Type="integer" Value="1" KeyPath="yes" />
+        <ServiceControl Id="StartFortunaWebService"
+                        Name="FortunaWebService"
+                        Start="install"
+                        Stop="both"
+                        Remove="uninstall"
+                        Wait="yes"/>
+
+        <fire:FirewallException Id="FortunaFirewall"
+                                Name="FortunaWebService"
+                                Port="8102"
+                                Protocol="tcp"
+                                Scope="any"/>
       </Component>
     </ComponentGroup>
+  </Fragment>
 
-    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
-
-  </Package>
+  <Fragment>
+    <DirectoryRef Id="ApplicationProgramsFolder">
+      <Component Id="ApplicationShortcut" Guid="5E95E5B9-4F3D-4B9A-819B-9149C5E4700F">
+        <util:InternetShortcut Id="DashboardShortcut"
+                               Name="Fortuna Dashboard"
+                               Target="http://localhost:8102"/>
+        <Shortcut Id="UninstallProduct"
+                  Name="Uninstall Fortuna Web Service"
+                  Target="[SystemFolder]msiexec.exe"
+                  Arguments="/x [ProductCode]"
+                  Description="Uninstalls Fortuna Web Service"/>
+        <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall"/>
+        <RegistryValue Root="HKCU"
+                       Key="Software\FortunaWebService"
+                       Name="installed"
+                       Type="integer"
+                       Value="1"
+                       KeyPath="yes"/>
+      </Component>
+    </DirectoryRef>
+  </Fragment>
 </Wix>

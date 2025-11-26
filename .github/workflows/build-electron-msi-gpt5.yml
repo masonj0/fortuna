@@ -255,13 +255,15 @@ jobs:
           from playwright.async_api import async_playwright, expect
 
           async def main():
-              screenshot = Path('${{ env.SMOKE_SCREENSHOT_PATH }}')
-              screenshot_fail = Path('${{ env.SMOKE_FAILURE_SCREENSHOT_PATH }}')
-              trace_path = Path('${{ env.PLAYWRIGHT_TRACE }}')
+              screenshot = Path(os.getenv('SMOKE_SCREENSHOT_PATH', 'smoke-test-electron.png'))
+              screenshot_fail = Path(os.getenv('SMOKE_FAILURE_SCREENSHOT_PATH', 'smoke-test-electron-FAILURE.png'))
+              trace_path = Path(os.getenv('PLAYWRIGHT_TRACE', 'electron-trace.zip'))
+
               async with async_playwright() as p:
                   app = None
                   try:
-                      app = await p._electron.launch(args=['${{ env.ELECTRON_DIR }}/main.js'])
+                      # The _electron attribute is on the async_playwright object itself
+                      app = await p.electron.launch(args=['${{ env.ELECTRON_DIR }}/main.js'])
                       window = await app.first_window()
                       await window.wait_for_load_state('domcontentloaded', timeout=30000)
                       await expect(window.locator("h1:has-text('Fortuna Faucet')")).to_be_visible(timeout=20000)

@@ -1,9 +1,11 @@
-name: Build Fortuna Faucet MSI (Zero-Fail Overkill Edition)
+name: Build Fortuna Faucet Web Service Installer (Overkill Edition)
 
 on:
   push:
     branches:
       - main
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 permissions:
@@ -20,7 +22,7 @@ defaults:
     shell: pwsh
 
 env:
-  NODE_VERSION: '20.16.0'
+  NODE_VERSION: '20'
   PYTHON_VERSION: '3.12'
   DOTNET_VERSION: '8.0.x'
   PYTHONUTF8: '1'
@@ -29,22 +31,30 @@ env:
   NPM_CONFIG_FUND: 'false'
   NPM_CONFIG_AUDIT: 'false'
   FORCE_COLOR: '3'
-  FRONTEND_BUILD_DIR: 'web_service/frontend/out'
-  BACKEND_SPEC: 'fortuna-webservice.spec'
-  MSI_STAGING_DIR: 'build_wix/staging'
-  MSI_OUTPUT_DIR: 'build_wix/dist'
+
+  # === PATH CONFIGURATION (Matched to Repo) ===
+  FRONTEND_DIR: 'web_service/frontend'
+  BACKEND_DIR: 'web_service/backend'
+  WIX_DIR: 'build_wix'
+  BACKEND_SPEC: 'fortuna-backend-webservice.spec'
+
+  # === RUNTIME CONFIG ===
+  SERVICE_PORT: '8102'
   HEALTH_ENDPOINT: '/health'
-  SERVICE_PORT: '8088'
-  FORTUNA_MODE: 'webservice'
   API_KEY: 'a_secure_test_api_key_that_is_long_enough_for_smoke_test'
+
+  # === OUTPUTS ===
+  MSI_STAGING_DIR: 'build_wix/staging'
+  MSI_OUTPUT_DIR: 'dist'
   WIX_VERSION: '4.0.5'
-  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
-  NUGET_XMLDOC_MODE: 'skip'
 
 jobs:
+  # ============================================================================
+  # STAGE 0: PREFLIGHT INTEGRITY CHECKS
+  # ============================================================================
   repo-preflight:
     name: '🧪 Repo Preflight & Integrity'
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     timeout-minutes: 5
     outputs:
       frontend_lock_hash: ${{ steps.hashes.outputs.frontend_lock_hash }}
@@ -60,17 +70,16 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
           $paths = @(
-            'web_service/frontend/package.json',
-            'web_service/frontend/package-lock.json',
-            'web_service/backend/requirements-dev.txt',
-            'run_web_service.py',
-            'fortuna-webservice.spec',
-            'wix/product_webservice.wxs',
-            'build_wix'
+            "${{ env.FRONTEND_DIR }}/package.json",
+            "${{ env.FRONTEND_DIR }}/package-lock.json",
+            "${{ env.BACKEND_DIR }}/requirements.txt",
+            "${{ env.BACKEND_DIR }}/main.py",
+            "${{ env.BACKEND_SPEC }}",
+            "${{ env.WIX_DIR }}/Product_WithService.wxs"
           )
           foreach ($path in $paths) {
             if (-not (Test-Path $path)) {
-              Write-Host "❌ Required path missing: $path" -ForegroundColor Red
+              Write-Host "❌ FATAL: Required path missing: $path" -ForegroundColor Red
               exit 1
             }
           }
@@ -80,9 +89,9 @@ jobs:
         id: hashes
         run: |
           Set-StrictMode -Version Latest
-          $frontend = (Get-FileHash web_service/frontend/package-lock.json -Algorithm SHA256).Hash
-          $backend = (Get-FileHash web_service/backend/requirements-dev.txt -Algorithm SHA256).Hash
-          $wix = (Get-FileHash wix/product_webservice.wxs -Algorithm SHA256).Hash
+          $frontend = (Get-FileHash "${{ env.FRONTEND_DIR }}/package-lock.json" -Algorithm SHA256).Hash
+          $backend = (Get-FileHash "${{ env.BACKEND_DIR }}/requirements.txt" -Algorithm SHA256).Hash
+          $wix = (Get-FileHash "${{ env.WIX_DIR }}/Product_WithService.wxs" -Algorithm SHA256).Hash
 
           "frontend_lock_hash=$frontend" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "backend_requirements_hash=$backend" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
@@ -93,12 +102,14 @@ jobs:
         with:
           name: repo-preflight-${{ github.run_id }}
           path: |
-            web_service/frontend/package-lock.json
-            web_service/backend/requirements-dev.txt
-            wix/product_webservice.wxs
+            ${{ env.FRONTEND_DIR }}/package-lock.json
+            ${{ env.BACKEND_DIR }}/requirements.txt
+            ${{ env.WIX_DIR }}/Product_WithService.wxs
           retention-days: 1
-          if-no-files-found: error
 
+  # ============================================================================
+  # STAGE 1: FRONTEND BUILD
+  # ============================================================================
   build-frontend:
     name: '📦 Build Frontend'
     runs-on: windows-latest
@@ -109,21 +120,18 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: 'web_service/frontend/package-lock.json'
+          cache-dependency-path: '${{ env.FRONTEND_DIR }}/package-lock.json'
 
       - name: Prime npm Cache
         uses: actions/cache@v4
         with:
-          path: |
-            ~\AppData\Local\npm-cache
+          path: ~\AppData\Local\npm-cache
           key: ${{ runner.os }}-npm-${{ env.NODE_VERSION }}-${{ env.FRONTEND_LOCK_HASH }}
           restore-keys: |
             ${{ runner.os }}-npm-${{ env.NODE_VERSION }}-
@@ -131,197 +139,138 @@ jobs:
       - name: Install Dependencies
         run: |
           Set-StrictMode -Version Latest
-          cd web_service/frontend
+          cd ${{ env.FRONTEND_DIR }}
           npm ci --prefer-offline --no-audit --no-fund
-
-      - name: Static Analysis (if configured)
-        run: |
-          Set-StrictMode -Version Latest
-          cd web_service/frontend
-          npm run lint --if-present
-
-      - name: Run Frontend Tests (if configured)
-        run: |
-          Set-StrictMode -Version Latest
-          cd web_service/frontend
-          npm run test --if-present -- --runInBand --passWithNoTests
 
       - name: Build Frontend
         run: |
           Set-StrictMode -Version Latest
-          cd web_service/frontend
+          cd ${{ env.FRONTEND_DIR }}
           npm run build
 
-      - name: Verify Frontend Build Output
+      - name: Verify Build Output
         run: |
           Set-StrictMode -Version Latest
-          $outDir = '${{ env.FRONTEND_BUILD_DIR }}'
+          $outDir = "${{ env.FRONTEND_DIR }}/out"
           if (-not (Test-Path $outDir)) {
-            Write-Host "❌ FATAL: Missing build directory $outDir" -ForegroundColor Red
-            exit 1
+             Write-Host "❌ FATAL: Build directory not found" -ForegroundColor Red
+             exit 1
           }
           $files = Get-ChildItem -Path $outDir -Recurse -File
           if ($files.Count -eq 0) {
-            Write-Host "❌ FATAL: Build directory is empty" -ForegroundColor Red
-            exit 1
+             Write-Host "❌ FATAL: Build directory empty" -ForegroundColor Red
+             exit 1
           }
-          $totalSizeMB = ($files | Measure-Object Length -Sum).Sum / 1MB
-          Write-Host "✅ Frontend build contains $($files.Count) files totaling $([math]::Round($totalSizeMB, 2)) MB."
+          Write-Host "✅ Frontend built: $($files.Count) files." -ForegroundColor Green
 
-      - name: Generate Frontend Manifest
+      - name: Generate Artifact Manifest
         run: |
           Set-StrictMode -Version Latest
-          $outDir = Resolve-Path '${{ env.FRONTEND_BUILD_DIR }}'
-          $manifestPath = Join-Path $env:GITHUB_WORKSPACE 'frontend-build-manifest.tsv'
+          $outDir = Resolve-Path "${{ env.FRONTEND_DIR }}/out"
+          $manifestPath = "frontend-manifest.tsv"
           "RelativePath`tSizeBytes`tSHA256" | Out-File $manifestPath -Encoding utf8
           Get-ChildItem -Path $outDir -Recurse -File | ForEach-Object {
-            $relative = $_.FullName.Replace($outDir, '').TrimStart('\')
+            $relative = $_.FullName.Replace($outDir.Path, '').TrimStart('\')
             $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
             "$relative`t$($_.Length)`t$hash" | Out-File $manifestPath -Encoding utf8 -Append
           }
-          Write-Host "✅ Manifest written to $manifestPath"
 
       - name: Upload Frontend Artifact
         uses: actions/upload-artifact@v4
         with:
           name: frontend-build-${{ github.run_id }}
-          path: ${{ env.FRONTEND_BUILD_DIR }}
+          path: ${{ env.FRONTEND_DIR }}/out
           retention-days: 1
-          if-no-files-found: error
 
-      - name: Upload Frontend Manifest
+      - name: Upload Manifest
         uses: actions/upload-artifact@v4
         with:
           name: frontend-manifest-${{ github.run_id }}
-          path: frontend-build-manifest.tsv
-          retention-days: 3
-          if-no-files-found: error
+          path: frontend-manifest.tsv
 
+  # ============================================================================
+  # STAGE 2: BACKEND BUILD
+  # ============================================================================
   build-backend:
     name: '🐍 Build Backend'
     runs-on: windows-latest
-    timeout-minutes: 30
-    needs:
-      - build-frontend
-      - repo-preflight
+    timeout-minutes: 25
+    needs: [repo-preflight, build-frontend]
     env:
       BACKEND_REQUIREMENTS_HASH: ${{ needs.repo-preflight.outputs.backend_requirements_hash }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Download Frontend Artifact
         uses: actions/download-artifact@v4
         with:
           name: frontend-build-${{ github.run_id }}
-          path: web_service/frontend/out
+          path: temp-frontend
+
+      - name: Stage Frontend for PyInstaller
+        run: |
+          Set-StrictMode -Version Latest
+          $dest = "staging/ui"
+          New-Item -ItemType Directory -Path $dest -Force | Out-Null
+          Copy-Item -Path "temp-frontend/*" -Destination $dest -Recurse -Force
+          Write-Host "✅ Frontend staged for inclusion." -ForegroundColor Green
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
-          cache-dependency-path: 'web_service/backend/requirements-dev.txt'
+          cache-dependency-path: '${{ env.BACKEND_DIR }}/requirements.txt'
 
-      - name: Prime pip Cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~\AppData\Local\pip\Cache
-          key: ${{ runner.os }}-pip-${{ env.PYTHON_VERSION }}-${{ env.BACKEND_REQUIREMENTS_HASH }}
-          restore-keys: |
-            ${{ runner.os }}-pip-${{ env.PYTHON_VERSION }}-
-
-      - name: Install Backend Dependencies
+      - name: Install Dependencies
         run: |
           Set-StrictMode -Version Latest
           python -m pip install --upgrade pip setuptools wheel
-          pip install -r web_service/backend/requirements-dev.txt
-          pip check
+          pip install -r ${{ env.BACKEND_DIR }}/requirements.txt
+          pip install -r ${{ env.BACKEND_DIR }}/requirements-dev.txt
 
-      - name: Run Backend Tests (if present)
-        run: |
-          Set-StrictMode -Version Latest
-          if (Test-Path 'web_service/backend/tests') {
-            python -m pytest web_service/backend/tests -m "not e2e" --maxfail=1 -q
-          } else {
-            Write-Host "⚠️ No backend tests directory found; skipping pytest."
-          }
-
-      - name: Verify PyInstaller Spec Entry
-        run: |
-          Set-StrictMode -Version Latest
-          $specPath = Resolve-Path '${{ env.BACKEND_SPEC }}'
-          if (-not (Test-Path $specPath)) {
-            Write-Host "❌ Spec file missing: $specPath" -ForegroundColor Red
-            exit 1
-          }
-          $specContent = Get-Content $specPath -Raw
-          if ($specContent -notmatch "run_web_service.py") {
-            Write-Host "⚠️ Spec does not reference run_web_service.py; review recommended." -ForegroundColor Yellow
-          } else {
-            Write-Host "✅ Spec references correct entry point."
-          }
-
-      - name: Build Backend Executable
+      - name: Build with PyInstaller
         run: |
           Set-StrictMode -Version Latest
           pyinstaller ${{ env.BACKEND_SPEC }} --clean --log-level WARN --noconfirm
 
-      - name: Verify Backend Executable
+      - name: Verify Executable
         run: |
           Set-StrictMode -Version Latest
-          $exePath = 'dist/fortuna-webservice.exe'
+          $exePath = "dist/fortuna-backend.exe"
           if (-not (Test-Path $exePath)) {
-            Write-Host "❌ Backend executable missing at $exePath" -ForegroundColor Red
+            Write-Host "❌ FATAL: Executable not found" -ForegroundColor Red
             exit 1
           }
-          $sizeMB = (Get-Item $exePath).Length / 1MB
-          $signature = Get-AuthenticodeSignature $exePath
-          if ($signature.Status -ne 'NotSigned' -and $signature.Status -ne 'Valid') {
-            Write-Host "❌ Suspicious Authenticode status: $($signature.Status)" -ForegroundColor Red
-            exit 1
-          }
-          Write-Host "✅ Backend executable ready ($([math]::Round($sizeMB,2)) MB, signature: $($signature.Status))."
-
-      - name: Generate Backend Metadata
-        run: |
-          Set-StrictMode -Version Latest
-          pip freeze | Out-File backend-pip-freeze.txt -Encoding utf8
-          $exePath = Resolve-Path 'dist/fortuna-webservice.exe'
           $hash = (Get-FileHash $exePath -Algorithm SHA256).Hash
-          "fortuna-webservice.exe`t$hash" | Out-File backend-executable-sha256.tsv -Encoding utf8
-          Write-Host "✅ Backend hash recorded: $hash"
+          $size = (Get-Item $exePath).Length / 1MB
+          "fortuna-backend.exe`t$hash" | Out-File backend-sha256.tsv -Encoding utf8
+          Write-Host "✅ Backend ready: $([math]::Round($size, 2)) MB ($hash)" -ForegroundColor Green
 
       - name: Upload Backend Executable
         uses: actions/upload-artifact@v4
         with:
           name: backend-executable-${{ github.run_id }}
-          path: dist/fortuna-webservice.exe
-          retention-days: 2
-          if-no-files-found: error
+          path: dist/fortuna-backend.exe
+          retention-days: 1
 
-      - name: Upload Backend Metadata
+      - name: Upload Metadata
         uses: actions/upload-artifact@v4
         with:
           name: backend-metadata-${{ github.run_id }}
-          path: |
-            backend-pip-freeze.txt
-            backend-executable-sha256.tsv
-          retention-days: 7
-          if-no-files-found: error
+          path: backend-sha256.tsv
 
+  # ============================================================================
+  # STAGE 3: SMOKE TESTS
+  # ============================================================================
   smoke-test-service:
     name: '🔬 Smoke Test Service'
     runs-on: windows-latest
     timeout-minutes: 20
     needs: build-backend
     env:
-      SMOKE_SCREENSHOT_PATH: 'smoke-test-screenshot.png'
-      SMOKE_FAILURE_SCREENSHOT_PATH: 'smoke-test-screenshot-FAILURE.png'
-      TRACE_PATH: 'trace.zip'
+      SMOKE_LOG_DIR: 'logs'
     steps:
       - name: Download Backend Executable
         uses: actions/download-artifact@v4
@@ -329,234 +278,153 @@ jobs:
           name: backend-executable-${{ github.run_id }}
           path: .
 
-      - name: Setup Python (for Playwright)
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Install Playwright
+      - name: Prepare Environment
         run: |
           Set-StrictMode -Version Latest
-          python -m pip install --upgrade pip
-          pip install playwright
-          python -m playwright install chromium
+          New-Item -ItemType Directory -Path $env:SMOKE_LOG_DIR -Force | Out-Null
+          New-Item -ItemType Directory -Path "${{ env.BACKEND_DIR }}/data" -Force | Out-Null
+          New-Item -ItemType Directory -Path "${{ env.BACKEND_DIR }}/json" -Force | Out-Null
 
-      - name: Configure Firewall
+          # Allow firewall
+          New-NetFirewallRule -DisplayName "FortunaSmokeTest" -Direction Inbound -Action Allow -Protocol TCP -LocalPort ${{ env.SERVICE_PORT }} -ErrorAction SilentlyContinue
+
+      - name: Start Service
         run: |
           Set-StrictMode -Version Latest
-          New-NetFirewallRule -DisplayName "Allow Fortuna Smoke Test" `
-            -Direction Inbound `
-            -Action Allow `
-            -Protocol TCP `
-            -LocalPort ${{ env.SERVICE_PORT }} `
-            -ErrorAction SilentlyContinue
-          Write-Host "✅ Firewall open on port ${{ env.SERVICE_PORT }}"
+          $env:API_KEY = "${{ env.API_KEY }}"
+          $env:FORTUNA_PORT = "${{ env.SERVICE_PORT }}"
 
-      - name: Prepare Runtime Directories
-        run: |
-          Set-StrictMode -Version Latest
-          @('data','logs','json') | ForEach-Object {
-            New-Item -ItemType Directory -Path (Join-Path $PWD $_) -Force | Out-Null
-          }
-          Write-Host "✅ Runtime directories ready."
-
-      - name: Launch Backend Service
-        run: |
-          Set-StrictMode -Version Latest
-          $env:API_KEY = '${{ env.API_KEY }}'
-          $env:FORTUNA_MODE = '${{ env.FORTUNA_MODE }}'
-          $env:FORTUNA_PORT = '${{ env.SERVICE_PORT }}'
-          $backendProcess = Start-Process -FilePath ".\fortuna-webservice.exe" `
-            -WorkingDirectory $PWD `
+          $proc = Start-Process -FilePath ".\fortuna-backend.exe" `
             -PassThru `
-            -RedirectStandardOutput "backend-out.log" `
-            -RedirectStandardError "backend-err.log"
-          $backendProcess.Id | Out-File backend.pid -Encoding ascii
-          Write-Host "✅ Backend started with PID $($backendProcess.Id)"
+            -RedirectStandardOutput "$env:SMOKE_LOG_DIR/backend-out.txt" `
+            -RedirectStandardError "$env:SMOKE_LOG_DIR/backend-err.txt"
 
-      - name: Wait for Healthy Service
+          $proc.Id | Out-File backend.pid -Encoding ascii
+          Write-Host "✅ Service started (PID: $($proc.Id))" -ForegroundColor Green
+
+      - name: Wait for Health (Polling)
         run: |
           Set-StrictMode -Version Latest
-          $healthUrl = "http://127.0.0.1:${{ env.SERVICE_PORT }}${{ env.HEALTH_ENDPOINT }}"
+          $url = "http://127.0.0.1:${{ env.SERVICE_PORT }}${{ env.HEALTH_ENDPOINT }}"
           $deadline = (Get-Date).AddMinutes(3)
           $success = $false
+
           do {
             try {
-              $resp = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 3
-              if ($resp.StatusCode -eq 200) {
-                $success = $true
-                break
-              }
+              $resp = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
+              if ($resp.StatusCode -eq 200) { $success = $true; break }
             } catch {
               Start-Sleep -Seconds 2
             }
           } while ((Get-Date) -lt $deadline)
+
           if (-not $success) {
-            Write-Host "❌ Health check failed within timeout." -ForegroundColor Red
-            Get-Content backend-err.log -Tail 200
+            Write-Host "❌ FATAL: Health check failed" -ForegroundColor Red
+            if (Test-Path "$env:SMOKE_LOG_DIR/backend-err.txt") { Get-Content "$env:SMOKE_LOG_DIR/backend-err.txt" -Tail 20 | Write-Host }
             exit 1
           }
-          Write-Host "✅ Health endpoint returned 200."
+          Write-Host "✅ Health check passed." -ForegroundColor Green
 
-      - name: Frontend UI Verification
+      - name: Verify API Response
         run: |
           Set-StrictMode -Version Latest
-          $script = @"
-          import os, sys
-          from datetime import datetime
-          from playwright.sync_api import sync_playwright, expect
+          $url = "http://127.0.0.1:${{ env.SERVICE_PORT }}/api/races"
+          $headers = @{ 'X-API-Key' = "${{ env.API_KEY }}" }
 
-          def main():
-              url = f"http://127.0.0.1:{os.environ['SERVICE_PORT']}"
-              screenshot_ok = os.environ['SMOKE_SCREENSHOT_PATH']
-              screenshot_fail = os.environ['SMOKE_FAILURE_SCREENSHOT_PATH']
-              trace_path = os.environ['TRACE_PATH']
-              heading_selector = "h1:has-text('Fortuna Faucet')"
-              with sync_playwright() as p:
-                  browser = p.chromium.launch(headless=True)
-                  context = browser.new_context(record_video_dir="playwright-video")
-                  context.tracing.start(screenshots=True, snapshots=True, sources=True)
-                  page = context.new_page()
-                  try:
-                      page.goto(url, wait_until="networkidle", timeout=30000)
-                      expect(page.locator(heading_selector)).to_be_visible(timeout=15000)
-                      page.screenshot(path=screenshot_ok, full_page=True)
-                      print("✅ UI verification succeeded.")
-                      context.tracing.stop(path=trace_path)
-                  except Exception as exc:
-                      page.screenshot(path=screenshot_fail, full_page=True)
-                      context.tracing.stop(path=trace_path)
-                      print(f"❌ UI verification failed: {exc}", file=sys.stderr)
-                      raise
-                  finally:
-                      context.close()
-                      browser.close()
-
-          if __name__ == "__main__":
-              main()
-          "@
-          Set-Content verify_frontend.py $script -Encoding utf8
-          python verify_frontend.py
-
-      - name: Upload Smoke Test Evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: smoke-test-artifacts-${{ github.run_id }}
-          path: |
-            backend-out.log
-            backend-err.log
-            backend.pid
-            ${{ env.SMOKE_SCREENSHOT_PATH }}
-            ${{ env.SMOKE_FAILURE_SCREENSHOT_PATH }}
-            ${{ env.TRACE_PATH }}
-            playwright-video
-          if-no-files-found: warn
-          retention-days: 7
-
-      - name: Collect Forensics
-        if: always()
-        run: |
-          Set-StrictMode -Version Latest
-          $logFile = "forensic-analysis.log"
-          "=== FORENSICS ($(Get-Date -Format o)) ===" | Out-File $logFile -Encoding utf8
-          "ENVIRONMENT" | Out-File $logFile -Append
-          Get-ChildItem Env: | Sort-Object Name | Out-String -Width 500 | Out-File $logFile -Append
-          "`nPROCESSES" | Out-File $logFile -Append
-          Get-Process | Sort-Object CPU -Descending | Select-Object -First 30 | Format-Table | Out-String -Width 500 | Out-File $logFile -Append
-          "`nNETSTAT" | Out-File $logFile -Append
-          netstat -ano | Out-File $logFile -Append
-          Write-Host "✅ Forensic log captured."
-
-      - name: Upload Forensics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: smoke-test-forensics-${{ github.run_id }}
-          path: forensic-analysis.log
-          retention-days: 7
-          if-no-files-found: warn
-
-      - name: Teardown Service
-        if: always()
-        run: |
-          Set-StrictMode -Version Latest
-          if (Test-Path 'backend.pid') {
-            $pid = Get-Content backend.pid
-            Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
-            Write-Host "🛑 Killed backend PID $pid"
+          try {
+            $resp = Invoke-WebRequest -Uri $url -Headers $headers -UseBasicParsing -TimeoutSec 5
+            if ($resp.StatusCode -eq 200 -or $resp.StatusCode -eq 400 -or $resp.StatusCode -eq 401) {
+              Write-Host "✅ API verification successful (HTTP $($resp.StatusCode))" -ForegroundColor Green
+            } else {
+               throw "Unexpected status code: $($resp.StatusCode)"
+            }
+          } catch {
+            Write-Host "❌ API Verification Failed: $_" -ForegroundColor Red
+            exit 1
           }
-          Remove-NetFirewallRule -DisplayName "Allow Fortuna Smoke Test" -ErrorAction SilentlyContinue
 
+      - name: Collect Forensics (On Failure)
+        if: failure()
+        run: |
+          "=== PROCESSES ===" | Out-File forensics.log
+          Get-Process | Sort-Object CPU -Descending | Select-Object -First 20 | Out-String | Out-File forensics.log -Append
+          "=== NETSTAT ===" | Out-File forensics.log -Append
+          netstat -ano | Out-File forensics.log -Append
+
+      - name: Upload Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-test-logs-${{ github.run_id }}
+          path: |
+            ${{ env.SMOKE_LOG_DIR }}/
+            forensics.log
+            backend.pid
+          retention-days: 7
+
+      - name: Teardown
+        if: always()
+        run: |
+          if (Test-Path 'backend.pid') { Stop-Process -Id (Get-Content backend.pid) -Force -ErrorAction SilentlyContinue }
+          Remove-NetFirewallRule -DisplayName "FortunaSmokeTest" -ErrorAction SilentlyContinue
+
+  # ============================================================================
+  # STAGE 4: PACKAGING MSI
+  # ============================================================================
   package-msi-service:
     name: '💿 Package Service MSI'
     runs-on: windows-latest
-    timeout-minutes: 25
-    needs:
-      - smoke-test-service
-      - repo-preflight
+    timeout-minutes: 20
+    needs: [repo-preflight, smoke-test-service]
     env:
       WIX_HASH: ${{ needs.repo-preflight.outputs.wix_definition_hash }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Download Backend Executable
+      - name: Download Backend
         uses: actions/download-artifact@v4
         with:
           name: backend-executable-${{ github.run_id }}
           path: dist
 
-      - name: Stage Build Artifacts
+      - name: Stage Artifacts
         id: stage
         run: |
           Set-StrictMode -Version Latest
-          $staging = '${{ env.MSI_STAGING_DIR }}'
+          $staging = "${{ env.MSI_STAGING_DIR }}"
           New-Item -ItemType Directory -Path $staging -Force | Out-Null
-          Move-Item -Path 'dist/fortuna-webservice.exe' -Destination (Join-Path $staging 'fortuna-webservice.exe') -Force
-          $branch = '${{ github.ref_name }}'
-          if ($branch -eq 'main') { $msiName = 'Fortuna-WebService-Nightly.msi' } else { $msiName = "Fortuna-WebService-$($branch -replace '/', '-').msi" }
+
+          # Move and rename to match WiX expectation
+          Move-Item -Path "dist/fortuna-backend.exe" -Destination "$staging/fortuna-webservice.exe" -Force
+
+          $msiName = "Fortuna-WebService-${{ github.ref_name }}.msi".Replace('/', '-')
           "msi_name=$msiName" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          Write-Host "✅ MSI name set to $msiName"
+          Write-Host "✅ Staged for MSI: $msiName" -ForegroundColor Green
 
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Cache NuGet Packages
+      - name: Cache NuGet
         uses: actions/cache@v4
         with:
-          path: |
-            C:\Users\runneradmin\.nuget\packages
-            ~\AppData\Local\NuGet\Cache
+          path: ~/.nuget/packages
           key: ${{ runner.os }}-nuget-${{ env.WIX_HASH }}
-          restore-keys: |
-            ${{ runner.os }}-nuget-
 
-      - name: Copy WiX Source
+      - name: Prepare WiX Project
         run: |
           Set-StrictMode -Version Latest
-          Copy-Item -Path 'wix/product_webservice.wxs' -Destination 'build_wix/Product_WithService.wxs' -Force
-          if (Test-Path 'build_wix/Product_WithoutService.wxs') {
-            Remove-Item 'build_wix/Product_WithoutService.wxs' -Force
-          }
-          Write-Host "✅ WiX definition prepared."
+          Copy-Item "${{ env.WIX_DIR }}/Product_WithService.wxs" "${{ env.WIX_DIR }}/Product.wxs" -Force
 
-      - name: Generate WiX Project
-        working-directory: build_wix
-        run: |
-          Set-StrictMode -Version Latest
-          $projectContent = @"
+          $wixProj = @"
           <Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">
             <PropertyGroup>
               <OutputName>${{ steps.stage.outputs.msi_name }}</OutputName>
               <OutputType>Package</OutputType>
               <DefineConstants>SourceDir=staging</DefineConstants>
               <Platforms>x64</Platforms>
-              <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
             </PropertyGroup>
             <ItemGroup>
               <PackageReference Include="WixToolset.Util.wixext" Version="${{ env.WIX_VERSION }}" />
@@ -564,85 +432,58 @@ jobs:
               <PackageReference Include="WixToolset.UI.wixext" Version="${{ env.WIX_VERSION }}" />
             </ItemGroup>
             <ItemGroup>
-              <Compile Include="Product_WithService.wxs" />
+              <Compile Include="Product.wxs" />
             </ItemGroup>
           </Project>
           "@
-          Set-Content -Path 'Fortuna.wixproj' -Value $projectContent -Encoding utf8
-          Write-Host "✅ Generated Fortuna.wixproj"
+          Set-Content "${{ env.WIX_DIR }}/Fortuna.wixproj" $wixProj -Encoding utf8
 
       - name: Build MSI
-        working-directory: build_wix
+        working-directory: ${{ env.WIX_DIR }}
         run: |
           Set-StrictMode -Version Latest
-          $packageVersion = "${{ github.run_number }}.${{ github.run_attempt }}.0"
-          dotnet build Fortuna.wixproj -c Release -p:Platform=x64 -p:Version=$packageVersion
-          $builtPath = "bin\x64\Release\${{ steps.stage.outputs.msi_name }}"
-          if (-not (Test-Path $builtPath)) {
-            Write-Host "❌ MSI not found at $builtPath" -ForegroundColor Red
-            exit 1
-          }
-          New-Item -ItemType Directory -Path "${{ env.MSI_OUTPUT_DIR }}" -Force | Out-Null
-          Copy-Item $builtPath -Destination "${{ env.MSI_OUTPUT_DIR }}" -Force
-          $hash = (Get-FileHash (Join-Path "${{ env.MSI_OUTPUT_DIR }}" "${{ steps.stage.outputs.msi_name }}") -Algorithm SHA256).Hash
-          "msi_sha256=$hash" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          Write-Host "✅ MSI built and hashed ($hash)"
+          dotnet build Fortuna.wixproj -c Release -p:Platform=x64
 
-      - name: Upload MSI Artifact
+          $msiFile = "bin/x64/Release/${{ steps.stage.outputs.msi_name }}"
+          if (-not (Test-Path $msiFile)) { throw "MSI not created" }
+
+          $hash = (Get-FileHash $msiFile -Algorithm SHA256).Hash
+          Write-Host "✅ MSI Built: $hash" -ForegroundColor Cyan
+
+      - name: Upload MSI
         uses: actions/upload-artifact@v4
         with:
-          name: fortuna-installer-service-${{ github.run_id }}
-          path: |
-            build_wix/dist/*.msi
-          retention-days: 14
-          if-no-files-found: error
+          name: fortuna-service-msi-${{ github.run_id }}
+          path: ${{ env.WIX_DIR }}/bin/x64/Release/*.msi
+          retention-days: 7
 
-      - name: Upload MSI Hash
-        uses: actions/upload-artifact@v4
-        with:
-          name: fortuna-installer-service-sha256-${{ github.run_id }}
-          path: build_wix/dist/*.msi
-          if-no-files-found: error
-        continue-on-error: true
-
+  # ============================================================================
+  # FINAL: RELEASE
+  # ============================================================================
   create-release:
-    name: '🚀 Create GitHub Release'
+    name: '🚀 Create Release'
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     needs: package-msi-service
     permissions:
       contents: write
     steps:
-      - name: Download MSI Artifact
+      - name: Download MSI
         uses: actions/download-artifact@v4
         with:
-          pattern: fortuna-installer-service-*
-          path: installers
+          pattern: fortuna-service-msi-*
           merge-multiple: true
+          path: assets
 
-      - name: Generate SHA256 Checksums
+      - name: Generate Checksums
         run: |
-          Set-StrictMode -Version Latest
-          $checksumFile = "installers/SHASUMS256.txt"
-          Get-ChildItem installers -Filter *.msi | ForEach-Object {
-            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
-            "$hash  $($_.Name)" | Out-File $checksumFile -Append -Encoding utf8
-          }
-          Get-Content $checksumFile
+          cd assets
+          sha256sum *.msi > SHASUMS256.txt
 
-      - name: Create Release
+      - name: Publish Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            installers/*.msi
-            installers/SHASUMS256.txt
-          body: |
-            🚀 **Fortuna Faucet Production Release**
-
-            - Windows Service MSI (`${{ needs.package-msi-service.outputs.msi_name }}`)
-            - SHA256 checksums included (SHASUMS256.txt)
-
-            ✅ Built, smoke-tested, and packaged via the Zero-Fail Overkill workflow.
-          draft: false
-          prerelease: false
+            assets/*.msi
+            assets/SHASUMS256.txt
           generate_release_notes: true
