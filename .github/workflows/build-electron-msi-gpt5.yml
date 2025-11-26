@@ -1,0 +1,366 @@
+name: Build Electron App (Zero-Fail Overkill Edition)
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  checks: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: pwsh
+
+env:
+  NODE_VERSION: '20.16.0'
+  PYTHON_VERSION: '3.12'
+  PYTHONUTF8: '1'
+  FORCE_COLOR: '3'
+  FRONTEND_DIR: 'web_platform/frontend'
+  ELECTRON_DIR: 'electron'
+  ELECTRON_OUTPUT: 'electron/dist'
+  PLAYWRIGHT_TRACE: 'electron-trace.zip'
+  SMOKE_SCREENSHOT_PATH: 'smoke-test-electron.png'
+  SMOKE_FAILURE_SCREENSHOT_PATH: 'smoke-test-electron-FAILURE.png'
+
+jobs:
+  repo-preflight:
+    name: '🧪 Repo Preflight & Integrity'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      frontend_lock_hash: ${{ steps.hashes.outputs.frontend_lock_hash }}
+      backend_requirements_hash: ${{ steps.hashes.outputs.backend_requirements_hash }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate Critical Paths
+        run: |
+          Set-StrictMode -Version Latest
+          $paths = @(
+            'web_platform/frontend/package.json',
+            'web_platform/frontend/package-lock.json',
+            'python_service/requirements-dev.txt',
+            'electron/package.json',
+            'fortuna-backend-electron.spec',
+            'electron/electron-builder-config.yml'
+          )
+          foreach ($path in $paths) {
+            if (-not (Test-Path $path)) { throw "Missing critical path: $path" }
+          }
+          Write-Host "✅ Preflight paths exist."
+
+      - name: Capture Hashes
+        id: hashes
+        run: |
+          Set-StrictMode -Version Latest
+          $frontend = (Get-FileHash web_platform/frontend/package-lock.json -Algorithm SHA256).Hash
+          $backend = (Get-FileHash python_service/requirements-dev.txt -Algorithm SHA256).Hash
+          "frontend_lock_hash=$frontend" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "backend_requirements_hash=$backend" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+  build-frontend:
+    name: '📦 Build Frontend for Electron'
+    runs-on: windows-latest
+    timeout-minutes: 20
+    needs: repo-preflight
+    env:
+      FRONTEND_LOCK_HASH: ${{ needs.repo-preflight.outputs.frontend_lock_hash }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: '${{ env.FRONTEND_DIR }}/package-lock.json'
+
+      - name: Prime npm Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~\AppData\Local\npm-cache
+          key: ${{ runner.os }}-electron-npm-${{ env.NODE_VERSION }}-${{ env.FRONTEND_LOCK_HASH }}
+          restore-keys: |
+            ${{ runner.os }}-electron-npm-${{ env.NODE_VERSION }}-
+
+      - name: Install & Build
+        run: |
+          Set-StrictMode -Version Latest
+          cd ${{ env.FRONTEND_DIR }}
+          npm ci --prefer-offline --no-audit --no-fund
+          npm run lint --if-present
+          npm run test --if-present -- --runInBand --passWithNoTests
+          npm run build
+
+      - name: Verify Frontend Build
+        run: |
+          Set-StrictMode -Version Latest
+          $outDir = '${{ env.FRONTEND_DIR }}/out'
+          if (-not (Test-Path $outDir)) { throw "Missing build directory $outDir" }
+          $count = (Get-ChildItem -Path $outDir -Recurse -File).Count
+          if ($count -eq 0) { throw "Build output empty." }
+          Write-Host "✅ $count frontend files built."
+
+      - name: Upload Frontend Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build-electron-${{ github.run_id }}
+          path: ${{ env.FRONTEND_DIR }}/out
+          retention-days: 1
+          if-no-files-found: error
+
+  build-backend:
+    name: '🐍 Build Backend for Electron'
+    runs-on: windows-latest
+    timeout-minutes: 25
+    needs: repo-preflight
+    env:
+      BACKEND_REQUIREMENTS_HASH: ${{ needs.repo-preflight.outputs.backend_requirements_hash }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: 'python_service/requirements-dev.txt'
+
+      - name: Prime pip Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~\AppData\Local\pip\Cache
+          key: ${{ runner.os }}-electron-pip-${{ env.PYTHON_VERSION }}-${{ env.BACKEND_REQUIREMENTS_HASH }}
+          restore-keys: |
+            ${{ runner.os }}-electron-pip-${{ env.PYTHON_VERSION }}-
+
+      - name: Install Dependencies
+        run: |
+          Set-StrictMode -Version Latest
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -r python_service/requirements-dev.txt
+          pip check
+
+      - name: Run Backend Tests (if present)
+        run: |
+          Set-StrictMode -Version Latest
+          if (Test-Path 'python_service/tests') {
+            python -m pytest python_service/tests --maxfail=1 -q
+          } else {
+            Write-Host "⚠️ No python_service/tests directory; skipping."
+          }
+
+      - name: Build Electron Backend Executable
+        run: |
+          Set-StrictMode -Version Latest
+          pyinstaller fortuna-backend-electron.spec --clean --log-level WARN --noconfirm
+
+      - name: Verify Backend Executable
+        run: |
+          Set-StrictMode -Version Latest
+          $exe = 'dist/fortuna-backend.exe'
+          if (-not (Test-Path $exe)) { throw "Missing $exe" }
+          $hash = (Get-FileHash $exe -Algorithm SHA256).Hash
+          $sizeMB = (Get-Item $exe).Length / 1MB
+          "fortuna-backend.exe`t$hash" | Out-File backend-electron-sha256.tsv -Encoding utf8
+          Write-Host "✅ Backend ready ($([math]::Round($sizeMB,2)) MB, SHA256 $hash)"
+
+      - name: Upload Backend Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-executable-electron-${{ github.run_id }}
+          path: dist/fortuna-backend.exe
+          retention-days: 1
+
+      - name: Upload Backend Metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-electron-manifest-${{ github.run_id }}
+          path: backend-electron-sha256.tsv
+          retention-days: 7
+
+  smoke-test-electron:
+    name: '🔬 Smoke Test Electron App'
+    runs-on: windows-latest
+    timeout-minutes: 25
+    needs:
+      - build-frontend
+      - build-backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Frontend Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build-electron-${{ github.run_id }}
+          path: temp/frontend
+
+      - name: Download Backend Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-executable-electron-${{ github.run_id }}
+          path: temp/backend
+
+      - name: Stage Artifacts
+        run: |
+          Set-StrictMode -Version Latest
+          New-Item -ItemType Directory -Path '${{ env.ELECTRON_DIR }}/resources' -Force | Out-Null
+          New-Item -ItemType Directory -Path '${{ env.ELECTRON_DIR }}/web-ui-build' -Force | Out-Null
+          Copy-Item -Path 'temp/frontend/*' -Destination '${{ env.ELECTRON_DIR }}/web-ui-build/' -Recurse -Force
+          Copy-Item -Path 'temp/backend/fortuna-backend.exe' -Destination '${{ env.ELECTRON_DIR }}/resources/fortuna-backend.exe' -Force
+          Write-Host "✅ Electron staging ready."
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: '${{ env.ELECTRON_DIR }}/package-lock.json'
+
+      - name: Install Electron Dependencies
+        working-directory: ${{ env.ELECTRON_DIR }}
+        run: |
+          Set-StrictMode -Version Latest
+          npm ci --prefer-offline --no-audit --no-fund
+
+      - name: Install Playwright
+        run: |
+          Set-StrictMode -Version Latest
+          python -m pip install --upgrade pip
+          pip install playwright
+          python -m playwright install chromium
+
+      - name: Verify Electron UI with Playwright
+        working-directory: ${{ env.ELECTRON_DIR }}
+        run: |
+          Set-StrictMode -Version Latest
+          $script = @"
+          import asyncio, os, sys, json
+          from pathlib import Path
+          from playwright.async_api import async_playwright, expect
+
+          async def main():
+              screenshot = Path(os.getenv('SMOKE_SCREENSHOT_PATH', 'smoke-test-electron.png'))
+              screenshot_fail = Path(os.getenv('SMOKE_FAILURE_SCREENSHOT_PATH', 'smoke-test-electron-FAILURE.png'))
+              trace_path = Path(os.getenv('PLAYWRIGHT_TRACE', 'electron-trace.zip'))
+
+              async with async_playwright() as p:
+                  app = None
+                  try:
+                      # The _electron attribute is on the async_playwright object itself
+                      app = await p.electron.launch(args=['${{ env.ELECTRON_DIR }}/main.js'])
+                      window = await app.first_window()
+                      await window.wait_for_load_state('domcontentloaded', timeout=30000)
+                      await expect(window.locator("h1:has-text('Fortuna Faucet')")).to_be_visible(timeout=20000)
+                      await window.screenshot(path=str(screenshot), full_page=True)
+                      await app.context.tracing.stop(path=str(trace_path))
+                      print('✅ Electron UI verification succeeded.')
+                  except Exception as exc:
+                      if app and app.context:
+                          await app.context.tracing.stop(path=str(trace_path))
+                      if 'window' in locals():
+                          await window.screenshot(path=str(screenshot_fail), full_page=True)
+                      print(f'❌ Electron UI verification failed: {exc}', file=sys.stderr)
+                      raise
+                  finally:
+                      if app:
+                          await app.close()
+
+          if __name__ == '__main__':
+              asyncio.run(main())
+          "@
+          Set-Content verify_electron.py $script -Encoding utf8
+          python verify_electron.py
+
+      - name: Upload Smoke Test Evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-smoke-test-${{ github.run_id }}
+          path: |
+            verify_electron.py
+            ${{ env.SMOKE_SCREENSHOT_PATH }}
+            ${{ env.SMOKE_FAILURE_SCREENSHOT_PATH }}
+            ${{ env.PLAYWRIGHT_TRACE }}
+          if-no-files-found: warn
+          retention-days: 7
+
+  package-electron-msi:
+    name: '💿 Package Electron MSI'
+    runs-on: windows-latest
+    timeout-minutes: 30
+    needs:
+      - smoke-test-electron
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Validated Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: temp
+
+      - name: Restage Artifacts
+        run: |
+          Set-StrictMode -Version Latest
+          Remove-Item '${{ env.ELECTRON_DIR }}/web-ui-build' -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item '${{ env.ELECTRON_DIR }}/resources' -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path '${{ env.ELECTRON_DIR }}/web-ui-build' -Force | Out-Null
+          New-Item -ItemType Directory -Path '${{ env.ELECTRON_DIR }}/resources' -Force | Out-Null
+          Copy-Item -Path 'temp/frontend-build-electron-${{ github.run_id }}/*' -Destination '${{ env.ELECTRON_DIR }}/web-ui-build/' -Recurse -Force
+          Copy-Item -Path 'temp/backend-executable-electron-${{ github.run_id }}/fortuna-backend.exe' -Destination '${{ env.ELECTRON_DIR }}/resources/fortuna-backend.exe' -Force
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: '${{ env.ELECTRON_DIR }}/package-lock.json'
+
+      - name: Install Electron Dependencies
+        working-directory: ${{ env.ELECTRON_DIR }}
+        run: |
+          Set-StrictMode -Version Latest
+          npm ci --prefer-offline --no-audit --no-fund
+
+      - name: Package MSI Installer
+        working-directory: ${{ env.ELECTRON_DIR }}
+        run: |
+          Set-StrictMode -Version Latest
+          npx electron-builder --config electron-builder-config.yml --win msi --publish=never
+
+      - name: Verify MSI Output
+        run: |
+          Set-StrictMode -Version Latest
+          $msiFiles = Get-ChildItem '${{ env.ELECTRON_OUTPUT }}' -Filter *.msi
+          if ($msiFiles.Count -eq 0) { throw "No MSI files produced." }
+          $msiFiles | ForEach-Object {
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
+            "$($_.Name)`t$hash" | Out-File electron-msi-sha256.tsv -Append -Encoding utf8
+            Write-Host "✅ $($_.Name) ($hash)"
+          }
+
+      - name: Upload Electron MSI
+        uses: actions/upload-artifact@v4
+        with:
+          name: fortuna-installer-electron-${{ github.run_id }}
+          path: |
+            ${{ env.ELECTRON_OUTPUT }}/*.msi
+            electron-msi-sha256.tsv
+          retention-days: 14
+          if-no-files-found: error
