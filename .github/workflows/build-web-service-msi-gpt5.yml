@@ -52,7 +52,7 @@ jobs:
       wix_definition_hash: ${{ steps.hashes.outputs.wix_definition_hash }}
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -89,7 +89,7 @@ jobs:
           "wix_definition_hash=$wix" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Upload Integrity Snapshot
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        uses: actions/upload-artifact@v4
         with:
           name: repo-preflight-${{ github.run_id }}
           path: |
@@ -108,19 +108,19 @@ jobs:
       FRONTEND_LOCK_HASH: ${{ needs.repo-preflight.outputs.frontend_lock_hash }}
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Setup Node.js
-        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
           cache-dependency-path: 'web_service/frontend/package-lock.json'
 
       - name: Prime npm Cache
-        uses: actions/cache@88522ab9f39a2ea568f7027ed67a8d8f9e9d59c3 # v4.0.2
+        uses: actions/cache@v4
         with:
           path: |
             ~\AppData\Local\npm-cache
@@ -182,7 +182,7 @@ jobs:
           Write-Host "✅ Manifest written to $manifestPath"
 
       - name: Upload Frontend Artifact
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        uses: actions/upload-artifact@v4
         with:
           name: frontend-build-${{ github.run_id }}
           path: ${{ env.FRONTEND_BUILD_DIR }}
@@ -190,7 +190,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload Frontend Manifest
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        uses: actions/upload-artifact@v4
         with:
           name: frontend-manifest-${{ github.run_id }}
           path: frontend-build-manifest.tsv
@@ -208,25 +208,25 @@ jobs:
       BACKEND_REQUIREMENTS_HASH: ${{ needs.repo-preflight.outputs.backend_requirements_hash }}
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Download Frontend Artifact
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        uses: actions/download-artifact@v4
         with:
           name: frontend-build-${{ github.run_id }}
           path: web_service/frontend/out
 
       - name: Setup Python
-        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
           cache-dependency-path: 'web_service/backend/requirements-dev.txt'
 
       - name: Prime pip Cache
-        uses: actions/cache@88522ab9f39a2ea568f7027ed67a8d8f9e9d59c3 # v4.0.2
+        uses: actions/cache@v4
         with:
           path: |
             ~\AppData\Local\pip\Cache
@@ -296,7 +296,7 @@ jobs:
           Write-Host "✅ Backend hash recorded: $hash"
 
       - name: Upload Backend Executable
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        uses: actions/upload-artifact@v4
         with:
           name: backend-executable-${{ github.run_id }}
           path: dist/fortuna-webservice.exe
@@ -304,7 +304,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload Backend Metadata
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        uses: actions/upload-artifact@v4
         with:
           name: backend-metadata-${{ github.run_id }}
           path: |
@@ -324,13 +324,13 @@ jobs:
       TRACE_PATH: 'trace.zip'
     steps:
       - name: Download Backend Executable
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        uses: actions/download-artifact@v4
         with:
           name: backend-executable-${{ github.run_id }}
           path: .
 
       - name: Setup Python (for Playwright)
-        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -440,7 +440,7 @@ jobs:
 
       - name: Upload Smoke Test Evidence
         if: always()
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        uses: actions/upload-artifact@v4
         with:
           name: smoke-test-artifacts-${{ github.run_id }}
           path: |
@@ -470,7 +470,7 @@ jobs:
 
       - name: Upload Forensics
         if: always()
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        uses: actions/upload-artifact@v4
         with:
           name: smoke-test-forensics-${{ github.run_id }}
           path: forensic-analysis.log
@@ -499,12 +499,12 @@ jobs:
       WIX_HASH: ${{ needs.repo-preflight.outputs.wix_definition_hash }}
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Download Backend Executable
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        uses: actions/download-artifact@v4
         with:
           name: backend-executable-${{ github.run_id }}
           path: dist
@@ -522,12 +522,12 @@ jobs:
           Write-Host "✅ MSI name set to $msiName"
 
       - name: Setup .NET SDK
-        uses: actions/setup-dotnet@3e891b0cb619bf60e2c25674b222b8940e2c1c25 # v4.1.0
+        uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: Cache NuGet Packages
-        uses: actions/cache@88522ab9f39a2ea568f7027ed67a8d8f9e9d59c3 # v4.0.2
+        uses: actions/cache@v4
         with:
           path: |
             C:\Users\runneradmin\.nuget\packages
@@ -589,7 +589,7 @@ jobs:
           Write-Host "✅ MSI built and hashed ($hash)"
 
       - name: Upload MSI Artifact
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        uses: actions/upload-artifact@v4
         with:
           name: fortuna-installer-service-${{ github.run_id }}
           path: |
@@ -598,7 +598,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload MSI Hash
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        uses: actions/upload-artifact@v4
         with:
           name: fortuna-installer-service-sha256-${{ github.run_id }}
           path: build_wix/dist/*.msi
@@ -614,7 +614,7 @@ jobs:
       contents: write
     steps:
       - name: Download MSI Artifact
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        uses: actions/download-artifact@v4
         with:
           pattern: fortuna-installer-service-*
           path: installers
@@ -631,7 +631,7 @@ jobs:
           Get-Content $checksumFile
 
       - name: Create Release
-        uses: softprops/action-gh-release@c062e08bd532815e2082a85e87e3ef29c3e6d191 # v2.2.0
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             installers/*.msi
