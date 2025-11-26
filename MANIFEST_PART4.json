@@ -1,5 +1,9 @@
 [
     ".github/dependabot.yml",
+    ".github/workflows/build-electron-from-ws-claude.yml",
+    ".github/workflows/build-web-service-msi-claude.yml",
+    ".github/workflows/build-electron-msi-grok.yml",
+    ".github/workflows/build-web-service-msi-grok.yml",
     "HISTORY.md",
     "package-lock.json",
     "python_service/adapters/betfair_greyhound_adapter.py",

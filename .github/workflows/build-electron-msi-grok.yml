@@ -1,4 +1,4 @@
-name: Build Fortuna Faucet MSI (Electron) - PRODUCTION
+name: Build Fortuna Faucet MSI (Electron) - Grok
 
 on:
   push:
@@ -99,7 +99,7 @@ jobs:
         run: python -m playwright install --with-deps chromium
 
       - name: Backend - Build with PyInstaller
-        run: pyinstaller fortuna-backend-electron.spec --clean --noconfirm
+        run: pyinstaller fortuna-backend-electron.spec --clean --log-level WARN --noconfirm
 
       - name: Run Electron App (Background)
         shell: pwsh
@@ -122,15 +122,19 @@ jobs:
 
           with sync_playwright() as p:
               browser = p.chromium.launch()
-              page = browser.new_page()
+              context = browser.new_context()
+              context.tracing.start(screenshots=True, snapshots=True)
+              page = context.new_page()
               try:
                   page.goto(url, wait_until='domcontentloaded', timeout=10000)
                   expect(page.locator("body")).to_be_visible(timeout=10000)
                   page.screenshot(path=os.environ["SMOKE_SCREENSHOT_PATH"])
                   print("✅ Screenshot captured.")
+                  context.tracing.stop(path="trace.zip")
               except Exception as e:
                   print(f"❌ Error: {e}")
                   page.screenshot(path="FAILURE.png")
+                  context.tracing.stop(path="trace.zip")
                   sys.exit(1)
               finally:
                   browser.close()
@@ -147,6 +151,7 @@ jobs:
             *.png
             electron.log
             electron.err
+            trace.zip
 
       - name: Cleanup Process
         if: always()
