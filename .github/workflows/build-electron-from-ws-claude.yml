@@ -1,0 +1,266 @@
+name: Build Electron App (Claude's Hardened Version)
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '20'
+  PYTHON_VERSION: '3.12'
+  PYTHONUTF8: "1"
+
+jobs:
+  build-frontend:
+    name: '📦 Build Frontend for Electron'
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Setup Node.js
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'web_platform/frontend/package-lock.json'
+      - name: Frontend - Install & Build
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          cd web_platform/frontend
+          npm ci --prefer-offline
+          npm run build
+      - name: Verify Frontend Build
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $outDir = 'web_platform/frontend/out'
+          if (-not (Test-Path $outDir)) { throw "❌ FATAL: Build output directory 'out' not created" }
+          if ((Get-ChildItem -Path $outDir -Recurse -File).Count -eq 0) { throw "❌ FATAL: Build output directory is empty" }
+          Write-Host "✅ Frontend build verified."
+      - name: Upload Frontend Artifact
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: frontend-build-electron-${{ github.run_id }}
+          path: web_platform/frontend/out
+          retention-days: 1
+
+  build-backend:
+    name: '🐍 Build Backend for Electron'
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Setup Python
+        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: 'python_service/requirements-dev.txt'
+      - name: Backend - Install Dependencies
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          python -m pip install --upgrade pip
+          pip install -r python_service/requirements-dev.txt
+      - name: Backend - Build with PyInstaller
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          pyinstaller fortuna-backend-electron.spec --clean --log-level WARN --noconfirm
+      - name: Verify Backend Build
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $exePath = "dist/fortuna-backend.exe"
+          if (-not (Test-Path $exePath)) { throw "❌ FATAL: Backend executable not created at $exePath" }
+          Write-Host "✅ Backend executable verified."
+      - name: Upload Backend Artifact
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: backend-executable-electron-${{ github.run_id }}
+          path: dist/fortuna-backend.exe
+          retention-days: 1
+
+  smoke-test-electron:
+    name: '🔬 Smoke Test Electron App'
+    needs: [build-frontend, build-backend]
+    runs-on: windows-latest
+    timeout-minutes: 15
+    env:
+      SMOKE_SCREENSHOT_PATH: "smoke-test-electron.png"
+      SMOKE_FAILURE_SCREENSHOT_PATH: "smoke-test-electron-FAILURE.png"
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          path: ./temp-artifacts/
+
+      - name: Stage Artifacts for Electron
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          New-Item -ItemType Directory -Path "electron/resources" -Force | Out-Null
+          New-Item -ItemType Directory -Path "electron/web-ui-build" -Force | Out-Null
+
+          $frontendSource = "./temp-artifacts/frontend-build-electron-${{ github.run_id }}/"
+          $backendSource = "./temp-artifacts/backend-executable-electron-${{ github.run_id }}/fortuna-backend.exe"
+
+          Copy-Item -Path $frontendSource* -Destination "electron/web-ui-build/" -Recurse -Force
+          Copy-Item -Path $backendSource -Destination "electron/resources/fortuna-backend.exe" -Force
+
+          Write-Host "✅ Frontend and backend artifacts staged for Electron."
+
+      - name: Setup Node.js for Electron
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'electron/package-lock.json'
+
+      - name: Install Electron Dependencies
+        working-directory: electron
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          npm ci --prefer-offline
+
+      - name: Install Playwright for Python
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          pip install playwright
+          python -m playwright install chromium
+
+      - name: Launch Electron App in Background
+        working-directory: electron
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $process = Start-Process "npm" -ArgumentList "start" -PassThru -RedirectStandardOutput "electron-out.log" -RedirectStandardError "electron-err.log"
+          Set-Content -Path "electron.pid" -Value $process.Id
+          Write-Host "✅ Electron app launched with PID: $($process.Id)"
+          Start-Sleep -Seconds 15 # Wait for app to initialize
+
+      - name: Verify Electron App with Playwright
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $script = @"
+          import sys, os, asyncio
+          from playwright.async_api import async_playwright, expect
+
+          async def run_verification():
+              async with async_playwright() as p:
+                  # Electron apps launch on a random port, so we can't connect via URL.
+                  # Instead, we launch a browser context and assume the Electron window is the first one.
+                  browser = await p.chromium.launch(headless=False) # Must be headful to see window
+                  page = browser.contexts[0].pages[0]
+                  await page.wait_for_load_state('domcontentloaded', timeout=20000)
+
+                  try:
+                      await expect(page.locator("h1:has-text('Fortuna Faucet')")).to_be_visible(timeout=10000)
+                      await page.screenshot(path=os.environ["SMOKE_SCREENSHOT_PATH"])
+                      print("✅ Electron UI verification successful")
+                      await browser.close()
+                      sys.exit(0)
+                  except Exception as e:
+                      print(f"❌ Error during Electron verification: {e}", file=sys.stderr)
+                      await page.screenshot(path=os.environ["SMOKE_FAILURE_SCREENSHOT_PATH"])
+                      await browser.close()
+                      sys.exit(1)
+
+          if __name__ == "__main__":
+              asyncio.run(run_verification())
+          "@
+          Set-Content -Path "verify_electron.py" -Value $script
+          python verify_electron.py
+
+      - name: Upload Verification Artifacts
+        if: always()
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: smoke-test-evidence-electron-${{ github.run_id }}
+          path: |
+            ${{ env.SMOKE_SCREENSHOT_PATH }}
+            ${{ env.SMOKE_FAILURE_SCREENSHOT_PATH }}
+            electron/electron-out.log
+            electron/electron-err.log
+          if-no-files-found: warn
+
+      - name: Teardown Electron Process
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path "electron.pid") {
+            $pid = Get-Content "electron.pid"
+            Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+            Write-Host "✅ Stopped Electron process $pid"
+          }
+
+  package-electron-msi:
+    name: ' MSI Package Electron App'
+    needs: [smoke-test-electron]
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Download Validated Artifacts
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          path: ./temp-artifacts/
+
+      - name: Stage Artifacts for Packaging
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          New-Item -ItemType Directory -Path "electron/resources" -Force | Out-Null
+          New-Item -ItemType Directory -Path "electron/web-ui-build" -Force | Out-Null
+          Copy-Item -Path "./temp-artifacts/frontend-build-electron-${{ github.run_id }}/*" -Destination "electron/web-ui-build/" -Recurse -Force
+          Copy-Item -Path "./temp-artifacts/backend-executable-electron-${{ github.run_id }}/fortuna-backend.exe" -Destination "electron/resources/fortuna-backend.exe" -Force
+          Write-Host "✅ Artifacts staged for final packaging."
+
+      - name: Setup Node.js for Electron Builder
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'electron/package-lock.json'
+
+      - name: Install Dependencies
+        working-directory: electron
+        run: npm ci --prefer-offline
+
+      - name: Package MSI Installer
+        working-directory: electron
+        run: npx electron-builder --win --publish=never
+
+      - name: Verify MSI Creation
+        shell: pwsh
+        run: |
+          $msiFiles = Get-ChildItem -Path "electron/dist/*.msi"
+          if ($msiFiles.Count -eq 0) { throw "❌ FATAL: No MSI file created" }
+          Write-Host "✅ MSI installer created successfully."
+
+      - name: Upload Final MSI Artifact
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: fortuna-installer-electron-claude-${{ github.run_id }}
+          path: electron/dist/*.msi
+          retention-days: 7

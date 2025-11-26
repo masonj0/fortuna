@@ -3,7 +3,7 @@
      xmlns:fire="http://schemas.microsoft.com/wix/FirewallExtension"
      xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
 
-  <Product Id="*" Name="Fortuna Web Service" Language="1033" Version="1.0.0"
+  <Product Id="*" Name="Fortuna Web Service" Language="1033" Version="$(var.Version)"
            Manufacturer="Fortuna Development Team" UpgradeCode="A3A4A3B6-2313-4375-9A97-15206C81454A">
 
     <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
