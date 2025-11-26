@@ -3,7 +3,7 @@ name: Build Fortuna Faucet MSI (WiX v4) - Grok
 on:
   push:
     branches:
-      - main
+      - deactivated
   workflow_dispatch:
 
 permissions:
