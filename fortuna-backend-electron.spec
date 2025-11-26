@@ -19,32 +19,46 @@ a = Analysis(
         'asyncio.windows_events',
         'asyncio.selector_events',
 
-        # Uvicorn/FastAPI
-        'uvicorn.logging',
-        'uvicorn.loops.auto',
-        'uvicorn.protocols.http.h11_impl',
-        'uvicorn.protocols.http.httptools_impl',
-        'uvicorn.protocols.websockets.wsproto_impl',
-        'uvicorn.protocols.websockets.websockets_impl',
-        'uvicorn.lifespan.on',
-        'fastapi.routing',
-        'fastapi.middleware.cors',
-        'starlette.staticfiles',
-        'starlette.middleware.cors',
-        'pydantic_core',
-        'pydantic_settings.sources',
-        'anyio._backends._asyncio',
-        'httpcore',
-        'python_multipart',
+datas = []
+hiddenimports = set()
 
-        # Package structure
-        'python_service',
-        'python_service.backend',
-        'python_service.backend.api',
+include('python_service/data', 'data', datas)
+include('python_service/json', 'json', datas)
+include('python_service/adapters', 'adapters', datas)
+include('python_service/config', 'config', datas)
 
-        'numpy',
-        'pandas'
-    ],
+datas += collect_data_files('python_service', includes=['*.json', '*.yml', '*.yaml'])
+hiddenimports.update(collect_submodules('python_service'))
+hiddenimports.update([
+    'asyncio',
+    'asyncio.windows_events',
+    'asyncio.selector_events',
+    'uvicorn.logging',
+    'uvicorn.loops.auto',
+    'uvicorn.protocols.http.h11_impl',
+    'uvicorn.protocols.http.httptools_impl',
+    'uvicorn.protocols.websockets.wsproto_impl',
+    'uvicorn.protocols.websockets.websockets_impl',
+    'uvicorn.lifespan.on',
+    'fastapi.routing',
+    'fastapi.middleware.cors',
+    'starlette.staticfiles',
+    'starlette.middleware.cors',
+    'pydantic_core',
+    'pydantic_settings.sources',
+    'anyio._backends._asyncio',
+    'httpcore',
+    'python_multipart',
+    'numpy',
+    'pandas',
+])
+
+a = Analysis(
+    ['python_service/main.py'],
+    pathex=[str(project_root)],
+    binaries=[],
+    datas=datas,
+    hiddenimports=sorted(hiddenimports),
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

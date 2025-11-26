@@ -195,6 +195,15 @@ jobs:
             -ErrorAction SilentlyContinue
           Write-Host "✅ Firewall rule configured for port ${{ env.FORTUNA_PORT }}" -ForegroundColor Green
 
+      - name: Create Runtime Directories
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          New-Item -ItemType Directory -Path "./data" -Force | Out-Null
+          New-Item -ItemType Directory -Path "./logs" -Force | Out-Null
+          New-Item -ItemType Directory -Path "./json" -Force | Out-Null
+          Write-Host "✅ Created runtime directories: data, logs, json" -ForegroundColor Green
+
       - name: Start Web Service
         shell: pwsh
         run: |
@@ -387,6 +396,13 @@ jobs:
         uses: actions/setup-dotnet@3e891b0cb619bf60e2c25674b222b8940e2c1c25 # v4.1.0
         with:
           dotnet-version: '8.0.x'
+
+      - name: Copy WiX Source File
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          Copy-Item -Path "wix/product_webservice.wxs" -Destination "build_wix/Product_WithService.wxs" -Force
+          Write-Host "✅ Copied WiX source file to build directory." -ForegroundColor Green
 
       - name: Remove Conflicting WXS File
         shell: pwsh

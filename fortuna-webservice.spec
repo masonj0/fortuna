@@ -1,11 +1,18 @@
-# fortuna-webservice.spec
+# -*- mode: python ; coding: utf-8 -*-
+
 import os
 from pathlib import Path
 
 block_cipher = None
 project_root = Path(SPECPATH).parent
 
-datas = []
+def include_tree(rel_path: str, target: str, store: list):
+    absolute = project_root / rel_path
+    if absolute.exists():
+        store.append((str(absolute), target))
+        print(f"[spec] Including {absolute} -> {target}")
+    else:
+        print(f"[spec] Skipping missing include: {absolute}")
 
 # 1. Add frontend assets
 frontend_path = project_root / 'web_service/frontend/out'
@@ -33,10 +40,10 @@ hiddenimports += collect_submodules('web_service')
 
 a = Analysis(
     ['run_web_service.py'],
-    pathex=['.'],
+    pathex=[str(project_root)],
     binaries=[],
     datas=datas,
-    hiddenimports=hiddenimports,
+    hiddenimports=sorted(hiddenimports),
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -60,10 +67,10 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=False,          # CRITICAL for Service stability
+    upx=False,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=False,      # CRITICAL: No window for Services
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
