@@ -3,7 +3,7 @@ name: Build Fortuna Faucet MSI (Electron) - Grok
 on:
   push:
     branches:
-      - main
+      - deactivated
   workflow_dispatch:
 
 permissions:

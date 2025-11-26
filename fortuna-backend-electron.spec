@@ -1,15 +1,17 @@
 # -*- mode: python ; coding: utf-8 -*-
+from pathlib import Path
 
 block_cipher = None
+project_root = Path(SPECPATH).parent
 
 a = Analysis(
     ['python_service/main.py'],  # ✅ CHANGED from run_electron_service.py
     pathex=['.'],
     binaries=[],
     datas=[
-        ('python_service/data', 'data'),
-        ('python_service/json', 'json'),
-        ('python_service/adapters', 'adapters'),
+        (str(project_root / 'python_service/data'), 'data'),
+        (str(project_root / 'python_service/json'), 'json'),
+        (str(project_root / 'python_service/adapters'), 'adapters'),
     ],
     hiddenimports=[
         # Event loop support
