@@ -95,7 +95,7 @@ jobs:
 
           # System info
           systeminfo | Out-File "debug-artifacts/systeminfo.txt"
-          wmic os get caption,version,buildnumber | Out-File "debug-artifacts/wmic-os.txt"
+          Get-CimInstance -ClassName Win32_OperatingSystem | Select-Object Caption, Version, BuildNumber | Out-File "debug-artifacts/os-version.txt"
 
           # Disk space
           Get-Volume | Out-File "debug-artifacts/disk-space.txt"
