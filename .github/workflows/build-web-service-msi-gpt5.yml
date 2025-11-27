@@ -65,7 +65,7 @@ jobs:
           foreach ($tool in $tools) {
             Write-Host "Checking for $($tool)..."
             Get-Command $tool -ErrorAction SilentlyContinue
-            if ($LASTEXITCODE -ne 0) {
+            if (-not $?) {
               Write-Host "❌ FATAL: Build tool '$tool' not found in PATH." -ForegroundColor Red
               exit 1
             }
