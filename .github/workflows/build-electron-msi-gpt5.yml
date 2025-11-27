@@ -116,7 +116,6 @@ jobs:
           retention-days: 14
 
   build-python-service:
-    continue-on-error: true
     name: 🐍 Build Python Service Bundle
     runs-on: windows-latest
     timeout-minutes: 20
@@ -153,7 +152,7 @@ jobs:
           pyinstaller `
             --onefile `
             --distpath ".\dist\service" `
-            --buildpath ".\build\service" `
+            --workpath ".\build\service" `
             --specpath ".\spec-working" `
             --clean `
             $specFile
@@ -197,8 +196,17 @@ jobs:
           path: dist/service/
           retention-days: 1
 
+      - name: 🚨 Upload Failure Diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-build-failure-logs-${{ needs.validate-environment.outputs.build_id }}
+          path: |
+            build/service/
+            spec-working/
+          retention-days: 30
+
   build-frontend:
-    continue-on-error: true
     name: 🎨 Build Web Frontend
     runs-on: windows-latest
     timeout-minutes: 15
@@ -253,6 +261,17 @@ jobs:
           name: frontend-dist-${{ needs.validate-environment.outputs.build_id }}
           path: web_platform/frontend/out/
           retention-days: 1
+
+      - name: 🚨 Upload Failure Diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build-failure-logs-${{ needs.validate-environment.outputs.build_id }}
+          path: |
+            web_platform/frontend/.next/
+            web_platform/frontend/npm-debug.log
+          if-no-files-found: ignore
+          retention-days: 30
 
   build-electron-msi:
     name: 🚀 Build Electron MSI Package
