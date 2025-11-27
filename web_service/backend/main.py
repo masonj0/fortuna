@@ -3,10 +3,6 @@ import sys
 import os
 from multiprocessing import freeze_support
 
-from web_service.backend.config import get_settings
-from web_service.backend.port_check import check_port_and_exit_if_in_use
-
-
 # Force UTF-8 encoding for stdout and stderr, crucial for PyInstaller on Windows
 os.environ["PYTHONUTF8"] = "1"
 
@@ -47,6 +43,9 @@ def main():
 
     # CRITICAL: This must be called before any other application imports.
     _configure_sys_path()
+
+    from web_service.backend.config import get_settings
+    from web_service.backend.port_check import check_port_and_exit_if_in_use
 
     settings = get_settings()
 

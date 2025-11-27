@@ -81,7 +81,7 @@ datas += collect_data_files("slowapi", includes=["*.json", "*.yaml"])
 datas += collect_data_files("structlog", includes=["*.json"])
 datas += collect_data_files("certifi")
 
-hiddenimports.update(collect_submodules("web_service.backend"))
+hiddenimports.update(collect_submodules("web_service"))
 hiddenimports.update(
     [
         "uvicorn.logging",
@@ -112,7 +112,7 @@ hiddenimports.update(
 
 analysis = Analysis(
     ["web_service/backend/main.py"],
-    pathex=[str(project_root)],
+    pathex=[str(project_root), str(project_root / 'web_service')],
     binaries=[],
     datas=datas,
     hiddenimports=sorted(hiddenimports),
