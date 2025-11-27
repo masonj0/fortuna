@@ -238,20 +238,20 @@ jobs:
             exit 1
           }
 
-          $distDir = Get-Item -Path ".\dist" -ErrorAction SilentlyContinue
-          if ($null -eq $distDir) {
-            Write-Error "No dist/ directory generated"
+          $outDir = Get-Item -Path ".\out" -ErrorAction SilentlyContinue
+          if ($null -eq $outDir) {
+            Write-Error "No out/ directory generated"
             exit 1
           }
 
-          $fileCount = (Get-ChildItem -Recurse -Path ".\dist" | Measure-Object).Count
+          $fileCount = (Get-ChildItem -Recurse -Path ".\out" | Measure-Object).Count
           Write-Host "✓ Frontend built: $fileCount files"
 
       - name: 📤 Upload Frontend Artifact
         uses: actions/upload-artifact@v4
         with:
           name: frontend-dist-${{ needs.validate-environment.outputs.build_id }}
-          path: web_platform/frontend/dist/
+          path: web_platform/frontend/out/
           retention-days: 1
 
   build-electron-msi:
@@ -282,7 +282,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: frontend-dist-${{ needs.validate-environment.outputs.build_id }}
-          path: web_platform/frontend/dist
+          path: web_platform/frontend/out
 
       - name: 📥 Install Electron Dependencies
         shell: pwsh
@@ -422,6 +422,6 @@ jobs:
           path: |
             electron/dist/
             python-service-bin/
-            web_platform/frontend/dist/
+            web_platform/frontend/out/
             build-report.json
           retention-days: 30
