@@ -6,10 +6,6 @@ on:
       - main
     tags:
       - 'v*'
-    paths:
-      - 'web_service/**'
-      - 'fortuna-backend-webservice.spec'
-      - '.github/workflows/build-web-service-msi-gpt5.yml'
   pull_request:
     branches:
       - main
