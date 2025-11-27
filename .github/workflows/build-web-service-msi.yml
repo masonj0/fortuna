@@ -6,10 +6,6 @@ on:
       - main
     tags:
       - 'v*'
-    paths:
-      - 'web_service/**'
-      - 'fortuna-backend-webservice.spec'
-      - '.github/workflows/build-web-service-msi-gpt5.yml'
   pull_request:
     branches:
       - main
@@ -558,8 +554,8 @@ jobs:
         if: always()
         run: |
           if (Test-Path 'backend.pid') {
-            $pid = Get-Content backend.pid
-            Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+            $processId = Get-Content backend.pid
+            Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
           }
           Remove-NetFirewallRule -DisplayName "FortunaSmokeTest" -ErrorAction SilentlyContinue
 
