@@ -23,8 +23,8 @@ def _configure_sys_path():
     """
     if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
         # Running in a PyInstaller bundle.
-        # The project root is one level above the executable's directory.
-        project_root = os.path.abspath(os.path.join(sys._MEIPASS, ".."))
+        # The project root IS the _MEIPASS directory itself.
+        project_root = os.path.abspath(sys._MEIPASS)
     else:
         # Running as a normal script.
         # The project root is two levels above this file's directory.
