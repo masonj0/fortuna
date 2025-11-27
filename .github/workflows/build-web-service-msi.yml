@@ -554,8 +554,8 @@ jobs:
         if: always()
         run: |
           if (Test-Path 'backend.pid') {
-            $pid = Get-Content backend.pid
-            Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+            $processId = Get-Content backend.pid
+            Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
           }
           Remove-NetFirewallRule -DisplayName "FortunaSmokeTest" -ErrorAction SilentlyContinue
 
