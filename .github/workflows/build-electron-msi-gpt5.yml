@@ -4,11 +4,6 @@ on:
   push:
     branches:
       - main
-    paths:
-      - 'electron/**'
-      - 'web_platform/frontend/**'
-      - 'python_service/**'
-      - '.github/workflows/build-electron-msi-gpt5.yml'
   workflow_dispatch:
 
 concurrency:
