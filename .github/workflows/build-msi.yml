@@ -1,12 +1,14 @@
-name: Build Fortuna Faucet MSI Installer - 🏆 PRODUCTION FORTRESS
+name: Build Fortuna Web Service MSI (Experimental)
 
-# Manually deactivated by setting a trigger that will never fire.
-# This keeps the workflow file valid but prevents it from running automatically.
-# Preserved for reference by JB's request on 2025-11-23.
 on:
   push:
     branches:
-      - 'deactivated'
+      - 'main'
+    paths:
+      - 'web_platform/**'
+      - 'python_service/**'
+      - 'fortuna-webservice.spec'
+      - '.github/workflows/build-msi.yml'
 
 permissions:
   contents: read
@@ -21,10 +23,44 @@ env:
   PYTHON_VERSION: '3.12'
 
 jobs:
+  system-check:
+    name: '⚙️ System Prerequisites'
+    runs-on: windows-latest
+    timeout-minutes: 5
+    outputs:
+      disk_free_gb: ${{ steps.system.outputs.disk_gb }}
+    steps:
+      - name: Verify Build Tools
+        run: |
+          Set-StrictMode -Version Latest
+          $tools = @('dotnet', 'python', 'node', 'npm', 'git')
+          foreach ($tool in $tools) {
+            Write-Host "Checking for $($tool)..."
+            Get-Command $tool -ErrorAction SilentlyContinue
+            if (-not $?) {
+              Write-Host "❌ FATAL: Build tool '$tool' not found in PATH." -ForegroundColor Red
+              exit 1
+            }
+          }
+          Write-Host "✅ All critical build tools are present." -ForegroundColor Green
+      - name: Check Disk Space
+        id: system
+        run: |
+          Set-StrictMode -Version Latest
+          $disk = Get-Volume | Where-Object { $_.DriveLetter -eq 'C' }
+          $freeGB = [math]::Round($disk.SizeRemaining / 1GB, 2)
+          if ($freeGB -lt 10) {
+            Write-Host "⚠️ WARNING: Low disk space. Only $freeGB GB free (10+ GB recommended)." -ForegroundColor Yellow
+          } else {
+            Write-Host "✅ Disk space check passed ($freeGB GB free)." -ForegroundColor Green
+          }
+          "disk_gb=$freeGB" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
   build-frontend:
     name: '📦 Build Frontend'
     timeout-minutes: 15
     runs-on: windows-latest
+    needs: system-check
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4.1.1 # Pinned to SHA
@@ -37,7 +73,7 @@ jobs:
       - name: Frontend - Install & Build
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
+          Set-StrictMode -Version Latest
           cd web_platform/frontend
           npm ci
           npm audit --audit-level=moderate # Added security check
@@ -45,7 +81,7 @@ jobs:
       - name: Verify Frontend Build
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
+          Set-StrictMode -Version Latest
           $outDir = 'web_platform/frontend/out'
           if (-not (Test-Path $outDir)) {
             Write-Host "❌ FATAL: Build output directory 'out' not created" -ForegroundColor Red
@@ -82,7 +118,7 @@ jobs:
       - name: '✅ [MONITOR] Ensure Required Directories Exist'
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
+          Set-StrictMode -Version Latest
           New-Item -ItemType Directory -Path "python_service/adapters" -Force | Out-Null
           New-Item -ItemType Directory -Path "python_service/data" -Force | Out-Null
           New-Item -ItemType Directory -Path "python_service/json" -Force | Out-Null
@@ -90,24 +126,24 @@ jobs:
       - name: '✅ [MONITOR] Verify Critical Files'
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
+          Set-StrictMode -Version Latest
           if (-not (Test-Path "python_service/main.py")) { throw "❌ FATAL: python_service/main.py not found" }
           Write-Host "✅ Critical files verified."
       - name: Backend - Install Dependencies
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
+          Set-StrictMode -Version Latest
           python -m pip install --upgrade pip
           pip install -r python_service/requirements-dev.txt
       - name: Backend - Security Audit
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
+          Set-StrictMode -Version Latest
           pip-audit -r python_service/requirements.txt --local
       - name: Verify PyInstaller Entry Point
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
+          Set-StrictMode -Version Latest
           $specFile = "fortuna-webservice.spec"
           if (-not (Test-Path $specFile)) { throw "❌ FATAL: Spec file not found: $specFile" }
           $specContent = Get-Content $specFile -Raw
@@ -125,8 +161,23 @@ jobs:
       - name: Backend - Build with PyInstaller
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
+          Set-StrictMode -Version Latest
           pyinstaller fortuna-webservice.spec --noconfirm
+      - name: Verify Executable Size
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $exePath = "dist/fortuna-webservice.exe"
+          if (-not (Test-Path $exePath)) {
+            Write-Host "❌ FATAL: Executable not found" -ForegroundColor Red
+            exit 1
+          }
+          $size = (Get-Item $exePath).Length / 1MB
+          if ($size -lt 10) {
+            Write-Host "❌ FATAL: Executable is suspiciously small: $($size) MB. Build may be incomplete." -ForegroundColor Red
+            exit 1
+          }
+          Write-Host "✅ Backend executable size is reasonable: $([math]::Round($size, 2)) MB" -ForegroundColor Green
       - name: Upload Backend Artifact
         uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         with:
@@ -177,7 +228,7 @@ jobs:
       - name: Run Backend and Frontend
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
+          Set-StrictMode -Version Latest
           New-Item -ItemType Directory -Path "data" -Force | Out-Null
           New-Item -ItemType Directory -Path "logs" -Force | Out-Null
           New-Item -ItemType Directory -Path "json" -Force | Out-Null
@@ -190,25 +241,29 @@ jobs:
       - name: Deep Integration Test (Poll Health Endpoint)
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
+          Set-StrictMode -Version Latest
           $healthUrl = "http://127.0.0.1:${{ env.FORTUNA_PORT }}/health"
           $maxAttempts = 15
           $delaySeconds = 2
+          $success = $false
           For ($i=1; $i -le $maxAttempts; $i++) {
             try {
               $response = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 2
               if ($response.StatusCode -eq 200) {
                 Write-Host "✅ Health check passed on attempt $i."
                 New-Item -Path . -Name ready -ItemType File
-                return
+                $success = $true
+                break
               }
             } catch {
               Write-Host "Attempt $i of $maxAttempts failed. Retrying in $delaySeconds seconds..."
               Start-Sleep -Seconds $delaySeconds
             }
           }
-          Write-Host "❌ Health check failed after $maxAttempts attempts."
-          exit 1
+          if (-not $success) {
+            Write-Host "❌ Health check failed after $maxAttempts attempts."
+            exit 1
+          }
       - name: '🕵️‍♀️ Enhanced Forensic Analysis'
         if: failure()
         shell: pwsh
@@ -240,7 +295,7 @@ jobs:
         continue-on-error: true
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
+          Set-StrictMode -Version Latest
           if (-not (Test-Path ready)) {
             Write-Host "Skipping UI verification: backend not ready."
             exit 0
@@ -291,7 +346,7 @@ jobs:
         if: always()
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
+          Set-StrictMode -Version Latest
           if (Test-Path "backend.pid") { Get-Content "backend.pid" | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } }
           if (Test-Path "frontend.pid") { Get-Content "frontend.pid" | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } }
           Remove-NetFirewallRule -DisplayName "Allow Fortuna Smoke Test" -ErrorAction SilentlyContinue
@@ -317,7 +372,7 @@ jobs:
       - name: Stage Artifacts for Packaging
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
+          Set-StrictMode -Version Latest
           New-Item -ItemType Directory -Path "./electron/web-ui-build" -Force | Out-Null
           New-Item -ItemType Directory -Path "./electron/resources" -Force | Out-Null
           Move-Item -Path "./temp-artifacts/frontend-build-output/*" -Destination "./electron/web-ui-build/out" -Force
@@ -325,6 +380,7 @@ jobs:
       - name: Verify Staged Artifacts
         shell: pwsh
         run: |
+          Set-StrictMode -Version Latest
           $backendPath = "./electron/resources/fortuna-backend.exe"
           $frontendDir = "./electron/web-ui-build/out"
           if (-not (Test-Path $backendPath)) {
@@ -342,6 +398,7 @@ jobs:
         env:
           API_KEY: "a_secure_test_api_key_that_is_long_enough"
         run: |
+          Set-StrictMode -Version Latest
           $exe = "./electron/resources/fortuna-backend.exe"
           # ... existing integration test ...
       - name: Electron - Install & Package MSI
