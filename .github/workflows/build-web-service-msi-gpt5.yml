@@ -578,6 +578,26 @@ jobs:
             '</Project>'
           )
           Set-Content "${{ env.WIX_DIR }}/Fortuna.wixproj" -Value $wixProj -Encoding utf8
+          $wixProj = @"
+<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">
+  <PropertyGroup>
+    <OutputName>${{ steps.stage.outputs.msi_name }}</OutputName>
+    <OutputType>Package</OutputType>
+    <DefineConstants>SourceDir=staging</DefineConstants>
+    <Platforms>x64</Platforms>
+    <Version>${{ env.BUILD_VERSION }}</Version>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="WixToolset.Util.wixext" Version="${{ env.WIX_VERSION }}" />
+    <PackageReference Include="WixToolset.Firewall.wixext" Version="${{ env.WIX_VERSION }}" />
+    <PackageReference Include="WixToolset.UI.wixext" Version="${{ env.WIX_VERSION }}" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Product.wxs" />
+  </ItemGroup>
+</Project>
+"@
+          Set-Content "${{ env.WIX_DIR }}/Fortuna.wixproj" $wixProj -Encoding utf8
 
       - name: Build MSI
         working-directory: ${{ env.WIX_DIR }}
