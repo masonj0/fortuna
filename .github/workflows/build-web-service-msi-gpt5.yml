@@ -210,10 +210,7 @@ jobs:
       - name: Run Pytest (if available)
         run: |
           Set-StrictMode -Version Latest
-          $hasPytest = python - <<'PY'
-import importlib.util, sys
-sys.exit(0 if importlib.util.find_spec("pytest") else 1)
-PY
+          python -c 'import importlib.util, sys; sys.exit(0 if importlib.util.find_spec("pytest") else 1)'
           if ($LASTEXITCODE -eq 0) {
             Write-Host "🧪 pytest detected, running suite..."
             cd "${{ env.BACKEND_DIR }}"
@@ -561,6 +558,26 @@ PY
         run: |
           Set-StrictMode -Version Latest
           Copy-Item "${{ env.WIX_DIR }}/Product_WithService.wxs" "${{ env.WIX_DIR }}/Product.wxs" -Force
+          $wixProj = @(
+            '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">'
+            '  <PropertyGroup>'
+            '    <OutputName>${{ steps.stage.outputs.msi_name }}</OutputName>'
+            '    <OutputType>Package</OutputType>'
+            '    <DefineConstants>SourceDir=staging</DefineConstants>'
+            '    <Platforms>x64</Platforms>'
+            '    <Version>${{ env.BUILD_VERSION }}</Version>'
+            '  </PropertyGroup>'
+            '  <ItemGroup>'
+            '    <PackageReference Include="WixToolset.Util.wixext" Version="${{ env.WIX_VERSION }}" />'
+            '    <PackageReference Include="WixToolset.Firewall.wixext" Version="${{ env.WIX_VERSION }}" />'
+            '    <PackageReference Include="WixToolset.UI.wixext" Version="${{ env.WIX_VERSION }}" />'
+            '  </ItemGroup>'
+            '  <ItemGroup>'
+            '    <Compile Include="Product.wxs" />'
+            '  </ItemGroup>'
+            '</Project>'
+          )
+          Set-Content "${{ env.WIX_DIR }}/Fortuna.wixproj" -Value $wixProj -Encoding utf8
           $wixProj = @"
 <Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">
   <PropertyGroup>
