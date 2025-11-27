@@ -150,10 +150,8 @@ jobs:
           }
 
           pyinstaller `
-            --onefile `
             --distpath ".\dist\service" `
             --workpath ".\build\service" `
-            --specpath ".\spec-working" `
             --clean `
             $specFile
 
