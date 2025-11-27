@@ -13,6 +13,26 @@ os.environ["PYTHONUTF8"] = "1"
 # This is the definitive entry point for the Fortuna Faucet backend service.
 # It is designed to be compiled with PyInstaller.
 
+def _configure_sys_path():
+    """
+    Dynamically adds the project root to sys.path.
+    This is the robust solution to ensure that string-based imports like
+    "web_service.backend.api:app" work correctly when the application is
+    run from a PyInstaller executable. The `_MEIPASS` attribute is a temporary
+    directory created by PyInstaller at runtime.
+    """
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        # Running in a PyInstaller bundle.
+        # The project root is one level above the executable's directory.
+        project_root = os.path.abspath(os.path.join(sys._MEIPASS, ".."))
+    else:
+        # Running as a normal script.
+        # The project root is two levels above this file's directory.
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+        print(f"INFO: Added project root to sys.path: {project_root}")
 
 def main():
     """
@@ -24,6 +44,9 @@ def main():
     if getattr(sys, "frozen", False):
         # CRITICAL for multiprocessing support in frozen mode on Windows.
         freeze_support()
+
+    # CRITICAL: This must be called before any other application imports.
+    _configure_sys_path()
 
     settings = get_settings()
 
