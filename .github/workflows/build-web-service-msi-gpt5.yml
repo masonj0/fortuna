@@ -502,6 +502,7 @@ jobs:
           Set-StrictMode -Version Latest
           $url = "http://127.0.0.1:${{ env.SERVICE_PORT }}${{ env.HEALTH_ENDPOINT }}"
           $deadline = (Get-Date).AddMinutes(3)
+          $success = $false
           do {
             try {
               $resp = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
