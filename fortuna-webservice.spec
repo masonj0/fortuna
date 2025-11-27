@@ -2,52 +2,55 @@
 
 import os
 from pathlib import Path
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 block_cipher = None
-project_root = Path(SPECPATH).parent
+project_root = Path(SPECPATH).resolve()
 
-def include_tree(rel_path: str, target: str, store: list):
+def include_tree(rel_path, target, store):
     absolute = project_root / rel_path
     if absolute.exists():
         store.append((str(absolute), target))
         print(f"[spec] Including {absolute} -> {target}")
     else:
-        print(f"[spec] Skipping missing include: {absolute}")
+        # This spec is used by the legacy build-msi.yml, which checks for these dirs.
+        # If they are missing here, it's a critical error.
+        raise FileNotFoundError(f"[spec] Required directory not found: {absolute}")
 
-# 1. Add frontend assets
-frontend_path = project_root / 'web_service/frontend/out'
-if frontend_path.exists():
-    datas.append((str(frontend_path), 'ui'))
+datas = []
+# Paths must match the legacy structure used by build-msi.yml
+include_tree('python_service/adapters', 'adapters', datas)
+include_tree('python_service/data', 'data', datas)
+include_tree('python_service/json', 'json', datas)
 
-# 2. Add backend adapters
-adapters_path = project_root / 'web_service/backend/adapters'
-if adapters_path.exists():
-    datas.append((str(adapters_path), 'adapters'))
+# Collect library assets
+try:
+    datas += collect_data_files('uvicorn', includes=['*.html', '*.json'])
+    datas += collect_data_files('structlog', includes=['*.json'])
+except Exception as e:
+    print(f"[spec] Warning: Could not collect library data files: {e}")
 
-from PyInstaller.utils.hooks import collect_submodules
-
-hiddenimports = [
-    'uvicorn.logging', 'uvicorn.loops.auto', 'uvicorn.protocols.http.h11_impl',
-    'uvicorn.protocols.http.httptools_impl', 'uvicorn.protocols.websockets.wsproto_impl',
-    'uvicorn.protocols.websockets.websockets_impl', 'uvicorn.lifespan.on',
-    'fastapi.routing', 'fastapi.middleware.cors',
-    'anyio._backends._asyncio', 'httpcore', 'httpx',
-    'python_multipart', 'slowapi', 'structlog', 'tenacity', 'aiosqlite', 'selectolax',
-    'pydantic_core', 'pydantic_settings.sources',
-    'python_service.port_check'  # Added from run_web_service.py
-]
-hiddenimports += collect_submodules('web_service')
+# Collect Hidden Imports for python_service
+hidden_imports = set()
+hidden_imports.update(collect_submodules('python_service'))
+hidden_imports.update([
+    'fastapi', 'uvicorn', 'uvicorn.logging', 'uvicorn.loops.auto', 'uvicorn.lifespan.on',
+    'uvicorn.protocols.http.h11_impl', 'uvicorn.protocols.http.httptools_impl',
+    'uvicorn.protocols.websockets.wsproto_impl', 'uvicorn.protocols.websockets.websockets_impl',
+    'anyio', 'httpcore', 'httpx', 'python_multipart', 'pydantic', 'pydantic_core',
+    'aiosqlite', 'structlog', 'tenacity', 'slowapi'
+])
 
 a = Analysis(
-    ['run_web_service.py'],
+    ['python_service/main.py'],  # Corrected Entry Point for the legacy workflow
     pathex=[str(project_root)],
     binaries=[],
     datas=datas,
-    hiddenimports=sorted(hiddenimports),
+    hiddenimports=sorted(hidden_imports),
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=['matplotlib', 'pandas', 'numpy', 'torch', 'tensorflow', 'web_service'],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
@@ -63,12 +66,11 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='fortuna-webservice',
+    name='fortuna-webservice', # Name matches the workflow expectation
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
-    upx_exclude=[],
     runtime_tmpdir=None,
     console=False,
     disable_windowed_traceback=False,
