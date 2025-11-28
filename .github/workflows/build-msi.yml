@@ -37,7 +37,7 @@ env:
   FRONTEND_BUILD_DIR: 'web_platform/frontend/out'
   BACKEND_DIR: 'python_service'
   WIX_DIR: 'build_wix'
-  BACKEND_SPEC: 'fortuna-webservice.spec'
+  BACKEND_SPEC: 'fortuna-backend-webservice.spec'
   SERVICE_PORT: '8102'
   HEALTH_ENDPOINT: '/health'
   API_KEY: ${{ secrets.TEST_API_KEY }}
@@ -411,8 +411,8 @@ jobs:
       - name: Create Required Backend Directories
         run: |
           Set-StrictMode -Version Latest
-          New-Item -ItemType Directory -Path "${{ env.BACKEND_DIR }}/data" -Force | Out-Null
-          New-Item -ItemType Directory -Path "${{ env.BACKEND_DIR }}/json" -Force | Out-Null
+          New-Item -ItemType Directory -Path "python_service/data" -Force | Out-Null
+          New-Item -ItemType Directory -Path "python_service/json" -Force | Out-Null
           Write-Host "✅ Created required backend directories for PyInstaller." -ForegroundColor Green
 
       - name: Build with PyInstaller
@@ -896,6 +896,20 @@ jobs:
       # ═════════════════════════════════════════════════════════════════════════
       # PHASE 1: PRE-LAUNCH PYTHON/ASGI VALIDATION
       # ═════════════════════════════════════════════════════════════════════════
+      - name: Setup Python for Pre-Launch Check
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Dependencies for Pre-Launch Check
+        run: |
+          Set-StrictMode -Version Latest
+          python -m pip install --upgrade pip
+          pip install -r "${{ env.BACKEND_DIR }}/requirements.txt"
+          if (Test-Path "${{ env.BACKEND_DIR }}/requirements-dev.txt") {
+            pip install -r "${{ env.BACKEND_DIR }}/requirements-dev.txt"
+          }
+
       - name: 🐍 Test PyInstaller Python Environment (Mimic Executable)
         run: |
           Set-StrictMode -Version Latest
@@ -951,13 +965,12 @@ jobs:
               except Exception as e:
                   print(f"   ⚠️  {mod}: {type(e).__name__}: {e}")
 
-          # 4. Attempt to import web_service modules
-          print("\n4. APPLICATION MODULES (web_service.backend):")
+          # 4. Attempt to import python_service modules
+          print("\n4. APPLICATION MODULES (python_service):")
           app_modules = [
-              'web_service',
-              'web_service.backend',
-              'web_service.backend.main',
-              'web_service.backend.api',
+              'python_service',
+              'python_service.main',
+              'python_service.api',
           ]
 
           for mod in app_modules:
@@ -975,7 +988,7 @@ jobs:
           # 5. Test ASGI app instantiation
           print("\n5. ASGI APP INSTANTIATION:")
           try:
-              from web_service.backend.main import app
+              from python_service.main import app
               print(f"   ✅ Successfully imported app from main")
               print(f"   App type: {type(app)}")
               print(f"   App class: {app.__class__.__name__}")
@@ -1461,7 +1474,7 @@ jobs:
           path: assets
 
       - name: Download SBOM
-        uses: actions/download-artifact@v4
+        uses: actions/upload-artifact@v4
         with:
           name: sbom-${{ github.run_id }}
           path: assets
