@@ -469,7 +469,7 @@ jobs:
       - name: 📥 Download Executable
         uses: actions/download-artifact@v4
         with:
-          name: backend-exe-${{ github.run_id }}
+          name: backend-executable-${{ github.run_id }}
           path: dist
 
       - name: 🏗️ Setup Directories & Capture Baseline
@@ -514,7 +514,7 @@ jobs:
 
           # PE signature check
           $bytes = [System.IO.File]::ReadAllBytes($exe)
-          $peSignature = "$($bytes[0]:X2)$($bytes[1]:X2)"
+          $peSignature = "{0:X2}{1:X2}" -f $bytes[0], $bytes[1]
           if ($peSignature -eq "4D5A") {
             Write-Host "✅ Valid PE signature: $peSignature" -ForegroundColor Green
           } else {
@@ -522,16 +522,16 @@ jobs:
             exit 1
           }
 
-          # Check for embedded dependencies
-          $stringsCmd = "strings" # Windows native or alternative
-          try {
-            $output = & cmd /c "findstr /C:`"uvicorn`" `"$exe`" 2>&1" 2>&1
-            if ($output) {
-              Write-Host "✅ Found uvicorn reference in executable" -ForegroundColor Green
-              $output | Out-File "diagnostics/exe-analysis/found-dependencies.txt"
-            }
-          } catch {
-            Write-Host "⚠️  Could not grep executable (not critical)" -ForegroundColor Yellow
+          # Check for embedded dependencies (more robustly)
+          $searchString = "uvicorn"
+          & cmd /c "findstr /C:`"$searchString`" `"$exe`" 1>$null 2>$null"
+          $exitCode = $LASTEXITCODE
+
+          if ($exitCode -eq 0) {
+            Write-Host "✅ Found '$searchString' reference in executable." -ForegroundColor Green
+          } else {
+            # findstr returns 1 if not found, other non-zero for errors.
+            Write-Host "ℹ️ Did not find '$searchString' reference in executable (exit code: $exitCode). Not critical." -ForegroundColor Gray
           }
 
       - name: 🔒 Configure Firewall & Network
