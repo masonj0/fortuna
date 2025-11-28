@@ -469,7 +469,7 @@ jobs:
       - name: 📥 Download Executable
         uses: actions/download-artifact@v4
         with:
-          name: backend-exe-${{ github.run_id }}
+          name: backend-executable-${{ github.run_id }}
           path: dist
 
       - name: 🏗️ Setup Directories & Capture Baseline
@@ -514,7 +514,7 @@ jobs:
 
           # PE signature check
           $bytes = [System.IO.File]::ReadAllBytes($exe)
-          $peSignature = "$($bytes[0]:X2)$($bytes[1]:X2)"
+          $peSignature = "{0:X2}{1:X2}" -f $bytes[0], $bytes[1]
           if ($peSignature -eq "4D5A") {
             Write-Host "✅ Valid PE signature: $peSignature" -ForegroundColor Green
           } else {
