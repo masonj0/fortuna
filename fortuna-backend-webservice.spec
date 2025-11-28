@@ -72,16 +72,16 @@ datas = []
 hiddenimports = set()
 
 include_tree("staging/ui", "ui", datas)
-include_tree("web_service/backend/adapters", "adapters", datas)
-include_tree("web_service/backend/data", "data", datas)
-include_tree("web_service/backend/json", "json", datas)
+include_tree("python_service/adapters", "adapters", datas)
+include_tree("python_service/data", "data", datas)
+include_tree("python_service/json", "json", datas)
 
 datas += collect_data_files("uvicorn", includes=["*.html", "*.json"])
 datas += collect_data_files("slowapi", includes=["*.json", "*.yaml"])
 datas += collect_data_files("structlog", includes=["*.json"])
 datas += collect_data_files("certifi")
 
-hiddenimports.update(collect_submodules("web_service"))
+hiddenimports.update(collect_submodules("python_service"))
 hiddenimports.update(
     [
         "uvicorn.logging",
@@ -111,15 +111,15 @@ hiddenimports.update(
 )
 
 analysis = Analysis(
-    ["web_service/backend/main.py"],
-    pathex=[str(project_root), str(project_root / 'web_service')],
+    ["python_service/main.py"],
+    pathex=[str(project_root)],
     binaries=[],
     datas=datas,
     hiddenimports=sorted(hiddenimports),
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=["tests", "pytest", "python_service"],
+    excludes=["tests", "pytest", "web_service"],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
