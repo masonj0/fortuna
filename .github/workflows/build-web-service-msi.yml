@@ -255,7 +255,7 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
           pip install pip-audit
-          pip-audit -r "${{ env.BACKEND_DIR }}/requirements.txt"
+          pip-audit -r ${{ env.BACKEND_DIR }}/requirements.txt
 
   sbom:
     name: '📄 SBOM Snapshot'
@@ -763,9 +763,9 @@ jobs:
               sys.exit(1)
 
           # Step 5: Get app object
-          print("\n[Step 5] Retrieving 'app' object from main...")
+          print("\n[Step 2] Retrieving 'app' object from main...")
           try:
-              from web_service.backend.api import app
+              from web_service.backend.main import app
               print(f"✅ app object retrieved")
               print(f"   Type: {type(app)}")
               print(f"   Class: {app.__class__.__name__}")
@@ -904,14 +904,11 @@ jobs:
 
           # Check for embedded dependencies (more robustly)
           $searchString = "uvicorn"
-          cmd /c "findstr /C:`"$searchString`" `"$exe`" >NUL 2>&1"
-          $exitCode = $LASTEXITCODE
-
-          if ($exitCode -eq 0) {
-            Write-Host "✅ Found '$searchString' reference in executable." -ForegroundColor Green
+          # Use Select-String instead of findstr to avoid exit code 1 issues
+          if (Select-String -Path $exe -Pattern $searchString -Quiet -SimpleMatch) {
+              Write-Host "✅ Found '$searchString' reference."
           } else {
-            # findstr returns 1 if not found, other non-zero for errors.
-            Write-Host "ℹ️ Did not find '$searchString' reference in executable (exit code: $exitCode). Not critical." -ForegroundColor Gray
+              Write-Host "ℹ️ '$searchString' not found in binary (likely packed). Continuing..." -ForegroundColor Gray
           }
 
       - name: 🔒 Configure Firewall & Network

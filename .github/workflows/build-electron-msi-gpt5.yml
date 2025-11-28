@@ -14,6 +14,7 @@ env:
   NODE_VERSION: '18'
   PYTHON_VERSION: '3.11'
   ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
+  BACKEND_DIR: 'python_service'
 
 jobs:
   validate-environment:
@@ -37,7 +38,7 @@ jobs:
             'fortuna-backend-electron.spec',
             'electron/electron-builder-config.yml',
             'web_platform/frontend/package.json',
-            'python_service/requirements-dev.txt',
+            '${{ env.BACKEND_DIR }}/requirements-dev.txt',
             'electron/package.json'
           )
 
@@ -131,7 +132,7 @@ jobs:
         shell: pwsh
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          pip install -r python_service/requirements-dev.txt
+          pip install -r ${{ env.BACKEND_DIR }}/requirements-dev.txt
           Write-Host "✓ Python dependencies installed"
 
       - name: 🔨 Build Python Service with PyInstaller
@@ -536,11 +537,11 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel --quiet
 
           Write-Host "Installing requirements.txt..." -ForegroundColor Cyan
-          pip install -r "python_service/requirements.txt" -v 2>&1 | Tee-Object "install-requirements.log"
+          pip install -r "${{ env.BACKEND_DIR }}/requirements.txt" -v 2>&1 | Tee-Object "install-requirements.log"
 
-          if (Test-Path "python_service/requirements-dev.txt") {
+          if (Test-Path "${{ env.BACKEND_DIR }}/requirements-dev.txt") {
             Write-Host "Installing requirements-dev.txt..." -ForegroundColor Cyan
-            pip install -r "python_service/requirements-dev.txt" -v 2>&1 | Tee-Object -Append "install-requirements.log"
+            pip install -r "${{ env.BACKEND_DIR }}/requirements-dev.txt" -v 2>&1 | Tee-Object -Append "install-requirements.log"
           }
 
           if ($LASTEXITCODE -ne 0) {
