@@ -3,10 +3,6 @@ import sys
 import os
 from multiprocessing import freeze_support
 
-from web_service.backend.config import get_settings
-from web_service.backend.port_check import check_port_and_exit_if_in_use
-
-
 # Force UTF-8 encoding for stdout and stderr, crucial for PyInstaller on Windows
 os.environ["PYTHONUTF8"] = "1"
 
@@ -15,24 +11,36 @@ os.environ["PYTHONUTF8"] = "1"
 
 def _configure_sys_path():
     """
-    Dynamically adds the project root to sys.path.
+    Dynamically adds project paths to sys.path.
     This is the robust solution to ensure that string-based imports like
     "web_service.backend.api:app" work correctly when the application is
     run from a PyInstaller executable. The `_MEIPASS` attribute is a temporary
     directory created by PyInstaller at runtime.
     """
     if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
-        # Running in a PyInstaller bundle.
-        # The project root IS the _MEIPASS directory itself.
+        # Running in a PyInstaller bundle. The project root is the _MEIPASS directory.
         project_root = os.path.abspath(sys._MEIPASS)
-    else:
-        # Running as a normal script.
-        # The project root is two levels above this file's directory.
-        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
-    if project_root not in sys.path:
-        sys.path.insert(0, project_root)
-        print(f"INFO: Added project root to sys.path: {project_root}")
+        # Aggressively add paths to resolve potential module lookup issues in frozen mode.
+        paths_to_add = [
+            project_root,
+            os.path.join(project_root, "web_service"),
+            os.path.join(project_root, "web_service", "backend"),
+        ]
+
+        # Insert paths at the beginning of sys.path in reverse order
+        # to maintain the desired precedence.
+        for path in reversed(paths_to_add):
+            if path not in sys.path:
+                sys.path.insert(0, path)
+                print(f"INFO: Added path to sys.path: {path}")
+
+    else:
+        # Running as a normal script. The project root is two levels up.
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        if project_root not in sys.path:
+            sys.path.insert(0, project_root)
+            print(f"INFO: Added project root to sys.path: {project_root}")
 
 def main():
     """
@@ -47,6 +55,9 @@ def main():
 
     # CRITICAL: This must be called before any other application imports.
     _configure_sys_path()
+
+    from web_service.backend.config import get_settings
+    from web_service.backend.port_check import check_port_and_exit_if_in_use
 
     settings = get_settings()
 

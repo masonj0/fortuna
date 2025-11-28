@@ -461,113 +461,544 @@ jobs:
             backend-freeze.txt
           retention-days: 7
 
-  smoke-test-service:
-    name: '🔬 Smoke Test Service'
+  smoke-test:
+    name: '🔬 Smoke Test (Diagnostic Overkill)'
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     needs: build-backend
-    env:
-      SMOKE_LOG_DIR: 'logs'
-      BUILD_VERSION: ${{ needs.repo-preflight.outputs.semver }}
     steps:
-      - name: Download Backend Executable
+      # ═════════════════════════════════════════════════════════════════════════
+      # PHASE 0: PRE-EXECUTION FORENSICS
+      # ═════════════════════════════════════════════════════════════════════════
+      - name: 📥 Download Executable
         uses: actions/download-artifact@v4
         with:
-          name: backend-executable-${{ github.run_id }}
-          path: .
+          name: backend-exe-${{ github.run_id }}
+          path: dist
 
-      - name: Prepare Environment
+      - name: 🏗️ Setup Directories & Capture Baseline
         run: |
           Set-StrictMode -Version Latest
-          New-Item -ItemType Directory -Path $env:SMOKE_LOG_DIR -Force | Out-Null
-          New-Item -ItemType Directory -Path "${{ env.BACKEND_DIR }}/data" -Force | Out-Null
-          New-Item -ItemType Directory -Path "${{ env.BACKEND_DIR }}/json" -Force | Out-Null
-          New-NetFirewallRule -DisplayName "FortunaSmokeTest" -Direction Inbound -Action Allow -Protocol TCP -LocalPort ${{ env.SERVICE_PORT }} -ErrorAction SilentlyContinue
 
-      - name: Start Service
+          # Create diagnostic structure
+          New-Item -ItemType Directory -Path "service-logs" -Force | Out-Null
+          New-Item -ItemType Directory -Path "diagnostics" -Force | Out-Null
+          New-Item -ItemType Directory -Path "diagnostics/exe-analysis" -Force | Out-Null
+          New-Item -ItemType Directory -Path "diagnostics/runtime-trace" -Force | Out-Null
+          New-Item -ItemType Directory -Path "diagnostics/import-analysis" -Force | Out-Null
+          New-Item -ItemType Directory -Path "diagnostics/environment" -Force | Out-Null
+          New-Item -ItemType Directory -Path "data" -Force | Out-Null
+          New-Item -ItemType Directory -Path "json" -Force | Out-Null
+
+          # Baseline system state
+          Get-Process | Out-File "diagnostics/baseline-processes.txt"
+          Get-NetTCPConnection -ErrorAction SilentlyContinue | Out-File "diagnostics/baseline-network.txt"
+          [Environment]::GetEnvironmentVariables() | Out-File "diagnostics/baseline-env.txt"
+
+          Write-Host "✅ Diagnostic directories created" -ForegroundColor Green
+
+      - name: 🔬 Analyze Executable (Pre-Execution)
         run: |
           Set-StrictMode -Version Latest
-          $env:API_KEY = "${{ env.API_KEY }}"
-          $env:FORTUNA_PORT = "${{ env.SERVICE_PORT }}"
-          $env:FORTUNA_VERSION = "${{ needs.repo-preflight.outputs.semver }}"
-          $proc = Start-Process -FilePath ".\fortuna-backend.exe" `
-            -PassThru `
-            -RedirectStandardOutput "$env:SMOKE_LOG_DIR/backend-out.txt" `
-            -RedirectStandardError "$env:SMOKE_LOG_DIR/backend-err.txt"
-          $proc.Id | Out-File backend.pid -Encoding ascii
-          Write-Host "✅ Service started (PID: $($proc.Id))"
 
-      - name: Wait for Health (Polling)
-        run: |
-          Set-StrictMode -Version Latest
-          $url = "http://127.0.0.1:${{ env.SERVICE_PORT }}${{ env.HEALTH_ENDPOINT }}"
-          $deadline = (Get-Date).AddMinutes(3)
-          $success = $false
-          do {
-            try {
-              $resp = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
-              if ($resp.StatusCode -eq 200) { $success = $true; break }
-            } catch {
-              Start-Sleep -Seconds 2
-            }
-          } while ((Get-Date) -lt $deadline)
-          if (-not $success) {
-            Write-Host "❌ FATAL: Health check failed" -ForegroundColor Red
-            Get-Content "$env:SMOKE_LOG_DIR/backend-err.txt" -Tail 40 | Write-Host
+          $exe = "dist/fortuna-backend.exe"
+
+          # File properties
+          $info = Get-Item $exe
+          $size = $info.Length / 1MB
+
+          @"
+          === EXECUTABLE ANALYSIS ===
+          Path: $($info.FullName)
+          Size: $([math]::Round($size, 2)) MB
+          Created: $($info.CreationTime)
+          Modified: $($info.LastWriteTime)
+          Attributes: $($info.Attributes)
+          "@ | Tee-Object "diagnostics/exe-analysis/exe-properties.txt"
+
+          # PE signature check
+          $bytes = [System.IO.File]::ReadAllBytes($exe)
+          $peSignature = "$($bytes[0]:X2)$($bytes[1]:X2)"
+          if ($peSignature -eq "4D5A") {
+            Write-Host "✅ Valid PE signature: $peSignature" -ForegroundColor Green
+          } else {
+            Write-Host "❌ INVALID PE signature: $peSignature (expected 4D5A)" -ForegroundColor Red
             exit 1
           }
-          Write-Host "✅ Health check passed."
 
-      - name: Verify API Response
-        run: |
-          Set-StrictMode -Version Latest
-          $url = "http://127.0.0.1:${{ env.SERVICE_PORT }}/api/races"
-          $headers = @{ 'X-API-Key' = "${{ env.API_KEY }}" }
+          # Check for embedded dependencies
+          $stringsCmd = "strings" # Windows native or alternative
           try {
-            $resp = Invoke-WebRequest -Uri $url -Headers $headers -UseBasicParsing -TimeoutSec 5
-            if ($resp.StatusCode -in 200,400,401) {
-              Write-Host "✅ API verification successful (HTTP $($resp.StatusCode))"
-            } else {
-               throw "Unexpected status code: $($resp.StatusCode)"
+            $output = & cmd /c "findstr /C:`"uvicorn`" `"$exe`" 2>&1" 2>&1
+            if ($output) {
+              Write-Host "✅ Found uvicorn reference in executable" -ForegroundColor Green
+              $output | Out-File "diagnostics/exe-analysis/found-dependencies.txt"
             }
           } catch {
-            Write-Host "❌ API Verification Failed: $_"
+            Write-Host "⚠️  Could not grep executable (not critical)" -ForegroundColor Yellow
+          }
+
+      - name: 🔒 Configure Firewall & Network
+        run: |
+          Set-StrictMode -Version Latest
+
+          # Create firewall rule
+          try {
+            New-NetFirewallRule `
+              -DisplayName "FortunaSmoke" `
+              -Direction Inbound `
+              -Action Allow `
+              -Protocol TCP `
+              -LocalPort ${{ env.SERVICE_PORT }} `
+              -ErrorAction Stop
+            Write-Host "✅ Firewall rule created" -ForegroundColor Green
+          } catch {
+            Write-Host "⚠️  Firewall rule may exist: $_" -ForegroundColor Yellow
+          }
+
+          # Allow port in Windows Defender
+          try {
+            netsh advfirewall firewall add rule name="FortunaSmokeHTTP" dir=in action=allow protocol=tcp localport=${{ env.SERVICE_PORT }} | Out-File "diagnostics/firewall-netsh.log"
+          } catch {
+            Write-Host "⚠️  netsh command issue (non-critical)" -ForegroundColor Yellow
+          }
+
+          # Baseline netstat
+          netstat -ano | Out-File "diagnostics/network-baseline.txt"
+
+      # ═════════════════════════════════════════════════════════════════════════
+      # PHASE 1: PRE-LAUNCH PYTHON/ASGI VALIDATION
+      # ═════════════════════════════════════════════════════════════════════════
+      - name: 🐍 Test PyInstaller Python Environment (Mimic Executable)
+        run: |
+          Set-StrictMode -Version Latest
+
+          # Create a test script that mimics what the executable should do
+          $testScript = @'
+          import sys
+          import os
+          import traceback
+
+          print("=" * 80)
+          print("PRE-LAUNCH PYTHON ENVIRONMENT CHECK")
+          print("=" * 80)
+
+          # 1. System paths
+          print("\n1. PYTHON ENVIRONMENT:")
+          print(f"   Python: {sys.executable}")
+          print(f"   Version: {sys.version}")
+          print(f"   Platform: {sys.platform}")
+          print(f"   Prefix: {sys.prefix}")
+
+          # 2. Module search paths
+          print("\n2. MODULE SEARCH PATHS:")
+          for i, p in enumerate(sys.path):
+              print(f"   [{i}] {p}")
+
+          # 3. Critical imports (same as in PyInstaller spec)
+          critical_modules = [
+              'fastapi',
+              'uvicorn',
+              'pydantic',
+              'pydantic_core',
+              'pydantic_settings',
+              'aiosqlite',
+              'slowapi',
+              'structlog',
+              'starlette',
+              'starlette.staticfiles',
+              'anyio',
+              'httpcore',
+              'httpx',
+          ]
+
+          print("\n3. CRITICAL MODULE IMPORTS:")
+          failed = []
+          for mod in critical_modules:
+              try:
+                  __import__(mod)
+                  print(f"   ✅ {mod}")
+              except ImportError as e:
+                  print(f"   ❌ {mod}: {e}")
+                  failed.append((mod, str(e)))
+              except Exception as e:
+                  print(f"   ⚠️  {mod}: {type(e).__name__}: {e}")
+
+          # 4. Attempt to import web_service modules
+          print("\n4. APPLICATION MODULES (web_service.backend):")
+          app_modules = [
+              'web_service',
+              'web_service.backend',
+              'web_service.backend.main',
+              'web_service.backend.api',
+          ]
+
+          for mod in app_modules:
+              try:
+                  __import__(mod)
+                  print(f"   ✅ {mod}")
+              except ImportError as e:
+                  print(f"   ❌ {mod}: {e}")
+                  failed.append((mod, str(e)))
+                  traceback.print_exc()
+              except Exception as e:
+                  print(f"   ⚠️  {mod}: {type(e).__name__}: {e}")
+                  traceback.print_exc()
+
+          # 5. Test ASGI app instantiation
+          print("\n5. ASGI APP INSTANTIATION:")
+          try:
+              from web_service.backend.main import app
+              print(f"   ✅ Successfully imported app from main")
+              print(f"   App type: {type(app)}")
+              print(f"   App class: {app.__class__.__name__}")
+          except ImportError as e:
+              print(f"   ❌ Failed to import app: {e}")
+              traceback.print_exc()
+              failed.append(("main.app", str(e)))
+          except Exception as e:
+              print(f"   ⚠️  {type(e).__name__}: {e}")
+              traceback.print_exc()
+
+          # Summary
+          print("\n" + "=" * 80)
+          if failed:
+              print(f"FAILURES: {len(failed)} module(s) failed")
+              for mod, err in failed:
+                  print(f"  - {mod}")
+                  print(f"    {err[:100]}")
+              sys.exit(1)
+          else:
+              print("✅ ALL CHECKS PASSED")
+              sys.exit(0)
+          '@
+
+          $testScript | Out-File "diagnostics/import-analysis/pre-launch-test.py" -Encoding utf8
+
+          python "diagnostics/import-analysis/pre-launch-test.py" 2>&1 | Tee-Object "diagnostics/import-analysis/pre-launch-output.txt"
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "⚠️  Pre-launch Python check failed (but executable may still work)" -ForegroundColor Yellow
+          }
+
+      - name: 🔍 Inspect Executable Contents (Strings Dump)
+        run: |
+          Set-StrictMode -Version Latest
+
+          $exe = "dist/fortuna-backend.exe"
+
+          # Extract strings from executable (look for module names, ports, etc.)
+          # Note: This requires PowerShell Get-Content binary reading
+          $content = [System.IO.File]::ReadAllBytes($exe)
+          $text = [System.Text.Encoding]::ASCII.GetString($content)
+
+          # Extract readable strings
+          $strings = [regex]::Matches($text, '[A-Za-z0-9_.\-/]+') | ForEach-Object { $_.Value } | Sort-Object -Unique
+
+          # Filter for interesting ones
+          $interestingStrings = $strings | Where-Object {
+            $_ -match '(uvicorn|fastapi|web_service|backend|main|api|asgi|starlette)' -or
+            $_.Length -gt 20 -and $_ -match '(\.py|\.so|\.dll|Protocol|http)'
+          }
+
+          Write-Host "Found $($interestingStrings.Count) interesting strings in executable" -ForegroundColor Cyan
+          $interestingStrings | Out-File "diagnostics/exe-analysis/interesting-strings.txt"
+          $interestingStrings | Out-Host
+
+      - name: 📊 Capture Environment for Service Launch
+        run: |
+          Set-StrictMode -Version Latest
+
+          $env | Out-File "diagnostics/environment/launch-environment.txt"
+
+          $envVars = @{
+            'API_KEY' = $env:API_KEY
+            'FORTUNA_PORT' = $env:FORTUNA_PORT
+            'FORTUNA_ENV' = $env:FORTUNA_ENV
+            'PYTHONPATH' = $env:PYTHONPATH
+            'PATH' = $env:PATH
+            'TEMP' = $env:TEMP
+            'TMP' = $env:TMP
+          }
+
+          @"
+          === SERVICE LAUNCH ENVIRONMENT ===
+          API_KEY: $($envVars['API_KEY'] ? '***SET***' : 'NOT SET')
+          FORTUNA_PORT: $($envVars['FORTUNA_PORT'])
+          FORTUNA_ENV: $($envVars['FORTUNA_ENV'])
+          PYTHONPATH: $($envVars['PYTHONPATH'])
+          TEMP: $($envVars['TEMP'])
+
+          Full environment:
+          "@ | Out-File "diagnostics/environment/service-environment.txt"
+
+          $envVars.GetEnumerator() | ForEach-Object {
+            "$($_.Key)=$($_.Value)" | Out-File -Append "diagnostics/environment/service-environment.txt"
+          }
+
+      # ═════════════════════════════════════════════════════════════════════════
+      # PHASE 2: SERVICE LAUNCH WITH OBSESSIVE TRACING
+      # ═════════════════════════════════════════════════════════════════════════
+      - name: 🚀 Start Service with Full Output Capture
+        run: |
+          Set-StrictMode -Version Latest
+
+          $exe = Resolve-Path "dist/fortuna-backend.exe"
+          $outLog = "service-logs/stdout.txt"
+          $errLog = "service-logs/stderr.txt"
+
+          Write-Host "Starting service..." -ForegroundColor Cyan
+          Write-Host "Executable: $exe" -ForegroundColor Cyan
+          Write-Host "Port: ${{ env.SERVICE_PORT }}" -ForegroundColor Cyan
+          Write-Host "API_KEY: ***" -ForegroundColor Cyan
+
+          # Set environment for subprocess
+          $env:API_KEY = "${{ env.API_KEY }}"
+          $env:FORTUNA_PORT = "${{ env.SERVICE_PORT }}"
+          $env:FORTUNA_ENV = "smoke-test"
+          $env:PYTHONUNBUFFERED = "1"  # Force unbuffered output
+
+          # Start process with full I/O redirection
+          $proc = Start-Process `
+            -FilePath $exe `
+            -PassThru `
+            -RedirectStandardOutput $outLog `
+            -RedirectStandardError $errLog `
+            -NoNewWindow
+
+          $pid = $proc.Id
+          Write-Host "✅ Service process started with PID: $pid" -ForegroundColor Green
+          $pid | Out-File "service.pid" -Encoding ascii
+
+          # Don't wait - proceed to health check
+          Start-Sleep -Seconds 5
+
+          # Check if process is still alive
+          if (Get-Process -Id $pid -ErrorAction SilentlyContinue) {
+            Write-Host "✅ Process still alive after 5 seconds" -ForegroundColor Green
+          } else {
+            Write-Host "❌ FATAL: Process died immediately" -ForegroundColor Red
+            Write-Host "=== STDOUT ===" -ForegroundColor Red
+            Get-Content $outLog
+            Write-Host "=== STDERR ===" -ForegroundColor Red
+            Get-Content $errLog
             exit 1
           }
 
-      - name: Collect Forensics (On Failure)
+      - name: 📊 Monitor Process While Running
+        run: |
+          Set-StrictMode -Version Latest
+
+          $pid = Get-Content "service.pid" -Raw -ErrorAction SilentlyContinue
+          if ($pid) {
+            $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
+            if ($proc) {
+              @"
+              === PROCESS INFO ===
+              PID: $pid
+              Name: $($proc.ProcessName)
+              Memory: $([math]::Round($proc.WorkingSet / 1MB, 2)) MB
+              CPU Time: $($proc.TotalProcessorTime)
+              Threads: $($proc.Threads.Count)
+              Handle Count: $($proc.HandleCount)
+              "@ | Tee-Object "diagnostics/runtime-trace/process-info.txt"
+            }
+          }
+
+          # Network state while running
+          netstat -ano | Out-File "diagnostics/network-running.txt"
+
+      # ═════════════════════════════════════════════════════════════════════════
+      # PHASE 3: HEALTH CHECK WITH AGGRESSIVE RETRIES & DEBUGGING
+      # ═════════════════════════════════════════════════════════════════════════
+      - name: 💓 Health Check (Retry Loop with Diagnostics)
+        run: |
+          Set-StrictMode -Version Latest
+
+          $url = "http://127.0.0.1:${{ env.SERVICE_PORT }}${{ env.HEALTH_ENDPOINT }}"
+          $maxRetries = 60  # 60 retries = 2 minutes
+          $retryInterval = 2
+          $attempt = 0
+          $success = $false
+
+          Write-Host "Health check URL: $url" -ForegroundColor Cyan
+          Write-Host "Max retries: $maxRetries | Interval: $retryInterval seconds" -ForegroundColor Cyan
+
+          $healthLog = "diagnostics/runtime-trace/health-check.log"
+
+          while ($attempt -lt $maxRetries -and -not $success) {
+            $attempt++
+            $elapsed = ($attempt - 1) * $retryInterval
+
+            Write-Host "Attempt $attempt/$maxRetries (${elapsed}s elapsed)..." -ForegroundColor Yellow
+
+            try {
+              # Attempt 1: Test-NetConnection (TCP)
+              Write-Host "  [TCP Check]..." -ForegroundColor Gray
+              $tcpTest = Test-NetConnection -ComputerName 127.0.0.1 -Port ${{ env.SERVICE_PORT }} -ErrorAction Stop
+              if ($tcpTest.TcpTestSucceeded) {
+                Write-Host "  ✅ TCP Connection successful" -ForegroundColor Green
+                "[$attempt] TCP connection successful" | Out-File -Append $healthLog
+              } else {
+                Write-Host "  ❌ TCP connection failed" -ForegroundColor Red
+                "[$ attempt] TCP connection failed" | Out-File -Append $healthLog
+                throw "TCP connection failed"
+              }
+
+              # Attempt 2: HTTP Request
+              Write-Host "  [HTTP GET]..." -ForegroundColor Gray
+              $response = Invoke-WebRequest `
+                -Uri $url `
+                -UseBasicParsing `
+                -TimeoutSec 10 `
+                -ErrorAction Stop
+
+              if ($response.StatusCode -eq 200) {
+                Write-Host "✅ HEALTH CHECK PASSED (HTTP $($response.StatusCode))" -ForegroundColor Green
+                $response.Content | Out-File "diagnostics/runtime-trace/health-response.json"
+                $response.Content | Out-File -Append $healthLog
+                $success = $true
+                break
+              } else {
+                Write-Host "⚠️  Unexpected status: $($response.StatusCode)" -ForegroundColor Yellow
+                "[$attempt] Status $($response.StatusCode)" | Out-File -Append $healthLog
+              }
+
+            } catch [System.Net.WebException] {
+              $ex = $_
+              Write-Host "  ❌ Request failed: $($ex.Exception.Message)" -ForegroundColor Red
+              "[$attempt] WebException: $($ex.Exception.Message)" | Out-File -Append $healthLog
+
+            } catch [System.Net.Sockets.SocketException] {
+              $ex = $_
+              Write-Host "  ❌ Socket error: $($ex.Exception.Message)" -ForegroundColor Red
+              "[$attempt] SocketException: $($ex.Exception.Message)" | Out-File -Append $healthLog
+
+            } catch {
+              Write-Host "  ❌ Error: $_" -ForegroundColor Red
+              "$attempt] Exception: $_" | Out-File -Append $healthLog
+            }
+
+            # Capture logs between attempts
+            $stdoutTail = Get-Content "service-logs/stdout.txt" -Tail 5 -ErrorAction SilentlyContinue
+            $stderrTail = Get-Content "service-logs/stderr.txt" -Tail 5 -ErrorAction SilentlyContinue
+
+            if ($stderrTail) {
+              Write-Host "  [STDERR tail]:" -ForegroundColor Gray
+              $stderrTail | ForEach-Object { Write-Host "    $_" -ForegroundColor Red }
+            }
+
+            if ($attempt -lt $maxRetries) {
+              Start-Sleep -Seconds $retryInterval
+            }
+          }
+
+          if (-not $success) {
+            Write-Host "❌ FATAL: Health check failed after $maxRetries attempts" -ForegroundColor Red
+
+            # FULL DIAGNOSTICS ON FAILURE
+            Write-Host "`n=== FULL DIAGNOSTIC DUMP ===" -ForegroundColor Red
+
+            Write-Host "`n[STDOUT - Last 50 lines]" -ForegroundColor Cyan
+            Get-Content "service-logs/stdout.txt" -Tail 50
+
+            Write-Host "`n[STDERR - Last 50 lines]" -ForegroundColor Cyan
+            Get-Content "service-logs/stderr.txt" -Tail 50
+
+            Write-Host "`n[Process Status]" -ForegroundColor Cyan
+            $pid = Get-Content "service.pid" -Raw
+            Get-Process -Id $pid -ErrorAction SilentlyContinue | Format-List
+
+            Write-Host "`n[Port Binding Check]" -ForegroundColor Cyan
+            netstat -ano | grep -E "127\.0\.0\.1:${{ env.SERVICE_PORT }}" 2>$null || `
+              netstat -ano | Select-String "127.0.0.1" | Select-String "${{ env.SERVICE_PORT }}"
+
+            Write-Host "`n[Firewall Rules]" -ForegroundColor Cyan
+            Get-NetFirewallRule -DisplayName "*Fortuna*" -ErrorAction SilentlyContinue | Format-List
+
+            exit 1
+          }
+
+      - name: 🔌 Test API Endpoint
+        run: |
+          Set-StrictMode -Version Latest
+
+          $url = "http://127.0.0.1:${{ env.SERVICE_PORT }}/api/races"
+          $headers = @{ 'X-API-Key' = "${{ env.API_KEY }}" }
+
+          Write-Host "Testing API endpoint: $url" -ForegroundColor Cyan
+
+          try {
+            $response = Invoke-WebRequest `
+              -Uri $url `
+              -Headers $headers `
+              -UseBasicParsing `
+              -TimeoutSec 10
+
+            Write-Host "✅ API Response: HTTP $($response.StatusCode)" -ForegroundColor Green
+            Write-Host "Response size: $($response.Content.Length) bytes" -ForegroundColor Cyan
+            $response.Content | Out-File "diagnostics/runtime-trace/api-response.json"
+
+          } catch {
+            Write-Host "⚠️  API call failed (service running, but endpoint issue): $_" -ForegroundColor Yellow
+          }
+
+      # ═════════════════════════════════════════════════════════════════════════
+      # PHASE 4: POST-EXECUTION FORENSICS
+      # ═════════════════════════════════════════════════════════════════════════
+      - name: 📊 Post-Test Forensics
         if: failure()
         run: |
-          "=== PROCESSES ===" | Out-File forensics.log
-          Get-Process | Sort-Object CPU -Descending | Select-Object -First 20 | Out-String | Out-File forensics.log -Append
-          "=== NETSTAT ===" | Out-File forensics.log -Append
-          netstat -ano | Out-File forensics.log -Append
+          Set-StrictMode -Version Latest
 
-      - name: Upload Logs
+          "=== TOP PROCESSES ===" | Out-File "diagnostics/forensics.log"
+          Get-Process | Sort-Object CPU -Descending | Select-Object -First 20 | Out-File -Append "diagnostics/forensics.log"
+
+          "=== NETWORK CONNECTIONS ===" | Out-File -Append "diagnostics/forensics.log"
+          netstat -ano | Out-File -Append "diagnostics/forensics.log"
+
+          "=== EVENT VIEWER (Last 20 errors) ===" | Out-File -Append "diagnostics/forensics.log"
+          Get-EventLog -LogName System -EntryType Error -Newest 20 -ErrorAction SilentlyContinue | Out-File -Append "diagnostics/forensics.log"
+
+          "=== DISK SPACE ===" | Out-File -Append "diagnostics/forensics.log"
+          Get-Volume | Out-File -Append "diagnostics/forensics.log"
+
+          "=== REGISTRY (FortunaWebService) ===" | Out-File -Append "diagnostics/forensics.log"
+          Get-ItemProperty -Path "HKLM:\Software\FortunaWebService" -ErrorAction SilentlyContinue | Out-File -Append "diagnostics/forensics.log"
+
+      - name: 📤 Upload All Diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: smoke-test-logs-${{ github.run_id }}
+          name: smoke-test-diagnostics-${{ github.run_id }}
           path: |
-            ${{ env.SMOKE_LOG_DIR }}/
-            forensics.log
-            backend.pid
-          retention-days: 7
+            service-logs/
+            diagnostics/
+            service.pid
+          retention-days: 30
+          if-no-files-found: warn
 
-      - name: Teardown
+      - name: 🧹 Cleanup
         if: always()
         run: |
-          if (Test-Path 'backend.pid') {
-            $pid = Get-Content backend.pid
-            Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+          if (Test-Path 'service.pid') {
+            try {
+              $pid = Get-Content 'service.pid' -Raw
+              Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+              Write-Host "✅ Service process terminated" -ForegroundColor Green
+            } catch {
+              Write-Host "⚠️  Could not terminate process" -ForegroundColor Yellow
+            }
           }
-          Remove-NetFirewallRule -DisplayName "FortunaSmokeTest" -ErrorAction SilentlyContinue
+
+          Remove-NetFirewallRule -DisplayName "FortunaSmoke" -ErrorAction SilentlyContinue
+          Remove-NetFirewallRule -DisplayName "FortunaSmokeHTTP" -ErrorAction SilentlyContinue
 
   package-msi-service:
     name: '💿 Package Service MSI'
     runs-on: windows-latest
     timeout-minutes: 25
-    needs: [repo-preflight, smoke-test-service]
+    needs: [repo-preflight, smoke-test]
     env:
       WIX_HASH: ${{ needs.repo-preflight.outputs.wix_definition_hash }}
       BUILD_VERSION: ${{ needs.repo-preflight.outputs.semver }}

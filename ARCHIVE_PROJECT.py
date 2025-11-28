@@ -39,6 +39,11 @@ def run_archiver():
 
         print(f"Processing {manifest_file} for PART {part_num}...")
         for relative_path in file_list:
+            if relative_path.endswith(".ymlx"):
+                print(f"[WARNING] Skipping deactivated workflow file: {relative_path}")
+                total_warnings += 1
+                continue
+
             file_path = PROJECT_ROOT / relative_path
             try:
                 with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
