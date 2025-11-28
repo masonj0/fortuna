@@ -896,6 +896,20 @@ jobs:
       # ═════════════════════════════════════════════════════════════════════════
       # PHASE 1: PRE-LAUNCH PYTHON/ASGI VALIDATION
       # ═════════════════════════════════════════════════════════════════════════
+      - name: Setup Python for Pre-Launch Check
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Dependencies for Pre-Launch Check
+        run: |
+          Set-StrictMode -Version Latest
+          python -m pip install --upgrade pip
+          pip install -r "${{ env.BACKEND_DIR }}/requirements.txt"
+          if (Test-Path "${{ env.BACKEND_DIR }}/requirements-dev.txt") {
+            pip install -r "${{ env.BACKEND_DIR }}/requirements-dev.txt"
+          }
+
       - name: 🐍 Test PyInstaller Python Environment (Mimic Executable)
         run: |
           Set-StrictMode -Version Latest
