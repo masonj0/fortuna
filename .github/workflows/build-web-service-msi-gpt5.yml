@@ -769,7 +769,7 @@ jobs:
           # Step 5: Get app object
           print("\n[Step 5] Retrieving 'app' object from main...")
           try:
-              from web_service.backend.main import app
+              from web_service.backend.api import app
               print(f"✅ app object retrieved")
               print(f"   Type: {type(app)}")
               print(f"   Class: {app.__class__.__name__}")
