@@ -510,13 +510,13 @@ jobs:
           pip list | Tee-Object "installed-packages.txt"
           pip freeze | Tee-Object "pip-freeze.txt"
 
-      - name: 🧪 PHASE 1: System Imports
+      - name: 🧪 PHASE 1 System Imports
         run: |
           python -c @'
           import sys
 
           print("\n" + "="*80)
-          print("PHASE 1: SYSTEM-LEVEL IMPORTS")
+          print("PHASE 1 SYSTEM-LEVEL IMPORTS")
           print("="*80)
 
           modules = [
@@ -547,14 +547,14 @@ jobs:
 
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
-      - name: 🧪 PHASE 2: Web Framework Core
+      - name: 🧪 PHASE 2 Web Framework Core
         run: |
           python -c @'
           import sys
           import traceback
 
           print("\n" + "="*80)
-          print("PHASE 2: WEB FRAMEWORK CORE")
+          print("PHASE 2 WEB FRAMEWORK CORE")
           print("="*80)
 
           modules = [
@@ -587,13 +587,13 @@ jobs:
 
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
-      - name: 🧪 PHASE 3: Pydantic & Data Validation
+      - name: 🧪 PHASE 3 Pydantic & Data Validation
         run: |
           python -c @'
           import sys
 
           print("\n" + "="*80)
-          print("PHASE 3: PYDANTIC & DATA VALIDATION")
+          print("PHASE 3 PYDANTIC & DATA VALIDATION")
           print("="*80)
 
           modules = [
@@ -615,13 +615,13 @@ jobs:
 
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
-      - name: 🧪 PHASE 4: Async/IO Utilities
+      - name: 🧪 PHASE 4 Async/IO Utilities
         run: |
           python -c @'
           import sys
 
           print("\n" + "="*80)
-          print("PHASE 4: ASYNC/IO UTILITIES")
+          print("PHASE 4 ASYNC/IO UTILITIES")
           print("="*80)
 
           modules = [
@@ -644,14 +644,14 @@ jobs:
 
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
-      - name: 🧪 PHASE 5: Optional Dependencies (non-critical)
+      - name: 🧪 PHASE 5 Optional Dependencies (non-critical)
         continue-on-error: true
         run: |
           python -c @'
           import sys
 
           print("\n" + "="*80)
-          print("PHASE 5: OPTIONAL DEPENDENCIES (non-critical)")
+          print("PHASE 5 OPTIONAL DEPENDENCIES (non-critical)")
           print("="*80)
 
           modules = [
@@ -670,7 +670,7 @@ jobs:
           print(f"\n✅ Phase 5 complete (warnings OK)")
           '@
 
-      - name: 🧪 PHASE 6: Application Directory Structure
+      - name: 🧪 PHASE 6 Application Directory Structure
         run: |
           Set-StrictMode -Version Latest
 
@@ -679,7 +679,7 @@ jobs:
           from pathlib import Path
 
           print("\n" + "="*80)
-          print("PHASE 6: APPLICATION DIRECTORY STRUCTURE")
+          print("PHASE 6 APPLICATION DIRECTORY STRUCTURE")
           print("="*80)
 
           cwd = Path.cwd()
@@ -706,7 +706,7 @@ jobs:
               print(f"  api.py: {api_py.exists()} ({api_py.stat().st_size if api_py.exists() else 'N/A'} bytes)")
           '@
 
-      - name: 🧪 PHASE 7: CRITICAL - Application Module Imports
+      - name: 🧪 PHASE 7 CRITICAL - Application Module Imports
         run: |
           python -c @'
           import sys
@@ -714,7 +714,7 @@ jobs:
           from pathlib import Path
 
           print("\n" + "="*80)
-          print("PHASE 7: APPLICATION MODULE IMPORTS (CRITICAL)")
+          print("PHASE 7 APPLICATION MODULE IMPORTS (CRITICAL)")
           print("="*80)
 
           # Step 1: web_service
