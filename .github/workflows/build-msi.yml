@@ -454,10 +454,50 @@ jobs:
               traceback.print_exc()
               sys.exit(1)
 
-          # Step 2: Get app object
+          # Step 2: web_service.backend
+          print("\n[Step 2] Importing web_service.backend...")
+          try:
+              import web_service.backend
+              print(f"✅ web_service.backend imported")
+              print(f"   Location: {web_service.backend.__file__}")
+          except Exception as e:
+              print(f"❌ FATAL: web_service.backend import failed")
+              print(f"   Error: {type(e).__name__}: {e}")
+              traceback.print_exc()
+              sys.exit(1)
+
+          # Step 3: web_service.backend.api (THE CRITICAL ONE)
+          print("\n[Step 3] Importing web_service.backend.api (CRITICAL)...")
+          try:
+              import web_service.backend.api
+              print(f"✅ web_service.backend.api imported")
+              print(f"   Location: {web_service.backend.api.__file__}")
+          except Exception as e:
+              print(f"\n❌ FATAL: web_service.backend.api import failed")
+              print(f"   This is why uvicorn fails with:")
+              print(f"   'Error loading ASGI app. Could not import module web_service.backend.api'")
+              print(f"\n   Error details:")
+              print(f"   {type(e).__name__}: {e}")
+              print(f"\n   Full traceback:")
+              traceback.print_exc()
+              sys.exit(1)
+
+          # Step 4: main.py
+          print("\n[Step 4] Importing web_service.backend.main...")
+          try:
+              import web_service.backend.main
+              print(f"✅ web_service.backend.main imported")
+              print(f"   Location: {web_service.backend.main.__file__}")
+          except Exception as e:
+              print(f"❌ FATAL: web_service.backend.main import failed")
+              print(f"   Error: {type(e).__name__}: {e}")
+              traceback.print_exc()
+              sys.exit(1)
+
+          # Step 5: Get app object
           print("\n[Step 5] Retrieving 'app' object from main...")
           try:
-              from web_service.backend.main import app
+              from web_service.backend.api import app
               print(f"✅ app object retrieved")
               print(f"   Type: {type(app)}")
               print(f"   Class: {app.__class__.__name__}")
@@ -499,7 +539,7 @@ jobs:
           $report += ""
           $report += "If this passed:"
           $report += "  ✅ All required dependencies are installed"
-          $report += "  ✅ python_service.main is importable"
+          $report += "  ✅ web_service.backend.api is importable"
           $report += "  ✅ FastAPI app is accessible"
           $report += "  ✅ The executable should work"
           $report += "  ✅ Uvicorn WILL be able to load the app"
@@ -509,9 +549,9 @@ jobs:
           $report += "  ❌ Fix the import error in your code"
           $report += "  ❌ Common issues:"
           $report += "     - Missing dependency in requirements.txt"
-          $report += "     - Syntax error in main.py"
-          $report += "     - Circular import in main.py"
-          $report += "     - main.py imports a module that fails"
+          $report += "     - Syntax error in api.py or main.py"
+          $report += "     - Circular import in api.py"
+          $report += "     - api.py imports a module that fails"
           $report += ""
           $report += "╔════════════════════════════════════════════════════════════════════════════╗"
           $report | Tee-Object "asgi-diagnostic-report.txt"
