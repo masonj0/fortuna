@@ -522,16 +522,16 @@ jobs:
             exit 1
           }
 
-          # Check for embedded dependencies
-          $stringsCmd = "strings" # Windows native or alternative
-          try {
-            $output = & cmd /c "findstr /C:`"uvicorn`" `"$exe`" 2>&1" 2>&1
-            if ($output) {
-              Write-Host "✅ Found uvicorn reference in executable" -ForegroundColor Green
-              $output | Out-File "diagnostics/exe-analysis/found-dependencies.txt"
-            }
-          } catch {
-            Write-Host "⚠️  Could not grep executable (not critical)" -ForegroundColor Yellow
+          # Check for embedded dependencies (more robustly)
+          $searchString = "uvicorn"
+          & cmd /c "findstr /C:`"$searchString`" `"$exe`" 1>$null 2>$null"
+          $exitCode = $LASTEXITCODE
+
+          if ($exitCode -eq 0) {
+            Write-Host "✅ Found '$searchString' reference in executable." -ForegroundColor Green
+          } else {
+            # findstr returns 1 if not found, other non-zero for errors.
+            Write-Host "ℹ️ Did not find '$searchString' reference in executable (exit code: $exitCode). Not critical." -ForegroundColor Gray
           }
 
       - name: 🔒 Configure Firewall & Network
