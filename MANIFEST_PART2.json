@@ -1,12 +1,17 @@
 [
-    "ARCHITECTURAL_MANDATE.md",
-    "electron/secure-settings-manager.js",
-    "package.json",
-    "python_service/middleware/error_handler.py",
-    "web_platform/api_gateway/src/services/DatabaseService.ts",
-    "web_platform/frontend/app/Providers.tsx",
+    "README.md",
+    "VERSION.txt",
+    "WISDOM.md",
+    "electron/resources/.gitkeep",
+    "pytest.ini",
+    "python_service/adapters/betfair_greyhound_adapter.py",
+    "python_service/db/init.py",
+    "python_service/utils/odds.py",
+    "scripts/install_fortuna_gui.bat",
+    "web_platform/api_gateway/tsconfig.json",
     "web_platform/frontend/public/workbox-4754cb34.js",
-    "web_platform/frontend/src/hooks/useWebSocket.ts",
-    "web_service/backend/core/exceptions.py",
-    "web_service/frontend/app/components/RaceCard.tsx"
+    "web_platform/frontend/src/utils/exportManager.ts",
+    "web_service/__init__.py",
+    "web_service/backend/middleware/error_handler.py",
+    "wix/product_webservice.wxs"
 ]

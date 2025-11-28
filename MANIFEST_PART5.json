@@ -1,13 +1,17 @@
 [
-    ".github/workflows/build-web-service-msi.yml",
     "AGENTS.md",
-    "WISDOM.md",
+    "HISTORY.md",
     "fortuna-backend-electron.spec",
-    "requirements.txt",
-    "web_platform/frontend/src/types/electron.d.ts",
-    "web_service/backend/utils/odds.py",
+    "fortuna-backend-webservice.spec",
+    "package.json",
+    "pyproject.toml",
+    "python_service/tests/test_manual_override.py",
+    "web_platform/frontend/app/Providers.tsx",
+    "web_platform/frontend/src/hooks/useWebSocket.ts",
+    "web_platform/frontend/tsconfig.json",
+    "web_service/backend/adapters/betfair_greyhound_adapter.py",
+    "web_service/backend/core/exceptions.py",
+    "web_service/backend/fortuna_service.py",
     "web_service/frontend/app/lib/queryClient.ts",
-    "web_service/frontend/app/utils/exportManager.ts",
-    "web_service/frontend/tsconfig.json",
-    "wix/product_webservice.wxs"
+    "web_service/frontend/app/types/electron.d.ts"
 ]

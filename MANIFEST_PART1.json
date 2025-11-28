@@ -1,14 +1,3 @@
 [
-    "VERSION.txt",
-    "electron/resources/.gitkeep",
-    "pytest.ini",
-    "python_service/utils/odds.py",
-    "requirements-dev.txt",
-    "web_platform/frontend/public/workbox-4754cb34.js",
-    "web_platform/frontend/src/components/RaceCard.tsx",
-    "web_service/backend/db/init.py",
-    "web_service/backend/middleware/error_handler.py",
-    "web_service/frontend/app/Providers.tsx",
-    "web_service/frontend/app/hooks/useWebSocket.ts",
-    "web_service/frontend/public/workbox-4754cb34.js"
+    ".github/workflows/build-web-service-msi-gpt5.yml"
 ]
