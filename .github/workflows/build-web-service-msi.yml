@@ -524,7 +524,7 @@ jobs:
 
           # Check for embedded dependencies (more robustly)
           $searchString = "uvicorn"
-          & cmd /c "findstr /C:`"$searchString`" `"$exe`" 1>$null 2>$null"
+          cmd /c "findstr /C:`"$searchString`" `"$exe`" >NUL 2>&1"
           $exitCode = $LASTEXITCODE
 
           if ($exitCode -eq 0) {
