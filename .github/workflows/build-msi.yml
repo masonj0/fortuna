@@ -504,6 +504,11 @@ jobs:
           pip list | Tee-Object "installed-packages.txt"
           pip freeze | Tee-Object "pip-freeze.txt"
 
+      - name: 🐍 Set PYTHONPATH
+        run: |
+          echo "PYTHONPATH=${{ github.workspace }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "PYTHONPATH set to ${{ github.workspace }}"
+
       - name: 🧪 PHASE 1 System Imports
         run: |
           python -c @'

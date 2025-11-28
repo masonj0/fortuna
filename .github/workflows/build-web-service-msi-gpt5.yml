@@ -507,6 +507,11 @@ jobs:
           pip list | Tee-Object "installed-packages.txt"
           pip freeze | Tee-Object "pip-freeze.txt"
 
+      - name: 🐍 Set PYTHONPATH
+        run: |
+          echo "PYTHONPATH=${{ github.workspace }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "PYTHONPATH set to ${{ github.workspace }}"
+
       - name: 🧪 PHASE 1 System Imports
         run: |
           python -c @'
@@ -1327,6 +1332,90 @@ jobs:
           if __name__ == "__main__":
               run_verification()
           "@
+          Set-Content -Path "verify_frontend.py" -Value $scriptContent
+          python verify_frontend.py
+
+      # ═════════════════════════════════════════════════════════════════════════
+      # PHASE 4: FRONTEND UI VERIFICATION
+      # ═════════════════════════════════════════════════════════════════════════
+      - name: '⚙️ Setup Node.js for Frontend Server'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: '📦 Install Serve for Static Hosting'
+        run: npm install -g serve
+
+      - name: '🚀 Start Frontend Server'
+        run: |
+          serve -s frontend-dist -l 3000 > frontend-server.log 2>&1 &
+          $proc = Get-Process -Name "serve"
+          $pid = $proc.Id
+          Write-Host "✅ Frontend server started with PID: $pid"
+          $pid | Out-File "frontend.pid" -Encoding ascii
+          Start-Sleep -Seconds 3
+
+      - name: '🧪 Frontend UI Verification'
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          pip install playwright==1.48.2
+          python -m playwright install chromium
+          $scriptContent = @'
+          import sys, os, time
+          from playwright.sync_api import sync_playwright, expect
+
+          def run_verification():
+              url = "http://127.0.0.1:3000"  # FRONTEND port, not backend!
+
+              with sync_playwright() as p:
+                  browser = p.chromium.launch()
+                  page = browser.new_page()
+                  page.tracing.start(screenshots=True, snapshots=True)
+
+                  try:
+                      print(f"[1] Navigating to {url}")
+                      page.goto(url, wait_until='networkidle', timeout=20000)
+
+                      print(f"[2] Page title: {page.title()}")
+                      print(f"[3] Page URL: {page.url}")
+
+                      # Diagnostic: Get all h1 tags
+                      h1_elements = page.locator("h1").all()
+                      print(f"[4] Found {len(h1_elements)} h1 tag(s)")
+                      for i, elem in enumerate(h1_elements):
+                          text = elem.text_content()
+                          print(f"     h1[{i}] = '{text}'")
+
+                      # Diagnostic: Check page content
+                      content = page.content()
+                      if "Fortuna Faucet" in content:
+                          print("[5] ✅ 'Fortuna Faucet' in HTML")
+                      else:
+                          print("[5] ❌ 'Fortuna Faucet' NOT in HTML")
+                          print(f"     Page length: {len(content)} bytes")
+                          print(f"     First 500 chars: {content[:500]}")
+
+                      # Assertion
+                      heading = page.locator("h1:has-text('Fortuna Faucet')")
+                      expect(heading).to_be_visible(timeout=10000)
+
+                      print("[6] ✅ UI test PASSED")
+                      page.screenshot(path="smoke-test-screenshot.png")
+                      page.tracing.stop(path="trace-success.zip")
+                      sys.exit(0)
+
+                  except Exception as e:
+                      print(f"[ERROR] {type(e).__name__}: {e}", file=sys.stderr)
+                      page.screenshot(path="smoke-test-screenshot-FAILURE.png")
+                      page.tracing.stop(path="trace-failure.zip")
+                      sys.exit(1)
+                  finally:
+                      browser.close()
+
+          if __name__ == "__main__":
+              run_verification()
+          '@
           Set-Content -Path "verify_frontend.py" -Value $scriptContent
           python verify_frontend.py
 
