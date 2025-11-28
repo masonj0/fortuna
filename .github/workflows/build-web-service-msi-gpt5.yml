@@ -249,8 +249,7 @@ jobs:
           python -c 'import importlib.util, sys; sys.exit(0 if importlib.util.find_spec("pytest") else 1)'
           if ($LASTEXITCODE -eq 0) {
             Write-Host "🧪 pytest detected, running suite..."
-            cd "${{ env.BACKEND_DIR }}"
-            python -m pytest --maxfail=1 --disable-warnings
+            python -m pytest "${{ env.BACKEND_DIR }}" --maxfail=1 --disable-warnings
           } else {
             Write-Host "ℹ️ pytest not installed; skipping tests."
           }
