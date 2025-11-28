@@ -7,6 +7,10 @@ from multiprocessing import freeze_support
 # Force UTF-8 encoding for stdout and stderr, crucial for PyInstaller on Windows
 os.environ["PYTHONUTF8"] = "1"
 
+# Import the 'app' object at the top level to make it accessible for import by other modules,
+# such as diagnostic scripts in CI/CD.
+from python_service.api import app, HTTPException
+
 # This is the definitive entry point for the Fortuna Faucet backend service.
 # It is designed to be compiled with PyInstaller.
 
@@ -23,7 +27,6 @@ def main():
         # CRITICAL for multiprocessing support in frozen mode on Windows.
         freeze_support()
 
-    from python_service.api import app, HTTPException
     from python_service.config import get_settings
     from fastapi.staticfiles import StaticFiles
     from fastapi.responses import FileResponse

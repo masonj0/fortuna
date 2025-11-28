@@ -43,7 +43,7 @@ env:
   BACKEND_SPEC: 'fortuna-backend-webservice.spec'
   SERVICE_PORT: '8102'
   HEALTH_ENDPOINT: '/health'
-  API_KEY: 'a_secure_test_api_key_that_is_long_enough_for_smoke_test'
+  API_KEY: ${{ secrets.TEST_API_KEY }}
   MSI_STAGING_DIR: 'build_wix/staging'
   MSI_OUTPUT_DIR: 'dist'
   WIX_VERSION: '4.0.5'
@@ -249,8 +249,7 @@ jobs:
           python -c 'import importlib.util, sys; sys.exit(0 if importlib.util.find_spec("pytest") else 1)'
           if ($LASTEXITCODE -eq 0) {
             Write-Host "🧪 pytest detected, running suite..."
-            cd "${{ env.BACKEND_DIR }}"
-            python -m pytest --maxfail=1 --disable-warnings
+            python -m pytest "${{ env.BACKEND_DIR }}" --maxfail=1 --disable-warnings
           } else {
             Write-Host "ℹ️ pytest not installed; skipping tests."
           }
@@ -1274,6 +1273,43 @@ jobs:
             Write-Host "⚠️  API call failed (service running, but endpoint issue): $_" -ForegroundColor Yellow
           }
 
+      - name: '🧪 Frontend UI Verification'
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          pip install playwright==1.48.2
+          python -m playwright install chromium
+          $scriptContent = @"
+          import sys, os
+          from playwright.sync_api import sync_playwright, expect
+
+          def run_verification():
+              with sync_playwright() as p:
+                  browser = p.chromium.launch()
+                  page = browser.new_page()
+                  page.tracing.start(screenshots=True, snapshots=True)
+                  try:
+                      url = "http://127.0.0.1:${{ env.SERVICE_PORT }}"
+                      page.goto(url, wait_until='networkidle', timeout=20000)
+                      heading = page.locator("h1:has-text('Fortuna Faucet')")
+                      expect(heading).to_be_visible(timeout=10000)
+                      page.screenshot(path="smoke-test-screenshot.png")
+                      page.tracing.stop(path="trace-success.zip")
+                      sys.exit(0)
+                  except Exception as e:
+                      print(f"Error: {e}", file=sys.stderr)
+                      page.screenshot(path="smoke-test-screenshot-FAILURE.png")
+                      page.tracing.stop(path="trace-failure.zip")
+                      sys.exit(1)
+                  finally:
+                      browser.close()
+
+          if __name__ == "__main__":
+              run_verification()
+          "@
+          Set-Content -Path "verify_frontend.py" -Value $scriptContent
+          python verify_frontend.py
+
       # ═════════════════════════════════════════════════════════════════════════
       # PHASE 4: POST-EXECUTION FORENSICS
       # ═════════════════════════════════════════════════════════════════════════
@@ -1350,6 +1386,7 @@ jobs:
           Set-StrictMode -Version Latest
           $staging = "${{ env.MSI_STAGING_DIR }}"
           New-Item -ItemType Directory -Path $staging -Force | Out-Null
+          # Rename the executable to match the service name defined in the WiX project
           Move-Item -Path "dist/fortuna-backend.exe" -Destination "$staging/fortuna-webservice.exe" -Force
           $msiName = "Fortuna-WebService-${{ env.BUILD_VERSION }}-${{ env.SHORT_SHA }}.msi".Replace('/', '-')
           "msi_name=$msiName" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
