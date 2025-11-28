@@ -849,7 +849,7 @@ jobs:
       - name: 📥 Download Executable
         uses: actions/download-artifact@v4
         with:
-          name: backend-exe-${{ github.run_id }}
+          name: backend-executable-${{ github.run_id }}
           path: dist
 
       - name: 🏗️ Setup Directories & Capture Baseline
