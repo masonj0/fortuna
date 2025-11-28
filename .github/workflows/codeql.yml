@@ -1,11 +1,3 @@
-# For most projects, this workflow file will not need changing; you simply need
-# to commit it to your repository.
-#
-# You may plcace this file in any folder within the .github/workflows folder.
-# GitHub will find and execute it.
-#
-# To learn more about the language matrix, please visit https://docs.github.com/en/code-security/code-scanning/automatically-scanning-your-code-for-vulnerabilities-and-errors/configuring-code-scanning#changing-the-languages-that-are-analyzed
-
 name: "CodeQL"
 
 on:
@@ -57,16 +49,6 @@ jobs:
         if [ -f web_service/frontend/package.json ]; then (cd web_service/frontend && npm install && npm run build); fi
         if [ -f web_platform/frontend/package.json ]; then (cd web_platform/frontend && npm install && npm run build); fi
         if [ -f electron/package.json ]; then (cd electron && npm install); fi
-
-    # ℹ️ Command-line programs to run using the OS shell.
-    # 📚 See https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#jobsjob_idstepsrun
-
-    #   If the Autobuild fails above, remove it and uncomment the following three lines.
-    #   and modify them (or add more) to build your code if your project, please refer to the EXAMPLE below for guidance.
-
-    # - run: |
-    #     echo "Run, Build Application using script"
-    #     ./build.sh
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v3

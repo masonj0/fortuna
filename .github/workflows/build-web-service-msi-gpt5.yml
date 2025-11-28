@@ -43,7 +43,7 @@ env:
   BACKEND_SPEC: 'fortuna-backend-webservice.spec'
   SERVICE_PORT: '8102'
   HEALTH_ENDPOINT: '/health'
-  API_KEY: 'a_secure_test_api_key_that_is_long_enough_for_smoke_test'
+  API_KEY: ${{ secrets.TEST_API_KEY }}
   MSI_STAGING_DIR: 'build_wix/staging'
   MSI_OUTPUT_DIR: 'dist'
   WIX_VERSION: '4.0.5'
@@ -249,8 +249,7 @@ jobs:
           python -c 'import importlib.util, sys; sys.exit(0 if importlib.util.find_spec("pytest") else 1)'
           if ($LASTEXITCODE -eq 0) {
             Write-Host "🧪 pytest detected, running suite..."
-            cd "${{ env.BACKEND_DIR }}"
-            python -m pytest --maxfail=1 --disable-warnings
+            python -m pytest "${{ env.BACKEND_DIR }}" --maxfail=1 --disable-warnings
           } else {
             Write-Host "ℹ️ pytest not installed; skipping tests."
           }
@@ -799,16 +798,22 @@ jobs:
     name: '🔬 Smoke Test (Diagnostic Overkill)'
     runs-on: windows-latest
     timeout-minutes: 30
-    needs: [build-backend, diagnose-asgi-imports]
+    needs: [build-frontend, build-backend, diagnose-asgi-imports]
     steps:
       # ═════════════════════════════════════════════════════════════════════════
       # PHASE 0: PRE-EXECUTION FORENSICS
       # ═════════════════════════════════════════════════════════════════════════
-      - name: 📥 Download Executable
+      - name: 📥 Download Backend Executable
         uses: actions/download-artifact@v4
         with:
           name: backend-executable-${{ github.run_id }}
           path: dist
+
+      - name: 📥 Download Frontend Build
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build-${{ github.run_id }}
+          path: frontend-dist
 
       - name: 🏗️ Setup Directories & Capture Baseline
         run: |
@@ -900,6 +905,20 @@ jobs:
       # ═════════════════════════════════════════════════════════════════════════
       # PHASE 1: PRE-LAUNCH PYTHON/ASGI VALIDATION
       # ═════════════════════════════════════════════════════════════════════════
+      - name: Setup Python for Pre-Launch Check
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Dependencies for Pre-Launch Check
+        run: |
+          Set-StrictMode -Version Latest
+          python -m pip install --upgrade pip
+          pip install -r "${{ env.BACKEND_DIR }}/requirements.txt"
+          if (Test-Path "${{ env.BACKEND_DIR }}/requirements-dev.txt") {
+            pip install -r "${{ env.BACKEND_DIR }}/requirements-dev.txt"
+          }
+
       - name: 🐍 Test PyInstaller Python Environment (Mimic Executable)
         run: |
           Set-StrictMode -Version Latest
@@ -1275,6 +1294,90 @@ jobs:
           }
 
       # ═════════════════════════════════════════════════════════════════════════
+      # PHASE 4: FRONTEND UI VERIFICATION
+      # ═════════════════════════════════════════════════════════════════════════
+      - name: '⚙️ Setup Node.js for Frontend Server'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: '📦 Install Serve for Static Hosting'
+        run: npm install -g serve
+
+      - name: '🚀 Start Frontend Server'
+        run: |
+          serve -s frontend-dist -l 3000 > frontend-server.log 2>&1 &
+          $proc = Get-Process -Name "serve"
+          $pid = $proc.Id
+          Write-Host "✅ Frontend server started with PID: $pid"
+          $pid | Out-File "frontend.pid" -Encoding ascii
+          Start-Sleep -Seconds 3
+
+      - name: '🧪 Frontend UI Verification'
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          pip install playwright==1.48.2
+          python -m playwright install chromium
+          $scriptContent = @'
+          import sys, os, time
+          from playwright.sync_api import sync_playwright, expect
+
+          def run_verification():
+              url = "http://127.0.0.1:3000"  # FRONTEND port, not backend!
+
+              with sync_playwright() as p:
+                  browser = p.chromium.launch()
+                  page = browser.new_page()
+                  page.tracing.start(screenshots=True, snapshots=True)
+
+                  try:
+                      print(f"[1] Navigating to {url}")
+                      page.goto(url, wait_until='networkidle', timeout=20000)
+
+                      print(f"[2] Page title: {page.title()}")
+                      print(f"[3] Page URL: {page.url}")
+
+                      # Diagnostic: Get all h1 tags
+                      h1_elements = page.locator("h1").all()
+                      print(f"[4] Found {len(h1_elements)} h1 tag(s)")
+                      for i, elem in enumerate(h1_elements):
+                          text = elem.text_content()
+                          print(f"     h1[{i}] = '{text}'")
+
+                      # Diagnostic: Check page content
+                      content = page.content()
+                      if "Fortuna Faucet" in content:
+                          print("[5] ✅ 'Fortuna Faucet' in HTML")
+                      else:
+                          print("[5] ❌ 'Fortuna Faucet' NOT in HTML")
+                          print(f"     Page length: {len(content)} bytes")
+                          print(f"     First 500 chars: {content[:500]}")
+
+                      # Assertion
+                      heading = page.locator("h1:has-text('Fortuna Faucet')")
+                      expect(heading).to_be_visible(timeout=10000)
+
+                      print("[6] ✅ UI test PASSED")
+                      page.screenshot(path="smoke-test-screenshot.png")
+                      page.tracing.stop(path="trace-success.zip")
+                      sys.exit(0)
+
+                  except Exception as e:
+                      print(f"[ERROR] {type(e).__name__}: {e}", file=sys.stderr)
+                      page.screenshot(path="smoke-test-screenshot-FAILURE.png")
+                      page.tracing.stop(path="trace-failure.zip")
+                      sys.exit(1)
+                  finally:
+                      browser.close()
+
+          if __name__ == "__main__":
+              run_verification()
+          '@
+          Set-Content -Path "verify_frontend.py" -Value $scriptContent
+          python verify_frontend.py
+
+      # ═════════════════════════════════════════════════════════════════════════
       # PHASE 4: POST-EXECUTION FORENSICS
       # ═════════════════════════════════════════════════════════════════════════
       - name: 📊 Post-Test Forensics
@@ -1306,6 +1409,10 @@ jobs:
             service-logs/
             diagnostics/
             service.pid
+            frontend.pid
+            frontend-server.log
+            smoke-test-screenshot*.png
+            trace-*.zip
           retention-days: 30
           if-no-files-found: warn
 
@@ -1316,12 +1423,20 @@ jobs:
             try {
               $pid = Get-Content 'service.pid' -Raw
               Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
-              Write-Host "✅ Service process terminated" -ForegroundColor Green
+              Write-Host "✅ Backend service process terminated"
             } catch {
-              Write-Host "⚠️  Could not terminate process" -ForegroundColor Yellow
+              Write-Host "⚠️  Could not terminate backend process"
             }
           }
-
+          if (Test-Path 'frontend.pid') {
+            try {
+              $pid = Get-Content 'frontend.pid' -Raw
+              Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+              Write-Host "✅ Frontend server process terminated"
+            } catch {
+              Write-Host "⚠️  Could not terminate frontend process"
+            }
+          }
           Remove-NetFirewallRule -DisplayName "FortunaSmoke" -ErrorAction SilentlyContinue
           Remove-NetFirewallRule -DisplayName "FortunaSmokeHTTP" -ErrorAction SilentlyContinue
 
@@ -1350,6 +1465,7 @@ jobs:
           Set-StrictMode -Version Latest
           $staging = "${{ env.MSI_STAGING_DIR }}"
           New-Item -ItemType Directory -Path $staging -Force | Out-Null
+          # Rename the executable to match the service name defined in the WiX project
           Move-Item -Path "dist/fortuna-backend.exe" -Destination "$staging/fortuna-webservice.exe" -Force
           $msiName = "Fortuna-WebService-${{ env.BUILD_VERSION }}-${{ env.SHORT_SHA }}.msi".Replace('/', '-')
           "msi_name=$msiName" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
