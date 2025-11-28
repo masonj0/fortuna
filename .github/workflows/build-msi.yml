@@ -186,10 +186,297 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
+  diagnose-asgi-imports:
+    name: '🔍 ASGI Import Killer (Pre-Smoke Diagnostic)'
+    runs-on: windows-latest
+    timeout-minutes: 15
+    needs: build-backend
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: ⚙️ Setup Python (EXACT VERSION)
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 📋 Capture Python Info
+        run: |
+          Set-StrictMode -Version Latest
+          Write-Host "Python executable: $(which python)" -ForegroundColor Cyan
+          python --version
+          python -m site
+          python -c "import sys; print('Prefix:', sys.prefix); print('Base prefix:', sys.base_prefix)"
+
+      - name: 📥 Install Requirements (Exactly as Backend Build)
+        run: |
+          Set-StrictMode -Version Latest
+          python -m pip install --upgrade pip setuptools wheel --quiet
+
+          Write-Host "Installing requirements.txt..." -ForegroundColor Cyan
+          pip install -r "python_service/requirements.txt" -v 2>&1 | Tee-Object "install-requirements.log"
+
+          if (Test-Path "python_service/requirements-dev.txt") {
+            Write-Host "Installing requirements-dev.txt..." -ForegroundColor Cyan
+            pip install -r "python_service/requirements-dev.txt" -v 2>&1 | Tee-Object -Append "install-requirements.log"
+          }
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "❌ pip install failed" -ForegroundColor Red
+            exit 1
+          }
+
+          Write-Host "✅ All dependencies installed" -ForegroundColor Green
+
+      - name: 📦 Capture Installed Packages
+        run: |
+          pip list | Tee-Object "installed-packages.txt"
+          pip freeze | Tee-Object "pip-freeze.txt"
+
+      - name: 🧪 PHASE 1 System Imports
+        run: |
+          python -c @'
+          import sys
+
+          print("\n" + "="*80)
+          print("PHASE 1 SYSTEM-LEVEL IMPORTS")
+          print("="*80)
+
+          modules = [
+              ('os', 'filesystem'),
+              ('sys', 'system'),
+              ('json', 'serialization'),
+              ('asyncio', 'async I/O'),
+              ('pathlib', 'paths'),
+              ('typing', 'type hints'),
+              ('importlib', 'import utilities'),
+          ]
+
+          failed = []
+          for mod_name, desc in modules:
+              try:
+                  __import__(mod_name)
+                  print(f"✅ {mod_name:20} [{desc}]")
+              except Exception as e:
+                  print(f"❌ {mod_name:20} ERROR: {e}")
+                  failed.append((mod_name, str(e)))
+
+          if failed:
+              print(f"\n❌ CRITICAL: {len(failed)} system imports failed")
+              sys.exit(1)
+
+          print(f"\n✅ Phase 1 complete")
+          '@
+
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - name: 🧪 PHASE 2 Web Framework Core
+        run: |
+          python -c @'
+          import sys
+          import traceback
+
+          print("\n" + "="*80)
+          print("PHASE 2 WEB FRAMEWORK CORE")
+          print("="*80)
+
+          modules = [
+              ('fastapi', 'web framework'),
+              ('uvicorn', 'ASGI server'),
+              ('starlette', 'ASGI toolkit'),
+              ('starlette.applications', 'ASGI app'),
+              ('starlette.routing', 'routing'),
+          ]
+
+          failed = []
+          for mod_name, desc in modules:
+              try:
+                  __import__(mod_name)
+                  print(f"✅ {mod_name:30} [{desc}]")
+              except ImportError as e:
+                  print(f"❌ {mod_name:30} ImportError: {e}")
+                  failed.append((mod_name, str(e)))
+              except Exception as e:
+                  print(f"⚠️  {mod_name:30} {type(e).__name__}: {e}")
+
+          if failed:
+              print(f"\n❌ {len(failed)} core framework imports failed")
+              for mod, err in failed:
+                  print(f"  - {mod}")
+              sys.exit(1)
+
+          print(f"\n✅ Phase 2 complete")
+          '@
+
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - name: 🧪 PHASE 3 Pydantic & Data Validation
+        run: |
+          python -c @'
+          import sys
+
+          print("\n" + "="*80)
+          print("PHASE 3 PYDANTIC & DATA VALIDATION")
+          print("="*80)
+
+          modules = [
+              ('pydantic', 'validation'),
+              ('pydantic_core', 'core'),
+              ('pydantic_settings', 'settings'),
+          ]
+
+          for mod_name, desc in modules:
+              try:
+                  __import__(mod_name)
+                  print(f"✅ {mod_name:30} [{desc}]")
+              except Exception as e:
+                  print(f"❌ {mod_name:30} {type(e).__name__}: {e}")
+                  sys.exit(1)
+
+          print(f"\n✅ Phase 3 complete")
+          '@
+
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - name: 🧪 PHASE 4 Async/IO Utilities
+        run: |
+          python -c @'
+          import sys
+
+          print("\n" + "="*80)
+          print("PHASE 4 ASYNC/IO UTILITIES")
+          print("="*80)
+
+          modules = [
+              ('anyio', 'async compat'),
+              ('httpcore', 'HTTP core'),
+              ('httpx', 'HTTP client'),
+              ('aiosqlite', 'async DB'),
+          ]
+
+          for mod_name, desc in modules:
+              try:
+                  __import__(mod_name)
+                  print(f"✅ {mod_name:30} [{desc}]")
+              except Exception as e:
+                  print(f"❌ {mod_name:30} {type(e).__name__}: {e}")
+                  sys.exit(1)
+
+          print(f"\n✅ Phase 4 complete")
+          '@
+
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - name: 🧪 PHASE 5 Optional Dependencies (non-critical)
+        continue-on-error: true
+        run: |
+          python -c @'
+          import sys
+
+          print("\n" + "="*80)
+          print("PHASE 5 OPTIONAL DEPENDENCIES (non-critical)")
+          print("="*80)
+
+          modules = [
+              ('slowapi', 'rate limiting'),
+              ('structlog', 'logging'),
+              ('tenacity', 'retries'),
+          ]
+
+          for mod_name, desc in modules:
+              try:
+                  __import__(mod_name)
+                  print(f"✅ {mod_name:30} [{desc}]")
+              except Exception as e:
+                  print(f"⚠️  {mod_name:30} not critical: {type(e).__name__}")
+
+          print(f"\n✅ Phase 5 complete (warnings OK)")
+          '@
+
+      - name: 🧪 PHASE 6 Application Directory Structure
+        run: |
+          Set-StrictMode -Version Latest
+
+          python -c @'
+          import os
+          from pathlib import Path
+
+          print("\n" + "="*80)
+          print("PHASE 6 APPLICATION DIRECTORY STRUCTURE")
+          print("="*80)
+
+          cwd = Path.cwd()
+          python_service = cwd / "python_service"
+
+          print(f"\nCurrent directory: {cwd}")
+          print(f"\npython_service exists: {python_service.exists()}")
+          if python_service.exists():
+              print(f"  Contents:")
+              for item in python_service.iterdir():
+                  print(f"    - {item.name}")
+
+              main_py = python_service / "main.py"
+              api_py = python_service / "api.py"
+
+              print(f"\n  main.py: {main_py.exists()} ({main_py.stat().st_size if main_py.exists() else 'N/A'} bytes)")
+              print(f"  api.py: {api_py.exists()} ({api_py.stat().st_size if api_py.exists() else 'N/A'} bytes)")
+          '@
+
+      - name: 🧪 PHASE 7 CRITICAL - Application Module Imports
+        run: |
+          python -c @'
+          import sys
+          import traceback
+          from pathlib import Path
+
+          print("\n" + "="*80)
+          print("PHASE 7 APPLICATION MODULE IMPORTS (CRITICAL)")
+          print("="*80)
+
+          # Step 1: python_service
+          print("\n[Step 1] Importing python_service...")
+          try:
+              import python_service
+              print(f"✅ python_service imported")
+              print(f"   Location: {python_service.__file__}")
+          except Exception as e:
+              print(f"❌ FATAL: python_service import failed")
+              print(f"   Error: {type(e).__name__}: {e}")
+              traceback.print_exc()
+              sys.exit(1)
+
+          # Step 2: Get app object
+          print("\n[Step 5] Retrieving 'app' object from main...")
+          try:
+              from python_service.main import app
+              print(f"✅ app object retrieved")
+              print(f"   Type: {type(app)}")
+              print(f"   Class: {app.__class__.__name__}")
+              print(f"   Module: {app.__class__.__module__}")
+          except Exception as e:
+              print(f"❌ FATAL: Could not get app object")
+              print(f"   Error: {type(e).__name__}: {e}")
+              traceback.print_exc()
+              sys.exit(1)
+
+          print("\n" + "="*80)
+          print("✅ ALL APPLICATION IMPORTS SUCCESSFUL")
+          print("="*80)
+          print("\nThe ASGI app is fully importable.")
+          print("Uvicorn should be able to load it successfully.")
+          '@
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "❌ APPLICATION IMPORT TEST FAILED" -ForegroundColor Red
+            exit 1
+          }
+
   smoke-test-service:
     name: '🧪 Smoke Test Service (Backend + Frontend)'
     timeout-minutes: 15
-    needs: [build-backend, build-frontend]
+    needs: [build-backend, build-frontend, diagnose-asgi-imports]
     runs-on: windows-latest
     env:
       API_KEY: "a_secure_test_api_key_that_is_long_enough_for_smoke_test"
