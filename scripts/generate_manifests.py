@@ -92,15 +92,15 @@ def get_all_project_files():
                 if name in EXCLUDE_FILES or name.endswith((".bmp", ".png", ".ico")):
                     continue
 
-            file_path = Path(root) / name
-            try:
-                # Use forward slashes for cross-platform compatibility
-                posix_path = str(file_path.as_posix())
-                size = os.path.getsize(file_path)
-                all_files_with_size.append((posix_path, size))
-            except FileNotFoundError:
-                print(f"[WARNING] File not found while scanning: {file_path}")
-                continue
+                file_path = Path(root) / name
+                try:
+                    # Use forward slashes for cross-platform compatibility
+                    posix_path = str(file_path.as_posix())
+                    size = os.path.getsize(file_path)
+                    all_files_with_size.append((posix_path, size))
+                except FileNotFoundError:
+                    print(f"[WARNING] File not found while scanning: {file_path}")
+                    continue
 
     # Consolidate and remove duplicates that might arise from overlapping rules
     return list(set(all_files_with_size))
