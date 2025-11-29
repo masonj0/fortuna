@@ -125,6 +125,207 @@ jobs:
             ${{ env.WIX_DIR }}/Product_WithService.wxs
           retention-days: 1
 
+  repo-preflight:
+    name: '🧪 Repo Preflight & Integrity'
+    runs-on: windows-latest
+    needs: system-check
+    timeout-minutes: 5
+    outputs:
+      frontend_lock_hash: ${{ steps.hashes.outputs.frontend_lock_hash }}
+      backend_requirements_hash: ${{ steps.hashes.outputs.backend_requirements_hash }}
+      wix_definition_hash: ${{ steps.hashes.outputs.wix_definition_hash }}
+      semver: ${{ steps.meta.outputs.semver }}
+      short_sha: ${{ steps.meta.outputs.short_sha }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Derive Build Metadata
+        id: meta
+        run: |
+          Set-StrictMode -Version Latest
+          $ref = "${{ github.ref }}"
+          if ($ref -like 'refs/tags/v*') {
+            $semver = $ref -replace 'refs/tags/v', ''
+          } else {
+            $semver = "0.0.${{ github.run_number }}"
+          }
+          $shortSha = "${{ github.sha }}".Substring(0,7)
+          "semver=$semver" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "short_sha=$shortSha" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Write-Host "🔖 Version: $semver ($shortSha)"
+
+      - name: Validate Critical Files Exist
+        run: |
+          Set-StrictMode -Version Latest
+          $paths = @(
+            "${{ env.FRONTEND_DIR }}/package.json",
+            "${{ env.FRONTEND_DIR }}/package-lock.json",
+            "${{ env.BACKEND_DIR }}/requirements.txt",
+            "${{ env.BACKEND_DIR }}/main.py",
+            "${{ env.BACKEND_SPEC }}",
+            "${{ env.WIX_DIR }}/Product_WithService.wxs"
+          )
+          foreach ($path in $paths) {
+            if (-not (Test-Path $path)) {
+              Write-Host "❌ FATAL: Required path missing: $path" -ForegroundColor Red
+              exit 1
+            }
+          }
+          Write-Host "✅ All critical files confirmed."
+
+      - name: Capture Integrity Hashes
+        id: hashes
+        run: |
+          Set-StrictMode -Version Latest
+          $frontend = (Get-FileHash "${{ env.FRONTEND_DIR }}/package-lock.json" -Algorithm SHA256).Hash
+          $backend = (Get-FileHash "${{ env.BACKEND_DIR }}/requirements.txt" -Algorithm SHA256).Hash
+          $wix = (Get-FileHash "${{ env.WIX_DIR }}/Product_WithService.wxs" -Algorithm SHA256).Hash
+          "frontend_lock_hash=$frontend" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "backend_requirements_hash=$backend" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "wix_definition_hash=$wix" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Upload Integrity Snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: repo-preflight-${{ github.run_id }}
+          path: |
+            ${{ env.FRONTEND_DIR }}/package-lock.json
+            ${{ env.BACKEND_DIR }}/requirements.txt
+            ${{ env.WIX_DIR }}/Product_WithService.wxs
+          retention-days: 3
+
+  frontend-quality:
+    name: '🧼 Frontend Quality Gates'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: repo-preflight
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: '${{ env.FRONTEND_DIR }}/package-lock.json'
+
+      - name: Install Dependencies
+        run: |
+          Set-StrictMode -Version Latest
+          cd "${{ env.FRONTEND_DIR }}"
+          npm ci --prefer-offline --no-audit --no-fund
+
+      - name: Run Lint (if defined)
+        run: |
+          Set-StrictMode -Version Latest
+          cd "${{ env.FRONTEND_DIR }}"
+          $pkg = Get-Content package.json -Raw | ConvertFrom-Json
+          if ($pkg.scripts.PSObject.Properties.Name -contains 'lint') {
+            Write-Host "🧹 Running npm run lint"
+            npm run lint
+          } else {
+            Write-Host "ℹ️ No lint script defined, skipping."
+          }
+
+      - name: Run Tests (if defined)
+        run: |
+          Set-StrictMode -Version Latest
+          cd "${{ env.FRONTEND_DIR }}"
+          $pkg = Get-Content package.json -Raw | ConvertFrom-Json
+          if ($pkg.scripts.PSObject.Properties.Name -contains 'test') {
+            Write-Host "🧪 Running npm test -- --watch=false"
+            npm test -- --watch=false
+          } else {
+            Write-Host "ℹ️ No test script defined, skipping."
+          }
+
+      - name: Security Audit (non-blocking)
+        continue-on-error: true
+        run: |
+          Set-StrictMode -Version Latest
+          cd "${{ env.FRONTEND_DIR }}"
+          npm audit --audit-level=critical
+
+  backend-quality:
+    name: '🧯 Backend Quality Gates'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: repo-preflight
+    env:
+      BACKEND_REQUIREMENTS_HASH: ${{ needs.repo-preflight.outputs.backend_requirements_hash }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: |
+            ${{ env.BACKEND_DIR }}/requirements.txt
+            ${{ env.BACKEND_DIR }}/requirements-dev.txt
+
+      - name: Install Dependencies
+        run: |
+          Set-StrictMode -Version Latest
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -r "${{ env.BACKEND_DIR }}/requirements.txt"
+          if (Test-Path "${{ env.BACKEND_DIR }}/requirements-dev.txt") {
+            pip install -r "${{ env.BACKEND_DIR }}/requirements-dev.txt"
+          } else {
+            Write-Host "ℹ️ requirements-dev.txt not found, skipping."
+          }
+
+      - name: Bytecode Compile (Fail Fast)
+        run: |
+          Set-StrictMode -Version Latest
+          python -m compileall -q "${{ env.BACKEND_DIR }}"
+
+      - name: Run Pytest (if available)
+        run: |
+          Set-StrictMode -Version Latest
+          python -c 'import importlib.util, sys; sys.exit(0 if importlib.util.find_spec("pytest") else 1)'
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "🧪 pytest detected, running suite..."
+            python -m pytest "${{ env.BACKEND_DIR }}" --maxfail=1 --disable-warnings
+          } else {
+            Write-Host "ℹ️ pytest not installed; skipping tests."
+          }
+
+      - name: pip-audit (non-blocking)
+        continue-on-error: true
+        run: |
+          Set-StrictMode -Version Latest
+          pip install pip-audit
+          pip-audit -r ${{ env.BACKEND_DIR }}/requirements.txt
+
+  sbom:
+    name: '📄 SBOM Snapshot'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: repo-preflight
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Generate SBOM (SPDX)
+        uses: anchore/sbom-action@v0
+        with:
+          output-file: sbom.spdx.json
+          format: spdx-json
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ github.run_id }}
+          path: sbom.spdx.json
+          retention-days: 7
+
   build-frontend:
     name: '📦 Build Frontend'
     runs-on: windows-latest
@@ -441,26 +642,26 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
           Copy-Item "${{ env.WIX_DIR }}/Product_WithService.wxs" "${{ env.WIX_DIR }}/Product.wxs" -Force
-          $wixProj = @"
-<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">
-  <PropertyGroup>
-    <OutputName>${{ steps.stage.outputs.msi_name }}</OutputName>
-    <OutputType>Package</OutputType>
-    <DefineConstants>SourceDir=staging</DefineConstants>
-    <Platforms>x64</Platforms>
-    <Version>${{ env.BUILD_VERSION }}</Version>
-  </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include="WixToolset.Util.wixext" Version="${{ env.WIX_VERSION }}" />
-    <PackageReference Include="WixToolset.Firewall.wixext" Version="${{ env.WIX_VERSION }}" />
-    <PackageReference Include="WixToolset.UI.wixext" Version="${{ env.WIX_VERSION }}" />
-  </ItemGroup>
-  <ItemGroup>
-    <Compile Include="Product.wxs" />
-  </ItemGroup>
-</Project>
-"@
-          Set-Content "${{ env.WIX_DIR }}/Fortuna.wixproj" $wixProj -Encoding utf8
+          $wixProj = @(
+            '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">'
+            '  <PropertyGroup>'
+            '    <OutputName>${{ steps.stage.outputs.msi_name }}</OutputName>'
+            '    <OutputType>Package</OutputType>'
+            '    <DefineConstants>SourceDir=staging</DefineConstants>'
+            '    <Platforms>x64</Platforms>'
+            '    <Version>${{ env.BUILD_VERSION }}</Version>'
+            '  </PropertyGroup>'
+            '  <ItemGroup>'
+            '    <PackageReference Include="WixToolset.Util.wixext" Version="${{ env.WIX_VERSION }}" />'
+            '    <PackageReference Include="WixToolset.Firewall.wixext" Version="${{ env.WIX_VERSION }}" />'
+            '    <PackageReference Include="WixToolset.UI.wixext" Version="${{ env.WIX_VERSION }}" />'
+            '  </ItemGroup>'
+            '  <ItemGroup>'
+            '    <Compile Include="Product.wxs" />'
+            '  </ItemGroup>'
+            '</Project>'
+          )
+          Set-Content "${{ env.WIX_DIR }}/Fortuna.wixproj" -Value $wixProj -Encoding utf8
 
       - name: Build MSI
         working-directory: ${{ env.WIX_DIR }}
