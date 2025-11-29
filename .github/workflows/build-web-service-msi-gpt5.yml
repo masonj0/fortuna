@@ -1,3 +1,4 @@
+# System Timestamp: 2025-11-29 13:19:26.933797
 name: Build Fortuna Faucet Web Service Installer (Omega Overkill)
 
 on:
@@ -1267,8 +1268,8 @@ jobs:
             Get-Content "service-logs/stderr.txt" -Tail 50
 
             Write-Host "`n[Process Status]" -ForegroundColor Cyan
-            $pid = Get-Content "service.pid" -Raw
-            Get-Process -Id $pid -ErrorAction SilentlyContinue | Format-List
+            $processId = Get-Content "service.pid" -Raw
+            Get-Process -Id $processId -ErrorAction SilentlyContinue | Format-List
 
             Write-Host "`n[Port Binding Check]" -ForegroundColor Cyan
             netstat -ano | grep -E "127\.0\.0\.1:${{ env.SERVICE_PORT }}" 2>$null || `
