@@ -315,6 +315,15 @@ jobs:
           cache: 'npm'
           cache-dependency-path: '${{ env.FRONTEND_DIR }}/package-lock.json'
 
+      - name: Cache Frontend Build
+        id: cache-frontend
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.FRONTEND_BUILD_DIR }}
+          key: ${{ runner.os }}-frontend-build-${{ hashFiles('${{ env.FRONTEND_DIR }}/**') }}
+          restore-keys: |
+            ${{ runner.os }}-frontend-build-
+
       - name: Prime npm Cache
         uses: actions/cache@v4
         with:
@@ -410,6 +419,15 @@ jobs:
           New-Item -ItemType Directory -Path $dest -Force | Out-Null
           Copy-Item -Path "temp-frontend/*" -Destination $dest -Recurse -Force
           Write-Host "✅ Frontend staged for inclusion."
+
+      - name: Cache Backend Build
+        id: cache-backend
+        uses: actions/cache@v4
+        with:
+          path: dist
+          key: ${{ runner.os }}-backend-build-${{ hashFiles('${{ env.BACKEND_DIR }}/**', '${{ env.BACKEND_SPEC }}') }}
+          restore-keys: |
+            ${{ runner.os }}-backend-build-
 
       - name: Setup Python
         uses: actions/setup-python@v5
