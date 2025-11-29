@@ -170,6 +170,13 @@ jobs:
           cache: 'npm'
           cache-dependency-path: '${{ env.FRONTEND_DIR }}/package-lock.json'
 
+      - name: Cache Frontend Build
+        id: cache-frontend
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.FRONTEND_BUILD_DIR }}
+          key: ${{ runner.os }}-frontend-build-${{ hashFiles('${{ env.FRONTEND_DIR }}/**') }}
+
       - name: Install Dependencies
         run: |
           Set-StrictMode -Version Latest
@@ -226,6 +233,13 @@ jobs:
           cache-dependency-path: |
             ${{ env.BACKEND_DIR }}/requirements.txt
             ${{ env.BACKEND_DIR }}/requirements-dev.txt
+
+      - name: Cache Backend Build
+        id: cache-backend
+        uses: actions/cache@v4
+        with:
+          path: dist
+          key: ${{ runner.os }}-backend-build-${{ hashFiles('${{ env.BACKEND_DIR }}/**', '${{ env.BACKEND_SPEC }}') }}
 
       - name: Install Dependencies
         run: |
@@ -316,10 +330,19 @@ jobs:
           npm ci --prefer-offline --no-audit --no-fund
 
       - name: Build Frontend
+        if: steps.cache-frontend.outputs.cache-hit != 'true'
         run: |
           Set-StrictMode -Version Latest
           cd "${{ env.FRONTEND_DIR }}"
           npm run build
+
+      - name: Report Cache Status
+        run: |
+          if ('${{ steps.cache-frontend.outputs.cache-hit }}' == 'true') {
+            Write-Host "✅ Frontend build restored from cache." -ForegroundColor Green
+          } else {
+            Write-Host "ℹ️ No cache hit. A new build was performed." -ForegroundColor Yellow
+          }
 
       - name: Verify Build Output
         run: |
@@ -407,11 +430,13 @@ jobs:
           }
 
       - name: Freeze Dependency Snapshot
+        if: steps.cache-backend.outputs.cache-hit != 'true'
         run: |
           Set-StrictMode -Version Latest
           pip freeze | Out-File backend-freeze.txt -Encoding utf8
 
       - name: Create Required Backend Directories
+        if: steps.cache-backend.outputs.cache-hit != 'true'
         run: |
           Set-StrictMode -Version Latest
           New-Item -ItemType Directory -Path "python_service/data" -Force | Out-Null
@@ -419,11 +444,20 @@ jobs:
           Write-Host "✅ Created required backend directories for PyInstaller." -ForegroundColor Green
 
       - name: Build with PyInstaller
+        if: steps.cache-backend.outputs.cache-hit != 'true'
         env:
           FORTUNA_VERSION: ${{ needs.repo-preflight.outputs.semver }}
         run: |
           Set-StrictMode -Version Latest
           pyinstaller "${{ env.BACKEND_SPEC }}" --clean --log-level=WARN --noconfirm
+
+      - name: Report Cache Status
+        run: |
+          if ('${{ steps.cache-backend.outputs.cache-hit }}' == 'true') {
+            Write-Host "✅ Backend build restored from cache." -ForegroundColor Green
+          } else {
+            Write-Host "ℹ️ No cache hit. A new build was performed." -ForegroundColor Yellow
+          }
 
       - name: Verify Executable
         run: |
@@ -537,7 +571,7 @@ jobs:
             '    sys.exit(1)',
             'print(f"\n✅ Phase 1 complete")'
           )
-          python -c ($script -join ';')
+          python -c ($script -join "`n")
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
       - name: 🧪 PHASE 2 Web Framework Core
@@ -572,7 +606,7 @@ jobs:
             '    sys.exit(1)',
             'print(f"\n✅ Phase 2 complete")'
           )
-          python -c ($script -join ';')
+          python -c ($script -join "`n")
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
       - name: 🧪 PHASE 3 Pydantic & Data Validation
@@ -596,7 +630,7 @@ jobs:
             '        sys.exit(1)',
             'print(f"\n✅ Phase 3 complete")'
           )
-          python -c ($script -join ';')
+          python -c ($script -join "`n")
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
       - name: 🧪 PHASE 4 Async/IO Utilities
@@ -621,7 +655,7 @@ jobs:
             '        sys.exit(1)',
             'print(f"\n✅ Phase 4 complete")'
           )
-          python -c ($script -join ';')
+          python -c ($script -join "`n")
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
       - name: 🧪 PHASE 5 Optional Dependencies (non-critical)
@@ -645,7 +679,7 @@ jobs:
             '        print(f"⚠️  {mod_name:30} not critical: {type(e).__name__}")',
             'print(f"\n✅ Phase 5 complete (warnings OK)")'
           )
-          python -c ($script -join ';')
+          python -c ($script -join "`n")
 
       - name: 🧪 PHASE 6 Application Directory Structure
         run: |
@@ -670,7 +704,7 @@ jobs:
             '    print(f"\n  main.py: {main_py.exists()} ({main_py.stat().st_size if main_py.exists() else \'N/A\'} bytes)")',
             '    print(f"  api.py: {api_py.exists()} ({api_py.stat().st_size if api_py.exists() else \'N/A\'} bytes)")'
           )
-          python -c ($script -join ';')
+          python -c ($script -join "`n")
 
       - name: 🧪 PHASE 7 CRITICAL - Application Module Imports
         run: |
@@ -709,7 +743,7 @@ jobs:
             'print("\nThe ASGI app is fully importable.")',
             'print("Uvicorn should be able to load it successfully.")'
           )
-          python -c ($script -join ';')
+          python -c ($script -join "`n")
           if ($LASTEXITCODE -ne 0) {
             Write-Host "❌ APPLICATION IMPORT TEST FAILED" -ForegroundColor Red
             exit 1
