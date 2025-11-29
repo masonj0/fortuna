@@ -1,3 +1,4 @@
+# System Timestamp: 2025-11-29 13:19:26.933797
 name: Build Fortuna Web Service MSI (The Veteran)
 
 on:
@@ -520,8 +521,8 @@ jobs:
         if: always()
         run: |
           if (Test-Path 'backend.pid') {
-            $pid = Get-Content backend.pid
-            Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+            $processId = Get-Content backend.pid
+            Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
           }
           Remove-NetFirewallRule -DisplayName "FortunaSmokeTest" -ErrorAction SilentlyContinue
 
