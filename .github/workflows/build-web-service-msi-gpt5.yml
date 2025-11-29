@@ -1128,15 +1128,15 @@ jobs:
             -RedirectStandardError $errLog `
             -NoNewWindow
 
-          $pid = $proc.Id
-          Write-Host "✅ Service process started with PID: $pid" -ForegroundColor Green
-          $pid | Out-File "service.pid" -Encoding ascii
+          $backendPid = $proc.Id
+          Write-Host "✅ Service process started with PID: $backendPid" -ForegroundColor Green
+          $backendPid | Out-File "service.pid" -Encoding ascii
 
           # Don't wait - proceed to health check
           Start-Sleep -Seconds 5
 
           # Check if process is still alive
-          if (Get-Process -Id $pid -ErrorAction SilentlyContinue) {
+          if (Get-Process -Id $backendPid -ErrorAction SilentlyContinue) {
             Write-Host "✅ Process still alive after 5 seconds" -ForegroundColor Green
           } else {
             Write-Host "❌ FATAL: Process died immediately" -ForegroundColor Red
@@ -1151,13 +1151,13 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
 
-          $pid = Get-Content "service.pid" -Raw -ErrorAction SilentlyContinue
-          if ($pid) {
-            $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
+          $backendPid = Get-Content "service.pid" -Raw -ErrorAction SilentlyContinue
+          if ($backendPid) {
+            $proc = Get-Process -Id $backendPid -ErrorAction SilentlyContinue
             if ($proc) {
               @"
               === PROCESS INFO ===
-              PID: $pid
+              PID: $backendPid
               Name: $($proc.ProcessName)
               Memory: $([math]::Round($proc.WorkingSet / 1MB, 2)) MB
               CPU Time: $($proc.TotalProcessorTime)
@@ -1319,10 +1319,11 @@ jobs:
       - name: '🚀 Start Frontend Server'
         run: |
           serve -s frontend-dist -l 3000 > frontend-server.log 2>&1 &
+          Start-Sleep -Seconds 5
           $proc = Get-Process -Name "serve"
-          $pid = $proc.Id
-          Write-Host "✅ Frontend server started with PID: $pid"
-          $pid | Out-File "frontend.pid" -Encoding ascii
+          $frontendPid = $proc.Id
+          Write-Host "✅ Frontend server started with PID: $frontendPid"
+          $frontendPid | Out-File "frontend.pid" -Encoding ascii
           Start-Sleep -Seconds 3
 
       - name: '🧪 Frontend UI Verification'
@@ -1433,8 +1434,8 @@ jobs:
         run: |
           if (Test-Path 'service.pid') {
             try {
-              $pid = Get-Content 'service.pid' -Raw
-              Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+              $backendPid = Get-Content 'service.pid' -Raw
+              Stop-Process -Id $backendPid -Force -ErrorAction SilentlyContinue
               Write-Host "✅ Backend service process terminated"
             } catch {
               Write-Host "⚠️  Could not terminate backend process"
@@ -1442,8 +1443,8 @@ jobs:
           }
           if (Test-Path 'frontend.pid') {
             try {
-              $pid = Get-Content 'frontend.pid' -Raw
-              Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+              $frontendPid = Get-Content 'frontend.pid' -Raw
+              Stop-Process -Id $frontendPid -Force -ErrorAction SilentlyContinue
               Write-Host "✅ Frontend server process terminated"
             } catch {
               Write-Host "⚠️  Could not terminate frontend process"
