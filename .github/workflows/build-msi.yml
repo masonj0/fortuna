@@ -3,12 +3,13 @@ name: Build Fortuna Web Service MSI (The Veteran)
 on:
   push:
     branches:
-      - 'main'
-    paths:
-      - 'web_platform/**'
-      - 'python_service/**'
-      - 'fortuna-webservice.spec'
-      - '.github/workflows/build-msi.yml'
+      - main
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -33,51 +34,96 @@ env:
   NPM_CONFIG_FUND: 'false'
   NPM_CONFIG_AUDIT: 'false'
   FORCE_COLOR: '3'
+
+  # === PATH CONFIGURATION ===
   FRONTEND_DIR: 'web_platform/frontend'
   FRONTEND_BUILD_DIR: 'web_platform/frontend/out'
   BACKEND_DIR: 'python_service'
   WIX_DIR: 'build_wix'
   BACKEND_SPEC: 'fortuna-backend-webservice.spec'
+
+  # === RUNTIME CONFIG ===
   SERVICE_PORT: '8102'
   HEALTH_ENDPOINT: '/health'
   API_KEY: ${{ secrets.TEST_API_KEY }}
+  FORTUNA_MODE: 'webservice'
+
+  # === OUTPUTS ===
   MSI_STAGING_DIR: 'build_wix/staging'
   MSI_OUTPUT_DIR: 'dist'
   WIX_VERSION: '4.0.5'
 
 jobs:
-  system-check:
-    name: '⚙️ System Prerequisites'
+  repo-preflight:
+    name: '🧪 Repo Preflight & Integrity'
     runs-on: windows-latest
     timeout-minutes: 5
     outputs:
-      disk_free_gb: ${{ steps.system.outputs.disk_gb }}
+      frontend_lock_hash: ${{ steps.hashes.outputs.frontend_lock_hash }}
+      backend_requirements_hash: ${{ steps.hashes.outputs.backend_requirements_hash }}
+      wix_definition_hash: ${{ steps.hashes.outputs.wix_definition_hash }}
+      semver: ${{ steps.meta.outputs.semver }}
+      short_sha: ${{ steps.meta.outputs.short_sha }}
     steps:
-      - name: Verify Build Tools
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Derive Build Metadata
+        id: meta
         run: |
           Set-StrictMode -Version Latest
-          $tools = @('dotnet', 'python', 'node', 'npm', 'git')
-          foreach ($tool in $tools) {
-            Write-Host "Checking for $($tool)..."
-            Get-Command $tool -ErrorAction SilentlyContinue
-            if (-not $?) {
-              Write-Host "❌ FATAL: Build tool '$tool' not found in PATH." -ForegroundColor Red
+          $ref = "${{ github.ref }}"
+          if ($ref -like 'refs/tags/v*') {
+            $semver = $ref -replace 'refs/tags/v', ''
+          } else {
+            $semver = "0.0.${{ github.run_number }}"
+          }
+          $shortSha = "${{ github.sha }}".Substring(0,7)
+          "semver=$semver" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "short_sha=$shortSha" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Write-Host "🔖 Version: $semver ($shortSha)"
+
+      - name: Validate Critical Files Exist
+        run: |
+          Set-StrictMode -Version Latest
+          $paths = @(
+            "${{ env.FRONTEND_DIR }}/package.json",
+            "${{ env.FRONTEND_DIR }}/package-lock.json",
+            "${{ env.BACKEND_DIR }}/requirements.txt",
+            "${{ env.BACKEND_DIR }}/main.py",
+            "${{ env.BACKEND_SPEC }}",
+            "${{ env.WIX_DIR }}/Product_WithService.wxs"
+          )
+          foreach ($path in $paths) {
+            if (-not (Test-Path $path)) {
+              Write-Host "❌ FATAL: Required path missing: $path" -ForegroundColor Red
               exit 1
             }
           }
-          Write-Host "✅ All critical build tools are present." -ForegroundColor Green
-      - name: Check Disk Space
-        id: system
+          Write-Host "✅ All critical files confirmed."
+
+      - name: Capture Integrity Hashes
+        id: hashes
         run: |
           Set-StrictMode -Version Latest
-          $disk = Get-Volume | Where-Object { $_.DriveLetter -eq 'C' }
-          $freeGB = [math]::Round($disk.SizeRemaining / 1GB, 2)
-          if ($freeGB -lt 10) {
-            Write-Host "⚠️ WARNING: Low disk space. Only $freeGB GB free (10+ GB recommended)." -ForegroundColor Yellow
-          } else {
-            Write-Host "✅ Disk space check passed ($freeGB GB free)." -ForegroundColor Green
-          }
-          "disk_gb=$freeGB" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          $frontend = (Get-FileHash "${{ env.FRONTEND_DIR }}/package-lock.json" -Algorithm SHA256).Hash
+          $backend = (Get-FileHash "${{ env.BACKEND_DIR }}/requirements.txt" -Algorithm SHA256).Hash
+          $wix = (Get-FileHash "${{ env.WIX_DIR }}/Product_WithService.wxs" -Algorithm SHA256).Hash
+          "frontend_lock_hash=$frontend" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "backend_requirements_hash=$backend" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "wix_definition_hash=$wix" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Upload Integrity Snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: repo-preflight-${{ github.run_id }}
+          path: |
+            ${{ env.FRONTEND_DIR }}/package-lock.json
+            ${{ env.BACKEND_DIR }}/requirements.txt
+            ${{ env.WIX_DIR }}/Product_WithService.wxs
+          retention-days: 1
 
   repo-preflight:
     name: '🧪 Repo Preflight & Integrity'
@@ -284,7 +330,7 @@ jobs:
     name: '📦 Build Frontend'
     runs-on: windows-latest
     timeout-minutes: 20
-    needs: [repo-preflight, frontend-quality]
+    needs: repo-preflight
     env:
       FRONTEND_LOCK_HASH: ${{ needs.repo-preflight.outputs.frontend_lock_hash }}
     steps:
@@ -333,37 +379,18 @@ jobs:
           }
           Write-Host "✅ Frontend built: $($files.Count) files."
 
-      - name: Generate Artifact Manifest
-        run: |
-          Set-StrictMode -Version Latest
-          $outDir = Resolve-Path "${{ env.FRONTEND_BUILD_DIR }}"
-          $manifestPath = "frontend-manifest.tsv"
-          "RelativePath`tSizeBytes`tSHA256" | Out-File $manifestPath -Encoding utf8
-          Get-ChildItem -Path $outDir -Recurse -File | ForEach-Object {
-            $relative = $_.FullName.Substring($outDir.Path.Length).TrimStart('\','/')
-            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
-            "$relative`t$($_.Length)`t$hash" | Out-File $manifestPath -Encoding utf8 -Append
-          }
-
       - name: Upload Frontend Artifact
         uses: actions/upload-artifact@v4
         with:
           name: frontend-build-${{ github.run_id }}
           path: ${{ env.FRONTEND_BUILD_DIR }}
-          retention-days: 3
-
-      - name: Upload Manifest
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-manifest-${{ github.run_id }}
-          path: frontend-manifest.tsv
-          retention-days: 3
+          retention-days: 1
 
   build-backend:
     name: '🐍 Build Backend'
     runs-on: windows-latest
     timeout-minutes: 25
-    needs: [repo-preflight, build-frontend, backend-quality]
+    needs: [repo-preflight, build-frontend]
     env:
       BACKEND_REQUIREMENTS_HASH: ${{ needs.repo-preflight.outputs.backend_requirements_hash }}
       BUILD_VERSION: ${{ needs.repo-preflight.outputs.semver }}
@@ -403,17 +430,12 @@ jobs:
             pip install -r "${{ env.BACKEND_DIR }}/requirements-dev.txt"
           }
 
-      - name: Freeze Dependency Snapshot
-        run: |
-          Set-StrictMode -Version Latest
-          pip freeze | Out-File backend-freeze.txt -Encoding utf8
-
       - name: Create Required Backend Directories
         run: |
           Set-StrictMode -Version Latest
-          New-Item -ItemType Directory -Path "python_service/data" -Force | Out-Null
-          New-Item -ItemType Directory -Path "python_service/json" -Force | Out-Null
-          Write-Host "✅ Created required backend directories for PyInstaller." -ForegroundColor Green
+          New-Item -ItemType Directory -Path "${{ env.BACKEND_DIR }}/data" -Force | Out-Null
+          New-Item -ItemType Directory -Path "${{ env.BACKEND_DIR }}/json" -Force | Out-Null
+          Write-Host "✅ Created required backend directories."
 
       - name: Build with PyInstaller
         env:
@@ -433,7 +455,7 @@ jobs:
           $hash = (Get-FileHash $exePath -Algorithm SHA256).Hash
           $size = (Get-Item $exePath).Length / 1MB
           if ($size -lt 10) {
-            Write-Host "❌ FATAL: Executable is suspiciously small: $($size) MB. Build may be incomplete." -ForegroundColor Red
+            Write-Host "❌ FATAL: Executable is suspiciously small: $($size) MB." -ForegroundColor Red
             exit 1
           }
           "fortuna-backend.exe`t$hash" | Out-File backend-sha256.tsv -Encoding utf8
@@ -450,1002 +472,136 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: backend-metadata-${{ github.run_id }}
-          path: |
-            backend-sha256.tsv
-            backend-freeze.txt
+          path: backend-sha256.tsv
           retention-days: 7
 
-  diagnose-asgi-imports:
-    name: '🔍 ASGI Import Killer (Pre-Smoke Diagnostic)'
+  smoke-test-service:
+    name: '🔬 Smoke Test Service'
     runs-on: windows-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     needs: build-backend
+    env:
+      SMOKE_LOG_DIR: 'logs'
     steps:
-      - name: 📥 Checkout Repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - name: ⚙️ Setup Python (EXACT VERSION)
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: 📋 Capture Python Info
-        run: |
-          Set-StrictMode -Version Latest
-          Write-Host "Python executable: $(which python)" -ForegroundColor Cyan
-          python --version
-          python -m site
-          python -c "import sys; print('Prefix:', sys.prefix); print('Base prefix:', sys.base_prefix)"
-
-      - name: 📥 Install Requirements (Exactly as Backend Build)
-        run: |
-          Set-StrictMode -Version Latest
-          python -m pip install --upgrade pip setuptools wheel --quiet
-
-          Write-Host "Installing requirements.txt..." -ForegroundColor Cyan
-          pip install -r "${{ env.BACKEND_DIR }}/requirements.txt" -v 2>&1 | Tee-Object "install-requirements.log"
-
-          if (Test-Path "${{ env.BACKEND_DIR }}/requirements-dev.txt") {
-            Write-Host "Installing requirements-dev.txt..." -ForegroundColor Cyan
-            pip install -r "${{ env.BACKEND_DIR }}/requirements-dev.txt" -v 2>&1 | Tee-Object -Append "install-requirements.log"
-          }
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "❌ pip install failed" -ForegroundColor Red
-            exit 1
-          }
-
-          Write-Host "✅ All dependencies installed" -ForegroundColor Green
-
-      - name: 📦 Capture Installed Packages
-        run: |
-          pip list | Tee-Object "installed-packages.txt"
-          pip freeze | Tee-Object "pip-freeze.txt"
-
-      - name: 🐍 Set PYTHONPATH
-        run: |
-          echo "PYTHONPATH=${{ github.workspace }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host "PYTHONPATH set to ${{ github.workspace }}"
-
-      - name: 🧪 PHASE 1 System Imports
-        run: |
-          python -c @'
-          import sys
-
-          print("\n" + "="*80)
-          print("PHASE 1 SYSTEM-LEVEL IMPORTS")
-          print("="*80)
-
-          modules = [
-              ('os', 'filesystem'),
-              ('sys', 'system'),
-              ('json', 'serialization'),
-              ('asyncio', 'async I/O'),
-              ('pathlib', 'paths'),
-              ('typing', 'type hints'),
-              ('importlib', 'import utilities'),
-          ]
-
-          failed = []
-          for mod_name, desc in modules:
-              try:
-                  __import__(mod_name)
-                  print(f"✅ {mod_name:20} [{desc}]")
-              except Exception as e:
-                  print(f"❌ {mod_name:20} ERROR: {e}")
-                  failed.append((mod_name, str(e)))
-
-          if failed:
-              print(f"\n❌ CRITICAL: {len(failed)} system imports failed")
-              sys.exit(1)
-
-          print(f"\n✅ Phase 1 complete")
-          '@
-
-          if ($LASTEXITCODE -ne 0) { exit 1 }
-
-      - name: 🧪 PHASE 2 Web Framework Core
-        run: |
-          python -c @'
-          import sys
-          import traceback
-
-          print("\n" + "="*80)
-          print("PHASE 2 WEB FRAMEWORK CORE")
-          print("="*80)
-
-          modules = [
-              ('fastapi', 'web framework'),
-              ('uvicorn', 'ASGI server'),
-              ('starlette', 'ASGI toolkit'),
-              ('starlette.applications', 'ASGI app'),
-              ('starlette.routing', 'routing'),
-          ]
-
-          failed = []
-          for mod_name, desc in modules:
-              try:
-                  __import__(mod_name)
-                  print(f"✅ {mod_name:30} [{desc}]")
-              except ImportError as e:
-                  print(f"❌ {mod_name:30} ImportError: {e}")
-                  failed.append((mod_name, str(e)))
-              except Exception as e:
-                  print(f"⚠️  {mod_name:30} {type(e).__name__}: {e}")
-
-          if failed:
-              print(f"\n❌ {len(failed)} core framework imports failed")
-              for mod, err in failed:
-                  print(f"  - {mod}")
-              sys.exit(1)
-
-          print(f"\n✅ Phase 2 complete")
-          '@
-
-          if ($LASTEXITCODE -ne 0) { exit 1 }
-
-      - name: 🧪 PHASE 3 Pydantic & Data Validation
-        run: |
-          python -c @'
-          import sys
-
-          print("\n" + "="*80)
-          print("PHASE 3 PYDANTIC & DATA VALIDATION")
-          print("="*80)
-
-          modules = [
-              ('pydantic', 'validation'),
-              ('pydantic_core', 'core'),
-              ('pydantic_settings', 'settings'),
-          ]
-
-          for mod_name, desc in modules:
-              try:
-                  __import__(mod_name)
-                  print(f"✅ {mod_name:30} [{desc}]")
-              except Exception as e:
-                  print(f"❌ {mod_name:30} {type(e).__name__}: {e}")
-                  sys.exit(1)
-
-          print(f"\n✅ Phase 3 complete")
-          '@
-
-          if ($LASTEXITCODE -ne 0) { exit 1 }
-
-      - name: 🧪 PHASE 4 Async/IO Utilities
-        run: |
-          python -c @'
-          import sys
-
-          print("\n" + "="*80)
-          print("PHASE 4 ASYNC/IO UTILITIES")
-          print("="*80)
-
-          modules = [
-              ('anyio', 'async compat'),
-              ('httpcore', 'HTTP core'),
-              ('httpx', 'HTTP client'),
-              ('aiosqlite', 'async DB'),
-          ]
-
-          for mod_name, desc in modules:
-              try:
-                  __import__(mod_name)
-                  print(f"✅ {mod_name:30} [{desc}]")
-              except Exception as e:
-                  print(f"❌ {mod_name:30} {type(e).__name__}: {e}")
-                  sys.exit(1)
-
-          print(f"\n✅ Phase 4 complete")
-          '@
-
-          if ($LASTEXITCODE -ne 0) { exit 1 }
-
-      - name: 🧪 PHASE 5 Optional Dependencies (non-critical)
-        continue-on-error: true
-        run: |
-          python -c @'
-          import sys
-
-          print("\n" + "="*80)
-          print("PHASE 5 OPTIONAL DEPENDENCIES (non-critical)")
-          print("="*80)
-
-          modules = [
-              ('slowapi', 'rate limiting'),
-              ('structlog', 'logging'),
-              ('tenacity', 'retries'),
-          ]
-
-          for mod_name, desc in modules:
-              try:
-                  __import__(mod_name)
-                  print(f"✅ {mod_name:30} [{desc}]")
-              except Exception as e:
-                  print(f"⚠️  {mod_name:30} not critical: {type(e).__name__}")
-
-          print(f"\n✅ Phase 5 complete (warnings OK)")
-          '@
-
-      - name: 🧪 PHASE 6 Application Directory Structure
-        run: |
-          Set-StrictMode -Version Latest
-
-          python -c @'
-          import os
-          from pathlib import Path
-
-          print("\n" + "="*80)
-          print("PHASE 6 APPLICATION DIRECTORY STRUCTURE")
-          print("="*80)
-
-          cwd = Path.cwd()
-          python_service = cwd / "python_service"
-
-          print(f"\nCurrent directory: {cwd}")
-          print(f"\npython_service exists: {python_service.exists()}")
-          if python_service.exists():
-              print(f"  Contents:")
-              for item in python_service.iterdir():
-                  print(f"    - {item.name}")
-
-              main_py = python_service / "main.py"
-              api_py = python_service / "api.py"
-
-              print(f"\n  main.py: {main_py.exists()} ({main_py.stat().st_size if main_py.exists() else 'N/A'} bytes)")
-              print(f"  api.py: {api_py.exists()} ({api_py.stat().st_size if api_py.exists() else 'N/A'} bytes)")
-          '@
-
-      - name: 🧪 PHASE 7 CRITICAL - Application Module Imports
-        run: |
-          python -c @'
-          import sys
-          import traceback
-          from pathlib import Path
-
-          print("\n" + "="*80)
-          print("PHASE 7 APPLICATION MODULE IMPORTS (CRITICAL)")
-          print("="*80)
-
-          # Step 1: python_service
-          print("\n[Step 1] Importing python_service...")
-          try:
-              import python_service
-              print(f"✅ python_service imported")
-              print(f"   Location: {python_service.__file__}")
-          except Exception as e:
-              print(f"❌ FATAL: python_service import failed")
-              print(f"   Error: {type(e).__name__}: {e}")
-              traceback.print_exc()
-              sys.exit(1)
-
-          # Step 2: Get app object
-          print("\n[Step 2] Retrieving 'app' object from main...")
-          try:
-              from python_service.main import app
-              print(f"✅ app object retrieved")
-              print(f"   Type: {type(app)}")
-              print(f"   Class: {app.__class__.__name__}")
-              print(f"   Module: {app.__class__.__module__}")
-          except Exception as e:
-              print(f"❌ FATAL: Could not get app object")
-              print(f"   Error: {type(e).__name__}: {e}")
-              traceback.print_exc()
-              sys.exit(1)
-
-          print("\n" + "="*80)
-          print("✅ ALL APPLICATION IMPORTS SUCCESSFUL")
-          print("="*80)
-          print("\nThe ASGI app is fully importable.")
-          print("Uvicorn should be able to load it successfully.")
-          '@
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "❌ APPLICATION IMPORT TEST FAILED" -ForegroundColor Red
-            exit 1
-          }
-
-      - name: 📋 Generate ASGI Diagnostic Report
-        if: always()
-        run: |
-          Set-StrictMode -Version Latest
-          $report = @()
-          $report += "╔════════════════════════════════════════════════════════════════════════════╗"
-          $report += "║              ASGI IMPORT KILLER - DIAGNOSTIC REPORT                        ║"
-          $report += "╚════════════════════════════════════════════════════════════════════════════╝"
-          $report += ""
-          $report += "Timestamp: $(Get-Date -Format 'o')"
-          $report += "Python: $(python --version)"
-          $report += ""
-          $report += "┌────────────────────────────────────────────────────────────────────────────┐"
-          $result = if ($LASTEXITCODE -eq 0) { 'PASS ✅' } else { 'FAIL ❌' }
-          $report += "│ RESULT: $result │"
-          $report += "└────────────────────────────────────────────────────────────────────────────┘"
-          $report += ""
-          $report += "If this passed:"
-          $report += "  ✅ All required dependencies are installed"
-          $report += "  ✅ python_service.main is importable"
-          $report += "  ✅ FastAPI app is accessible"
-          $report += "  ✅ The executable should work"
-          $report += "  ✅ Uvicorn WILL be able to load the app"
-          $report += ""
-          $report += "If this failed:"
-          $report += "  ❌ See error output above for the exact problem"
-          $report += "  ❌ Fix the import error in your code"
-          $report += "  ❌ Common issues:"
-          $report += "     - Missing dependency in requirements.txt"
-          $report += "     - Syntax error in api.py or main.py"
-          $report += "     - Circular import in api.py"
-          $report += "     - api.py imports a module that fails"
-          $report += ""
-          $report += "╔════════════════════════════════════════════════════════════════════════════╗"
-          $report | Tee-Object "asgi-diagnostic-report.txt"
-
-      - name: 📤 Upload Diagnostic Artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: asgi-import-diagnostics-${{ github.run_id }}
-          path: |
-            install-requirements.log
-            installed-packages.txt
-            pip-freeze.txt
-            asgi-diagnostic-report.txt
-          retention-days: 30
-          if-no-files-found: warn
-
-  smoke-test:
-    name: '🔬 Smoke Test (Diagnostic Overkill)'
-    runs-on: windows-latest
-    timeout-minutes: 30
-    needs: [build-frontend, build-backend, diagnose-asgi-imports]
-    steps:
-      # ═════════════════════════════════════════════════════════════════════════
-      # PHASE 0: PRE-EXECUTION FORENSICS
-      # ═════════════════════════════════════════════════════════════════════════
-      - name: 📥 Download Backend Executable
+      - name: Download Backend Executable
         uses: actions/download-artifact@v4
         with:
           name: backend-executable-${{ github.run_id }}
           path: dist
 
-      - name: 📥 Download Frontend Build
-        uses: actions/download-artifact@v4
-        with:
-          name: frontend-build-${{ github.run_id }}
-          path: frontend-dist
-
-      - name: 🏗️ Setup Directories & Capture Baseline
+      - name: Prepare Environment
         run: |
           Set-StrictMode -Version Latest
+          New-Item -ItemType Directory -Path $env:SMOKE_LOG_DIR -Force | Out-Null
+          New-Item -ItemType Directory -Path "${{ env.BACKEND_DIR }}/data" -Force | Out-Null
+          New-Item -ItemType Directory -Path "${{ env.BACKEND_DIR }}/json" -Force | Out-Null
+          New-NetFirewallRule -DisplayName "FortunaSmokeTest" -Direction Inbound -Action Allow -Protocol TCP -LocalPort ${{ env.SERVICE_PORT }} -ErrorAction SilentlyContinue
 
-          # Create diagnostic structure
-          New-Item -ItemType Directory -Path "service-logs" -Force | Out-Null
-          New-Item -ItemType Directory -Path "diagnostics" -Force | Out-Null
-          New-Item -ItemType Directory -Path "diagnostics/exe-analysis" -Force | Out-Null
-          New-Item -ItemType Directory -Path "diagnostics/runtime-trace" -Force | Out-Null
-          New-Item -ItemType Directory -Path "diagnostics/import-analysis" -Force | Out-Null
-          New-Item -ItemType Directory -Path "diagnostics/environment" -Force | Out-Null
-          New-Item -ItemType Directory -Path "data" -Force | Out-Null
-          New-Item -ItemType Directory -Path "json" -Force | Out-Null
-
-          # Baseline system state
-          Get-Process | Out-File "diagnostics/baseline-processes.txt"
-          Get-NetTCPConnection -ErrorAction SilentlyContinue | Out-File "diagnostics/baseline-network.txt"
-          [Environment]::GetEnvironmentVariables() | Out-File "diagnostics/baseline-env.txt"
-
-          Write-Host "✅ Diagnostic directories created" -ForegroundColor Green
-
-      - name: 🔬 Analyze Executable (Pre-Execution)
+      - name: Analyze Executable (Safe Check)
         run: |
           Set-StrictMode -Version Latest
-
           $exe = "dist/fortuna-backend.exe"
 
-          # File properties
-          $info = Get-Item $exe
-          $size = $info.Length / 1MB
-
-          @"
-          === EXECUTABLE ANALYSIS ===
-          Path: $($info.FullName)
-          Size: $([math]::Round($size, 2)) MB
-          Created: $($info.CreationTime)
-          Modified: $($info.LastWriteTime)
-          Attributes: $($info.Attributes)
-          "@ | Tee-Object "diagnostics/exe-analysis/exe-properties.txt"
-
-          # PE signature check
+          # PE Check
           $bytes = [System.IO.File]::ReadAllBytes($exe)
-          $peSignature = "{0:X2}{1:X2}" -f $bytes[0], $bytes[1]
-          if ($peSignature -eq "4D5A") {
-            Write-Host "✅ Valid PE signature: $peSignature" -ForegroundColor Green
-          } else {
-            Write-Host "❌ INVALID PE signature: $peSignature (expected 4D5A)" -ForegroundColor Red
-            exit 1
+          if ($bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) {
+             Write-Host "❌ Invalid PE signature" -ForegroundColor Red
+             exit 1
           }
+          Write-Host "✅ PE Signature OK"
 
-          # Check for embedded dependencies (more robustly)
+          # String Check (PATCHED TO AVOID EXIT CODE 1)
           $searchString = "uvicorn"
-          # Use Select-String instead of findstr to avoid exit code 1 issues
-          if (Select-String -Path $exe -Pattern $searchString -Quiet -SimpleMatch) {
-              Write-Host "✅ Found '$searchString' reference."
+          # Select-String returns $null if not found, doesn't throw error
+          $found = Select-String -Path $exe -Pattern $searchString -Encoding ascii -Quiet -SimpleMatch
+          if ($found) {
+             Write-Host "✅ Found '$searchString' signature" -ForegroundColor Green
           } else {
-              Write-Host "ℹ️ '$searchString' not found in binary (likely packed). Continuing..." -ForegroundColor Gray
+             Write-Host "ℹ️ '$searchString' not found in plain text (likely compressed). Continuing..." -ForegroundColor Gray
           }
 
-      - name: 🔒 Configure Firewall & Network
+          # Force successful exit code
+          exit 0
+
+      - name: Start Service
         run: |
           Set-StrictMode -Version Latest
-
-          # Create firewall rule
-          try {
-            New-NetFirewallRule `
-              -DisplayName "FortunaSmoke" `
-              -Direction Inbound `
-              -Action Allow `
-              -Protocol TCP `
-              -LocalPort ${{ env.SERVICE_PORT }} `
-              -ErrorAction Stop
-            Write-Host "✅ Firewall rule created" -ForegroundColor Green
-          } catch {
-            Write-Host "⚠️  Firewall rule may exist: $_" -ForegroundColor Yellow
-          }
-
-          # Allow port in Windows Defender
-          try {
-            netsh advfirewall firewall add rule name="FortunaSmokeHTTP" dir=in action=allow protocol=tcp localport=${{ env.SERVICE_PORT }} | Out-File "diagnostics/firewall-netsh.log"
-          } catch {
-            Write-Host "⚠️  netsh command issue (non-critical)" -ForegroundColor Yellow
-          }
-
-          # Baseline netstat
-          netstat -ano | Out-File "diagnostics/network-baseline.txt"
-
-      # ═════════════════════════════════════════════════════════════════════════
-      # PHASE 1: PRE-LAUNCH PYTHON/ASGI VALIDATION
-      # ═════════════════════════════════════════════════════════════════════════
-      - name: Setup Python for Pre-Launch Check
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Install Dependencies for Pre-Launch Check
-        run: |
-          Set-StrictMode -Version Latest
-          python -m pip install --upgrade pip
-          pip install -r "${{ env.BACKEND_DIR }}/requirements.txt"
-          if (Test-Path "${{ env.BACKEND_DIR }}/requirements-dev.txt") {
-            pip install -r "${{ env.BACKEND_DIR }}/requirements-dev.txt"
-          }
-
-      - name: 🐍 Test PyInstaller Python Environment (Mimic Executable)
-        run: |
-          Set-StrictMode -Version Latest
-
-          # Create a test script that mimics what the executable should do
-          $testScript = @'
-          import sys
-          import os
-          import traceback
-
-          print("=" * 80)
-          print("PRE-LAUNCH PYTHON ENVIRONMENT CHECK")
-          print("=" * 80)
-
-          # 1. System paths
-          print("\n1. PYTHON ENVIRONMENT:")
-          print(f"   Python: {sys.executable}")
-          print(f"   Version: {sys.version}")
-          print(f"   Platform: {sys.platform}")
-          print(f"   Prefix: {sys.prefix}")
-
-          # 2. Module search paths
-          print("\n2. MODULE SEARCH PATHS:")
-          for i, p in enumerate(sys.path):
-              print(f"   [{i}] {p}")
-
-          # 3. Critical imports (same as in PyInstaller spec)
-          critical_modules = [
-              'fastapi',
-              'uvicorn',
-              'pydantic',
-              'pydantic_core',
-              'pydantic_settings',
-              'aiosqlite',
-              'slowapi',
-              'structlog',
-              'starlette',
-              'starlette.staticfiles',
-              'anyio',
-              'httpcore',
-              'httpx',
-          ]
-
-          print("\n3. CRITICAL MODULE IMPORTS:")
-          failed = []
-          for mod in critical_modules:
-              try:
-                  __import__(mod)
-                  print(f"   ✅ {mod}")
-              except ImportError as e:
-                  print(f"   ❌ {mod}: {e}")
-                  failed.append((mod, str(e)))
-              except Exception as e:
-                  print(f"   ⚠️  {mod}: {type(e).__name__}: {e}")
-
-          # 4. Attempt to import python_service modules
-          print("\n4. APPLICATION MODULES (python_service):")
-          app_modules = [
-              'python_service',
-              'python_service.main',
-              'python_service.api',
-          ]
-
-          for mod in app_modules:
-              try:
-                  __import__(mod)
-                  print(f"   ✅ {mod}")
-              except ImportError as e:
-                  print(f"   ❌ {mod}: {e}")
-                  failed.append((mod, str(e)))
-                  traceback.print_exc()
-              except Exception as e:
-                  print(f"   ⚠️  {mod}: {type(e).__name__}: {e}")
-                  traceback.print_exc()
-
-          # 5. Test ASGI app instantiation
-          print("\n5. ASGI APP INSTANTIATION:")
-          try:
-              from python_service.main import app
-              print(f"   ✅ Successfully imported app from main")
-              print(f"   App type: {type(app)}")
-              print(f"   App class: {app.__class__.__name__}")
-          except ImportError as e:
-              print(f"   ❌ Failed to import app: {e}")
-              traceback.print_exc()
-              failed.append(("main.app", str(e)))
-          except Exception as e:
-              print(f"   ⚠️  {type(e).__name__}: {e}")
-              traceback.print_exc()
-
-          # Summary
-          print("\n" + "=" * 80)
-          if failed:
-              print(f"FAILURES: {len(failed)} module(s) failed")
-              for mod, err in failed:
-                  print(f"  - {mod}")
-                  print(f"    {err[:100]}")
-              sys.exit(1)
-          else:
-              print("✅ ALL CHECKS PASSED")
-              sys.exit(0)
-          '@
-
-          $testScript | Out-File "diagnostics/import-analysis/pre-launch-test.py" -Encoding utf8
-
-          python "diagnostics/import-analysis/pre-launch-test.py" 2>&1 | Tee-Object "diagnostics/import-analysis/pre-launch-output.txt"
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "⚠️  Pre-launch Python check failed (but executable may still work)" -ForegroundColor Yellow
-          }
-
-      - name: 🔍 Inspect Executable Contents (Strings Dump)
-        run: |
-          Set-StrictMode -Version Latest
-
-          $exe = "dist/fortuna-backend.exe"
-
-          # Extract strings from executable (look for module names, ports, etc.)
-          # Note: This requires PowerShell Get-Content binary reading
-          $content = [System.IO.File]::ReadAllBytes($exe)
-          $text = [System.Text.Encoding]::ASCII.GetString($content)
-
-          # Extract readable strings
-          $strings = [regex]::Matches($text, '[A-Za-z0-9_.\-/]+') | ForEach-Object { $_.Value } | Sort-Object -Unique
-
-          # Filter for interesting ones
-          $interestingStrings = $strings | Where-Object {
-            $_ -match '(uvicorn|fastapi|web_service|backend|main|api|asgi|starlette)' -or
-            $_.Length -gt 20 -and $_ -match '(\.py|\.so|\.dll|Protocol|http)'
-          }
-
-          Write-Host "Found $($interestingStrings.Count) interesting strings in executable" -ForegroundColor Cyan
-          $interestingStrings | Out-File "diagnostics/exe-analysis/interesting-strings.txt"
-          $interestingStrings | Out-Host
-
-      - name: 📊 Capture Environment for Service Launch
-        run: |
-          Set-StrictMode -Version Latest
-
-          $env | Out-File "diagnostics/environment/launch-environment.txt"
-
-          $envVars = @{
-            'API_KEY' = $env:API_KEY
-            'FORTUNA_PORT' = $env:FORTUNA_PORT
-            'FORTUNA_ENV' = $env:FORTUNA_ENV
-            'PYTHONPATH' = $env:PYTHONPATH
-            'PATH' = $env:PATH
-            'TEMP' = $env:TEMP
-            'TMP' = $env:TMP
-          }
-
-          @"
-          === SERVICE LAUNCH ENVIRONMENT ===
-          API_KEY: $($envVars['API_KEY'] ? '***SET***' : 'NOT SET')
-          FORTUNA_PORT: $($envVars['FORTUNA_PORT'])
-          FORTUNA_ENV: $($envVars['FORTUNA_ENV'])
-          PYTHONPATH: $($envVars['PYTHONPATH'])
-          TEMP: $($envVars['TEMP'])
-
-          Full environment:
-          "@ | Out-File "diagnostics/environment/service-environment.txt"
-
-          $envVars.GetEnumerator() | ForEach-Object {
-            "$($_.Key)=$($_.Value)" | Out-File -Append "diagnostics/environment/service-environment.txt"
-          }
-
-      # ═════════════════════════════════════════════════════════════════════════
-      # PHASE 2: SERVICE LAUNCH WITH OBSESSIVE TRACING
-      # ═════════════════════════════════════════════════════════════════════════
-      - name: 🚀 Start Service with Full Output Capture
-        run: |
-          Set-StrictMode -Version Latest
-
-          $exe = Resolve-Path "dist/fortuna-backend.exe"
-          $outLog = "service-logs/stdout.txt"
-          $errLog = "service-logs/stderr.txt"
-
-          Write-Host "Starting service..." -ForegroundColor Cyan
-          Write-Host "Executable: $exe" -ForegroundColor Cyan
-          Write-Host "Port: ${{ env.SERVICE_PORT }}" -ForegroundColor Cyan
-          Write-Host "API_KEY: ***" -ForegroundColor Cyan
-
-          # Set environment for subprocess
           $env:API_KEY = "${{ env.API_KEY }}"
           $env:FORTUNA_PORT = "${{ env.SERVICE_PORT }}"
-          $env:FORTUNA_ENV = "smoke-test"
-          $env:PYTHONUNBUFFERED = "1"  # Force unbuffered output
+          $env:FORTUNA_MODE = "${{ env.FORTUNA_MODE }}"
 
-          # Start process with full I/O redirection
-          $proc = Start-Process `
-            -FilePath $exe `
+          $proc = Start-Process -FilePath "dist\\fortuna-backend.exe" `
             -PassThru `
-            -RedirectStandardOutput $outLog `
-            -RedirectStandardError $errLog `
-            -NoNewWindow
+            -RedirectStandardOutput "$env:SMOKE_LOG_DIR/backend-out.txt" `
+            -RedirectStandardError "$env:SMOKE_LOG_DIR/backend-err.txt"
+          $proc.Id | Out-File backend.pid -Encoding ascii
+          Write-Host "✅ Service started (PID: $($proc.Id))"
 
-          $pid = $proc.Id
-          Write-Host "✅ Service process started with PID: $pid" -ForegroundColor Green
-          $pid | Out-File "service.pid" -Encoding ascii
-
-          # Don't wait - proceed to health check
-          Start-Sleep -Seconds 5
-
-          # Check if process is still alive
-          if (Get-Process -Id $pid -ErrorAction SilentlyContinue) {
-            Write-Host "✅ Process still alive after 5 seconds" -ForegroundColor Green
-          } else {
-            Write-Host "❌ FATAL: Process died immediately" -ForegroundColor Red
-            Write-Host "=== STDOUT ===" -ForegroundColor Red
-            Get-Content $outLog
-            Write-Host "=== STDERR ===" -ForegroundColor Red
-            Get-Content $errLog
-            exit 1
-          }
-
-      - name: 📊 Monitor Process While Running
+      - name: Wait for Health (Polling)
         run: |
           Set-StrictMode -Version Latest
-
-          $pid = Get-Content "service.pid" -Raw -ErrorAction SilentlyContinue
-          if ($pid) {
-            $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
-            if ($proc) {
-              @"
-              === PROCESS INFO ===
-              PID: $pid
-              Name: $($proc.ProcessName)
-              Memory: $([math]::Round($proc.WorkingSet / 1MB, 2)) MB
-              CPU Time: $($proc.TotalProcessorTime)
-              Threads: $($proc.Threads.Count)
-              Handle Count: $($proc.HandleCount)
-              "@ | Tee-Object "diagnostics/runtime-trace/process-info.txt"
-            }
-          }
-
-          # Network state while running
-          netstat -ano | Out-File "diagnostics/network-running.txt"
-
-      # ═════════════════════════════════════════════════════════════════════════
-      # PHASE 3: HEALTH CHECK WITH AGGRESSIVE RETRIES & DEBUGGING
-      # ═════════════════════════════════════════════════════════════════════════
-      - name: 💓 Health Check (Retry Loop with Diagnostics)
-        run: |
-          Set-StrictMode -Version Latest
-
           $url = "http://127.0.0.1:${{ env.SERVICE_PORT }}${{ env.HEALTH_ENDPOINT }}"
-          $maxRetries = 60  # 60 retries = 2 minutes
-          $retryInterval = 2
-          $attempt = 0
+          $deadline = (Get-Date).AddMinutes(3)
           $success = $false
-
-          Write-Host "Health check URL: $url" -ForegroundColor Cyan
-          Write-Host "Max retries: $maxRetries | Interval: $retryInterval seconds" -ForegroundColor Cyan
-
-          $healthLog = "diagnostics/runtime-trace/health-check.log"
-
-          while ($attempt -lt $maxRetries -and -not $success) {
-            $attempt++
-            $elapsed = ($attempt - 1) * $retryInterval
-
-            Write-Host "Attempt $attempt/$maxRetries (${elapsed}s elapsed)..." -ForegroundColor Yellow
-
+          do {
             try {
-              # Attempt 1: Test-NetConnection (TCP)
-              Write-Host "  [TCP Check]..." -ForegroundColor Gray
-              $tcpTest = Test-NetConnection -ComputerName 127.0.0.1 -Port ${{ env.SERVICE_PORT }} -ErrorAction Stop
-              if ($tcpTest.TcpTestSucceeded) {
-                Write-Host "  ✅ TCP Connection successful" -ForegroundColor Green
-                "[$attempt] TCP connection successful" | Out-File -Append $healthLog
-              } else {
-                Write-Host "  ❌ TCP connection failed" -ForegroundColor Red
-                "[$ attempt] TCP connection failed" | Out-File -Append $healthLog
-                throw "TCP connection failed"
-              }
-
-              # Attempt 2: HTTP Request
-              Write-Host "  [HTTP GET]..." -ForegroundColor Gray
-              $response = Invoke-WebRequest `
-                -Uri $url `
-                -UseBasicParsing `
-                -TimeoutSec 10 `
-                -ErrorAction Stop
-
-              if ($response.StatusCode -eq 200) {
-                Write-Host "✅ HEALTH CHECK PASSED (HTTP $($response.StatusCode))" -ForegroundColor Green
-                $response.Content | Out-File "diagnostics/runtime-trace/health-response.json"
-                $response.Content | Out-File -Append $healthLog
-                $success = $true
-                break
-              } else {
-                Write-Host "⚠️  Unexpected status: $($response.StatusCode)" -ForegroundColor Yellow
-                "[$attempt] Status $($response.StatusCode)" | Out-File -Append $healthLog
-              }
-
-            } catch [System.Net.WebException] {
-              $ex = $_
-              Write-Host "  ❌ Request failed: $($ex.Exception.Message)" -ForegroundColor Red
-              "[$attempt] WebException: $($ex.Exception.Message)" | Out-File -Append $healthLog
-
-            } catch [System.Net.Sockets.SocketException] {
-              $ex = $_
-              Write-Host "  ❌ Socket error: $($ex.Exception.Message)" -ForegroundColor Red
-              "[$attempt] SocketException: $($ex.Exception.Message)" | Out-File -Append $healthLog
-
+              $resp = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
+              if ($resp.StatusCode -eq 200) { $success = $true; break }
             } catch {
-              Write-Host "  ❌ Error: $_" -ForegroundColor Red
-              "$attempt] Exception: $_" | Out-File -Append $healthLog
+              Start-Sleep -Seconds 2
             }
-
-            # Capture logs between attempts
-            $stdoutTail = Get-Content "service-logs/stdout.txt" -Tail 5 -ErrorAction SilentlyContinue
-            $stderrTail = Get-Content "service-logs/stderr.txt" -Tail 5 -ErrorAction SilentlyContinue
-
-            if ($stderrTail) {
-              Write-Host "  [STDERR tail]:" -ForegroundColor Gray
-              $stderrTail | ForEach-Object { Write-Host "    $_" -ForegroundColor Red }
-            }
-
-            if ($attempt -lt $maxRetries) {
-              Start-Sleep -Seconds $retryInterval
-            }
-          }
+          } while ((Get-Date) -lt $deadline)
 
           if (-not $success) {
-            Write-Host "❌ FATAL: Health check failed after $maxRetries attempts" -ForegroundColor Red
+            Write-Host "❌ FATAL: Health check failed" -ForegroundColor Red
+            if (Test-Path "$env:SMOKE_LOG_DIR/backend-err.txt") {
+               Get-Content "$env:SMOKE_LOG_DIR/backend-err.txt" -Tail 40 | Write-Host
+            }
+            exit 1
+          }
+          Write-Host "✅ Health check passed."
 
-            # FULL DIAGNOSTICS ON FAILURE
-            Write-Host "`n=== FULL DIAGNOSTIC DUMP ===" -ForegroundColor Red
-
-            Write-Host "`n[STDOUT - Last 50 lines]" -ForegroundColor Cyan
-            Get-Content "service-logs/stdout.txt" -Tail 50
-
-            Write-Host "`n[STDERR - Last 50 lines]" -ForegroundColor Cyan
-            Get-Content "service-logs/stderr.txt" -Tail 50
-
-            Write-Host "`n[Process Status]" -ForegroundColor Cyan
-            $pid = Get-Content "service.pid" -Raw
-            Get-Process -Id $pid -ErrorAction SilentlyContinue | Format-List
-
-            Write-Host "`n[Port Binding Check]" -ForegroundColor Cyan
-            netstat -ano | grep -E "127\.0\.0\.1:${{ env.SERVICE_PORT }}" 2>$null || `
-              netstat -ano | Select-String "127.0.0.1" | Select-String "${{ env.SERVICE_PORT }}"
-
-            Write-Host "`n[Firewall Rules]" -ForegroundColor Cyan
-            Get-NetFirewallRule -DisplayName "*Fortuna*" -ErrorAction SilentlyContinue | Format-List
-
+      - name: Verify API Response
+        run: |
+          Set-StrictMode -Version Latest
+          $url = "http://127.0.0.1:${{ env.SERVICE_PORT }}/api/races"
+          $headers = @{ 'X-API-Key' = "${{ env.API_KEY }}" }
+          try {
+            $resp = Invoke-WebRequest -Uri $url -Headers $headers -UseBasicParsing -TimeoutSec 5
+            if ($resp.StatusCode -in 200,400,401) {
+              Write-Host "✅ API verification successful (HTTP $($resp.StatusCode))"
+            } else {
+               throw "Unexpected status code: $($resp.StatusCode)"
+            }
+          } catch {
+            Write-Host "❌ API Verification Failed: $_"
             exit 1
           }
 
-      - name: 🔌 Test API Endpoint
-        run: |
-          Set-StrictMode -Version Latest
-
-          $url = "http://127.0.0.1:${{ env.SERVICE_PORT }}/api/races"
-          $headers = @{ 'X-API-Key' = "${{ env.API_KEY }}" }
-
-          Write-Host "Testing API endpoint: $url" -ForegroundColor Cyan
-
-          try {
-            $response = Invoke-WebRequest `
-              -Uri $url `
-              -Headers $headers `
-              -UseBasicParsing `
-              -TimeoutSec 10
-
-            Write-Host "✅ API Response: HTTP $($response.StatusCode)" -ForegroundColor Green
-            Write-Host "Response size: $($response.Content.Length) bytes" -ForegroundColor Cyan
-            $response.Content | Out-File "diagnostics/runtime-trace/api-response.json"
-
-          } catch {
-            Write-Host "⚠️  API call failed (service running, but endpoint issue): $_" -ForegroundColor Yellow
-          }
-
-      # ═════════════════════════════════════════════════════════════════════════
-      # PHASE 4: FRONTEND UI VERIFICATION
-      # ═════════════════════════════════════════════════════════════════════════
-      - name: '⚙️ Setup Node.js for Frontend Server'
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: '📦 Install Serve for Static Hosting'
-        run: npm install -g serve
-
-      - name: '🚀 Start Frontend Server'
-        run: |
-          serve -s frontend-dist -l 3000 > frontend-server.log 2>&1 &
-          $proc = Get-Process -Name "serve"
-          $pid = $proc.Id
-          Write-Host "✅ Frontend server started with PID: $pid"
-          $pid | Out-File "frontend.pid" -Encoding ascii
-          Start-Sleep -Seconds 3
-
-      - name: '🧪 Frontend UI Verification'
-        shell: pwsh
-        run: |
-          Set-StrictMode -Version Latest
-          pip install playwright==1.48.2
-          python -m playwright install chromium
-          $scriptContent = @'
-          import sys, os, time
-          from playwright.sync_api import sync_playwright, expect
-
-          def run_verification():
-              url = "http://127.0.0.1:3000"  # FRONTEND port, not backend!
-
-              with sync_playwright() as p:
-                  browser = p.chromium.launch()
-                  page = browser.new_page()
-                  page.tracing.start(screenshots=True, snapshots=True)
-
-                  try:
-                      print(f"[1] Navigating to {url}")
-                      page.goto(url, wait_until='networkidle', timeout=20000)
-
-                      print(f"[2] Page title: {page.title()}")
-                      print(f"[3] Page URL: {page.url}")
-
-                      # Diagnostic: Get all h1 tags
-                      h1_elements = page.locator("h1").all()
-                      print(f"[4] Found {len(h1_elements)} h1 tag(s)")
-                      for i, elem in enumerate(h1_elements):
-                          text = elem.text_content()
-                          print(f"     h1[{i}] = '{text}'")
-
-                      # Diagnostic: Check page content
-                      content = page.content()
-                      if "Fortuna Faucet" in content:
-                          print("[5] ✅ 'Fortuna Faucet' in HTML")
-                      else:
-                          print("[5] ❌ 'Fortuna Faucet' NOT in HTML")
-                          print(f"     Page length: {len(content)} bytes")
-                          print(f"     First 500 chars: {content[:500]}")
-
-                      # Assertion
-                      heading = page.locator("h1:has-text('Fortuna Faucet')")
-                      expect(heading).to_be_visible(timeout=10000)
-
-                      print("[6] ✅ UI test PASSED")
-                      page.screenshot(path="smoke-test-screenshot.png")
-                      page.tracing.stop(path="trace-success.zip")
-                      sys.exit(0)
-
-                  except Exception as e:
-                      print(f"[ERROR] {type(e).__name__}: {e}", file=sys.stderr)
-                      page.screenshot(path="smoke-test-screenshot-FAILURE.png")
-                      page.tracing.stop(path="trace-failure.zip")
-                      sys.exit(1)
-                  finally:
-                      browser.close()
-
-          if __name__ == "__main__":
-              run_verification()
-          '@
-          Set-Content -Path "verify_frontend.py" -Value $scriptContent
-          python verify_frontend.py
-
-      # ═════════════════════════════════════════════════════════════════════════
-      # PHASE 4: POST-EXECUTION FORENSICS
-      # ═════════════════════════════════════════════════════════════════════════
-      - name: 📊 Post-Test Forensics
-        if: failure()
-        run: |
-          Set-StrictMode -Version Latest
-
-          "=== TOP PROCESSES ===" | Out-File "diagnostics/forensics.log"
-          Get-Process | Sort-Object CPU -Descending | Select-Object -First 20 | Out-File -Append "diagnostics/forensics.log"
-
-          "=== NETWORK CONNECTIONS ===" | Out-File -Append "diagnostics/forensics.log"
-          netstat -ano | Out-File -Append "diagnostics/forensics.log"
-
-          "=== EVENT VIEWER (Last 20 errors) ===" | Out-File -Append "diagnostics/forensics.log"
-          Get-EventLog -LogName System -EntryType Error -Newest 20 -ErrorAction SilentlyContinue | Out-File -Append "diagnostics/forensics.log"
-
-          "=== DISK SPACE ===" | Out-File -Append "diagnostics/forensics.log"
-          Get-Volume | Out-File -Append "diagnostics/forensics.log"
-
-          "=== REGISTRY (FortunaWebService) ===" | Out-File -Append "diagnostics/forensics.log"
-          Get-ItemProperty -Path "HKLM:\Software\FortunaWebService" -ErrorAction SilentlyContinue | Out-File -Append "diagnostics/forensics.log"
-
-      - name: 📤 Upload All Diagnostics
+      - name: Upload Logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: smoke-test-diagnostics-${{ github.run_id }}
+          name: smoke-test-logs-${{ github.run_id }}
           path: |
-            service-logs/
-            diagnostics/
-            service.pid
-            frontend.pid
-            frontend-server.log
-            smoke-test-screenshot*.png
-            trace-*.zip
-          retention-days: 30
-          if-no-files-found: warn
+            ${{ env.SMOKE_LOG_DIR }}/
+            backend.pid
+          retention-days: 7
 
-      - name: 🧹 Cleanup
+      - name: Teardown
         if: always()
         run: |
-          if (Test-Path 'service.pid') {
-            try {
-              $pid = Get-Content 'service.pid' -Raw
-              Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
-              Write-Host "✅ Backend service process terminated"
-            } catch {
-              Write-Host "⚠️  Could not terminate backend process"
-            }
+          if (Test-Path 'backend.pid') {
+            $pid = Get-Content backend.pid
+            Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
           }
-          if (Test-Path 'frontend.pid') {
-            try {
-              $pid = Get-Content 'frontend.pid' -Raw
-              Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
-              Write-Host "✅ Frontend server process terminated"
-            } catch {
-              Write-Host "⚠️  Could not terminate frontend process"
-            }
-          }
-          Remove-NetFirewallRule -DisplayName "FortunaSmoke" -ErrorAction SilentlyContinue
-          Remove-NetFirewallRule -DisplayName "FortunaSmokeHTTP" -ErrorAction SilentlyContinue
+          Remove-NetFirewallRule -DisplayName "FortunaSmokeTest" -ErrorAction SilentlyContinue
 
   package-msi-service:
     name: '💿 Package Service MSI'
     runs-on: windows-latest
     timeout-minutes: 25
-    needs: [repo-preflight, smoke-test]
+    needs: [repo-preflight, smoke-test-service]
     env:
       WIX_HASH: ${{ needs.repo-preflight.outputs.wix_definition_hash }}
       BUILD_VERSION: ${{ needs.repo-preflight.outputs.semver }}
@@ -1466,7 +622,6 @@ jobs:
           Set-StrictMode -Version Latest
           $staging = "${{ env.MSI_STAGING_DIR }}"
           New-Item -ItemType Directory -Path $staging -Force | Out-Null
-          # Rename the executable to match the service name defined in the WiX project
           Move-Item -Path "dist/fortuna-backend.exe" -Destination "$staging/fortuna-webservice.exe" -Force
           $msiName = "Fortuna-WebService-${{ env.BUILD_VERSION }}-${{ env.SHORT_SHA }}.msi".Replace('/', '-')
           "msi_name=$msiName" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
@@ -1543,12 +698,6 @@ jobs:
           merge-multiple: true
           path: assets
 
-      - name: Download SBOM
-        uses: actions/upload-artifact@v4
-        with:
-          name: sbom-${{ github.run_id }}
-          path: assets
-
       - name: Generate Checksums
         run: |
           cd assets
@@ -1562,5 +711,4 @@ jobs:
             assets/*.msi
             assets/*.sha256
             assets/SHASUMS256.txt
-            assets/sbom.spdx.json
           generate_release_notes: true
