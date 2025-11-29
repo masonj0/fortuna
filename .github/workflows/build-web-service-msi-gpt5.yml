@@ -805,6 +805,9 @@ jobs:
     timeout-minutes: 30
     needs: [build-frontend, build-backend, diagnose-asgi-imports]
     steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
       # ═════════════════════════════════════════════════════════════════════════
       # PHASE 0: PRE-EXECUTION FORENSICS
       # ═════════════════════════════════════════════════════════════════════════
