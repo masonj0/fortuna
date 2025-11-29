@@ -121,7 +121,7 @@ jobs:
             "${{ env.FRONTEND_DIR }}/package-lock.json",
             "${{ env.BACKEND_DIR }}/requirements.txt",
             "${{ env.BACKEND_DIR }}/main.py",
-            "web_service/${{ env.BACKEND_SPEC }}",
+            "${{ env.BACKEND_SPEC }}",
             "${{ env.WIX_DIR }}/Product_WithService.wxs"
           )
           foreach ($path in $paths) {
@@ -413,8 +413,8 @@ jobs:
       - name: Create Required Backend Directories
         run: |
           Set-StrictMode -Version Latest
-          New-Item -ItemType Directory -Path "${{ env.BACKEND_DIR }}/data" -Force | Out-Null
-          New-Item -ItemType Directory -Path "${{ env.BACKEND_DIR }}/json" -Force | Out-Null
+          New-Item -ItemType Directory -Path "python_service/data" -Force | Out-Null
+          New-Item -ItemType Directory -Path "python_service/json" -Force | Out-Null
           Write-Host "✅ Created required backend directories for PyInstaller." -ForegroundColor Green
 
       - name: Build with PyInstaller
@@ -422,7 +422,7 @@ jobs:
           FORTUNA_VERSION: ${{ needs.repo-preflight.outputs.semver }}
         run: |
           Set-StrictMode -Version Latest
-          pyinstaller "web_service/${{ env.BACKEND_SPEC }}" --clean --log-level=WARN --noconfirm
+          pyinstaller "${{ env.BACKEND_SPEC }}" --clean --log-level=WARN --noconfirm
 
       - name: Verify Executable
         run: |

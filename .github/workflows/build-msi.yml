@@ -128,7 +128,6 @@ jobs:
   repo-preflight:
     name: '🧪 Repo Preflight & Integrity'
     runs-on: windows-latest
-    needs: system-check
     timeout-minutes: 5
     outputs:
       frontend_lock_hash: ${{ steps.hashes.outputs.frontend_lock_hash }}
