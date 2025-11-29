@@ -7,7 +7,8 @@ on:
     tags:
       - 'v*'
     paths:
-      - 'web_service/**'
+      - 'python_service/**'
+      - 'web_platform/frontend/**'
       - 'fortuna-backend-webservice.spec'
       - '.github/workflows/build-web-service-msi-gpt5.yml'
   workflow_dispatch:
@@ -35,9 +36,9 @@ env:
   NPM_CONFIG_FUND: 'false'
   NPM_CONFIG_AUDIT: 'false'
   FORCE_COLOR: '3'
-  FRONTEND_DIR: 'web_service/frontend'
-  FRONTEND_BUILD_DIR: 'web_service/frontend/out'
-  BACKEND_DIR: 'web_service/backend'
+  FRONTEND_DIR: 'web_platform/frontend'
+  FRONTEND_BUILD_DIR: 'web_platform/frontend/out'
+  BACKEND_DIR: 'python_service'
   WIX_DIR: 'build_wix'
   BACKEND_SPEC: 'fortuna-backend-webservice.spec'
   SERVICE_PORT: '8102'
@@ -121,7 +122,7 @@ jobs:
             "${{ env.FRONTEND_DIR }}/package-lock.json",
             "${{ env.BACKEND_DIR }}/requirements.txt",
             "${{ env.BACKEND_DIR }}/main.py",
-            "web_service/${{ env.BACKEND_SPEC }}",
+            "${{ env.BACKEND_SPEC }}",
             "${{ env.WIX_DIR }}/Product_WithService.wxs"
           )
           foreach ($path in $paths) {
@@ -422,7 +423,7 @@ jobs:
           FORTUNA_VERSION: ${{ needs.repo-preflight.outputs.semver }}
         run: |
           Set-StrictMode -Version Latest
-          pyinstaller "web_service/${{ env.BACKEND_SPEC }}" --clean --log-level=WARN --noconfirm
+          pyinstaller "${{ env.BACKEND_SPEC }}" --clean --log-level=WARN --noconfirm
 
       - name: Verify Executable
         run: |
@@ -804,6 +805,9 @@ jobs:
     timeout-minutes: 30
     needs: [build-frontend, build-backend, diagnose-asgi-imports]
     steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
       # ═════════════════════════════════════════════════════════════════════════
       # PHASE 0: PRE-EXECUTION FORENSICS
       # ═════════════════════════════════════════════════════════════════════════
@@ -978,13 +982,12 @@ jobs:
               except Exception as e:
                   print(f"   ⚠️  {mod}: {type(e).__name__}: {e}")
 
-          # 4. Attempt to import web_service modules
-          print("\n4. APPLICATION MODULES (web_service.backend):")
+          # 4. Attempt to import ${{ env.BACKEND_DIR }} modules
+          print("\n4. APPLICATION MODULES (${{ env.BACKEND_DIR }}):")
           app_modules = [
-              'web_service',
-              'web_service.backend',
-              'web_service.backend.main',
-              'web_service.backend.api',
+              '${{ env.BACKEND_DIR }}',
+              '${{ env.BACKEND_DIR }}.main',
+              '${{ env.BACKEND_DIR }}.api',
           ]
 
           for mod in app_modules:
@@ -1002,7 +1005,7 @@ jobs:
           # 5. Test ASGI app instantiation
           print("\n5. ASGI APP INSTANTIATION:")
           try:
-              from web_service.backend.main import app
+              from ${{ env.BACKEND_DIR }}.main import app
               print(f"   ✅ Successfully imported app from main")
               print(f"   App type: {type(app)}")
               print(f"   App class: {app.__class__.__name__}")
