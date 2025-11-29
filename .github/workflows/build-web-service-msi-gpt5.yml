@@ -927,6 +927,11 @@ jobs:
             pip install -r "${{ env.BACKEND_DIR }}/requirements-dev.txt"
           }
 
+      - name: 🐍 Set PYTHONPATH for Pre-Launch Check
+        run: |
+          echo "PYTHONPATH=${{ github.workspace }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "PYTHONPATH set to ${{ github.workspace }}"
+
       - name: 🐍 Test PyInstaller Python Environment (Mimic Executable)
         run: |
           Set-StrictMode -Version Latest
@@ -1299,43 +1304,6 @@ jobs:
           } catch {
             Write-Host "⚠️  API call failed (service running, but endpoint issue): $_" -ForegroundColor Yellow
           }
-
-      - name: '🧪 Frontend UI Verification'
-        shell: pwsh
-        run: |
-          Set-StrictMode -Version Latest
-          pip install playwright==1.48.2
-          python -m playwright install chromium
-          $scriptContent = @"
-          import sys, os
-          from playwright.sync_api import sync_playwright, expect
-
-          def run_verification():
-              with sync_playwright() as p:
-                  browser = p.chromium.launch()
-                  page = browser.new_page()
-                  page.tracing.start(screenshots=True, snapshots=True)
-                  try:
-                      url = "http://127.0.0.1:${{ env.SERVICE_PORT }}"
-                      page.goto(url, wait_until='networkidle', timeout=20000)
-                      heading = page.locator("h1:has-text('Fortuna Faucet')")
-                      expect(heading).to_be_visible(timeout=10000)
-                      page.screenshot(path="smoke-test-screenshot.png")
-                      page.tracing.stop(path="trace-success.zip")
-                      sys.exit(0)
-                  except Exception as e:
-                      print(f"Error: {e}", file=sys.stderr)
-                      page.screenshot(path="smoke-test-screenshot-FAILURE.png")
-                      page.tracing.stop(path="trace-failure.zip")
-                      sys.exit(1)
-                  finally:
-                      browser.close()
-
-          if __name__ == "__main__":
-              run_verification()
-          "@
-          Set-Content -Path "verify_frontend.py" -Value $scriptContent
-          python verify_frontend.py
 
       # ═════════════════════════════════════════════════════════════════════════
       # PHASE 4: FRONTEND UI VERIFICATION
