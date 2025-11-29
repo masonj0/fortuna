@@ -1071,7 +1071,7 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
 
-          $env | Out-File "diagnostics/environment/launch-environment.txt"
+          Get-ChildItem Env: | Out-File "diagnostics/environment/launch-environment.txt"
 
           $envVars = @{
             'API_KEY' = $env:API_KEY
