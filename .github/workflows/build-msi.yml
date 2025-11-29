@@ -54,7 +54,7 @@ env:
   WIX_VERSION: '4.0.5'
 
 jobs:
-  repopreflight:
+  repo-preflight:
     name: '🧪 Repo Preflight & Integrity'
     runs-on: windows-latest
     timeout-minutes: 5
