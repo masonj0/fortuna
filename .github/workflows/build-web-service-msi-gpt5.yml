@@ -571,7 +571,8 @@ jobs:
             '    sys.exit(1)',
             'print(f"\n✅ Phase 1 complete")'
           )
-          python -c ($script -join "`n")
+          $script | Out-File -FilePath "diag_script.py" -Encoding utf8
+          python diag_script.py
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
       - name: 🧪 PHASE 2 Web Framework Core
@@ -606,7 +607,8 @@ jobs:
             '    sys.exit(1)',
             'print(f"\n✅ Phase 2 complete")'
           )
-          python -c ($script -join "`n")
+          $script | Out-File -FilePath "diag_script.py" -Encoding utf8
+          python diag_script.py
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
       - name: 🧪 PHASE 3 Pydantic & Data Validation
@@ -630,7 +632,8 @@ jobs:
             '        sys.exit(1)',
             'print(f"\n✅ Phase 3 complete")'
           )
-          python -c ($script -join "`n")
+          $script | Out-File -FilePath "diag_script.py" -Encoding utf8
+          python diag_script.py
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
       - name: 🧪 PHASE 4 Async/IO Utilities
@@ -655,7 +658,8 @@ jobs:
             '        sys.exit(1)',
             'print(f"\n✅ Phase 4 complete")'
           )
-          python -c ($script -join "`n")
+          $script | Out-File -FilePath "diag_script.py" -Encoding utf8
+          python diag_script.py
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
       - name: 🧪 PHASE 5 Optional Dependencies (non-critical)
@@ -679,7 +683,8 @@ jobs:
             '        print(f"⚠️  {mod_name:30} not critical: {type(e).__name__}")',
             'print(f"\n✅ Phase 5 complete (warnings OK)")'
           )
-          python -c ($script -join "`n")
+          $script | Out-File -FilePath "diag_script.py" -Encoding utf8
+          python diag_script.py
 
       - name: 🧪 PHASE 6 Application Directory Structure
         run: |
@@ -704,7 +709,8 @@ jobs:
             '    print(f"\n  main.py: {main_py.exists()} ({main_py.stat().st_size if main_py.exists() else \'N/A\'} bytes)")',
             '    print(f"  api.py: {api_py.exists()} ({api_py.stat().st_size if api_py.exists() else \'N/A\'} bytes)")'
           )
-          python -c ($script -join "`n")
+          $script | Out-File -FilePath "diag_script.py" -Encoding utf8
+          python diag_script.py
 
       - name: 🧪 PHASE 7 CRITICAL - Application Module Imports
         run: |
@@ -743,7 +749,8 @@ jobs:
             'print("\nThe ASGI app is fully importable.")',
             'print("Uvicorn should be able to load it successfully.")'
           )
-          python -c ($script -join "`n")
+          $script | Out-File -FilePath "diag_script.py" -Encoding utf8
+          python diag_script.py
           if ($LASTEXITCODE -ne 0) {
             Write-Host "❌ APPLICATION IMPORT TEST FAILED" -ForegroundColor Red
             exit 1
