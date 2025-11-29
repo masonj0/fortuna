@@ -5,13 +5,13 @@
     "fortuna-backend-webservice.spec",
     "package.json",
     "pyproject.toml",
+    "python_service/adapters/betfair_greyhound_adapter.py",
+    "python_service/fortuna_service.py",
     "python_service/tests/test_manual_override.py",
     "web_platform/frontend/app/Providers.tsx",
     "web_platform/frontend/src/hooks/useWebSocket.ts",
-    "web_platform/frontend/tsconfig.json",
-    "web_service/backend/adapters/betfair_greyhound_adapter.py",
+    "web_platform/frontend/src/lib/queryClient.ts",
     "web_service/backend/core/exceptions.py",
-    "web_service/backend/fortuna_service.py",
-    "web_service/frontend/app/lib/queryClient.ts",
-    "web_service/frontend/app/types/electron.d.ts"
+    "web_service/frontend/app/types/electron.d.ts",
+    "web_service/frontend/tsconfig.json"
 ]
