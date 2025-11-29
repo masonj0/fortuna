@@ -170,6 +170,13 @@ jobs:
           cache: 'npm'
           cache-dependency-path: '${{ env.FRONTEND_DIR }}/package-lock.json'
 
+      - name: Cache Frontend Build
+        id: cache-frontend
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.FRONTEND_BUILD_DIR }}
+          key: ${{ runner.os }}-frontend-build-${{ hashFiles('${{ env.FRONTEND_DIR }}/**') }}
+
       - name: Install Dependencies
         run: |
           Set-StrictMode -Version Latest
@@ -226,6 +233,13 @@ jobs:
           cache-dependency-path: |
             ${{ env.BACKEND_DIR }}/requirements.txt
             ${{ env.BACKEND_DIR }}/requirements-dev.txt
+
+      - name: Cache Backend Build
+        id: cache-backend
+        uses: actions/cache@v4
+        with:
+          path: dist
+          key: ${{ runner.os }}-backend-build-${{ hashFiles('${{ env.BACKEND_DIR }}/**', '${{ env.BACKEND_SPEC }}') }}
 
       - name: Install Dependencies
         run: |
@@ -301,6 +315,15 @@ jobs:
           cache: 'npm'
           cache-dependency-path: '${{ env.FRONTEND_DIR }}/package-lock.json'
 
+      - name: Cache Frontend Build
+        id: cache-frontend
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.FRONTEND_BUILD_DIR }}
+          key: ${{ runner.os }}-frontend-build-${{ hashFiles('${{ env.FRONTEND_DIR }}/**') }}
+          restore-keys: |
+            ${{ runner.os }}-frontend-build-
+
       - name: Prime npm Cache
         uses: actions/cache@v4
         with:
@@ -316,10 +339,19 @@ jobs:
           npm ci --prefer-offline --no-audit --no-fund
 
       - name: Build Frontend
+        if: steps.cache-frontend.outputs.cache-hit != 'true'
         run: |
           Set-StrictMode -Version Latest
           cd "${{ env.FRONTEND_DIR }}"
           npm run build
+
+      - name: Report Cache Status
+        run: |
+          if ('${{ steps.cache-frontend.outputs.cache-hit }}' == 'true') {
+            Write-Host "✅ Frontend build restored from cache." -ForegroundColor Green
+          } else {
+            Write-Host "ℹ️ No cache hit. A new build was performed." -ForegroundColor Yellow
+          }
 
       - name: Verify Build Output
         run: |
@@ -388,6 +420,15 @@ jobs:
           Copy-Item -Path "temp-frontend/*" -Destination $dest -Recurse -Force
           Write-Host "✅ Frontend staged for inclusion."
 
+      - name: Cache Backend Build
+        id: cache-backend
+        uses: actions/cache@v4
+        with:
+          path: dist
+          key: ${{ runner.os }}-backend-build-${{ hashFiles('${{ env.BACKEND_DIR }}/**', '${{ env.BACKEND_SPEC }}') }}
+          restore-keys: |
+            ${{ runner.os }}-backend-build-
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -407,11 +448,13 @@ jobs:
           }
 
       - name: Freeze Dependency Snapshot
+        if: steps.cache-backend.outputs.cache-hit != 'true'
         run: |
           Set-StrictMode -Version Latest
           pip freeze | Out-File backend-freeze.txt -Encoding utf8
 
       - name: Create Required Backend Directories
+        if: steps.cache-backend.outputs.cache-hit != 'true'
         run: |
           Set-StrictMode -Version Latest
           New-Item -ItemType Directory -Path "python_service/data" -Force | Out-Null
@@ -419,11 +462,20 @@ jobs:
           Write-Host "✅ Created required backend directories for PyInstaller." -ForegroundColor Green
 
       - name: Build with PyInstaller
+        if: steps.cache-backend.outputs.cache-hit != 'true'
         env:
           FORTUNA_VERSION: ${{ needs.repo-preflight.outputs.semver }}
         run: |
           Set-StrictMode -Version Latest
           pyinstaller "${{ env.BACKEND_SPEC }}" --clean --log-level=WARN --noconfirm
+
+      - name: Report Cache Status
+        run: |
+          if ('${{ steps.cache-backend.outputs.cache-hit }}' == 'true') {
+            Write-Host "✅ Backend build restored from cache." -ForegroundColor Green
+          } else {
+            Write-Host "ℹ️ No cache hit. A new build was performed." -ForegroundColor Yellow
+          }
 
       - name: Verify Executable
         run: |
@@ -514,237 +566,209 @@ jobs:
 
       - name: 🧪 PHASE 1 System Imports
         run: |
-          python -c @'
-          import sys
-
-          print("\n" + "="*80)
-          print("PHASE 1 SYSTEM-LEVEL IMPORTS")
-          print("="*80)
-
-          modules = [
-              ('os', 'filesystem'),
-              ('sys', 'system'),
-              ('json', 'serialization'),
-              ('asyncio', 'async I/O'),
-              ('pathlib', 'paths'),
-              ('typing', 'type hints'),
-              ('importlib', 'import utilities'),
-          ]
-
-          failed = []
-          for mod_name, desc in modules:
-              try:
-                  __import__(mod_name)
-                  print(f"✅ {mod_name:20} [{desc}]")
-              except Exception as e:
-                  print(f"❌ {mod_name:20} ERROR: {e}")
-                  failed.append((mod_name, str(e)))
-
-          if failed:
-              print(f"\n❌ CRITICAL: {len(failed)} system imports failed")
-              sys.exit(1)
-
-          print(f"\n✅ Phase 1 complete")
-          '@
-
+          $script = @(
+            'import sys',
+            'print("\n" + "="*80)',
+            'print("PHASE 1 SYSTEM-LEVEL IMPORTS")',
+            'print("="*80)',
+            'modules = [',
+            "    ('os', 'filesystem'), ('sys', 'system'), ('json', 'serialization'),",
+            "    ('asyncio', 'async I/O'), ('pathlib', 'paths'), ('typing', 'type hints'),",
+            "    ('importlib', 'import utilities')",
+            ']',
+            'failed = []',
+            'for mod_name, desc in modules:',
+            '    try:',
+            '        __import__(mod_name)',
+            '        print(f"✅ {mod_name:20} [{desc}]")',
+            '    except ImportError as e:',
+            '        print(f"❌ {mod_name:20} ImportError: {e}")',
+            '        failed.append(mod_name)',
+            'if failed:',
+            '    print(f"\n❌ {len(failed)} system imports failed")',
+            '    sys.exit(1)',
+            'print(f"\n✅ Phase 1 complete")'
+          )
+          $script | Out-File -FilePath "diag_script.py" -Encoding utf8
+          python diag_script.py
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
       - name: 🧪 PHASE 2 Web Framework Core
         run: |
-          python -c @'
-          import sys
-          import traceback
-
-          print("\n" + "="*80)
-          print("PHASE 2 WEB FRAMEWORK CORE")
-          print("="*80)
-
-          modules = [
-              ('fastapi', 'web framework'),
-              ('uvicorn', 'ASGI server'),
-              ('starlette', 'ASGI toolkit'),
-              ('starlette.applications', 'ASGI app'),
-              ('starlette.routing', 'routing'),
-          ]
-
-          failed = []
-          for mod_name, desc in modules:
-              try:
-                  __import__(mod_name)
-                  print(f"✅ {mod_name:30} [{desc}]")
-              except ImportError as e:
-                  print(f"❌ {mod_name:30} ImportError: {e}")
-                  failed.append((mod_name, str(e)))
-              except Exception as e:
-                  print(f"⚠️  {mod_name:30} {type(e).__name__}: {e}")
-
-          if failed:
-              print(f"\n❌ {len(failed)} core framework imports failed")
-              for mod, err in failed:
-                  print(f"  - {mod}")
-              sys.exit(1)
-
-          print(f"\n✅ Phase 2 complete")
-          '@
-
+          $script = @(
+            'import sys',
+            'import traceback',
+            'print("\n" + "="*80)',
+            'print("PHASE 2 WEB FRAMEWORK CORE")',
+            'print("="*80)',
+            'modules = [',
+            "    ('fastapi', 'web framework'),",
+            "    ('uvicorn', 'ASGI server'),",
+            "    ('starlette', 'ASGI toolkit'),",
+            "    ('starlette.applications', 'ASGI app'),",
+            "    ('starlette.routing', 'routing'),",
+            ']',
+            'failed = []',
+            'for mod_name, desc in modules:',
+            '    try:',
+            '        __import__(mod_name)',
+            '        print(f"✅ {mod_name:30} [{desc}]")',
+            '    except ImportError as e:',
+            '        print(f"❌ {mod_name:30} ImportError: {e}")',
+            '        failed.append((mod_name, str(e)))',
+            '    except Exception as e:',
+            '        print(f"⚠️  {mod_name:30} {type(e).__name__}: {e}")',
+            'if failed:',
+            '    print(f"\n❌ {len(failed)} core framework imports failed")',
+            '    for mod, err in failed:',
+            '        print(f"  - {mod}")',
+            '    sys.exit(1)',
+            'print(f"\n✅ Phase 2 complete")'
+          )
+          $script | Out-File -FilePath "diag_script.py" -Encoding utf8
+          python diag_script.py
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
       - name: 🧪 PHASE 3 Pydantic & Data Validation
         run: |
-          python -c @'
-          import sys
-
-          print("\n" + "="*80)
-          print("PHASE 3 PYDANTIC & DATA VALIDATION")
-          print("="*80)
-
-          modules = [
-              ('pydantic', 'validation'),
-              ('pydantic_core', 'core'),
-              ('pydantic_settings', 'settings'),
-          ]
-
-          for mod_name, desc in modules:
-              try:
-                  __import__(mod_name)
-                  print(f"✅ {mod_name:30} [{desc}]")
-              except Exception as e:
-                  print(f"❌ {mod_name:30} {type(e).__name__}: {e}")
-                  sys.exit(1)
-
-          print(f"\n✅ Phase 3 complete")
-          '@
-
+          $script = @(
+            'import sys',
+            'print("\n" + "="*80)',
+            'print("PHASE 3 PYDANTIC & DATA VALIDATION")',
+            'print("="*80)',
+            'modules = [',
+            "    ('pydantic', 'validation'),",
+            "    ('pydantic_core', 'core'),",
+            "    ('pydantic_settings', 'settings'),",
+            ']',
+            'for mod_name, desc in modules:',
+            '    try:',
+            '        __import__(mod_name)',
+            '        print(f"✅ {mod_name:30} [{desc}]")',
+            '    except Exception as e:',
+            '        print(f"❌ {mod_name:30} {type(e).__name__}: {e}")',
+            '        sys.exit(1)',
+            'print(f"\n✅ Phase 3 complete")'
+          )
+          $script | Out-File -FilePath "diag_script.py" -Encoding utf8
+          python diag_script.py
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
       - name: 🧪 PHASE 4 Async/IO Utilities
         run: |
-          python -c @'
-          import sys
-
-          print("\n" + "="*80)
-          print("PHASE 4 ASYNC/IO UTILITIES")
-          print("="*80)
-
-          modules = [
-              ('anyio', 'async compat'),
-              ('httpcore', 'HTTP core'),
-              ('httpx', 'HTTP client'),
-              ('aiosqlite', 'async DB'),
-          ]
-
-          for mod_name, desc in modules:
-              try:
-                  __import__(mod_name)
-                  print(f"✅ {mod_name:30} [{desc}]")
-              except Exception as e:
-                  print(f"❌ {mod_name:30} {type(e).__name__}: {e}")
-                  sys.exit(1)
-
-          print(f"\n✅ Phase 4 complete")
-          '@
-
+          $script = @(
+            'import sys',
+            'print("\n" + "="*80)',
+            'print("PHASE 4 ASYNC/IO UTILITIES")',
+            'print("="*80)',
+            'modules = [',
+            "    ('anyio', 'async compat'),",
+            "    ('httpcore', 'HTTP core'),",
+            "    ('httpx', 'HTTP client'),",
+            "    ('aiosqlite', 'async DB'),",
+            ']',
+            'for mod_name, desc in modules:',
+            '    try:',
+            '        __import__(mod_name)',
+            '        print(f"✅ {mod_name:30} [{desc}]")',
+            '    except Exception as e:',
+            '        print(f"❌ {mod_name:30} {type(e).__name__}: {e}")',
+            '        sys.exit(1)',
+            'print(f"\n✅ Phase 4 complete")'
+          )
+          $script | Out-File -FilePath "diag_script.py" -Encoding utf8
+          python diag_script.py
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
       - name: 🧪 PHASE 5 Optional Dependencies (non-critical)
         continue-on-error: true
         run: |
-          python -c @'
-          import sys
-
-          print("\n" + "="*80)
-          print("PHASE 5 OPTIONAL DEPENDENCIES (non-critical)")
-          print("="*80)
-
-          modules = [
-              ('slowapi', 'rate limiting'),
-              ('structlog', 'logging'),
-              ('tenacity', 'retries'),
-          ]
-
-          for mod_name, desc in modules:
-              try:
-                  __import__(mod_name)
-                  print(f"✅ {mod_name:30} [{desc}]")
-              except Exception as e:
-                  print(f"⚠️  {mod_name:30} not critical: {type(e).__name__}")
-
-          print(f"\n✅ Phase 5 complete (warnings OK)")
-          '@
+          $script = @(
+            'import sys',
+            'print("\n" + "="*80)',
+            'print("PHASE 5 OPTIONAL DEPENDENCIES (non-critical)")',
+            'print("="*80)',
+            'modules = [',
+            "    ('slowapi', 'rate limiting'),",
+            "    ('structlog', 'logging'),",
+            "    ('tenacity', 'retries'),",
+            ']',
+            'for mod_name, desc in modules:',
+            '    try:',
+            '        __import__(mod_name)',
+            '        print(f"✅ {mod_name:30} [{desc}]")',
+            '    except Exception as e:',
+            '        print(f"⚠️  {mod_name:30} not critical: {type(e).__name__}")',
+            'print(f"\n✅ Phase 5 complete (warnings OK)")'
+          )
+          $script | Out-File -FilePath "diag_script.py" -Encoding utf8
+          python diag_script.py
 
       - name: 🧪 PHASE 6 Application Directory Structure
         run: |
           Set-StrictMode -Version Latest
 
-          python -c @'
-          import os
-          from pathlib import Path
-
-          print("\n" + "="*80)
-          print("PHASE 6 APPLICATION DIRECTORY STRUCTURE")
-          print("="*80)
-
-          cwd = Path.cwd()
-          python_service = cwd / "python_service"
-
-          print(f"\nCurrent directory: {cwd}")
-          print(f"\npython_service exists: {python_service.exists()}")
-          if python_service.exists():
-              print(f"  Contents:")
-              for item in python_service.iterdir():
-                  print(f"    - {item.name}")
-
-              main_py = python_service / "main.py"
-              api_py = python_service / "api.py"
-
-              print(f"\n  main.py: {main_py.exists()} ({main_py.stat().st_size if main_py.exists() else 'N/A'} bytes)")
-              print(f"  api.py: {api_py.exists()} ({api_py.stat().st_size if api_py.exists() else 'N/A'} bytes)")
-          '@
+          $script = @(
+            'import os',
+            'from pathlib import Path',
+            'print("\n" + "="*80)',
+            'print("PHASE 6 APPLICATION DIRECTORY STRUCTURE")',
+            'print("="*80)',
+            'cwd = Path.cwd()',
+            'python_service = cwd / "python_service"',
+            'print(f"\nCurrent directory: {cwd}")',
+            'print(f"\npython_service exists: {python_service.exists()}")',
+            'if python_service.exists():',
+            '    print(f"  Contents:")',
+            '    for item in python_service.iterdir():',
+            '        print(f"    - {item.name}")',
+            '    main_py = python_service / "main.py"',
+            '    api_py = python_service / "api.py"',
+            '    print(f"\n  main.py: {main_py.exists()} ({main_py.stat().st_size if main_py.exists() else \'N/A\'} bytes)")',
+            '    print(f"  api.py: {api_py.exists()} ({api_py.stat().st_size if api_py.exists() else \'N/A\'} bytes)")'
+          )
+          $script | Out-File -FilePath "diag_script.py" -Encoding utf8
+          python diag_script.py
 
       - name: 🧪 PHASE 7 CRITICAL - Application Module Imports
         run: |
-          python -c @'
-          import sys
-          import traceback
-          from pathlib import Path
-
-          print("\n" + "="*80)
-          print("PHASE 7 APPLICATION MODULE IMPORTS (CRITICAL)")
-          print("="*80)
-
-          # Step 1: python_service
-          print("\n[Step 1] Importing python_service...")
-          try:
-              import python_service
-              print(f"✅ python_service imported")
-              print(f"   Location: {python_service.__file__}")
-          except Exception as e:
-              print(f"❌ FATAL: python_service import failed")
-              print(f"   Error: {type(e).__name__}: {e}")
-              traceback.print_exc()
-              sys.exit(1)
-
-          # Step 2: Get app object
-          print("\n[Step 2] Retrieving 'app' object from main...")
-          try:
-              from python_service.main import app
-              print(f"✅ app object retrieved")
-              print(f"   Type: {type(app)}")
-              print(f"   Class: {app.__class__.__name__}")
-              print(f"   Module: {app.__class__.__module__}")
-          except Exception as e:
-              print(f"❌ FATAL: Could not get app object")
-              print(f"   Error: {type(e).__name__}: {e}")
-              traceback.print_exc()
-              sys.exit(1)
-
-          print("\n" + "="*80)
-          print("✅ ALL APPLICATION IMPORTS SUCCESSFUL")
-          print("="*80)
-          print("\nThe ASGI app is fully importable.")
-          print("Uvicorn should be able to load it successfully.")
-          '@
-
+          $script = @(
+            'import sys',
+            'import traceback',
+            'from pathlib import Path',
+            'print("\n" + "="*80)',
+            'print("PHASE 7 APPLICATION MODULE IMPORTS (CRITICAL)")',
+            'print("="*80)',
+            'print("\n[Step 1] Importing python_service...")',
+            'try:',
+            '    import python_service',
+            '    print(f"✅ python_service imported")',
+            '    print(f"   Location: {python_service.__file__}")',
+            'except Exception as e:',
+            '    print(f"❌ FATAL: python_service import failed")',
+            '    print(f"   Error: {type(e).__name__}: {e}")',
+            '    traceback.print_exc()',
+            '    sys.exit(1)',
+            'print("\n[Step 2] Retrieving \'app\' object from main...")',
+            'try:',
+            '    from python_service.main import app',
+            '    print(f"✅ app object retrieved")',
+            '    print(f"   Type: {type(app)}")',
+            '    print(f"   Class: {app.__class__.__name__}")',
+            '    print(f"   Module: {app.__class__.__module__}")',
+            'except Exception as e:',
+            '    print(f"❌ FATAL: Could not get app object")',
+            '    print(f"   Error: {type(e).__name__}: {e}")',
+            '    traceback.print_exc()',
+            '    sys.exit(1)',
+            'print("\n" + "="*80)',
+            'print("✅ ALL APPLICATION IMPORTS SUCCESSFUL")',
+            'print("="*80)',
+            'print("\nThe ASGI app is fully importable.")',
+            'print("Uvicorn should be able to load it successfully.")'
+          )
+          $script | Out-File -FilePath "diag_script.py" -Encoding utf8
+          python diag_script.py
           if ($LASTEXITCODE -ne 0) {
             Write-Host "❌ APPLICATION IMPORT TEST FAILED" -ForegroundColor Red
             exit 1
@@ -854,14 +878,15 @@ jobs:
           $info = Get-Item $exe
           $size = $info.Length / 1MB
 
-          @"
-          === EXECUTABLE ANALYSIS ===
-          Path: $($info.FullName)
-          Size: $([math]::Round($size, 2)) MB
-          Created: $($info.CreationTime)
-          Modified: $($info.LastWriteTime)
-          Attributes: $($info.Attributes)
-          "@ | Tee-Object "diagnostics/exe-analysis/exe-properties.txt"
+          $exeAnalysis = @(
+            "=== EXECUTABLE ANALYSIS ===",
+            "Path: $($info.FullName)",
+            "Size: $([math]::Round($size, 2)) MB",
+            "Created: $($info.CreationTime)",
+            "Modified: $($info.LastWriteTime)",
+            "Attributes: $($info.Attributes)"
+          )
+          $exeAnalysis | Tee-Object "diagnostics/exe-analysis/exe-properties.txt"
 
           # PE signature check
           $bytes = [System.IO.File]::ReadAllBytes($exe)
@@ -937,104 +962,77 @@ jobs:
           Set-StrictMode -Version Latest
 
           # Create a test script that mimics what the executable should do
-          $testScript = @'
-          import sys
-          import os
-          import traceback
-
-          print("=" * 80)
-          print("PRE-LAUNCH PYTHON ENVIRONMENT CHECK")
-          print("=" * 80)
-
-          # 1. System paths
-          print("\n1. PYTHON ENVIRONMENT:")
-          print(f"   Python: {sys.executable}")
-          print(f"   Version: {sys.version}")
-          print(f"   Platform: {sys.platform}")
-          print(f"   Prefix: {sys.prefix}")
-
-          # 2. Module search paths
-          print("\n2. MODULE SEARCH PATHS:")
-          for i, p in enumerate(sys.path):
-              print(f"   [{i}] {p}")
-
-          # 3. Critical imports (same as in PyInstaller spec)
-          critical_modules = [
-              'fastapi',
-              'uvicorn',
-              'pydantic',
-              'pydantic_core',
-              'pydantic_settings',
-              'aiosqlite',
-              'slowapi',
-              'structlog',
-              'starlette',
-              'starlette.staticfiles',
-              'anyio',
-              'httpcore',
-              'httpx',
-          ]
-
-          print("\n3. CRITICAL MODULE IMPORTS:")
-          failed = []
-          for mod in critical_modules:
-              try:
-                  __import__(mod)
-                  print(f"   ✅ {mod}")
-              except ImportError as e:
-                  print(f"   ❌ {mod}: {e}")
-                  failed.append((mod, str(e)))
-              except Exception as e:
-                  print(f"   ⚠️  {mod}: {type(e).__name__}: {e}")
-
-          # 4. Attempt to import ${{ env.BACKEND_DIR }} modules
-          print("\n4. APPLICATION MODULES (${{ env.BACKEND_DIR }}):")
-          app_modules = [
-              '${{ env.BACKEND_DIR }}',
-              '${{ env.BACKEND_DIR }}.main',
-              '${{ env.BACKEND_DIR }}.api',
-          ]
-
-          for mod in app_modules:
-              try:
-                  __import__(mod)
-                  print(f"   ✅ {mod}")
-              except ImportError as e:
-                  print(f"   ❌ {mod}: {e}")
-                  failed.append((mod, str(e)))
-                  traceback.print_exc()
-              except Exception as e:
-                  print(f"   ⚠️  {mod}: {type(e).__name__}: {e}")
-                  traceback.print_exc()
-
-          # 5. Test ASGI app instantiation
-          print("\n5. ASGI APP INSTANTIATION:")
-          try:
-              from ${{ env.BACKEND_DIR }}.main import app
-              print(f"   ✅ Successfully imported app from main")
-              print(f"   App type: {type(app)}")
-              print(f"   App class: {app.__class__.__name__}")
-          except ImportError as e:
-              print(f"   ❌ Failed to import app: {e}")
-              traceback.print_exc()
-              failed.append(("main.app", str(e)))
-          except Exception as e:
-              print(f"   ⚠️  {type(e).__name__}: {e}")
-              traceback.print_exc()
-
-          # Summary
-          print("\n" + "=" * 80)
-          if failed:
-              print(f"FAILURES: {len(failed)} module(s) failed")
-              for mod, err in failed:
-                  print(f"  - {mod}")
-                  print(f"    {err[:100]}")
-              sys.exit(1)
-          else:
-              print("✅ ALL CHECKS PASSED")
-              sys.exit(0)
-          '@
-
+          $testScript = @(
+            'import sys, os, traceback',
+            'print("=" * 80)',
+            'print("PRE-LAUNCH PYTHON ENVIRONMENT CHECK")',
+            'print("=" * 80)',
+            'print("\n1. PYTHON ENVIRONMENT:")',
+            'print(f"   Python: {sys.executable}")',
+            'print(f"   Version: {sys.version}")',
+            'print(f"   Platform: {sys.platform}")',
+            'print(f"   Prefix: {sys.prefix}")',
+            'print("\n2. MODULE SEARCH PATHS:")',
+            'for i, p in enumerate(sys.path):',
+            '    print(f"   [{i}] {p}")',
+            'critical_modules = [',
+            "    'fastapi', 'uvicorn', 'pydantic', 'pydantic_core', 'pydantic_settings',",
+            "    'aiosqlite', 'slowapi', 'structlog', 'starlette', 'starlette.staticfiles',",
+            "    'anyio', 'httpcore', 'httpx'",
+            ']',
+            'print("\n3. CRITICAL MODULE IMPORTS:")',
+            'failed = []',
+            'for mod in critical_modules:',
+            '    try:',
+            '        __import__(mod)',
+            '        print(f"   ✅ {mod}")',
+            '    except ImportError as e:',
+            '        print(f"   ❌ {mod}: {e}")',
+            '        failed.append((mod, str(e)))',
+            '    except Exception as e:',
+            '        print(f"   ⚠️  {mod}: {type(e).__name__}: {e}")',
+            'print("\n4. APPLICATION MODULES (${{ env.BACKEND_DIR }}):")',
+            "app_modules = [",
+            "    '${{ env.BACKEND_DIR }}',",
+            "    '${{ env.BACKEND_DIR }}.main',",
+            "    '${{ env.BACKEND_DIR }}.api',",
+            "]",
+            'for mod in app_modules:',
+            '    try:',
+            '        __import__(mod)',
+            '        print(f"   ✅ {mod}")',
+            '    except ImportError as e:',
+            '        print(f"   ❌ {mod}: {e}")',
+            '        failed.append((mod, str(e)))',
+            '        traceback.print_exc()',
+            '    except Exception as e:',
+            '        print(f"   ⚠️  {mod}: {type(e).__name__}: {e}")',
+            '        traceback.print_exc()',
+            'print("\n5. ASGI APP INSTANTIATION:")',
+            'try:',
+            "    from ${{ env.BACKEND_DIR }}.main import app",
+            '    print(f"   ✅ Successfully imported app from main")',
+            '    print(f"   App type: {type(app)}")',
+            '    print(f"   App class: {app.__class__.__name__}")',
+            'except ImportError as e:',
+            '    print(f"   ❌ Failed to import app: {e}")',
+            '    traceback.print_exc()',
+            '    failed.append(("main.app", str(e)))',
+            'except Exception as e:',
+            '    print(f"   ⚠️  {type(e).__name__}: {e}")',
+            '    traceback.print_exc()',
+            'print("\n" + "=" * 80)',
+            'if failed:',
+            '    print(f"FAILURES: {len(failed)} module(s) failed")',
+            '    for mod, err in failed:',
+            '        print(f"  - {mod}")',
+            '        print(f"    {err[:100]}")',
+            '    sys.exit(1)',
+            'else:',
+            '    print("✅ ALL CHECKS PASSED")',
+            '    sys.exit(0)',
+            ''
+          )
           $testScript | Out-File "diagnostics/import-analysis/pre-launch-test.py" -Encoding utf8
 
           python "diagnostics/import-analysis/pre-launch-test.py" 2>&1 | Tee-Object "diagnostics/import-analysis/pre-launch-output.txt"
@@ -1071,7 +1069,7 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
 
-          $env | Out-File "diagnostics/environment/launch-environment.txt"
+          Get-ChildItem Env: | Out-File "diagnostics/environment/launch-environment.txt"
 
           $envVars = @{
             'API_KEY' = $env:API_KEY
@@ -1128,15 +1126,15 @@ jobs:
             -RedirectStandardError $errLog `
             -NoNewWindow
 
-          $pid = $proc.Id
-          Write-Host "✅ Service process started with PID: $pid" -ForegroundColor Green
-          $pid | Out-File "service.pid" -Encoding ascii
+          $backendPid = $proc.Id
+          Write-Host "✅ Service process started with PID: $backendPid" -ForegroundColor Green
+          $backendPid | Out-File "service.pid" -Encoding ascii
 
           # Don't wait - proceed to health check
           Start-Sleep -Seconds 5
 
           # Check if process is still alive
-          if (Get-Process -Id $pid -ErrorAction SilentlyContinue) {
+          if (Get-Process -Id $backendPid -ErrorAction SilentlyContinue) {
             Write-Host "✅ Process still alive after 5 seconds" -ForegroundColor Green
           } else {
             Write-Host "❌ FATAL: Process died immediately" -ForegroundColor Red
@@ -1151,19 +1149,20 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
 
-          $pid = Get-Content "service.pid" -Raw -ErrorAction SilentlyContinue
-          if ($pid) {
-            $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
+          $backendPid = Get-Content "service.pid" -Raw -ErrorAction SilentlyContinue
+          if ($backendPid) {
+            $proc = Get-Process -Id $backendPid -ErrorAction SilentlyContinue
             if ($proc) {
-              @"
-              === PROCESS INFO ===
-              PID: $pid
-              Name: $($proc.ProcessName)
-              Memory: $([math]::Round($proc.WorkingSet / 1MB, 2)) MB
-              CPU Time: $($proc.TotalProcessorTime)
-              Threads: $($proc.Threads.Count)
-              Handle Count: $($proc.HandleCount)
-              "@ | Tee-Object "diagnostics/runtime-trace/process-info.txt"
+              $processInfo = @(
+                "=== PROCESS INFO ===",
+                "PID: $backendPid",
+                "Name: $($proc.ProcessName)",
+                "Memory: $([math]::Round($proc.WorkingSet / 1MB, 2)) MB",
+                "CPU Time: $($proc.TotalProcessorTime)",
+                "Threads: $($proc.Threads.Count)",
+                "Handle Count: $($proc.HandleCount)"
+              )
+              $processInfo | Tee-Object "diagnostics/runtime-trace/process-info.txt"
             }
           }
 
@@ -1319,10 +1318,11 @@ jobs:
       - name: '🚀 Start Frontend Server'
         run: |
           serve -s frontend-dist -l 3000 > frontend-server.log 2>&1 &
+          Start-Sleep -Seconds 5
           $proc = Get-Process -Name "serve"
-          $pid = $proc.Id
-          Write-Host "✅ Frontend server started with PID: $pid"
-          $pid | Out-File "frontend.pid" -Encoding ascii
+          $frontendPid = $proc.Id
+          Write-Host "✅ Frontend server started with PID: $frontendPid"
+          $frontendPid | Out-File "frontend.pid" -Encoding ascii
           Start-Sleep -Seconds 3
 
       - name: '🧪 Frontend UI Verification'
@@ -1331,145 +1331,62 @@ jobs:
           Set-StrictMode -Version Latest
           pip install playwright==1.48.2
           python -m playwright install chromium
-          $scriptContent = @'
-          import sys, os, time
-          from playwright.sync_api import sync_playwright, expect
-
-          def run_verification():
-              url = "http://127.0.0.1:3000"  # FRONTEND port, not backend!
-
-              with sync_playwright() as p:
-                  browser = p.chromium.launch()
-                  page = browser.new_page()
-                  page.tracing.start(screenshots=True, snapshots=True)
-
-                  try:
-                      print(f"[1] Navigating to {url}")
-                      page.goto(url, wait_until='networkidle', timeout=20000)
-
-                      print(f"[2] Page title: {page.title()}")
-                      print(f"[3] Page URL: {page.url}")
-
-                      # Diagnostic: Get all h1 tags
-                      h1_elements = page.locator("h1").all()
-                      print(f"[4] Found {len(h1_elements)} h1 tag(s)")
-                      for i, elem in enumerate(h1_elements):
-                          text = elem.text_content()
-                          print(f"     h1[{i}] = '{text}'")
-
-                      # Diagnostic: Check page content
-                      content = page.content()
-                      if "Fortuna Faucet" in content:
-                          print("[5] ✅ 'Fortuna Faucet' in HTML")
-                      else:
-                          print("[5] ❌ 'Fortuna Faucet' NOT in HTML")
-                          print(f"     Page length: {len(content)} bytes")
-                          print(f"     First 500 chars: {content[:500]}")
-
-                      # Assertion
-                      heading = page.locator("h1:has-text('Fortuna Faucet')")
-                      expect(heading).to_be_visible(timeout=10000)
-
-                      print("[6] ✅ UI test PASSED")
-                      page.screenshot(path="smoke-test-screenshot.png")
-                      page.tracing.stop(path="trace-success.zip")
-                      sys.exit(0)
-
-                  except Exception as e:
-                      print(f"[ERROR] {type(e).__name__}: {e}", file=sys.stderr)
-                      page.screenshot(path="smoke-test-screenshot-FAILURE.png")
-                      page.tracing.stop(path="trace-failure.zip")
-                      sys.exit(1)
-                  finally:
-                      browser.close()
-
-          if __name__ == "__main__":
-              run_verification()
-          '@
-          Set-Content -Path "verify_frontend.py" -Value $scriptContent
-          python verify_frontend.py
-
-      # ═════════════════════════════════════════════════════════════════════════
-      # PHASE 4: FRONTEND UI VERIFICATION
-      # ═════════════════════════════════════════════════════════════════════════
-      - name: '⚙️ Setup Node.js for Frontend Server'
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: '📦 Install Serve for Static Hosting'
-        run: npm install -g serve
-
-      - name: '🚀 Start Frontend Server'
-        run: |
-          serve -s frontend-dist -l 3000 > frontend-server.log 2>&1 &
-          $proc = Get-Process -Name "serve"
-          $pid = $proc.Id
-          Write-Host "✅ Frontend server started with PID: $pid"
-          $pid | Out-File "frontend.pid" -Encoding ascii
-          Start-Sleep -Seconds 3
-
-      - name: '🧪 Frontend UI Verification'
-        shell: pwsh
-        run: |
-          Set-StrictMode -Version Latest
-          pip install playwright==1.48.2
-          python -m playwright install chromium
-          $scriptContent = @'
-          import sys, os, time
-          from playwright.sync_api import sync_playwright, expect
-
-          def run_verification():
-              url = "http://127.0.0.1:3000"  # FRONTEND port, not backend!
-
-              with sync_playwright() as p:
-                  browser = p.chromium.launch()
-                  page = browser.new_page()
-                  page.tracing.start(screenshots=True, snapshots=True)
-
-                  try:
-                      print(f"[1] Navigating to {url}")
-                      page.goto(url, wait_until='networkidle', timeout=20000)
-
-                      print(f"[2] Page title: {page.title()}")
-                      print(f"[3] Page URL: {page.url}")
-
-                      # Diagnostic: Get all h1 tags
-                      h1_elements = page.locator("h1").all()
-                      print(f"[4] Found {len(h1_elements)} h1 tag(s)")
-                      for i, elem in enumerate(h1_elements):
-                          text = elem.text_content()
-                          print(f"     h1[{i}] = '{text}'")
-
-                      # Diagnostic: Check page content
-                      content = page.content()
-                      if "Fortuna Faucet" in content:
-                          print("[5] ✅ 'Fortuna Faucet' in HTML")
-                      else:
-                          print("[5] ❌ 'Fortuna Faucet' NOT in HTML")
-                          print(f"     Page length: {len(content)} bytes")
-                          print(f"     First 500 chars: {content[:500]}")
-
-                      # Assertion
-                      heading = page.locator("h1:has-text('Fortuna Faucet')")
-                      expect(heading).to_be_visible(timeout=10000)
-
-                      print("[6] ✅ UI test PASSED")
-                      page.screenshot(path="smoke-test-screenshot.png")
-                      page.tracing.stop(path="trace-success.zip")
-                      sys.exit(0)
-
-                  except Exception as e:
-                      print(f"[ERROR] {type(e).__name__}: {e}", file=sys.stderr)
-                      page.screenshot(path="smoke-test-screenshot-FAILURE.png")
-                      page.tracing.stop(path="trace-failure.zip")
-                      sys.exit(1)
-                  finally:
-                      browser.close()
-
-          if __name__ == "__main__":
-              run_verification()
-          '@
+          $scriptContent = @(
+            'import sys, os, time',
+            'from playwright.sync_api import sync_playwright, expect',
+            '',
+            'def run_verification():',
+            '    url = "http://127.0.0.1:3000"  # FRONTEND port, not backend!',
+            '',
+            '    with sync_playwright() as p:',
+            '        browser = p.chromium.launch()',
+            '        page = browser.new_page()',
+            '        page.tracing.start(screenshots=True, snapshots=True)',
+            '',
+            '        try:',
+            '            print(f"[1] Navigating to {url}")',
+            "            page.goto(url, wait_until='networkidle', timeout=20000)",
+            '',
+            '            print(f"[2] Page title: {page.title()}")',
+            '            print(f"[3] Page URL: {page.url}")',
+            '',
+            '            # Diagnostic: Get all h1 tags',
+            '            h1_elements = page.locator("h1").all()',
+            '            print(f"[4] Found {len(h1_elements)} h1 tag(s)")',
+            '            for i, elem in enumerate(h1_elements):',
+            '                text = elem.text_content()',
+            '                print(f"     h1[{i}] = \'{text}\'")',
+            '',
+            '            # Diagnostic: Check page content',
+            '            content = page.content()',
+            '            if "Fortuna Faucet" in content:',
+            '                print("[5] ✅ \'Fortuna Faucet\' in HTML")',
+            '            else:',
+            '                print("[5] ❌ \'Fortuna Faucet\' NOT in HTML")',
+            '                print(f"     Page length: {len(content)} bytes")',
+            '                print(f"     First 500 chars: {content[:500]}")',
+            '',
+            '            # Assertion',
+            "            heading = page.locator(\"h1:has-text('Fortuna Faucet')\")",
+            '            expect(heading).to_be_visible(timeout=10000)',
+            '',
+            '            print("[6] ✅ UI test PASSED")',
+            '            page.screenshot(path="smoke-test-screenshot.png")',
+            '            page.tracing.stop(path="trace-success.zip")',
+            '            sys.exit(0)',
+            '',
+            '        except Exception as e:',
+            '            print(f"[ERROR] {type(e).__name__}: {e}", file=sys.stderr)',
+            '            page.screenshot(path="smoke-test-screenshot-FAILURE.png")',
+            '            page.tracing.stop(path="trace-failure.zip")',
+            '            sys.exit(1)',
+            '        finally:',
+            '            browser.close()',
+            '',
+            'if __name__ == "__main__":',
+            '    run_verification()',
+            ''
+          )
           Set-Content -Path "verify_frontend.py" -Value $scriptContent
           python verify_frontend.py
 
@@ -1517,8 +1434,8 @@ jobs:
         run: |
           if (Test-Path 'service.pid') {
             try {
-              $pid = Get-Content 'service.pid' -Raw
-              Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+              $backendPid = Get-Content 'service.pid' -Raw
+              Stop-Process -Id $backendPid -Force -ErrorAction SilentlyContinue
               Write-Host "✅ Backend service process terminated"
             } catch {
               Write-Host "⚠️  Could not terminate backend process"
@@ -1526,8 +1443,8 @@ jobs:
           }
           if (Test-Path 'frontend.pid') {
             try {
-              $pid = Get-Content 'frontend.pid' -Raw
-              Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+              $frontendPid = Get-Content 'frontend.pid' -Raw
+              Stop-Process -Id $frontendPid -Force -ErrorAction SilentlyContinue
               Write-Host "✅ Frontend server process terminated"
             } catch {
               Write-Host "⚠️  Could not terminate frontend process"
