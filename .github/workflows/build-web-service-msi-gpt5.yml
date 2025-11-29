@@ -927,6 +927,11 @@ jobs:
             pip install -r "${{ env.BACKEND_DIR }}/requirements-dev.txt"
           }
 
+      - name: 🐍 Set PYTHONPATH for Pre-Launch Check
+        run: |
+          echo "PYTHONPATH=${{ github.workspace }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "PYTHONPATH set to ${{ github.workspace }}"
+
       - name: 🐍 Test PyInstaller Python Environment (Mimic Executable)
         run: |
           Set-StrictMode -Version Latest
