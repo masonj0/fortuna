@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - session/jules1130
     tags:
       - 'v*'
     paths:
@@ -1184,7 +1185,7 @@ jobs:
           Set-StrictMode -Version Latest
 
           $url = "http://127.0.0.1:${{ env.SERVICE_PORT }}${{ env.HEALTH_ENDPOINT }}"
-          $maxRetries = 60  # 60 retries = 2 minutes
+          $maxRetries = 30  # 30 retries * 2s = 60s timeout
           $retryInterval = 2
           $attempt = 0
           $success = $false
@@ -1201,19 +1202,7 @@ jobs:
             Write-Host "Attempt $attempt/$maxRetries (${elapsed}s elapsed)..." -ForegroundColor Yellow
 
             try {
-              # Attempt 1: Test-NetConnection (TCP)
-              Write-Host "  [TCP Check]..." -ForegroundColor Gray
-              $tcpTest = Test-NetConnection -ComputerName 127.0.0.1 -Port ${{ env.SERVICE_PORT }} -ErrorAction Stop
-              if ($tcpTest.TcpTestSucceeded) {
-                Write-Host "  ✅ TCP Connection successful" -ForegroundColor Green
-                "[$attempt] TCP connection successful" | Out-File -Append $healthLog
-              } else {
-                Write-Host "  ❌ TCP connection failed" -ForegroundColor Red
-                "[$ attempt] TCP connection failed" | Out-File -Append $healthLog
-                throw "TCP connection failed"
-              }
-
-              # Attempt 2: HTTP Request
+              # Attempt HTTP Request
               Write-Host "  [HTTP GET]..." -ForegroundColor Gray
               $response = Invoke-WebRequest `
                 -Uri $url `
