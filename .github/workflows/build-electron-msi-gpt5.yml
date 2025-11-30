@@ -725,8 +725,8 @@ jobs:
             '        print(f"    - {item.name}")',
             '    main_py = python_service / "main.py"',
             '    api_py = python_service / "api.py"',
-            '    print(f"\n  main.py: {main_py.stat().st_size if main_py.exists() else \"N/A\"} bytes")',
-            '    print(f"  api.py: {api_py.stat().st_size if api_py.exists() else \"N/A\"} bytes")'
+            '    print(f''\n  main.py: {main_py.stat().st_size if main_py.exists() else "N/A"} bytes'')',
+            '    print(f''  api.py: {api_py.stat().st_size if api_py.exists() else "N/A"} bytes'')'
           )
           $script | Out-File -FilePath "diag_script.py" -Encoding utf8
           python diag_script.py
@@ -750,7 +750,7 @@ jobs:
             '    print(f"   Error: {type(e).__name__}: {e}")',
             '    traceback.print_exc()',
             '    sys.exit(1)',
-            'print("\n[Step 2] Retrieving ''app'' object from main...")',
+            'print(''\\n[Step 2] Retrieving "app" object from main...'')',
             'try:',
             '    from python_service.main import app',
             '    print(f"✅ app object retrieved")',
