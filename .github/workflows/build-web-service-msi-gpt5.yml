@@ -868,6 +868,7 @@ jobs:
           New-Item -ItemType Directory -Path "diagnostics/environment" -Force | Out-Null
           New-Item -ItemType Directory -Path "data" -Force | Out-Null
           New-Item -ItemType Directory -Path "json" -Force | Out-Null
+          New-Item -ItemType Directory -Path "logs" -Force | Out-Null
 
           # Baseline system state
           Get-Process | Out-File "diagnostics/baseline-processes.txt"
