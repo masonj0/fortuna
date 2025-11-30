@@ -482,6 +482,7 @@ jobs:
           $installDir = "C:\Program Files\Fortuna Faucet"
           New-Item -ItemType Directory -Path "$installDir\data" -Force | Out-Null
           New-Item -ItemType Directory -Path "$installDir\json" -Force | Out-Null
+          New-Item -ItemType Directory -Path "$installDir\logs" -Force | Out-Null
           Write-Host "✅ Created runtime directories in $installDir"
 
       - name: 🚀 Launch Application & Verify Process
