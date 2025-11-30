@@ -348,7 +348,7 @@ jobs:
 
       - name: Report Cache Status
         run: |
-          if ('${{ steps.cache-frontend.outputs.cache-hit }}' == 'true') {
+          if ('${{ steps.cache-frontend.outputs.cache-hit }}' -eq 'true') {
             Write-Host "✅ Frontend build restored from cache." -ForegroundColor Green
           } else {
             Write-Host "ℹ️ No cache hit. A new build was performed." -ForegroundColor Yellow
@@ -472,7 +472,7 @@ jobs:
 
       - name: Report Cache Status
         run: |
-          if ('${{ steps.cache-backend.outputs.cache-hit }}' == 'true') {
+          if ('${{ steps.cache-backend.outputs.cache-hit }}' -eq 'true') {
             Write-Host "✅ Backend build restored from cache." -ForegroundColor Green
           } else {
             Write-Host "ℹ️ No cache hit. A new build was performed." -ForegroundColor Yellow
@@ -516,6 +516,8 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 15
     needs: build-backend
+    env:
+      PYTHONUTF8: '1'
     steps:
       - name: 📥 Checkout Repository
         uses: actions/checkout@v4
@@ -829,6 +831,8 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 30
     needs: [build-frontend, build-backend, diagnose-asgi-imports]
+    env:
+      PYTHONUTF8: '1'
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
