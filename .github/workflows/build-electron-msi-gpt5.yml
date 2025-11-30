@@ -16,6 +16,7 @@ env:
   PYTHON_VERSION: '3.11'
   ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
   BACKEND_DIR: 'python_service'
+  PYTHONUTF8: '1'
 
 jobs:
   validate-environment:
@@ -755,8 +756,8 @@ jobs:
           '    main_py = python_service / "main.py"',
           '    api_py = python_service / "api.py"',
           '',
-          "    print(f'\n  main.py: {main_py.exists()} ({main_py.stat().st_size if main_py.exists() else 'N/A'} bytes)')",
-          "    print(f'  api.py: {api_py.exists()} ({api_py.stat().st_size if api_py.exists() else 'N/A'} bytes)')",
+          "    print(f'\\n  main.py: {main_py.exists()} ({main_py.stat().st_size if main_py.exists() else \"N/A\"} bytes)')",
+          "    print(f'  api.py: {api_py.exists()} ({api_py.stat().st_size if api_py.exists() else \"N/A\"} bytes)')",
           ''
           )
           $script | Out-File -FilePath "diag_script.py" -Encoding utf8
