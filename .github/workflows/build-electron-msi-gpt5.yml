@@ -329,16 +329,17 @@ jobs:
 
           Write-Host "✓ electron-builder config valid"
 
-      - name: 🔍 Verify Electron Assets
+      - name: 🧐 Verify Electron Assets
         shell: pwsh
         working-directory: electron
         run: |
           $iconPath = "assets/icon.ico"
           if (-not (Test-Path $iconPath)) {
-            Write-Error "❌ FATAL: Icon file missing at $iconPath (Resolved: $(Resolve-Path $iconPath))"
+            Write-Error "❌ FATAL: Icon file missing at $iconPath"
+            Get-ChildItem -Recurse
             exit 1
           }
-          Write-Host "✅ Icon found at: $iconPath"
+          Write-Host "✅ Icon found at: $(Resolve-Path $iconPath)"
 
       - name: 🔨 Build Electron Application
         shell: pwsh
@@ -370,6 +371,7 @@ jobs:
           }
 
           Write-Host "✓ MSI build completed"
+
 
       - name: 🔍 Verify MSI Output
         shell: pwsh

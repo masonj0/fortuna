@@ -1,49 +1,34 @@
-# System Timestamp: 2025-11-29 13:19:26.933797
-appId: com.fortuna.faucet
+appId: com.jules.fortunafaucet
 productName: "Fortuna Faucet"
-artifactName: "Fortuna-Faucet-${version}-${arch}.${ext}"
+
 directories:
-  app: "."
-  buildResources: "assets"
-  output: "dist"
+  output: dist
+  buildResources: assets
+
 files:
-  - "main.js"
-  - "preload.js"
-  - "secure-settings-manager.js"
-  - "package.json"
-  - "web-ui-build/**/*"
-  - "assets/**/*"
-  - "!**/node_modules/*/{test,__mocks__,__tests__}/**"
+  - filter:
+      - "**/*"
+
 extraResources:
-  - from: "resources/fortuna-backend.exe"
-    to: "fortuna-backend.exe"
-asar: true
-protocols:
-  - name: "Fortuna Faucet Protocol"
-    schemes:
-      - "fortuna"
-fileAssociations:
-  - ext: "faucet"
-    name: "Fortuna Project File"
-    role: "Editor"
-    description: "Opens Fortuna Faucet project payloads"
-icon: icon.ico
+  - from: "../python-service-bin"
+    to: "resources/python-service-bin"
+    filter:
+      - "**/*"
+  - from: "../web_platform/frontend/out"
+    to: "resources/frontend"
+    filter:
+      - "**/*"
+
 win:
-  target:
-    - target: "msi"
-      arch:
-        - x64
-  legalTrademarks: "Fortuna Labs"
-  publisherName:
-    - "Fortuna Labs LLC"
+  target: msi
+  icon: "assets/icon.ico"
+
 msi:
-  installerIcon: icon.ico
-  uninstallerIcon: icon.ico
   oneClick: false
   perMachine: true
   runAfterFinish: true
-  createDesktopShortcut: true
-  createStartMenuShortcut: true
+  # Explicitly pointing to the file ensures WiX picks it up
+  installerIcon: "assets/icon.ico"
+  uninstallerIcon: "assets/icon.ico"
   shortcutName: "Fortuna Faucet"
-  warningsAsErrors: true
-publish: []
+  warningsAsErrors: false
