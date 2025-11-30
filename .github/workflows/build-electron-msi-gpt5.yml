@@ -5,7 +5,7 @@ on:
   push:
     branches:
       - main
-      - session/jules1130
+      - session/jules1130b
   workflow_dispatch:
 
 concurrency:
@@ -448,7 +448,6 @@ jobs:
     timeout-minutes: 15
     needs:
       - build-electron-msi
-      - diagnose-asgi-imports
     steps:
       - name: 📥 Download MSI Installer
         uses: actions/download-artifact@v4
