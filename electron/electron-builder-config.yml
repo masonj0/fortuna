@@ -37,6 +37,7 @@ win:
   publisherName:
     - "Fortuna Labs LLC"
 msi:
+  icon: null
   oneClick: false
   perMachine: true
   runAfterFinish: true

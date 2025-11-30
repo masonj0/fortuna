@@ -1,11 +1,11 @@
-# System Timestamp: 2025-11-29 13:19:26.933797
+# System Timestamp: 2025-11-30 10:17:05.926855
 name: 🔨 Build Electron MSI Installer (Production)
 
 on:
   push:
     branches:
       - main
-      - session/jules1130
+      - session/jules1130b
   workflow_dispatch:
 
 concurrency:
@@ -329,6 +329,17 @@ jobs:
 
           Write-Host "✓ electron-builder config valid"
 
+      - name: 🩹 Dynamically Patch MSI Icon Config
+        shell: pwsh
+        run: |
+          $configFile = 'electron/electron-builder-config.yml'
+          $config = Get-Content $configFile -Raw
+          # Use a regular expression to add 'icon: null' under the 'msi:' key
+          $updatedConfig = $config -replace '(?m)(^msi:\s*$)', "`$1`n  icon: null"
+          Set-Content -Path $configFile -Value $updatedConfig
+          Write-Host "✅ Patched electron-builder config to disable MSI icon."
+          Get-Content $configFile | Write-Host
+
       - name: 🔨 Build Electron Application
         shell: pwsh
         working-directory: electron
@@ -448,7 +459,6 @@ jobs:
     timeout-minutes: 15
     needs:
       - build-electron-msi
-      - diagnose-asgi-imports
     steps:
       - name: 📥 Download MSI Installer
         uses: actions/download-artifact@v4
