@@ -1,14 +1,17 @@
 [
     ".github/dependabot.yml",
     "ARCHITECTURAL_MANDATE.md",
+    "VERSION.txt",
+    "electron/assets/license.rtf",
+    "electron/resources/.gitkeep",
     "electron/secure-settings-manager.js",
     "python_service/core/exceptions.py",
-    "python_service/middleware/error_handler.py",
     "web_platform/api_gateway/src/server.ts",
-    "web_platform/frontend/public/workbox-4754cb34.js",
-    "web_platform/frontend/src/types/electron.d.ts",
-    "web_platform/frontend/src/utils/exportManager.ts",
-    "web_platform/frontend/tsconfig.json",
-    "web_service/frontend/app/components/RaceCard.tsx",
-    "web_service/frontend/app/lib/queryClient.ts"
+    "web_platform/api_gateway/tsconfig.json",
+    "web_platform/frontend/src/components/RaceCard.tsx",
+    "web_service/__init__.py",
+    "web_service/backend/middleware/error_handler.py",
+    "web_service/frontend/app/types/electron.d.ts",
+    "web_service/frontend/app/utils/exportManager.ts",
+    "web_service/frontend/public/workbox-4754cb34.js"
 ]

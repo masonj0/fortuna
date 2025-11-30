@@ -1,15 +1,15 @@
 [
     "PSEUDOCODE.MD",
-    "electron/assets/license.rtf",
     "package-lock.json",
+    "pytest.ini",
     "python_service/db/init.py",
-    "python_service/utils/odds.py",
     "requirements-dev.txt",
     "requirements.txt",
     "web_platform/api_gateway/src/services/DatabaseService.ts",
-    "web_platform/frontend/src/components/RaceCard.tsx",
     "web_service/backend/fortuna_service.py",
     "web_service/backend/tests/test_web_service_manual_override.py",
+    "web_service/backend/utils/odds.py",
     "web_service/frontend/app/Providers.tsx",
+    "web_service/frontend/app/components/RaceCard.tsx",
     "web_service/frontend/app/hooks/useWebSocket.ts"
 ]
