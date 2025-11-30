@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - session/jules1130
     tags:
       - 'v*'
   pull_request:
@@ -422,8 +423,8 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
           New-Item -ItemType Directory -Path $env:SMOKE_LOG_DIR -Force | Out-Null
-          New-Item -ItemType Directory -Path "${{ env.BACKEND_DIR }}/data" -Force | Out-Null
-          New-Item -ItemType Directory -Path "${{ env.BACKEND_DIR }}/json" -Force | Out-Null
+          New-Item -ItemType Directory -Path "data" -Force | Out-Null
+          New-Item -ItemType Directory -Path "json" -Force | Out-Null
           New-NetFirewallRule -DisplayName "FortunaSmokeTest" -Direction Inbound -Action Allow -Protocol TCP -LocalPort ${{ env.SERVICE_PORT }} -ErrorAction SilentlyContinue
 
       - name: Analyze Executable (Safe Check)
