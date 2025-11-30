@@ -513,7 +513,7 @@ jobs:
     name: '🔍 ASGI Import Killer (Pre-Smoke Diagnostic)'
     runs-on: windows-latest
     timeout-minutes: 15
-    needs: build-python-service
+    needs: build-backend
     env:
       PYTHONUTF8: '1'
     steps:
