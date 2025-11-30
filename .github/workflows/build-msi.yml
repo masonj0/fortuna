@@ -482,6 +482,7 @@ jobs:
     needs: build-backend
     env:
       SMOKE_LOG_DIR: 'logs'
+      FORTUNA_ENV: 'smoke-test'
     steps:
       - name: Download Backend Executable
         uses: actions/download-artifact@v4
