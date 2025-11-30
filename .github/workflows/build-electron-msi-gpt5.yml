@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - session/jules1130
   workflow_dispatch:
 
 concurrency:
@@ -335,7 +336,7 @@ jobs:
           # Set code signing to false for CI (unless you have signing certificates)
           $env:CSC_IDENTITY_AUTO_DISCOVERY = 'false'
 
-          npm run build 2>&1
+          npm run build -- --publish never 2>&1
 
           if ($LASTEXITCODE -ne 0) {
             Write-Error "Electron build failed"
@@ -445,7 +446,9 @@ jobs:
     name: '🔬 Smoke Test (Install & Launch)'
     runs-on: windows-latest
     timeout-minutes: 15
-    needs: [build-electron-msi, diagnose-asgi-imports]
+    needs:
+      - build-electron-msi
+      - diagnose-asgi-imports
     steps:
       - name: 📥 Download MSI Installer
         uses: actions/download-artifact@v4
@@ -472,6 +475,14 @@ jobs:
             exit 1
           }
           Write-Host "✅ Application appears to be installed"
+
+      - name: 🏗️ Create Runtime Directories
+        shell: pwsh
+        run: |
+          $installDir = "C:\Program Files\Fortuna Faucet"
+          New-Item -ItemType Directory -Path "$installDir\data" -Force | Out-Null
+          New-Item -ItemType Directory -Path "$installDir\json" -Force | Out-Null
+          Write-Host "✅ Created runtime directories in $installDir"
 
       - name: 🚀 Launch Application & Verify Process
         shell: pwsh
@@ -513,7 +524,7 @@ jobs:
     name: '🔍 ASGI Import Killer (Pre-Smoke Diagnostic)'
     runs-on: windows-latest
     timeout-minutes: 15
-    needs: build-backend
+    needs: build-python-service
     env:
       PYTHONUTF8: '1'
     steps:
