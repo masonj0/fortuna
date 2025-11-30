@@ -5,7 +5,7 @@ on:
   push:
     branches:
       - main
-      - session/jules1130
+      - session/jules1130b
     tags:
       - 'v*'
   pull_request:
@@ -40,9 +40,9 @@ env:
   # === PATH CONFIGURATION ===
   FRONTEND_DIR: 'web_platform/frontend'
   FRONTEND_BUILD_DIR: 'web_platform/frontend/out'
-  BACKEND_DIR: 'python_service'
+  BACKEND_DIR: 'web_service/backend'
   WIX_DIR: 'build_wix'
-  BACKEND_SPEC: 'fortuna-backend-webservice.spec'
+  BACKEND_SPEC: 'webservice.spec'
 
   # === RUNTIME CONFIG ===
   SERVICE_PORT: '8102'
@@ -95,7 +95,6 @@ jobs:
             "${{ env.FRONTEND_DIR }}/package-lock.json",
             "${{ env.BACKEND_DIR }}/requirements.txt",
             "${{ env.BACKEND_DIR }}/main.py",
-            "${{ env.BACKEND_SPEC }}",
             "${{ env.WIX_DIR }}/Product_WithService.wxs"
           )
           foreach ($path in $paths) {
@@ -359,6 +358,77 @@ jobs:
           if (Test-Path "${{ env.BACKEND_DIR }}/requirements-dev.txt") {
             pip install -r "${{ env.BACKEND_DIR }}/requirements-dev.txt"
           }
+
+      - name: Create webservice.spec for PyInstaller
+        run: |
+          $specContent = @"
+          # -*- mode: python ; coding: utf-8 -*-
+          import os
+          from pathlib import Path
+          from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+
+          block_cipher = None
+          project_root = Path(SPECPATH).parent
+          version_string = os.environ.get("FORTUNA_VERSION", "0.0.0")
+
+          # Explicitly include the frontend UI files
+          datas = [
+              (str(project_root / 'staging/ui'), 'ui')
+          ]
+          # Include necessary data files from installed packages
+          datas += collect_data_files("uvicorn")
+          datas += collect_data_files("slowapi")
+          datas += collect_data_files("structlog")
+          datas += collect_data_files("certifi")
+
+          hiddenimports = set()
+          hiddenimports.update(collect_submodules("web_service.backend"))
+          hiddenimports.update([
+              "uvicorn.logging", "uvicorn.loops.auto", "uvicorn.lifespan.on",
+              "uvicorn.protocols.http.h11_impl", "uvicorn.protocols.websockets.wsproto_impl",
+              "fastapi.routing", "starlette.staticfiles", "anyio._backends._asyncio",
+              "httpcore", "httpx", "slowapi", "structlog", "tenacity", "aiosqlite",
+              "pydantic_core", "pydantic_settings.sources", "web_service.backend.main"
+          ])
+
+          a = Analysis(
+              ['web_service/backend/main.py'],
+              pathex=[str(project_root)],
+              binaries=[],
+              datas=datas,
+              hiddenimports=sorted(hiddenimports),
+              hookspath=[],
+              runtime_hooks=[],
+              excludes=['tests', 'pytest', 'python_service'], # CRITICAL: Exclude the other service
+              win_no_prefer_redirects=False,
+              win_private_assemblies=False,
+              cipher=block_cipher,
+              noarchive=False
+          )
+          pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+          exe = EXE(
+              pyz,
+              a.scripts,
+              a.binaries,
+              a.zipfiles,
+              a.datas,
+              [],
+              name='fortuna-backend',
+              debug=False,
+              bootloader_ignore_signals=False,
+              strip=False,
+              upx=True,
+              runtime_tmpdir=None,
+              console=False,
+              disable_windowed_traceback=False,
+              argv_emulation=False,
+              target_arch=None,
+              codesign_identity=None,
+              entitlements_file=None
+          )
+          "@
+          Set-Content -Path "${{ env.BACKEND_SPEC }}" -Value $specContent
+          Write-Host "✅ Custom webservice.spec created."
 
       - name: Create Required Backend Directories
         run: |
