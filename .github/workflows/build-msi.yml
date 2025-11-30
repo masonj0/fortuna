@@ -409,24 +409,22 @@ jobs:
           exe = EXE(
               pyz,
               a.scripts,
+              a.binaries,
+              a.zipfiles,
+              a.datas,
               [],
-              exclude_binaries=True,
               name='fortuna-backend',
               debug=False,
               bootloader_ignore_signals=False,
               strip=False,
               upx=True,
-              console=True
-          )
-          coll = COLLECT(
-              exe,
-              a.binaries,
-              a.zipfiles,
-              a.datas,
-              strip=False,
-              upx=True,
-              upx_exclude=[],
-              name='fortuna-backend'
+              runtime_tmpdir=None,
+              console=False,
+              disable_windowed_traceback=False,
+              argv_emulation=False,
+              target_arch=None,
+              codesign_identity=None,
+              entitlements_file=None
           )
           "@
           Set-Content -Path "${{ env.BACKEND_SPEC }}" -Value $specContent
