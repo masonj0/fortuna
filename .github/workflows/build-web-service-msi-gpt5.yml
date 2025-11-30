@@ -472,7 +472,7 @@ jobs:
 
       - name: Report Cache Status
         run: |
-          if ('${{ steps.cache-backend.outputs.cache-hit }}' == 'true') {
+          if ('${{ steps.cache-backend.outputs.cache-hit }}' -eq 'true') {
             Write-Host "✅ Backend build restored from cache." -ForegroundColor Green
           } else {
             Write-Host "ℹ️ No cache hit. A new build was performed." -ForegroundColor Yellow
