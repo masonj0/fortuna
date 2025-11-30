@@ -27,17 +27,18 @@ fileAssociations:
     name: "Fortuna Project File"
     role: "Editor"
     description: "Opens Fortuna Faucet project payloads"
+icon: icon.ico
 win:
   target:
     - target: "msi"
       arch:
         - x64
-  icon: "assets/icon.ico"
   legalTrademarks: "Fortuna Labs"
   publisherName:
     - "Fortuna Labs LLC"
 msi:
-  icon: null
+  installerIcon: icon.ico
+  uninstallerIcon: icon.ico
   oneClick: false
   perMachine: true
   runAfterFinish: true

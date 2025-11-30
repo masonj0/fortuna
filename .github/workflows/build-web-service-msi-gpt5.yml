@@ -908,6 +908,7 @@ jobs:
     needs: [build-frontend, build-backend, diagnose-asgi-imports]
     env:
       PYTHONUTF8: '1'
+      FORTUNA_ENV: 'smoke-test'
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4

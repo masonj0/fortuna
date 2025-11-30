@@ -368,7 +368,7 @@ jobs:
           from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
           block_cipher = None
-          project_root = Path(SPECPATH).parent
+          project_root = Path(SPECPATH)
           version_string = os.environ.get("FORTUNA_VERSION", "0.0.0")
 
           # Explicitly include the frontend UI files
