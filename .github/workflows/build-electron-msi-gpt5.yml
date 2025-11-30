@@ -329,6 +329,17 @@ jobs:
 
           Write-Host "✓ electron-builder config valid"
 
+      - name: 🩹 Dynamically Patch MSI Icon Config
+        shell: pwsh
+        run: |
+          $configFile = 'electron/electron-builder-config.yml'
+          $config = Get-Content $configFile -Raw
+          # Use a regular expression to add 'icon: null' under the 'msi:' key
+          $updatedConfig = $config -replace '(?m)(^msi:\s*$)', "`$1`n  icon: null"
+          Set-Content -Path $configFile -Value $updatedConfig
+          Write-Host "✅ Patched electron-builder config to disable MSI icon."
+          Get-Content $configFile | Write-Host
+
       - name: 🔨 Build Electron Application
         shell: pwsh
         working-directory: electron
