@@ -513,6 +513,8 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 15
     needs: build-python-service
+    env:
+      PYTHONUTF8: '1'
     steps:
       - name: 📥 Checkout Repository
         uses: actions/checkout@v4

@@ -516,6 +516,8 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 15
     needs: build-backend
+    env:
+      PYTHONUTF8: '1'
     steps:
       - name: 📥 Checkout Repository
         uses: actions/checkout@v4
@@ -829,6 +831,8 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 30
     needs: [build-frontend, build-backend, diagnose-asgi-imports]
+    env:
+      PYTHONUTF8: '1'
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
