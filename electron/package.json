@@ -15,12 +15,5 @@
  },
  "dependencies": {
  "electron-updater": "^6.1.1"
- },
- "build": {
- "publish": [{
- "provider": "github",
- "owner": "masonj0",
- "repo": "fortuna"
- }]
  }
 }
