@@ -353,10 +353,66 @@ jobs:
             exit 1
           }
 
+      - name: '🧐 Forensically Guarantee Icon Paths (YAML Parser Method)'
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "Stop"
+
+          # Install and import the required module for YAML parsing
+          Install-Module -Name powershell-yaml -Force -Scope CurrentUser -ErrorAction Stop
+          Import-Module powershell-yaml
+
+          $configPath = 'electron/electron-builder-config.yml'
+          Write-Host "--- Icon Path Forensics ---"
+          Write-Host "Verifying and correcting icon paths in: $configPath"
+
+          # 1. Verify the icon file physically exists
+          $iconPath = "electron/assets/icon.ico"
+          if (-not (Test-Path -LiteralPath $iconPath)) {
+            Write-Error "CRITICAL: The primary icon file is missing at '$iconPath'."
+            exit 1
+          }
+          $absoluteIconPath = (Resolve-Path -LiteralPath $iconPath).Path
+          Write-Host "✅ Primary icon found at: $absoluteIconPath"
+
+          # 2. Read and parse the YAML configuration
+          $config = Get-Content $configPath | ConvertFrom-Yaml
+
+          # 3. Normalize the icon path for YAML
+          $normalizedIconPath = $absoluteIconPath.Replace('\', '/')
+
+          # 4. Update the icon paths in the configuration object
+          $config.win.icon = $normalizedIconPath
+
+          # The installerIcon and uninstallerIcon properties are not valid for the MSI target.
+          # electron-builder automatically uses the main application icon for the installer.
+          # We remove them here to prevent schema validation errors.
+          if ($config.msi.PSObject.Properties.Name -contains 'installerIcon') {
+            $config.msi.PSObject.Properties.Remove('installerIcon')
+            Write-Host "  -> Removed invalid 'msi.installerIcon' property." -ForegroundColor Yellow
+          }
+          if ($config.msi.PSObject.Properties.Name -contains 'uninstallerIcon') {
+            $config.msi.PSObject.Properties.Remove('uninstallerIcon')
+            Write-Host "  -> Removed invalid 'msi.uninstallerIcon' property." -ForegroundColor Yellow
+          }
+
+          Write-Host "  -> Set win.icon to '$normalizedIconPath'" -ForegroundColor Green
+
+          # 5. Convert back to YAML and write to a NEW temporary config file
+          $tempConfigPath = 'electron/temp-builder-config.yml'
+          $config | ConvertTo-Yaml | Set-Content -Path $tempConfigPath
+          Write-Host "✅ Successfully created temporary config '$tempConfigPath' with corrected icon paths."
+
+          # 6. Display final config for verification
+          Write-Host "\n--- Final Config ---"
+          Get-Content $tempConfigPath | Write-Host
+          Write-Host "--------------------"
+
       - name: 🔍 Verify electron-builder Config
         shell: pwsh
         run: |
-          $configPath = 'electron/electron-builder-config.yml'
+          $configPath = 'electron/temp-builder-config.yml'
 
           if (-not (Test-Path $configPath)) {
             Write-Error "electron-builder config not found: $configPath"
@@ -379,7 +435,7 @@ jobs:
           # Set code signing to false for CI (unless you have signing certificates)
           $env:CSC_IDENTITY_AUTO_DISCOVERY = 'false'
 
-          npm run build -- --publish never 2>&1
+          npm run build -- --config temp-builder-config.yml --publish never 2>&1
 
           if ($LASTEXITCODE -ne 0) {
             Write-Error "Electron build failed"
@@ -394,7 +450,7 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: |
-          npm run dist -- --win msi --publish never 2>&1
+          npm run dist -- --win msi --config temp-builder-config.yml --publish never 2>&1
 
           if ($LASTEXITCODE -ne 0) {
             Write-Error "electron-builder MSI creation failed"
