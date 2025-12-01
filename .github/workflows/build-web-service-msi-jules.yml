@@ -316,6 +316,14 @@ jobs:
             pip install -r (Join-Path $env:BACKEND_DIR "requirements-dev.txt")
           }
 
+      - name: Create Required Backend Directories
+        run: |
+          Set-StrictMode -Version Latest
+          New-Item -ItemType Directory -Path (Join-Path $env:BACKEND_DIR "data") -Force | Out-Null
+          New-Item -ItemType Directory -Path (Join-Path $env:BACKEND_DIR "json") -Force | Out-Null
+          New-Item -ItemType Directory -Path "staging/ui" -Force | Out-Null
+          Write-Host "✅ Created required backend directories for PyInstaller." -ForegroundColor Green
+
       - name: Create Dynamic webservice.spec for PyInstaller
         run: |
           Set-StrictMode -Version Latest
