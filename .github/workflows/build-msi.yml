@@ -606,11 +606,65 @@ jobs:
           }
           Remove-NetFirewallRule -DisplayName "FortunaSmokeTest" -ErrorAction SilentlyContinue
 
+  diagnose-runtime:
+    name: '🔎 Diagnose PyInstaller Runtime'
+    runs-on: windows-latest
+    timeout-minutes: 10
+    needs: build-backend
+    steps:
+      - name: 📥 Download Backend Executable
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-executable-${{ github.run_id }}
+          path: dist
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 📦 Install PyInstaller
+        run: pip install pyinstaller==6.6.0
+
+      - name: 🕵️ Extract and Analyze Executable Contents
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $exePath = "dist/fortuna-backend.exe"
+          $extractDir = "extracted_exe"
+          New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
+
+          Write-Host "--- Executable Analysis ---"
+          Write-Host "Unpacking $exePath with pyi-archive_viewer..."
+          pyi-archive_viewer $exePath --out $extractDir --log-level INFO
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to extract executable."
+            exit 1
+          }
+
+          Write-Host "\n--- Filesystem Forensics ---"
+          Get-ChildItem -Path $extractDir -Recurse | ForEach-Object {
+            $indent = "  " * ($_.FullName.Split('\').Length - 1)
+            Write-Host "$indent- $($_.Name)"
+          }
+
+          $initPyPath = Join-Path $extractDir ('web_service\backend\__init__.py')
+          Write-Host "\n--- Verification ---"
+          Write-Host "Verifying existence of: $initPyPath"
+
+          if (Test-Path $initPyPath) {
+            Write-Host "✅ SUCCESS: Key module file '__init__.py' found inside the executable." -ForegroundColor Green
+          } else {
+            Write-Error "❌ FAILURE: Key module file '__init__.py' NOT found inside the executable. This confirms a bundling error."
+            exit 1
+          }
+
   package-msi-service:
     name: '💿 Package Service MSI'
     runs-on: windows-latest
     timeout-minutes: 25
-    needs: [repo-preflight, smoke-test-service]
+    needs: [repo-preflight, smoke-test-service, diagnose-runtime]
     env:
       WIX_HASH: ${{ needs.repo-preflight.outputs.wix_definition_hash }}
       BUILD_VERSION: ${{ needs.repo-preflight.outputs.semver }}

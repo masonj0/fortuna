@@ -988,11 +988,76 @@ jobs:
           retention-days: 30
           if-no-files-found: warn
 
+  diagnose-runtime:
+    name: '🔎 Diagnose PyInstaller Runtime'
+    runs-on: windows-latest
+    timeout-minutes: 10
+    needs: [path-finder, build-backend]
+    env:
+      BACKEND_MODULE_PATH: ${{ needs.path-finder.outputs.backend_module_path }}
+    steps:
+      - name: 📥 Download Backend Executable
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-executable-${{ github.run_id }}
+          path: dist
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 📦 Install PyInstaller
+        run: pip install pyinstaller==6.6.0
+
+      - name: 🕵️ Extract and Analyze Executable Contents
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $exePath = "dist/fortuna-backend.exe"
+          $extractDir = "extracted_exe"
+          New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
+
+          Write-Host "--- Executable Analysis ---"
+          Write-Host "Unpacking $exePath with pyi-archive_viewer..."
+          pyi-archive_viewer $exePath --out $extractDir --log-level INFO
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to extract executable."
+            exit 1
+          }
+
+          Write-Host "\n--- Filesystem Forensics ---"
+          Get-ChildItem -Path $extractDir -Recurse | ForEach-Object {
+            $indent = "  " * ($_.FullName.Split('\').Length - 1)
+            Write-Host "$indent- $($_.Name)"
+          }
+
+          $initPyPath = Join-Path $extractDir ($env:BACKEND_MODULE_PATH.Replace('.', '\') + '\__init__.py')
+          Write-Host "\n--- Verification ---"
+          Write-Host "Verifying existence of: $initPyPath"
+
+          if (Test-Path $initPyPath) {
+            Write-Host "✅ SUCCESS: Key module file '__init__.py' found inside the executable." -ForegroundColor Green
+            Get-Content $initPyPath | Out-Host
+          } else {
+            Write-Error "❌ FAILURE: Key module file '__init__.py' NOT found inside the executable. This confirms a bundling error."
+            exit 1
+          }
+
+      - name: 📤 Upload Extracted Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: extracted-executable-${{ github.run_id }}
+          path: extracted_exe/
+          retention-days: 7
+
   smoke-test:
     name: '🔬 Smoke Test (Diagnostic Overkill)'
     runs-on: windows-latest
     timeout-minutes: 30
-    needs: [path-finder, build-frontend, build-backend, diagnose-asgi-imports]
+    needs: [path-finder, build-frontend, build-backend, diagnose-asgi-imports, diagnose-runtime]
     env:
       PYTHONUTF8: '1'
       FORTUNA_ENV: 'smoke-test'
