@@ -462,6 +462,12 @@ jobs:
           New-Item -ItemType Directory -Path "${{ env.BACKEND_DIR }}/json" -Force | Out-Null
           Write-Host "✅ Created required backend directories."
 
+      - name: Ensure Python Package Structure
+        run: |
+          Set-Content -Path "web_service/__init__.py" -Value ""
+          Set-Content -Path "web_service/backend/__init__.py" -Value ""
+          Write-Host "✅ Ensured __init__.py files exist for package discovery."
+
       - name: Build with PyInstaller
         env:
           FORTUNA_VERSION: ${{ needs.repo-preflight.outputs.semver }}
@@ -569,7 +575,7 @@ jobs:
       - name: Wait for Health (Polling)
         run: |
           Set-StrictMode -Version Latest
-          $url = "http://localhost:${{ env.SERVICE_PORT }}${{ env.HEALTH_ENDPOINT }}"
+          $url = "http://127.0.0.1:${{ env.SERVICE_PORT }}${{ env.HEALTH_ENDPOINT }}"
           $deadline = (Get-Date).AddMinutes(3)
           $success = $false
           $attempt = 0
@@ -673,7 +679,7 @@ jobs:
           Write-Host "\n--- Verification ---"
           Write-Host "Searching for key module file: '$expectedInitFile' in archive contents..."
 
-          if ($archiveContents | Select-String -Pattern $expectedInitFile -Quiet) {
+          if ($archiveContents | Select-String -Pattern $expectedInitFile -Quiet -SimpleMatch) {
             Write-Host "✅ SUCCESS: Key module file found inside the executable archive." -ForegroundColor Green
           } else {
             Write-Error "❌ FAILURE: Key module file '$expectedInitFile' NOT found inside the executable. This confirms a bundling error."
