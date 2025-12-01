@@ -673,7 +673,7 @@ jobs:
           Write-Host "\n--- Verification ---"
           Write-Host "Searching for key module file: '$expectedInitFile' in archive contents..."
 
-          if ($archiveContents | Select-String -Pattern $expectedInitFile -Quiet) {
+          if ($archiveContents | Select-String -Pattern $expectedInitFile -Quiet -SimpleMatch) {
             Write-Host "✅ SUCCESS: Key module file found inside the executable archive." -ForegroundColor Green
           } else {
             Write-Error "❌ FAILURE: Key module file '$expectedInitFile' NOT found inside the executable. This confirms a bundling error."
