@@ -270,11 +270,56 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
+  verify-assets:
+    name: '🖼️ Verify Critical Build Assets'
+    runs-on: windows-latest
+    timeout-minutes: 5
+    needs: validate-environment
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🧐 Forensic Asset Verification
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $asset_manifest = @(
+            @{ Path = "electron/assets/icon.ico"; Purpose = "Main Application Icon" },
+            @{ Path = "electron/assets/installerIcon.ico"; Purpose = "MSI Installer Icon (Unused)" },
+            @{ Path = "electron/assets/uninstallerIcon.ico"; Purpose = "MSI Uninstaller Icon (Unused)" }
+          )
+
+          Write-Host "--- Asset Verification Forensics ---"
+          $all_assets_found = $true
+
+          foreach ($asset in $asset_manifest) {
+            Write-Host "Checking for: $($asset.Path) ($($asset.Purpose))"
+            if (Test-Path -LiteralPath $asset.Path) {
+              $file_info = Get-Item -LiteralPath $asset.Path
+              $hash = (Get-FileHash -LiteralPath $asset.Path -Algorithm SHA256).Hash
+              Write-Host "  ✅ FOUND: $($file_info.Length) bytes, SHA256: $($hash.Substring(0,12))" -ForegroundColor Green
+            } else {
+              Write-Host "  ❌ MISSING" -ForegroundColor Red
+              $all_assets_found = $false
+            }
+          }
+
+          if (-not $all_assets_found) {
+            Write-Error "CRITICAL: One or more required assets are missing."
+            Write-Host "\n--- Filesystem State ---"
+            Write-Host "Listing contents of 'electron/assets' directory for debugging:"
+            Get-ChildItem -Path "electron/assets" -Recurse | ForEach-Object {
+              Write-Host "  - $($_.FullName.Replace($env:GITHUB_WORKSPACE, ''))"
+            }
+            exit 1
+          }
+
+          Write-Host "\n✅ All critical assets verified." -ForegroundColor Green
   build-electron-msi:
     name: 🚀 Build Electron MSI Package
     runs-on: windows-latest
     timeout-minutes: 30
-    needs: [validate-environment, build-python-service, build-frontend]
+    needs: [validate-environment, build-python-service, build-frontend, verify-assets]
     steps:
       - name: 📥 Checkout Repository
         uses: actions/checkout@v4
@@ -328,18 +373,6 @@ jobs:
           }
 
           Write-Host "✓ electron-builder config valid"
-
-      - name: 🧐 Verify Electron Assets
-        shell: pwsh
-        working-directory: electron
-        run: |
-          $iconPath = "assets/icon.ico"
-          if (-not (Test-Path $iconPath)) {
-            Write-Error "❌ FATAL: Icon file missing at $iconPath"
-            Get-ChildItem -Recurse
-            exit 1
-          }
-          Write-Host "✅ Icon found at: $(Resolve-Path $iconPath)"
 
       - name: 🔨 Build Electron Application
         shell: pwsh

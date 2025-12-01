@@ -10,8 +10,10 @@ on:
       - 'v*'
     paths:
       - 'python_service/**'
+      - 'web_service/backend/**'
       - 'web_platform/frontend/**'
       - 'fortuna-backend-webservice.spec'
+      - 'webservice.spec'
       - '.github/workflows/build-web-service-msi-gpt5.yml'
   workflow_dispatch:
 
@@ -40,9 +42,7 @@ env:
   FORCE_COLOR: '3'
   FRONTEND_DIR: 'web_platform/frontend'
   FRONTEND_BUILD_DIR: 'web_platform/frontend/out'
-  BACKEND_DIR: 'web_service/backend'
   WIX_DIR: 'build_wix'
-  BACKEND_SPEC: 'webservice.spec'
   SERVICE_PORT: '8102'
   HEALTH_ENDPOINT: '/health'
   API_KEY: ${{ secrets.TEST_API_KEY }}
@@ -51,6 +51,71 @@ env:
   WIX_VERSION: '4.0.5'
 
 jobs:
+  path-finder:
+    name: '🔎 Path Finder (Dynamic Backend Detection)'
+    runs-on: windows-latest
+    outputs:
+      backend_dir: ${{ steps.find-path.outputs.backend_dir }}
+      backend_module_path: ${{ steps.find-path.outputs.backend_module_path }}
+      spec_file: ${{ steps.find-path.outputs.spec_file }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Detect Backend Path
+        id: find-path
+        run: |
+          Set-StrictMode -Version Latest
+          $web_service_path = "web_service/backend"
+          $python_service_path = "python_service"
+          $backend_dir = ""
+          $backend_module_path = ""
+          $spec_file = ""
+
+          Write-Host "--- Path Finding Forensics ---"
+          Write-Host "Searching for the correct backend service directory..."
+
+          # Test web_service path
+          $web_service_main = Test-Path (Join-Path $web_service_path "main.py")
+          $web_service_api = Test-Path (Join-Path $web_service_path "api.py")
+          $web_service_init = Test-Path (Join-Path $web_service_path "__init__.py")
+          Write-Host "Checking '$web_service_path':"
+          Write-Host "  main.py -> $web_service_main"
+          Write-Host "  api.py -> $web_service_api"
+          Write-Host "  __init__.py -> $web_service_init"
+
+          # Test python_service path
+          $python_service_main = Test-Path (Join-Path $python_service_path "main.py")
+          $python_service_api = Test-Path (Join-Path $python_service_path "api.py")
+          $python_service_init = Test-Path (Join-Path $python_service_path "__init__.py")
+          Write-Host "Checking '$python_service_path':"
+          Write-Host "  main.py -> $python_service_main"
+          Write-Host "  api.py -> $python_service_api"
+          Write-Host "  __init__.py -> $python_service_init"
+
+          if ($web_service_main -and $web_service_api -and $web_service_init) {
+            $backend_dir = $web_service_path
+            $backend_module_path = "web_service.backend"
+            $spec_file = "webservice.spec"
+            Write-Host "✅ Verdict: Detected 'web_service/backend' as the target." -ForegroundColor Green
+          } elseif ($python_service_main -and $python_service_api -and $python_service_init) {
+            $backend_dir = $python_service_path
+            $backend_module_path = "python_service"
+            $spec_file = "fortuna-backend-webservice.spec"
+            Write-Host "✅ Verdict: Detected 'python_service' as the target." -ForegroundColor Green
+          } else {
+            Write-Host "❌ FATAL: Could not determine a valid backend directory. Neither 'web_service/backend' nor 'python_service' contains the required files (main.py, api.py, __init__.py)." -ForegroundColor Red
+            exit 1
+          }
+
+          Write-Host "--- Outputs ---"
+          Write-Host "backend_dir: $backend_dir"
+          Write-Host "backend_module_path: $backend_module_path"
+          Write-Host "spec_file: $spec_file"
+
+          "backend_dir=$backend_dir" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "backend_module_path=$backend_module_path" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "spec_file=$spec_file" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
   system-check:
     name: '⚙️ System Prerequisites'
     runs-on: windows-latest
@@ -87,7 +152,7 @@ jobs:
   repo-preflight:
     name: '🧪 Repo Preflight & Integrity'
     runs-on: windows-latest
-    needs: system-check
+    needs: [path-finder, system-check]
     timeout-minutes: 5
     outputs:
       frontend_lock_hash: ${{ steps.hashes.outputs.frontend_lock_hash }}
@@ -117,13 +182,15 @@ jobs:
           Write-Host "🔖 Version: $semver ($shortSha)"
 
       - name: Validate Critical Files Exist
+        env:
+          BACKEND_DIR: ${{ needs.path-finder.outputs.backend_dir }}
         run: |
           Set-StrictMode -Version Latest
           $paths = @(
             "${{ env.FRONTEND_DIR }}/package.json",
             "${{ env.FRONTEND_DIR }}/package-lock.json",
-            "${{ env.BACKEND_DIR }}/requirements.txt",
-            "${{ env.BACKEND_DIR }}/main.py",
+            (Join-Path $env:BACKEND_DIR "requirements.txt"),
+            (Join-Path $env:BACKEND_DIR "main.py"),
             "${{ env.WIX_DIR }}/Product_WithService.wxs"
           )
           foreach ($path in $paths) {
@@ -136,10 +203,12 @@ jobs:
 
       - name: Capture Integrity Hashes
         id: hashes
+        env:
+          BACKEND_DIR: ${{ needs.path-finder.outputs.backend_dir }}
         run: |
           Set-StrictMode -Version Latest
           $frontend = (Get-FileHash "${{ env.FRONTEND_DIR }}/package-lock.json" -Algorithm SHA256).Hash
-          $backend = (Get-FileHash "${{ env.BACKEND_DIR }}/requirements.txt" -Algorithm SHA256).Hash
+          $backend = (Get-FileHash (Join-Path $env:BACKEND_DIR "requirements.txt") -Algorithm SHA256).Hash
           $wix = (Get-FileHash "${{ env.WIX_DIR }}/Product_WithService.wxs" -Algorithm SHA256).Hash
           "frontend_lock_hash=$frontend" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "backend_requirements_hash=$backend" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
@@ -219,9 +288,11 @@ jobs:
     name: '🧯 Backend Quality Gates'
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    needs: repo-preflight
+    needs: [path-finder, repo-preflight]
     env:
       BACKEND_REQUIREMENTS_HASH: ${{ needs.repo-preflight.outputs.backend_requirements_hash }}
+      BACKEND_DIR: ${{ needs.path-finder.outputs.backend_dir }}
+      BACKEND_SPEC: ${{ needs.path-finder.outputs.spec_file }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -240,15 +311,15 @@ jobs:
         uses: actions/cache@v4
         with:
           path: dist
-          key: ${{ runner.os }}-backend-build-${{ hashFiles('${{ env.BACKEND_DIR }}/**', '${{ env.BACKEND_SPEC }}') }}
+          key: ${{ runner.os }}-backend-build-${{ hashFiles(format('{0}/**', env.BACKEND_DIR), format('{0}', env.BACKEND_SPEC)) }}
 
       - name: Install Dependencies
         run: |
           Set-StrictMode -Version Latest
           python -m pip install --upgrade pip setuptools wheel
-          pip install -r "${{ env.BACKEND_DIR }}/requirements.txt"
-          if (Test-Path "${{ env.BACKEND_DIR }}/requirements-dev.txt") {
-            pip install -r "${{ env.BACKEND_DIR }}/requirements-dev.txt"
+          pip install -r (Join-Path $env:BACKEND_DIR "requirements.txt")
+          if (Test-Path (Join-Path $env:BACKEND_DIR "requirements-dev.txt")) {
+            pip install -r (Join-Path $env:BACKEND_DIR "requirements-dev.txt")
           } else {
             Write-Host "ℹ️ requirements-dev.txt not found, skipping."
           }
@@ -274,7 +345,7 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
           pip install pip-audit
-          pip-audit -r ${{ env.BACKEND_DIR }}/requirements.txt
+          pip-audit -r (Join-Path $env:BACKEND_DIR "requirements.txt")
 
   sbom:
     name: '📄 SBOM Snapshot'
@@ -302,7 +373,7 @@ jobs:
     name: '📦 Build Frontend'
     runs-on: windows-latest
     timeout-minutes: 20
-    needs: [repo-preflight, frontend-quality]
+    needs: [path-finder, repo-preflight, frontend-quality]
     env:
       FRONTEND_LOCK_HASH: ${{ needs.repo-preflight.outputs.frontend_lock_hash }}
     steps:
@@ -401,10 +472,13 @@ jobs:
     name: '🐍 Build Backend'
     runs-on: windows-latest
     timeout-minutes: 25
-    needs: [repo-preflight, build-frontend, backend-quality]
+    needs: [path-finder, repo-preflight, build-frontend, backend-quality]
     env:
       BACKEND_REQUIREMENTS_HASH: ${{ needs.repo-preflight.outputs.backend_requirements_hash }}
       BUILD_VERSION: ${{ needs.repo-preflight.outputs.semver }}
+      BACKEND_DIR: ${{ needs.path-finder.outputs.backend_dir }}
+      BACKEND_MODULE_PATH: ${{ needs.path-finder.outputs.backend_module_path }}
+      BACKEND_SPEC: ${{ needs.path-finder.outputs.spec_file }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -428,7 +502,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: dist
-          key: ${{ runner.os }}-backend-build-${{ hashFiles('${{ env.BACKEND_DIR }}/**', '${{ env.BACKEND_SPEC }}') }}
+          key: ${{ runner.os }}-backend-build-${{ hashFiles(format('{0}/**', env.BACKEND_DIR), format('{0}', env.BACKEND_SPEC)) }}
           restore-keys: |
             ${{ runner.os }}-backend-build-
 
@@ -445,9 +519,9 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
           python -m pip install --upgrade pip setuptools wheel
-          pip install -r "${{ env.BACKEND_DIR }}/requirements.txt"
-          if (Test-Path "${{ env.BACKEND_DIR }}/requirements-dev.txt") {
-            pip install -r "${{ env.BACKEND_DIR }}/requirements-dev.txt"
+          pip install -r (Join-Path $env:BACKEND_DIR "requirements.txt")
+          if (Test-Path (Join-Path $env:BACKEND_DIR "requirements-dev.txt")) {
+            pip install -r (Join-Path $env:BACKEND_DIR "requirements-dev.txt")
           }
 
       - name: Freeze Dependency Snapshot
@@ -456,11 +530,19 @@ jobs:
           Set-StrictMode -Version Latest
           pip freeze | Out-File backend-freeze.txt -Encoding utf8
 
-      - name: Create webservice.spec for PyInstaller
+      - name: Create Dynamic webservice.spec for PyInstaller
         if: steps.cache-backend.outputs.cache-hit != 'true'
         run: |
+          Set-StrictMode -Version Latest
+          $entry_point = (Join-Path $env:BACKEND_DIR "main.py").Replace('\', '/')
+          $submodules = "collect_submodules('{0}')" -f $env:BACKEND_MODULE_PATH
+          $main_import = "'{0}.main'" -f $env:BACKEND_MODULE_PATH
+
+          $other_service = if ("${{ env.BACKEND_DIR }}" -eq "web_service/backend") { "python_service" } else { "web_service" }
+
           $specContent = @"
           # -*- mode: python ; coding: utf-8 -*-
+          # DYNAMICALLY GENERATED SPEC - DO NOT EDIT MANUALLY
           import os
           from pathlib import Path
           from PyInstaller.utils.hooks import collect_data_files, collect_submodules
@@ -480,24 +562,24 @@ jobs:
           datas += collect_data_files("certifi")
 
           hiddenimports = set()
-          hiddenimports.update(collect_submodules("web_service.backend"))
+          hiddenimports.update($submodules)
           hiddenimports.update([
               "uvicorn.logging", "uvicorn.loops.auto", "uvicorn.lifespan.on",
               "uvicorn.protocols.http.h11_impl", "uvicorn.protocols.websockets.wsproto_impl",
               "fastapi.routing", "starlette.staticfiles", "anyio._backends._asyncio",
               "httpcore", "httpx", "slowapi", "structlog", "tenacity", "aiosqlite",
-              "pydantic_core", "pydantic_settings.sources", "web_service.backend.main"
+              "pydantic_core", "pydantic_settings.sources", $main_import
           ])
 
           a = Analysis(
-              ['web_service/backend/main.py'],
+              ['$entry_point'],
               pathex=[str(project_root)],
               binaries=[],
               datas=datas,
               hiddenimports=sorted(hiddenimports),
               hookspath=[],
               runtime_hooks=[],
-              excludes=['tests', 'pytest', 'python_service'], # CRITICAL: Exclude the other service
+              excludes=['tests', 'pytest', '$other_service'], # CRITICAL: Exclude the other service
               win_no_prefer_redirects=False,
               win_private_assemblies=False,
               cipher=block_cipher,
@@ -526,14 +608,14 @@ jobs:
           )
           "@
           Set-Content -Path "${{ env.BACKEND_SPEC }}" -Value $specContent
-          Write-Host "✅ Custom webservice.spec created."
+          Write-Host "✅ Dynamically generated '${{ env.BACKEND_SPEC }}' created."
 
       - name: Create Required Backend Directories
         if: steps.cache-backend.outputs.cache-hit != 'true'
         run: |
           Set-StrictMode -Version Latest
-          New-Item -ItemType Directory -Path "web_service/backend/data" -Force | Out-Null
-          New-Item -ItemType Directory -Path "web_service/backend/json" -Force | Out-Null
+          New-Item -ItemType Directory -Path (Join-Path $env:BACKEND_DIR "data") -Force | Out-Null
+          New-Item -ItemType Directory -Path (Join-Path $env:BACKEND_DIR "json") -Force | Out-Null
           Write-Host "✅ Created required backend directories for PyInstaller." -ForegroundColor Green
 
       - name: Build with PyInstaller
@@ -589,9 +671,10 @@ jobs:
     name: '🔍 ASGI Import Killer (Pre-Smoke Diagnostic)'
     runs-on: windows-latest
     timeout-minutes: 15
-    needs: build-backend
+    needs: [path-finder, build-backend]
     env:
       PYTHONUTF8: '1'
+      BACKEND_DIR: ${{ needs.path-finder.outputs.backend_dir }}
     steps:
       - name: 📥 Checkout Repository
         uses: actions/checkout@v4
@@ -617,11 +700,11 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel --quiet
 
           Write-Host "Installing requirements.txt..." -ForegroundColor Cyan
-          pip install -r "${{ env.BACKEND_DIR }}/requirements.txt" -v 2>&1 | Tee-Object "install-requirements.log"
+          pip install -r (Join-Path $env:BACKEND_DIR "requirements.txt") -v 2>&1 | Tee-Object "install-requirements.log"
 
-          if (Test-Path "${{ env.BACKEND_DIR }}/requirements-dev.txt") {
+          if (Test-Path (Join-Path $env:BACKEND_DIR "requirements-dev.txt")) {
             Write-Host "Installing requirements-dev.txt..." -ForegroundColor Cyan
-            pip install -r "${{ env.BACKEND_DIR }}/requirements-dev.txt" -v 2>&1 | Tee-Object -Append "install-requirements.log"
+            pip install -r (Join-Path $env:BACKEND_DIR "requirements-dev.txt") -v 2>&1 | Tee-Object -Append "install-requirements.log"
           }
 
           if ($LASTEXITCODE -ne 0) {
@@ -808,34 +891,38 @@ jobs:
           python diag_script.py
 
       - name: 🧪 PHASE 7 CRITICAL - Application Module Imports
+        env:
+          BACKEND_MODULE_PATH: ${{ needs.path-finder.outputs.backend_module_path }}
         run: |
           $script = @(
             'import sys',
             'import traceback',
+            'import importlib',
             'from pathlib import Path',
             'print("\n" + "="*80)',
             'print("PHASE 7 APPLICATION MODULE IMPORTS (CRITICAL)")',
             'print("="*80)',
-            'backend_module = "${{ env.BACKEND_DIR }}".replace("/", ".")'
-            'print(f"\n[Step 1] Importing {backend_module}...")',
+            'backend_module_path = "${{ env.BACKEND_MODULE_PATH }}"',
+            'print(f"\n[Step 1] Dynamically importing module: {backend_module_path}")',
             'try:',
-            '    __import__(backend_module)',
-            '    print(f"✅ {backend_module} imported")',
+            '    backend_module = importlib.import_module(backend_module_path)',
+            '    print(f"✅ {backend_module_path} imported successfully")',
             'except Exception as e:',
-            '    print(f"❌ FATAL: {backend_module} import failed")',
+            '    print(f"❌ FATAL: {backend_module_path} import failed")',
             '    print(f"   Error: {type(e).__name__}: {e}")',
             '    traceback.print_exc()',
             '    sys.exit(1)',
-            'print(''\\n[Step 2] Retrieving "app" object from api...'')',
-            'api_module = f"{backend_module}.api"',
+            'print(''\\n[Step 2] Retrieving "app" object from the API submodule...'')',
+            'api_module_path = f"{backend_module_path}.api"',
             'try:',
-            '    from web_service.backend.api import app',
-            '    print(f"✅ app object retrieved from {api_module}")',
+            '    api_module = importlib.import_module(api_module_path)',
+            '    app = getattr(api_module, "app")',
+            '    print(f"✅ app object retrieved from {api_module_path}")',
             '    print(f"   Type: {type(app)}")',
             '    print(f"   Class: {app.__class__.__name__}")',
             '    print(f"   Module: {app.__class__.__module__}")',
-            'except Exception as e:',
-            '    print(f"❌ FATAL: Could not get app object")',
+            'except (ImportError, AttributeError) as e:',
+            '    print(f"❌ FATAL: Could not get app object from {api_module_path}")',
             '    print(f"   Error: {type(e).__name__}: {e}")',
             '    traceback.print_exc()',
             '    sys.exit(1)',
@@ -905,10 +992,11 @@ jobs:
     name: '🔬 Smoke Test (Diagnostic Overkill)'
     runs-on: windows-latest
     timeout-minutes: 30
-    needs: [build-frontend, build-backend, diagnose-asgi-imports]
+    needs: [path-finder, build-frontend, build-backend, diagnose-asgi-imports]
     env:
       PYTHONUTF8: '1'
       FORTUNA_ENV: 'smoke-test'
+      BACKEND_DIR: ${{ needs.path-finder.outputs.backend_dir }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -1029,9 +1117,9 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
           python -m pip install --upgrade pip
-          pip install -r "${{ env.BACKEND_DIR }}/requirements.txt"
-          if (Test-Path "${{ env.BACKEND_DIR }}/requirements-dev.txt") {
-            pip install -r "${{ env.BACKEND_DIR }}/requirements-dev.txt"
+          pip install -r (Join-Path $env:BACKEND_DIR "requirements.txt")
+          if (Test-Path (Join-Path $env:BACKEND_DIR "requirements-dev.txt")) {
+            pip install -r (Join-Path $env:BACKEND_DIR "requirements-dev.txt")
           }
 
       - name: 🐍 Set PYTHONPATH for Pre-Launch Check
@@ -1040,12 +1128,14 @@ jobs:
           Write-Host "PYTHONPATH set to ${{ github.workspace }}"
 
       - name: 🐍 Test PyInstaller Python Environment (Mimic Executable)
+        env:
+          BACKEND_MODULE_PATH: ${{ needs.path-finder.outputs.backend_module_path }}
         run: |
           Set-StrictMode -Version Latest
 
           # Create a test script that mimics what the executable should do
           $testScript = @(
-            'import sys, os, traceback',
+            'import sys, os, traceback, importlib',
             'print("=" * 80)',
             'print("PRE-LAUNCH PYTHON ENVIRONMENT CHECK")',
             'print("=" * 80)',
@@ -1073,7 +1163,7 @@ jobs:
             '        failed.append((mod, str(e)))',
             '    except Exception as e:',
             '        print(f"   ⚠️  {mod}: {type(e).__name__}: {e}")',
-            'backend_module_path = "${{ env.BACKEND_DIR }}".replace("/", ".")'
+            'backend_module_path = "${{ env.BACKEND_MODULE_PATH }}"',
             'print(f"\n4. APPLICATION MODULES ({backend_module_path}):")',
             "app_modules = [",
             "    backend_module_path,",
@@ -1082,7 +1172,7 @@ jobs:
             "]",
             'for mod in app_modules:',
             '    try:',
-            '        __import__(mod)',
+            '        importlib.import_module(mod)',
             '        print(f"   ✅ {mod}")',
             '    except ImportError as e:',
             '        print(f"   ❌ {mod}: {e}")',
@@ -1093,14 +1183,15 @@ jobs:
             '        traceback.print_exc()',
             'print("\n5. ASGI APP INSTANTIATION:")',
             'try:',
-            "    from web_service.backend.api import app",
-            '    print(f"   ✅ Successfully imported app from api")',
+            '    api_module = importlib.import_module(f"{backend_module_path}.api")',
+            '    app = getattr(api_module, "app")',
+            '    print(f"   ✅ Successfully imported app from {backend_module_path}.api")',
             '    print(f"   App type: {type(app)}")',
             '    print(f"   App class: {app.__class__.__name__}")',
-            'except ImportError as e:',
+            'except (ImportError, AttributeError) as e:',
             '    print(f"   ❌ Failed to import app: {e}")',
             '    traceback.print_exc()',
-            '    failed.append(("main.app", str(e)))',
+            '    failed.append(("app_import", str(e)))',
             'except Exception as e:',
             '    print(f"   ⚠️  {type(e).__name__}: {e}")',
             '    traceback.print_exc()',
@@ -1528,7 +1619,7 @@ jobs:
     name: '💿 Package Service MSI'
     runs-on: windows-latest
     timeout-minutes: 25
-    needs: [repo-preflight, smoke-test]
+    needs: [path-finder, repo-preflight, smoke-test]
     env:
       WIX_HASH: ${{ needs.repo-preflight.outputs.wix_definition_hash }}
       BUILD_VERSION: ${{ needs.repo-preflight.outputs.semver }}

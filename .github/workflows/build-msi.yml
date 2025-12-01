@@ -538,6 +538,8 @@ jobs:
             -RedirectStandardError "$env:SMOKE_LOG_DIR/backend-err.txt"
           $proc.Id | Out-File backend.pid -Encoding ascii
           Write-Host "✅ Service started (PID: $($proc.Id))"
+          Write-Host "Pausing for 10 seconds to allow service initialization..."
+          Start-Sleep -Seconds 10
 
       - name: Wait for Health (Polling)
         run: |
