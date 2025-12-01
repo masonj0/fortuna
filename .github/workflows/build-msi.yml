@@ -315,11 +315,36 @@ jobs:
           path: ${{ env.FRONTEND_BUILD_DIR }}
           retention-days: 1
 
+  pre-build-forensics:
+    name: '🌳 Pre-Build Forensic File Tree'
+    runs-on: windows-latest
+    timeout-minutes: 5
+    needs: [repo-preflight, build-frontend]
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      - name: Download Frontend Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build-${{ github.run_id }}
+          path: web_platform/frontend/out
+      - name: 📜 Log Full File Tree
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          Write-Host "--- Complete Workspace File Tree ---"
+          Get-ChildItem -Recurse | ForEach-Object {
+            # Format the output to be more readable
+            $depth = $_.FullName.Split('\').Count - $env:GITHUB_WORKSPACE.Split('\').Count
+            $indent = "  " * $depth
+            Write-Host "$indent- $($_.Name)"
+          }
+
   build-backend:
     name: '🐍 Build Backend'
     runs-on: windows-latest
     timeout-minutes: 25
-    needs: [repo-preflight, build-frontend]
+    needs: [repo-preflight, build-frontend, pre-build-forensics]
     env:
       BACKEND_REQUIREMENTS_HASH: ${{ needs.repo-preflight.outputs.backend_requirements_hash }}
       BUILD_VERSION: ${{ needs.repo-preflight.outputs.semver }}
@@ -538,6 +563,8 @@ jobs:
             -RedirectStandardError "$env:SMOKE_LOG_DIR/backend-err.txt"
           $proc.Id | Out-File backend.pid -Encoding ascii
           Write-Host "✅ Service started (PID: $($proc.Id))"
+          Write-Host "Pausing for 10 seconds to allow service initialization..."
+          Start-Sleep -Seconds 10
 
       - name: Wait for Health (Polling)
         run: |
@@ -604,11 +631,60 @@ jobs:
           }
           Remove-NetFirewallRule -DisplayName "FortunaSmokeTest" -ErrorAction SilentlyContinue
 
+  diagnose-runtime:
+    name: '🔎 Diagnose PyInstaller Runtime'
+    runs-on: windows-latest
+    timeout-minutes: 10
+    needs: build-backend
+    steps:
+      - name: 📥 Download Backend Executable
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-executable-${{ github.run_id }}
+          path: dist
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 📦 Install PyInstaller
+        run: pip install pyinstaller==6.6.0
+
+      - name: 🕵️ Extract and Analyze Executable Contents
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $exePath = "dist/fortuna-backend.exe"
+
+          Write-Host "--- Executable Analysis ---"
+          Write-Host "Analyzing contents of $exePath with pyi-archive_viewer..."
+
+          $archiveContents = pyi-archive_viewer $exePath
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to analyze executable with pyi-archive_viewer."
+            exit 1
+          }
+
+          Write-Host "\n--- Archive Contents ---"
+          $archiveContents | Out-Host
+
+          $expectedInitFile = 'web_service\backend\__init__.py'
+          Write-Host "\n--- Verification ---"
+          Write-Host "Searching for key module file: '$expectedInitFile' in archive contents..."
+
+          if ($archiveContents | Select-String -Pattern $expectedInitFile -Quiet) {
+            Write-Host "✅ SUCCESS: Key module file found inside the executable archive." -ForegroundColor Green
+          } else {
+            Write-Error "❌ FAILURE: Key module file '$expectedInitFile' NOT found inside the executable. This confirms a bundling error."
+            exit 1
+          }
+
   package-msi-service:
     name: '💿 Package Service MSI'
     runs-on: windows-latest
     timeout-minutes: 25
-    needs: [repo-preflight, smoke-test-service]
+    needs: [repo-preflight, smoke-test-service, diagnose-runtime]
     env:
       WIX_HASH: ${{ needs.repo-preflight.outputs.wix_definition_hash }}
       BUILD_VERSION: ${{ needs.repo-preflight.outputs.semver }}
