@@ -330,6 +330,7 @@ jobs:
           $entry_point = (Join-Path $env:BACKEND_DIR "main.py").Replace('\', '/')
           $submodules = "collect_submodules('{0}')" -f $env:BACKEND_MODULE_PATH
           $main_import = "'{0}.main'" -f $env:BACKEND_MODULE_PATH
+          $staging_ui_path = (Resolve-Path "staging/ui").Path.Replace('\', '/')
           $other_service = if ("${{ env.BACKEND_DIR }}" -eq "web_service/backend") { "python_service" } else { "web_service" }
 
           $specContent = @"
@@ -343,7 +344,7 @@ jobs:
           version_string = os.environ.get("FORTUNA_VERSION", "0.0.0")
 
           datas = [
-              (str(project_root / 'staging/ui'), 'ui')
+              ('$staging_ui_path', 'ui')
           ]
           datas += collect_data_files("uvicorn")
           datas += collect_data_files("slowapi")
