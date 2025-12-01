@@ -284,9 +284,7 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
           $asset_manifest = @(
-            @{ Path = "electron/assets/icon.ico"; Purpose = "Main Application Icon" },
-            @{ Path = "electron/assets/installerIcon.ico"; Purpose = "MSI Installer Icon (Unused)" },
-            @{ Path = "electron/assets/uninstallerIcon.ico"; Purpose = "MSI Uninstaller Icon (Unused)" }
+            @{ Path = "electron/assets/icon.ico"; Purpose = "Main Application & MSI Icon" }
           )
 
           Write-Host "--- Asset Verification Forensics ---"

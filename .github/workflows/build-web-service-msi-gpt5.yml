@@ -1015,33 +1015,27 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
           $exePath = "dist/fortuna-backend.exe"
-          $extractDir = "extracted_exe"
-          New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
 
           Write-Host "--- Executable Analysis ---"
-          Write-Host "Unpacking $exePath with pyi-archive_viewer..."
-          pyi-archive_viewer $exePath --out $extractDir --log-level INFO
+          Write-Host "Analyzing contents of $exePath with pyi-archive_viewer..."
 
+          $archiveContents = pyi-archive_viewer $exePath
           if ($LASTEXITCODE -ne 0) {
-            Write-Error "Failed to extract executable."
+            Write-Error "Failed to analyze executable with pyi-archive_viewer."
             exit 1
           }
 
-          Write-Host "\n--- Filesystem Forensics ---"
-          Get-ChildItem -Path $extractDir -Recurse | ForEach-Object {
-            $indent = "  " * ($_.FullName.Split('\').Length - 1)
-            Write-Host "$indent- $($_.Name)"
-          }
+          Write-Host "\n--- Archive Contents ---"
+          $archiveContents | Out-Host
 
-          $initPyPath = Join-Path $extractDir ($env:BACKEND_MODULE_PATH.Replace('.', '\') + '\__init__.py')
+          $expectedInitFile = ($env:BACKEND_MODULE_PATH.Replace('.', '\') + '\__init__.py')
           Write-Host "\n--- Verification ---"
-          Write-Host "Verifying existence of: $initPyPath"
+          Write-Host "Searching for key module file: '$expectedInitFile' in archive contents..."
 
-          if (Test-Path $initPyPath) {
-            Write-Host "✅ SUCCESS: Key module file '__init__.py' found inside the executable." -ForegroundColor Green
-            Get-Content $initPyPath | Out-Host
+          if ($archiveContents | Select-String -Pattern $expectedInitFile -Quiet) {
+            Write-Host "✅ SUCCESS: Key module file found inside the executable archive." -ForegroundColor Green
           } else {
-            Write-Error "❌ FAILURE: Key module file '__init__.py' NOT found inside the executable. This confirms a bundling error."
+            Write-Error "❌ FAILURE: Key module file '$expectedInitFile' NOT found inside the executable. This confirms a bundling error."
             exit 1
           }
 
