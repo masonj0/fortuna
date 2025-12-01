@@ -462,6 +462,12 @@ jobs:
           New-Item -ItemType Directory -Path "${{ env.BACKEND_DIR }}/json" -Force | Out-Null
           Write-Host "✅ Created required backend directories."
 
+      - name: Ensure Python Package Structure
+        run: |
+          Set-Content -Path "web_service/__init__.py" -Value ""
+          Set-Content -Path "web_service/backend/__init__.py" -Value ""
+          Write-Host "✅ Ensured __init__.py files exist for package discovery."
+
       - name: Build with PyInstaller
         env:
           FORTUNA_VERSION: ${{ needs.repo-preflight.outputs.semver }}
