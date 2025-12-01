@@ -489,14 +489,6 @@ jobs:
           name: frontend-build-${{ github.run_id }}
           path: temp-frontend
 
-      - name: Stage Frontend for PyInstaller
-        run: |
-          Set-StrictMode -Version Latest
-          $dest = "staging/ui"
-          New-Item -ItemType Directory -Path $dest -Force | Out-Null
-          Copy-Item -Path "temp-frontend/*" -Destination $dest -Recurse -Force
-          Write-Host "✅ Frontend staged for inclusion."
-
       - name: Cache Backend Build
         id: cache-backend
         uses: actions/cache@v4
@@ -505,6 +497,14 @@ jobs:
           key: ${{ runner.os }}-backend-build-${{ hashFiles(format('{0}/**', env.BACKEND_DIR), format('{0}', env.BACKEND_SPEC)) }}
           restore-keys: |
             ${{ runner.os }}-backend-build-
+
+      - name: Stage Frontend for PyInstaller
+        run: |
+          Set-StrictMode -Version Latest
+          $dest = "staging/ui"
+          New-Item -ItemType Directory -Path $dest -Force | Out-Null
+          Copy-Item -Path "temp-frontend/*" -Destination $dest -Recurse -Force
+          Write-Host "✅ Frontend staged for inclusion."
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -537,7 +537,7 @@ jobs:
           $entry_point = (Join-Path $env:BACKEND_DIR "main.py").Replace('\', '/')
           $submodules = "collect_submodules('{0}')" -f $env:BACKEND_MODULE_PATH
           $main_import = "'{0}.main'" -f $env:BACKEND_MODULE_PATH
-
+          $staging_ui_path = (Resolve-Path "staging/ui").Path.Replace('\', '/')
           $other_service = if ("${{ env.BACKEND_DIR }}" -eq "web_service/backend") { "python_service" } else { "web_service" }
 
           $specContent = @"
@@ -553,7 +553,7 @@ jobs:
 
           # Explicitly include the frontend UI files
           datas = [
-              (str(project_root / 'staging/ui'), 'ui')
+              ('$staging_ui_path', 'ui')
           ]
           # Include necessary data files from installed packages
           datas += collect_data_files("uvicorn")
@@ -1725,7 +1725,7 @@ jobs:
             '  <PropertyGroup>'
             '    <OutputName>${{ steps.stage.outputs.msi_name }}</OutputName>'
             '    <OutputType>Package</OutputType>'
-            '    <DefineConstants>SourceDir=staging</DefineConstants>'
+            '    <DefineConstants>SourceDir=staging;Version=${{ env.BUILD_VERSION }}</DefineConstants>'
             '    <Platforms>x64</Platforms>'
             '    <Version>${{ env.BUILD_VERSION }}</Version>'
             '  </PropertyGroup>'
