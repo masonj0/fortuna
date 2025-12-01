@@ -384,12 +384,20 @@ jobs:
 
           # 4. Update the icon paths in the configuration object
           $config.win.icon = $normalizedIconPath
-          $config.msi.installerIcon = $normalizedIconPath
-          $config.msi.uninstallerIcon = $normalizedIconPath
+
+          # The installerIcon and uninstallerIcon properties are not valid for the MSI target.
+          # electron-builder automatically uses the main application icon for the installer.
+          # We remove them here to prevent schema validation errors.
+          if ($config.msi.PSObject.Properties.Name -contains 'installerIcon') {
+            $config.msi.PSObject.Properties.Remove('installerIcon')
+            Write-Host "  -> Removed invalid 'msi.installerIcon' property." -ForegroundColor Yellow
+          }
+          if ($config.msi.PSObject.Properties.Name -contains 'uninstallerIcon') {
+            $config.msi.PSObject.Properties.Remove('uninstallerIcon')
+            Write-Host "  -> Removed invalid 'msi.uninstallerIcon' property." -ForegroundColor Yellow
+          }
 
           Write-Host "  -> Set win.icon to '$normalizedIconPath'" -ForegroundColor Green
-          Write-Host "  -> Set msi.installerIcon to '$normalizedIconPath'" -ForegroundColor Green
-          Write-Host "  -> Set msi.uninstallerIcon to '$normalizedIconPath'" -ForegroundColor Green
 
           # 5. Convert back to YAML and write to a NEW temporary config file
           $tempConfigPath = 'electron/temp-builder-config.yml'
