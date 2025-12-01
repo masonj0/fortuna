@@ -15,7 +15,41 @@ from python_service.api import app, HTTPException
 # It is designed to be compiled with PyInstaller.
 
 
+def _configure_sys_path():
+    """
+    Dynamically adds project paths to sys.path.
+    This is the robust solution to ensure that string-based imports like
+    "web_service.backend.api:app" work correctly when the application is
+    run from a PyInstaller executable. The `_MEIPASS` attribute is a temporary
+    directory created by PyInstaller at runtime.
+    """
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        # Running in a PyInstaller bundle. The project root is the _MEIPASS directory.
+        project_root = os.path.abspath(sys._MEIPASS)
+
+        # Aggressively add paths to resolve potential module lookup issues in frozen mode.
+        paths_to_add = [
+            project_root,
+            os.path.join(project_root, "python_service"),
+        ]
+
+        # Insert paths at the beginning of sys.path in reverse order
+        # to maintain the desired precedence.
+        for path in reversed(paths_to_add):
+            if path not in sys.path:
+                sys.path.insert(0, path)
+                print(f"INFO: Added path to sys.path: {path}")
+
+    else:
+        # Running as a normal script. The project root is one level up.
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        if project_root not in sys.path:
+            sys.path.insert(0, project_root)
+            print(f"INFO: Added project root to sys.path: {project_root}")
+
+
 def main():
+    _configure_sys_path()
     """
     Primary entry point for the Fortuna Faucet backend application.
     This function configures and runs the Uvicorn server.
