@@ -534,7 +534,7 @@ jobs:
         if: steps.cache-backend.outputs.cache-hit != 'true'
         run: |
           Set-StrictMode -Version Latest
-          $entry_point = Join-Path $env:BACKEND_DIR "main.py"
+          $entry_point = (Join-Path $env:BACKEND_DIR "main.py").Replace('\', '/')
           $submodules = "collect_submodules('{0}')" -f $env:BACKEND_MODULE_PATH
           $main_import = "'{0}.main'" -f $env:BACKEND_MODULE_PATH
 
