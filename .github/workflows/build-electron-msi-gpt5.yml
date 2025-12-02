@@ -104,6 +104,22 @@ jobs:
             ForEach-Object { "{0} {1}" -f $_.FullName, $_.Length } |
             Out-File "debug-artifacts/file-manifest.txt"
 
+      - name: Derive Build Metadata
+        id: meta
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ref = "${{ github.ref }}"
+          if ($ref -like 'refs/tags/v*') {
+            $semver = $ref -replace 'refs/tags/v', ''
+          } else {
+            $semver = "0.0.${{ github.run_number }}"
+          }
+          $shortSha = "${{ github.sha }}".Substring(0,7)
+          "semver=$semver" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "short_sha=$shortSha" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Write-Host "🔖 Version: $semver ($shortSha)"
+
       - name: 📤 Upload Validation Artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -387,14 +403,18 @@ jobs:
 
           # The installerIcon and uninstallerIcon properties are not valid for the MSI target.
           # electron-builder automatically uses the main application icon for the installer.
-          # We remove them here to prevent schema validation errors.
-          if ($config.msi.PSObject.Properties.Name -contains 'installerIcon') {
+          # We unconditionally remove them here to prevent schema validation errors, catching the error if they don't exist.
+          try {
             $config.msi.PSObject.Properties.Remove('installerIcon')
-            Write-Host "  -> Removed invalid 'msi.installerIcon' property." -ForegroundColor Yellow
+            Write-Host "  -> Removed 'msi.installerIcon' property." -ForegroundColor Yellow
+          } catch {
+            Write-Host "  -> 'msi.installerIcon' property did not exist, no action needed."
           }
-          if ($config.msi.PSObject.Properties.Name -contains 'uninstallerIcon') {
+          try {
             $config.msi.PSObject.Properties.Remove('uninstallerIcon')
-            Write-Host "  -> Removed invalid 'msi.uninstallerIcon' property." -ForegroundColor Yellow
+            Write-Host "  -> Removed 'msi.uninstallerIcon' property." -ForegroundColor Yellow
+          } catch {
+            Write-Host "  -> 'msi.uninstallerIcon' property did not exist, no action needed."
           }
 
           Write-Host "  -> Set win.icon to '$normalizedIconPath'" -ForegroundColor Green
@@ -450,7 +470,10 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: |
-          npm run dist -- --win msi --config temp-builder-config.yml --publish never 2>&1
+          $semver = "${{ needs.validate-environment.outputs.semver }}"
+          $shortSha = "${{ needs.validate-environment.outputs.short_sha }}"
+          $artifactName = "Fortuna-Electron-${semver}-${shortSha}.msi"
+          npm run dist -- --win msi --config temp-builder-config.yml --publish never -c.artifactName=$artifactName 2>&1
 
           if ($LASTEXITCODE -ne 0) {
             Write-Error "electron-builder MSI creation failed"

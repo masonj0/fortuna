@@ -28,7 +28,5 @@ msi:
   perMachine: true
   runAfterFinish: true
   # Explicitly pointing to the file ensures WiX picks it up
-  installerIcon: "assets/icon.ico"
-  uninstallerIcon: "assets/icon.ico"
   shortcutName: "Fortuna Faucet"
   warningsAsErrors: false
