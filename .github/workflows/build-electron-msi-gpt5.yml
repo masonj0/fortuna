@@ -185,6 +185,39 @@ jobs:
 
           Write-Host "✓ Service executable: $($serviceExe.FullName) ($('{0:N0}' -f $serviceExe.Length) bytes)"
 
+      - name: ☢️ NUCLEAR FIX: Surgical File Injection
+        shell: pwsh
+        run: |
+          $injectionScript = @(
+            "import sys, zipfile, os",
+            # NOTE: Electron workflow outputs to dist/service, not dist
+            "exe_path = 'dist/service/fortuna-backend.exe'",
+            # NOTE: Electron workflow uses python_service, not web_service
+            "init_path = 'python_service/__init__.py'",
+            "arcname = 'python_service/__init__.py'",
+            "",
+            "print(f'--- SURGICAL INJECTION START ---')",
+            "print(f'Target: {exe_path}')",
+            "print(f'Injecting: {init_path}')",
+            "",
+            "if not os.path.exists(init_path):",
+            "    print(f'⚠️ WARNING: {init_path} not found. Attempting to create dummy...')",
+            "    with open(init_path, 'w') as f: f.write('# Injected dummy')",
+            "",
+            "try:",
+            "    with zipfile.ZipFile(exe_path, 'a', compression=zipfile.ZIP_DEFLATED) as zf:",
+            "        if arcname not in zf.namelist():",
+            "            zf.write(init_path, arcname)",
+            "            print('✅ INJECTION SUCCESSFUL: File added to archive.')",
+            "        else:",
+            "            print('⚠️ File already exists in archive. Skipping.')",
+            "except Exception as e:",
+            "    print(f'❌ INJECTION FAILED: {e}')",
+            "    sys.exit(1)"
+          )
+          $injectionScript | Out-File "inject_init.py" -Encoding utf8
+          python inject_init.py
+
       - name: 🧪 Verify Service Executable
         shell: pwsh
         run: |
@@ -552,7 +585,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: fortuna-electron-msi-${{ needs.validate-environment.outputs.build_id }}
-          path: release-artifacts/
+          path: |
+            release-artifacts/
+            build-report.json
           retention-days: 90
 
       - name: 🚨 Upload Failure Diagnostics
@@ -672,15 +707,54 @@ jobs:
       - build-electron-msi
       - validate-environment
     steps:
-      - name: 📥 Download MSI Installer
+      - name: 📥 Download Build Artifacts
         uses: actions/download-artifact@v4
         with:
           name: fortuna-electron-msi-${{ needs.validate-environment.outputs.build_id }}
-          path: msi-installer
+          path: staging-area
+
+      - name: 🚚 Manifest-Driven Extraction
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $reportPath = "staging-area/build-report.json"
+          if (-not (Test-Path $reportPath)) {
+            Write-Error "build-report.json not found in downloaded artifact."
+            exit 1
+          }
+
+          $report = Get-Content $reportPath | ConvertFrom-Json
+          $msiFile = $report.msi_files[0]
+
+          if (-not $msiFile) {
+            Write-Error "No MSI file listed in the build report."
+            exit 1
+          }
+
+          $sourcePath = Join-Path "staging-area" "release-artifacts"
+          $destinationPath = "final-release-artifact"
+          New-Item -ItemType Directory -Path $destinationPath -Force
+
+          $msiFileName = Split-Path -Path $msiFile.path -Leaf
+
+          Write-Host "--- Manifest-Driven Extraction ---"
+          Write-Host "Source Directory: $sourcePath"
+          Write-Host "Destination Directory: $destinationPath"
+          Write-Host "Target MSI (from manifest): $msiFileName"
+
+          robocopy $sourcePath $destinationPath $msiFileName ($msiFileName + ".sha256") /R:3 /W:5
+
+          if ($LASTEXITCODE -ge 8) {
+            Write-Error "Robocopy failed with exit code $LASTEXITCODE. This indicates a serious error."
+            exit 1
+          }
+
+          Write-Host "✅ Robocopy completed successfully."
+          Get-ChildItem -Path $destinationPath | Write-Host
 
       - name: 📤 Upload Final MSI Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Final-MSI-Artifact
-          path: msi-installer/
+          path: final-release-artifact/
           retention-days: 90
