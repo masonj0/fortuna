@@ -130,131 +130,121 @@ jobs:
           $staging_ui_path = (Resolve-Path "web_platform/frontend/out").Path.Replace('\', '/')
           $other_service = if ("$env:BACKEND_DIR" -eq "web_service/backend") { "python_service" } else { "web_service" }
 
-          # Forcefully create non-empty __init__.py files
-          $init_path = (Join-Path $env:BACKEND_DIR "__init__.py")
-          if (-not (Test-Path $init_path)) { Set-Content -Path $init_path -Value "# DUMMY" }
+          # Forcefully create non-empty __init__.py files and get their absolute paths
+          $backend_init_path = (Resolve-Path (Join-Path $env:BACKEND_DIR "__init__.py")).Path.Replace('\', '/')
+          Set-Content -Path $backend_init_path -Value "# NON-EMPTY" -Force
+
+          $parent_init_datas = ""
           if ($env:BACKEND_DIR -eq "web_service/backend") {
-             if (-not (Test-Path "web_service/__init__.py")) { Set-Content -Path "web_service/__init__.py" -Value "# DUMMY" }
+            $parent_init_path = (Resolve-Path "web_service/__init__.py").Path.Replace('\', '/')
+            Set-Content -Path $parent_init_path -Value "# NON-EMPTY" -Force
+            # Correctly calculate the destination path relative to the package root
+            $parent_dest = "web_service"
+            $parent_init_datas = "    ('$parent_init_path', '$parent_dest'),"
           }
 
-          # Get absolute paths for datas section
-          $backend_init = (Resolve-Path $init_path).Path.Replace('\', '/')
+          # Correctly calculate the backend's destination path
+          $backend_dest = $env:BACKEND_DIR.Replace('/', '\')
 
-          # Check for parent init
-          $parent_init_path = (Join-Path (Split-Path $env:BACKEND_DIR) "__init__.py")
-          $parent_init = ""
-          if (Test-Path $parent_init_path) {
-            $parent_init = (Resolve-Path $parent_init_path).Path.Replace('\', '/')
-          }
-
-          # Start building the Python Spec content
+          # Build the spec content as a single string list
           $specContent = @(
-            "# -*- mode: python ; coding: utf-8 -*-",
-            "import os",
-            "from pathlib import Path",
-            "from PyInstaller.utils.hooks import collect_data_files",
-            "block_cipher = None",
-            "a = Analysis(",
-            "    ['$entry_point'],",
-            "    pathex=[os.getcwd()],",
-            "    hiddenimports=['uvicorn.lifespan.on', 'uvicorn.loops.auto', 'uvicorn.protocols.http.h11_impl'],",
-            "    hookspath=[],",
-            "    runtime_hooks=[],",
-            "    excludes=['$other_service', 'tests'],",
-            "    win_no_prefer_redirects=False,",
-            "    win_private_assemblies=False,",
-            "    cipher=block_cipher,",
-            "    noarchive=False,",
-            ")",
-            "# Nuclear Option: Explicitly bundle the __init__.py files as data",
-            "a.datas += [",
-            "    ('$staging_ui_path', 'ui'),",
-            "    ('$backend_init', 'web_service\\backend')"
-          )
-
-          # LOGIC FIX: Evaluate this in PowerShell, then append valid Python code to the array
-          if ($parent_init -ne "") {
-             # Calculate the destination path in PowerShell
-             $dest = (Split-Path $env:BACKEND_DIR -Leaf)
-             # Append the Python line
-             $specContent += "    ,('$parent_init', '$dest')"
-          }
-
-          # Close the list and continue
-          $specContent += @(
-            "]",
-            "pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)",
-            "exe = EXE(",
-            "    pyz,",
-            "    a.scripts,",
-            "    [],",
-            "    exclude_binaries=True,",
-            "    name='fortuna-backend',",
-            "    debug=False,",
-            "    bootloader_ignore_signals=False,",
-            "    strip=False,",
-            "    upx=True,",
-            "    console=False,",
-            "    icon=None,",
-            ")",
-            "coll = COLLECT(",
-            "    exe,",
-            "    a.binaries,",
-            "    a.zipfiles,",
-            "    a.datas,",
-            "    strip=False,",
-            "    upx=True,",
-            "    upx_exclude=[],",
-            "    name='fortuna-backend-dist',",
-            ")"
+              '# -*- mode: python ; coding: utf-8 -*-',
+              'import os',
+              'from pathlib import Path',
+              'from PyInstaller.utils.hooks import collect_data_files, collect_submodules',
+              'block_cipher = None',
+              'a = Analysis(',
+              "    ['$entry_point'],",
+              '    pathex=[os.getcwd()],',
+              "    hiddenimports=['uvicorn.lifespan.on', 'uvicorn.loops.auto', 'uvicorn.protocols.http.h11_impl'] + collect_submodules('${{ env.BACKEND_MODULE_PATH }}'),",
+              '    hookspath=[],',
+              '    runtime_hooks=[],',
+              "    excludes=['$other_service', 'tests'],",
+              '    win_no_prefer_redirects=False,',
+              '    win_private_assemblies=False,',
+              '    cipher=block_cipher,',
+              '    noarchive=False,',
+              ')',
+              '# Add data files',
+              'a.datas += [',
+              "    ('$staging_ui_path', 'ui'),",
+              "    ('$backend_init_path', '$backend_dest'),",
+              $parent_init_datas,
+              "]",
+              'pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)',
+              'exe = EXE(',
+              '    pyz,',
+              '    a.scripts,',
+              '    a.binaries,',
+              '    a.zipfiles,',
+              '    a.datas,',
+              '    [],',
+              "    name='fortuna-backend',",
+              '    debug=False,',
+              '    bootloader_ignore_signals=False,',
+              '    strip=False,',
+              '    upx=True,',
+              '    console=False,',
+              '    icon=None,',
+              ')'
           )
 
           Set-Content -Path "simplified.spec" -Value ($specContent -join "`n")
-          Write-Host "✅ Dynamically generated 'simplified.spec' created."
+          Write-Host "✅ Dynamically generated 'simplified.spec' for onefile build created."
 
       - name: Build with PyInstaller
         run: pyinstaller simplified.spec --clean --noconfirm
 
-      - name: Verify Executable Contents (Nuclear Option Part 2)
-        shell: pwsh
+      - name: Verify Executable Contents
+        shell: python
         run: |
-          Set-StrictMode -Version Latest
-          $script = @(
-          'import sys, subprocess, os',
-          'exe_path = os.path.join("dist", "fortuna-backend-dist", "fortuna-backend.exe")',
-          'module_path = "${{ env.BACKEND_MODULE_PATH }}".replace(".", os.sep)',
-          'expected_file = os.path.join(module_path, "__init__.py")',
-          'print(f"--- Python-based Verification ---")',
-          'print(f"Checking for: {expected_file}")',
-          'try:',
-          '    result = subprocess.run(["pyi-archive_viewer", exe_path], capture_output=True, text=True, check=True)',
-          '    if expected_file in result.stdout:',
-          '        print(f"✅ SUCCESS: Found \'{expected_file}\' in executable archive.")',
-          '        sys.exit(0)',
-          '    else:',
-          '        print(f"❌ FAILURE: Did not find \'{expected_file}\' in executable archive.")',
-          '        print("--- Archive Contents ---")',
-          '        print(result.stdout)',
-          '        sys.exit(1)',
-          'except FileNotFoundError:',
-          '    print("Error: pyi-archive_viewer not found. Is PyInstaller installed?")',
-          '    sys.exit(1)',
-          'except subprocess.CalledProcessError as e:',
-          '    print(f"Error running pyi-archive_viewer: {e}")',
-          '    print(e.stderr)',
-          '    sys.exit(1)',
-          )
-          $script | Set-Content -Path "verify_exe.py" -Encoding utf8
-          python verify_exe.py
-          if ($LASTEXITCODE -ne 0) {
-            exit 1
-          }
+          import zipfile
+          import sys
+          import os
+
+          exe_path = os.path.join('dist', 'fortuna-backend.exe')
+          module_path = "${{ env.BACKEND_MODULE_PATH }}".replace('.', '/')
+          expected_files = [
+              os.path.join(module_path, '__init__.py').replace('\\', '/')
+          ]
+          if "${{ env.BACKEND_DIR }}" == "web_service/backend":
+              expected_files.append('web_service/__init__.py'.replace('\\', '/'))
+
+          print(f"--- Verifying onefile executable: {exe_path} ---")
+          if not os.path.exists(exe_path):
+              print(f"❌ FATAL: Executable not found at {exe_path}")
+              sys.exit(1)
+
+          found_all = True
+          try:
+              with zipfile.ZipFile(exe_path, 'r') as zf:
+                  archive_files = [f.replace('\\', '/') for f in zf.namelist()]
+                  print(f"Found {len(archive_files)} files in the archive.")
+
+                  for expected in expected_files:
+                      if expected in archive_files:
+                          print(f"✅ Found required file: {expected}")
+                      else:
+                          print(f"❌ MISSING required file: {expected}")
+                          found_all = False
+          except Exception as e:
+              print(f"❌ Error inspecting executable: {e}")
+              sys.exit(1)
+
+          if not found_all:
+              print("\n--- Full Archive Listing ---")
+              for f in sorted(archive_files):
+                  print(f)
+              print("-----------------------------")
+              sys.exit(1)
+
+          print("\n✅ All critical files verified in executable.")
 
       - name: Upload Backend Artifact
         uses: actions/upload-artifact@v4
         with:
           name: backend-dist-${{ steps.vars.outputs.build_id }}
-          path: dist/fortuna-backend-dist/
+          path: dist/fortuna-backend.exe
           retention-days: 1
 
   package-msi:
@@ -341,39 +331,64 @@ jobs:
       - name: Launch Service & Verify Health
         env:
           SERVICE_PORT: '8102'
+        shell: python
         run: |
-          Set-StrictMode -Version Latest
-          $script = @(
-          'import os, sys, subprocess, socket, time',
-          'from contextlib import closing',
-          'HOST = "127.0.0.1"',
-          'PORT = int(os.environ.get("SERVICE_PORT", "8102"))',
-          'STARTUP_TIMEOUT = 60',
-          'POLL_INTERVAL = 0.5',
-          'def check_socket(host, port):',
-          '    with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as sock:',
-          '        return sock.connect_ex((host, port)) == 0',
-          '# Start the service via the command that the installer sets up',
-          'try:',
-          '    subprocess.run(["sc.exe", "start", "FortunaFaucetService"], check=True)',
-          'except subprocess.CalledProcessError as e:',
-          '    print(f"Error starting service: {e}")',
-          '    sys.exit(1)',
-          'print(f"Waiting for service to start on port {PORT}...")',
-          'start_time = time.time()',
-          'while time.time() - start_time < STARTUP_TIMEOUT:',
-          '    if check_socket(HOST, PORT):',
-          '        print(f"✅ Service is running and listening on port {PORT}.")',
-          '        sys.exit(0)',
-          '    time.sleep(POLL_INTERVAL)',
-          'print(f"❌ FATAL: Timed out after {STARTUP_TIMEOUT}s waiting for service.")',
-          'sys.exit(1)',
-          )
-          $script | Set-Content -Path "verify_install.py" -Encoding utf8
-          python verify_install.py
-          if ($LASTEXITCODE -ne 0) {
-            exit 1
-          }
+          import os
+          import sys
+          import subprocess
+          import socket
+          import time
+          from contextlib import closing
+
+          HOST = "127.0.0.1"
+          PORT = int(os.environ.get("SERVICE_PORT", "8102"))
+          STARTUP_TIMEOUT = 60
+          POLL_INTERVAL = 0.5
+
+          def check_socket(host, port):
+              with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as sock:
+                  return sock.connect_ex((host, port)) == 0
+
+          print("--- Starting Smoke Test ---")
+          # Start the service via the command that the installer sets up
+          try:
+              print("Attempting to start the 'FortunaFaucetService'...")
+              subprocess.run(["sc.exe", "start", "FortunaFaucetService"], check=True, capture_output=True, text=True)
+              print("Service start command issued successfully.")
+          except subprocess.CalledProcessError as e:
+              print(f"❌ Error starting service with sc.exe: {e}")
+              print(f"   stdout: {e.stdout}")
+              print(f"   stderr: {e.stderr}")
+              # It might have already been started, so we continue but with a warning.
+              print("⚠️  Service might have already been running, proceeding with check...")
+          except FileNotFoundError:
+              print("❌ FATAL: sc.exe not found. This test can only run on Windows.")
+              sys.exit(1)
+
+
+          print(f"Waiting for service to start listening on port {PORT} (timeout: {STARTUP_TIMEOUT}s)...")
+          start_time = time.time()
+          service_ready = False
+          while time.time() - start_time < STARTUP_TIMEOUT:
+              if check_socket(HOST, PORT):
+                  print(f"✅ Service is running and listening on port {PORT}.")
+                  service_ready = True
+                  break
+              time.sleep(POLL_INTERVAL)
+              print(".", end="", flush=True)
+
+          if not service_ready:
+              print(f"\n❌ FATAL: Timed out after {STARTUP_TIMEOUT}s waiting for service.")
+              # Try to get service status
+              result = subprocess.run(["sc.exe", "query", "FortunaFaucetService"], capture_output=True, text=True)
+              print("\n--- Service Status (sc query) ---")
+              print(result.stdout)
+              print(result.stderr)
+              print("---------------------------------")
+              sys.exit(1)
+
+          # If we get here, the test passed.
+          print("\nSmoke test passed!")
 
       - name: Cleanup
         if: always()

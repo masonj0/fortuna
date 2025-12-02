@@ -519,7 +519,7 @@ jobs:
           Set-StrictMode -Version Latest
           pip freeze | Out-File backend-freeze.txt -Encoding utf8
 
-      - name: Ensure Python Package Structure
+      - name: ☢️ NUCLEAR FIX: Ensure Python Package Structure & Double Injection
         if: steps.cache-backend.outputs.cache-hit != 'true'
         run: |
           Set-Content -Path "web_service/__init__.py" -Value "# This file is intentionally non-empty to ensure package recognition."
@@ -549,7 +549,7 @@ jobs:
           "project_root = Path(os.getcwd())",
           "version_string = os.environ.get('FORTUNA_VERSION', '0.0.0')",
           "",
-          "# Explicitly include the frontend UI files and critical __init__.py files",
+          "# DOUBLE INJECTION PART 1: Explicitly include the frontend UI files and critical __init__.py files",
           "datas = [",
           "    ('$staging_ui_path', 'ui'),",
           "    ('$backend_init', 'web_service/backend'),",
@@ -626,7 +626,7 @@ jobs:
           Set-StrictMode -Version Latest
           pyinstaller "${{ env.BACKEND_SPEC }}" --clean --log-level=WARN --noconfirm
 
-      - name: Surgical File Injection (Post-Mortem Implant)
+      - name: ☢️ DOUBLE INJECTION PART 2: Surgical File Implant
         if: steps.cache-backend.outputs.cache-hit != 'true'
         run: |
           Set-StrictMode -Version Latest
