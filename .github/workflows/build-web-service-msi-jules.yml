@@ -1,11 +1,20 @@
 # System Timestamp: 2025-11-30 10:29:10.703207
-name: Build Fortuna Faucet Web Service Installer (Jules's Synthesis)
+name: Build Fortuna Faucet Web Service Installer (Synthesized Overkill)
 
 on:
   push:
     branches:
       - main
       - session/jules1130b
+    tags:
+      - 'v*'
+    paths:
+      - 'python_service/**'
+      - 'web_service/backend/**'
+      - 'web_platform/frontend/**'
+      - 'fortuna-backend-webservice.spec'
+      - 'webservice.spec'
+      - '.github/workflows/build-web-service-msi-gpt5.yml'
   workflow_dispatch:
 
 permissions:
@@ -52,18 +61,6 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-
-      - name: 🔍 VERIFY CRITICAL FILE EXISTS
-        shell: pwsh
-        run: |
-          Set-StrictMode -Version Latest
-          $critical_file = "web_service/backend/__init__.py"
-          if (Test-Path $critical_file) {
-            Write-Host "✅ Critical file '$critical_file' found." -ForegroundColor Green
-          } else {
-            Write-Host "❌ FATAL: Critical file '$critical_file' is MISSING. This will cause PyInstaller to fail." -ForegroundColor Red
-            exit 1
-          }
 
       - name: Detect Backend Path
         id: find-path
@@ -471,36 +468,11 @@ jobs:
           path: frontend-manifest.tsv
           retention-days: 3
 
-  pre-build-forensics:
-    name: '🌳 Pre-Build Forensic File Tree'
-    runs-on: windows-latest
-    timeout-minutes: 5
-    needs: [repo-preflight, build-frontend]
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-      - name: Download Frontend Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: frontend-build-${{ github.run_id }}
-          path: web_platform/frontend/out
-      - name: 📜 Log Full File Tree
-        shell: pwsh
-        run: |
-          Set-StrictMode -Version Latest
-          Write-Host "--- Complete Workspace File Tree ---"
-          Get-ChildItem -Recurse | ForEach-Object {
-            # Format the output to be more readable
-            $depth = $_.FullName.Split('\').Count - $env:GITHUB_WORKSPACE.Split('\').Count
-            $indent = "  " * $depth
-            Write-Host "$indent- $($_.Name)"
-          }
-
   build-backend:
     name: '🐍 Build Backend'
     runs-on: windows-latest
     timeout-minutes: 25
-    needs: [path-finder, repo-preflight, build-frontend, backend-quality, pre-build-forensics]
+    needs: [path-finder, repo-preflight, build-frontend, backend-quality]
     env:
       BACKEND_REQUIREMENTS_HASH: ${{ needs.repo-preflight.outputs.backend_requirements_hash }}
       BUILD_VERSION: ${{ needs.repo-preflight.outputs.semver }}
@@ -646,7 +618,7 @@ jobs:
           "    entitlements_file=None",
           ")"
           )
-          $specContent | Set-Content -Path "${{ env.BACKEND_SPEC }}"
+          Set-Content -Path "${{ env.BACKEND_SPEC }}" -Value $specContent
           Write-Host "✅ Dynamically generated '${{ env.BACKEND_SPEC }}' created."
 
       - name: Create Required Backend Directories
@@ -656,12 +628,6 @@ jobs:
           New-Item -ItemType Directory -Path (Join-Path $env:BACKEND_DIR "data") -Force | Out-Null
           New-Item -ItemType Directory -Path (Join-Path $env:BACKEND_DIR "json") -Force | Out-Null
           Write-Host "✅ Created required backend directories for PyInstaller." -ForegroundColor Green
-
-      - name: 🐍 Set PYTHONPATH for PyInstaller
-        if: steps.cache-backend.outputs.cache-hit != 'true'
-        run: |
-          echo "PYTHONPATH=${{ github.workspace }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host "PYTHONPATH set to ${{ github.workspace }}"
 
       - name: Build with PyInstaller
         if: steps.cache-backend.outputs.cache-hit != 'true'
@@ -1540,3 +1506,22 @@ jobs:
             assets/SHASUMS256.txt
             assets/sbom.spdx.json
           generate_release_notes: true
+
+  stage-release-artifacts:
+    name: '📦 Stage Release Artifacts'
+    runs-on: windows-latest
+    timeout-minutes: 5
+    needs: [package-msi-service]
+    steps:
+      - name: 📥 Download MSI Installer
+        uses: actions/download-artifact@v4
+        with:
+          name: fortuna-service-msi-${{ github.run_id }}
+          path: msi-installer
+
+      - name: 📤 Upload Final MSI Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Final-MSI-Artifact
+          path: msi-installer/
+          retention-days: 90
