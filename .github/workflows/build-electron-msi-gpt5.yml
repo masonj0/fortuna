@@ -387,10 +387,19 @@ jobs:
 
           # The installerIcon and uninstallerIcon properties are not valid for the MSI target.
           # electron-builder automatically uses the main application icon for the installer.
-          # We set them to null here to ensure they are omitted from the final YAML, preventing schema validation errors.
-          $config.msi.installerIcon = $null
-          $config.msi.uninstallerIcon = $null
-          Write-Host "  -> Ensured invalid 'msi.installerIcon' and 'msi.uninstallerIcon' properties are nullified." -ForegroundColor Yellow
+          # We unconditionally remove them here to prevent schema validation errors, catching the error if they don't exist.
+          try {
+            $config.msi.PSObject.Properties.Remove('installerIcon')
+            Write-Host "  -> Removed 'msi.installerIcon' property." -ForegroundColor Yellow
+          } catch {
+            Write-Host "  -> 'msi.installerIcon' property did not exist, no action needed."
+          }
+          try {
+            $config.msi.PSObject.Properties.Remove('uninstallerIcon')
+            Write-Host "  -> Removed 'msi.uninstallerIcon' property." -ForegroundColor Yellow
+          } catch {
+            Write-Host "  -> 'msi.uninstallerIcon' property did not exist, no action needed."
+          }
 
           Write-Host "  -> Set win.icon to '$normalizedIconPath'" -ForegroundColor Green
 
