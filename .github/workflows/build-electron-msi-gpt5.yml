@@ -516,7 +516,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Path "release-artifacts" -Force | Out-Null
 
-          Get-ChildItem -Filter "*.msi" -Recurse | ForEach-Object {
+          Get-ChildItem -Path "electron/dist" -Filter "*.msi" -Recurse | ForEach-Object {
             Copy-Item -LiteralPath $_.FullName -Destination "release-artifacts/"
             Copy-Item -LiteralPath "$($_.FullName).sha256" -Destination "release-artifacts/" -ErrorAction SilentlyContinue
           }

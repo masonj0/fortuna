@@ -533,9 +533,9 @@ jobs:
       - name: Ensure Python Package Structure
         if: steps.cache-backend.outputs.cache-hit != 'true'
         run: |
-          Set-Content -Path "web_service/__init__.py" -Value ""
-          Set-Content -Path "web_service/backend/__init__.py" -Value ""
-          Write-Host "✅ Ensured __init__.py files exist for package discovery."
+          Set-Content -Path "web_service/__init__.py" -Value "# This file is intentionally non-empty to ensure package recognition."
+          Set-Content -Path "web_service/backend/__init__.py" -Value "# This file is intentionally non-empty to ensure package recognition."
+          Write-Host "✅ Ensured non-empty __init__.py files exist for package discovery."
 
       - name: Create Dynamic webservice.spec for PyInstaller
         if: steps.cache-backend.outputs.cache-hit != 'true'
