@@ -5,17 +5,6 @@ on:
   push:
     branches:
       - main
-      - session/jules1130b
-    tags:
-      - 'v*'
-    paths:
-      - 'python_service/**'
-      - 'web_service/backend/**'
-      - 'web_platform/frontend/**'
-      - 'fortuna-backend-webservice.spec'
-      - 'webservice.spec'
-      - '.github/workflows/build-web-service-msi-gpt5.yml'
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -778,14 +767,19 @@ jobs:
           Write-Host "\n--- Archive Contents ---"
           $archiveContents | Out-Host
 
-          $expectedInitFile = ($env:BACKEND_MODULE_PATH.Replace('.', '\') + '\__init__.py')
+          # Normalize expected path to forward slashes
+          $expectedInitFile = ($env:BACKEND_MODULE_PATH.Replace('.', '/') + '/__init__.py')
           Write-Host "\n--- Verification ---"
-          Write-Host "Searching for key module file: '$expectedInitFile' in archive contents..."
+          Write-Host "Searching for key module file: '$expectedInitFile'..."
 
-          if ($archiveContents | Select-String -Pattern $expectedInitFile -Quiet -SimpleMatch) {
+          # FIX: Normalize the archive output to forward slashes before matching
+          $found = $archiveContents | ForEach-Object { $_.Replace('\', '/') } | Select-String -Pattern $expectedInitFile -SimpleMatch -Quiet
+
+          if ($found) {
             Write-Host "✅ SUCCESS: Key module file found inside the executable archive." -ForegroundColor Green
           } else {
-            Write-Error "❌ FAILURE: Key module file '$expectedInitFile' NOT found inside the executable. This confirms a bundling error."
+            Write-Error "❌ FAILURE: Key module file '$expectedInitFile' NOT found inside the executable."
+            # Don't exit 1 here if you want to trust the injection step, but for now let's keep it strict
             exit 1
           }
 
@@ -1082,119 +1076,99 @@ jobs:
       # ═════════════════════════════════════════════════════════════════════════
       # PHASE 2 & 3: THE SOCKET HANDOVER (LAUNCH & VERIFY)
       # ═════════════════════════════════════════════════════════════════════════
-      - name: 🚀 Launch Service & Verify Health (Socket Handover)
+      - name: 🧪 Smoke Test via Native Python
+        shell: python
         run: |
-          Set-StrictMode -Version Latest
-          $script = @(
-          'import os, sys, subprocess, socket, time, threading',
-          'from contextlib import closing',
-          '',
-          '# --- CONFIGURATION ---',
-          'EXE_PATH = "dist/fortuna-backend.exe"',
-          'HOST = "127.0.0.1"',
-          'PORT = int(os.environ.get("SERVICE_PORT", "8102"))',
-          'HEALTH_ENDPOINT = os.environ.get("HEALTH_ENDPOINT", "/health")',
-          'API_KEY = os.environ.get("API_KEY", "default-key")',
-          'STARTUP_TIMEOUT = 90  # seconds',
-          'POLL_INTERVAL = 0.5   # seconds',
-          'STDOUT_LOG = "service-logs/stdout.txt"',
-          'STDERR_LOG = "service-logs/stderr.txt"',
-          'PID_FILE = "service.pid"',
-          '',
-          '# --- UTILITY FUNCTIONS ---',
-          'def print_banner(message):',
-          '    print(f"\\n{'='*25} {message} {'='*25}")',
-          '',
-          'def check_socket(host, port):',
-          '    with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as sock:',
-          '        return sock.connect_ex((host, port)) == 0',
-          '',
-          'def tail_file(filename, lines=10):',
-          '    try:',
-          '        with open(filename, "r") as f:',
-          '            content = f.readlines()',
-          '        return "".join(content[-lines:])',
-          '    except FileNotFoundError:',
-          '        return "Log file not found."',
-          '    except Exception as e:',
-          '        return f"Error reading log: {e}"',
-          '',
-          '# --- MAIN LOGIC ---',
-          'def main():',
-          '    print_banner("SOCKET HANDOVER PROTOCOL INITIATED")',
-          '',
-          '    # 1. Pre-flight check: Find a free port',
-          '    print(f"Checking if port {PORT} is available...")',
-          '    if check_socket(HOST, PORT):',
-          '        print(f"❌ FATAL: Port {PORT} is already in use before starting the service.")',
-          '        sys.exit(1)',
-          '    print(f"✅ Port {PORT} is free.")',
-          '',
-          '    # 2. Launch the service executable',
-          '    print_banner(f"LAUNCHING {os.path.basename(EXE_PATH)}")',
-          '    launch_env = os.environ.copy()',
-          '    launch_env["FORTUNA_PORT"] = str(PORT)',
-          '    launch_env["API_KEY"] = API_KEY',
-          '    launch_env["FORTUNA_ENV"] = "smoke-test"',
-          '    launch_env["PYTHONUNBUFFERED"] = "1"',
-          '',
-          '    if not os.path.exists(EXE_PATH):',
-          '        print(f"❌ FATAL: Executable not found at {EXE_PATH}")',
-          '        sys.exit(1)',
-          '',
-          '    with open(STDOUT_LOG, "wb") as out_log, open(STDERR_LOG, "wb") as err_log:',
-          '        process = subprocess.Popen([EXE_PATH], env=launch_env, stdout=out_log, stderr=err_log)',
-          '',
-          '    with open(PID_FILE, "w") as f:',
-          '        f.write(str(process.pid))',
-          '    print(f"🚀 Service process started with PID: {process.pid}")',
-          '    print(f"   - stdout -> {STDOUT_LOG}")',
-          '    print(f"   - stderr -> {STDERR_LOG}")',
-          '',
-          '    # 3. Wait for the socket to be bound',
-          '    print_banner(f"WAITING FOR SOCKET BIND ON {HOST}:{PORT}")',
-          '    start_time = time.time()',
-          '    bound = False',
-          '    while time.time() - start_time < STARTUP_TIMEOUT:',
-          '        if process.poll() is not None:',
-          '            print(f"❌ FATAL: Process terminated unexpectedly with exit code {process.poll()}.")',
-          '            break',
-          '        if check_socket(HOST, PORT):',
-          '            print(f"✅ Socket is now bound! (Took {time.time() - start_time:.2f}s)")',
-          '            bound = True',
-          '            break',
-          '        time.sleep(POLL_INTERVAL)',
-          '        print(f"   ... waiting ({time.time() - start_time:.1f}s)", end="\\r")',
-          '',
-          '    if not bound:',
-          '        print(f"❌ FATAL: Timed out after {STARTUP_TIMEOUT}s waiting for port {PORT} to be bound.")',
-          '',
-          '    # 4. Final Verification and Diagnostics',
-          '    print_banner("FINAL DIAGNOSTICS")',
-          '    print(f"STDOUT (Last 10 lines):\\n{tail_file(STDOUT_LOG)}")',
-          '    print(f"STDERR (Last 10 lines):\\n{tail_file(STDERR_LOG)}")',
-          '',
-          '    if process.poll() is not None:',
-          '        print("❌ Final state: PROCESS IS DEAD.")',
-          '        sys.exit(1)',
-          '    else:',
-          '        print("✅ Final state: PROCESS IS ALIVE.")',
-          '',
-          '    if not bound:',
-          '        print("❌ Final state: SOCKET NOT BOUND.")',
-          '        sys.exit(1)',
-          '    else:',
-          '        print("✅ Final state: SOCKET IS BOUND.")',
-          '',
-          '    print_banner("SOCKET HANDOVER SUCCESSFUL")',
-          '    sys.exit(0)',
-          '',
-          'if __name__ == "__main__":',
-          '    main()',
-          ''
-          )
-          $script | Set-Content -Path "verify_service.py" -Encoding utf8
-          python verify_service.py
+          import subprocess
+          import time
+          import socket
+          import sys
+          import os
+          import urllib.request
+
+          EXE_PATH = r'dist/fortuna-backend.exe'
+          PORT = 8102
+          API_KEY = os.environ.get('API_KEY', '')
+
+          def wait_for_port(port, timeout=60):
+              start_time = time.time()
+              while time.time() - start_time < timeout:
+                  try:
+                      with socket.create_connection(('127.0.0.1', port), timeout=1):
+                          return True
+                  except (ConnectionRefusedError, socket.timeout):
+                      time.sleep(0.5)
+              return False
+
+          print(f"--- Native Python Smoke Test ---")
+          print(f"🚀 Launching executable: {EXE_PATH}")
+
+          # Set up environment for the subprocess
+          env = os.environ.copy()
+          env['PYTHONUNBUFFERED'] = '1'
+          env['HOST'] = '0.0.0.0'
+          env['PORT'] = str(PORT)
+          env['API_KEY'] = API_KEY
+          env['FORTUNA_ENV'] = 'smoke-test'
+
+          # Launch the backend executable
+          try:
+            process = subprocess.Popen(
+                [EXE_PATH],
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding='utf-8',
+                errors='replace'
+            )
+          except FileNotFoundError:
+            print(f"❌ FATAL: Executable not found at '{EXE_PATH}'")
+            sys.exit(1)
+          except Exception as e:
+            print(f"❌ FATAL: Failed to launch process: {e}")
+            sys.exit(1)
+
+
+          print(f"⏳ Waiting for port {PORT} to become available (timeout: 60s)...")
+          if wait_for_port(PORT):
+              print(f"✅ Port {PORT} is open. Service appears to be running.")
+              # Simple health check
+              try:
+                  url = f'http://127.0.0.1:{PORT}/health'
+                  print(f"🔬 Performing health check against {url}...")
+                  with urllib.request.urlopen(url, timeout=10) as response:
+                      if response.status == 200:
+                          print(f"✅ Health check successful (HTTP {response.status}).")
+                      else:
+                          print(f"❌ Health check failed with status: {response.status}")
+                          process.terminate()
+                          sys.exit(1)
+              except Exception as e:
+                  print(f"❌ Health check request failed: {e}")
+                  process.terminate()
+                  sys.exit(1)
+          else:
+              print(f"❌ TIMEOUT: Service failed to bind to port {PORT} within the time limit.")
+              # Attempt to get output from the failed process
+              try:
+                  outs, errs = process.communicate(timeout=10)
+                  print("\n--- Process STDOUT ---")
+                  print(outs)
+                  print("\n--- Process STDERR ---")
+                  print(errs)
+                  print("----------------------")
+              except Exception as e:
+                  print(f"Could not get process output: {e}")
+              process.terminate()
+              sys.exit(1)
+
+          # If we get here, the service is running. Write the PID to a file.
+          with open('service.pid', 'w') as f:
+              f.write(str(process.pid))
+
+          print(f"✅ Service running in background with PID: {process.pid}. PID written to service.pid.")
+          # Do not terminate, let it run for subsequent steps
 
       - name: 🔌 Test API Endpoint
         run: |
