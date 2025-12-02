@@ -28,6 +28,8 @@ jobs:
       node_version: ${{ steps.versions.outputs.node }}
       python_version: ${{ steps.versions.outputs.python }}
       build_id: ${{ steps.versions.outputs.build_id }}
+      semver: ${{ steps.meta.outputs.semver }}
+      short_sha: ${{ steps.meta.outputs.short_sha }}
     steps:
       - name: 📥 Checkout Repository
         uses: actions/checkout@v4
@@ -473,7 +475,7 @@ jobs:
           $semver = "${{ needs.validate-environment.outputs.semver }}"
           $shortSha = "${{ needs.validate-environment.outputs.short_sha }}"
           $artifactName = "Fortuna-Electron-${semver}-${shortSha}.msi"
-          npm run dist -- --win msi --config temp-builder-config.yml --publish never -c.artifactName=$artifactName 2>&1
+          npm run dist -- --win msi --config temp-builder-config.yml --publish never --config.artifactName=$artifactName 2>&1
 
           if ($LASTEXITCODE -ne 0) {
             Write-Error "electron-builder MSI creation failed"
