@@ -1,0 +1,367 @@
+name: simplified MSI builder
+
+on:
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '20'
+  PYTHON_VERSION: '3.12'
+  DOTNET_VERSION: '8.0.x'
+  WIX_VERSION: '4.0.5'
+  FRONTEND_DIR: 'web_platform/frontend'
+  WIX_DIR: 'build_wix'
+
+jobs:
+  path-finder:
+    name: '🔎 Path Finder Dynamic Backend Detection'
+    runs-on: windows-latest
+    outputs:
+      backend_dir: ${{ steps.find-path.outputs.backend_dir }}
+      backend_module_path: ${{ steps.find-path.outputs.backend_module_path }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Detect Backend Path
+        id: find-path
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $web_service_path = "web_service/backend"
+          $python_service_path = "python_service"
+          $backend_dir = ""
+          $backend_module_path = ""
+          $spec_file = ""
+
+          Write-Host "--- Path Finding Forensics ---"
+          Write-Host "Searching for the correct backend service directory..."
+
+          # Test web_service path
+          $web_service_main = Test-Path (Join-Path $web_service_path "main.py")
+          $web_service_api = Test-Path (Join-Path $web_service_path "api.py")
+          $web_service_init = Test-Path (Join-Path $web_service_path "__init__.py")
+          Write-Host "Checking '$web_service_path':"
+          Write-Host "  main.py -> $web_service_main"
+          Write-Host "  api.py -> $web_service_api"
+          Write-Host "  __init__.py -> $web_service_init"
+
+          # Test python_service path
+          $python_service_main = Test-Path (Join-Path $python_service_path "main.py")
+          $python_service_api = Test-Path (Join-Path $python_service_path "api.py")
+          $python_service_init = Test-Path (Join-Path $python_service_path "__init__.py")
+          Write-Host "Checking '$python_service_path':"
+          Write-Host "  main.py -> $python_service_main"
+          Write-Host "  api.py -> $python_service_api"
+          Write-Host "  __init__.py -> $python_service_init"
+
+          if ($web_service_main -and $web_service_api -and $web_service_init) {
+            $backend_dir = $web_service_path
+            $backend_module_path = "web_service.backend"
+            $spec_file = "webservice.spec"
+            Write-Host "✅ Verdict: Detected 'web_service/backend' as the target." -ForegroundColor Green
+          } elseif ($python_service_main -and $python_service_api -and $python_service_init) {
+            $backend_dir = $python_service_path
+            $backend_module_path = "python_service"
+            $spec_file = "fortuna-backend-webservice.spec"
+            Write-Host "✅ Verdict: Detected 'python_service' as the target." -ForegroundColor Green
+          } else {
+            Write-Host "❌ FATAL: Could not determine a valid backend directory. Neither 'web_service/backend' nor 'python_service' contains the required files (main.py, api.py, __init__.py)." -ForegroundColor Red
+            exit 1
+          }
+
+          Write-Host "--- Outputs ---"
+          Write-Host "backend_dir: $backend_dir"
+          Write-Host "backend_module_path: $backend_module_path"
+          Write-Host "spec_file: $spec_file"
+
+          "backend_dir=$backend_dir" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "backend_module_path=$backend_module_path" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+  build:
+    name: '🛠️ Build Unified Artifact'
+    runs-on: windows-latest
+    needs: path-finder
+    env:
+      BACKEND_DIR: ${{ needs.path-finder.outputs.backend_dir }}
+      BACKEND_MODULE_PATH: ${{ needs.path-finder.outputs.backend_module_path }}
+    outputs:
+      build_id: ${{ steps.vars.outputs.build_id }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set Build ID
+        id: vars
+        run: echo "build_id=${{ github.run_id }}-${{ github.run_attempt }}" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: '${{ env.FRONTEND_DIR }}/package-lock.json'
+
+      - name: Install Frontend Dependencies & Build
+        run: |
+          cd "${{ env.FRONTEND_DIR }}"
+          npm ci --prefer-offline
+          npm run build
+          cd ../..
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: '${{ env.BACKEND_DIR }}/requirements.txt'
+
+      - name: Install Backend Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r ${{ env.BACKEND_DIR }}/requirements.txt
+          pip install pyinstaller==6.6.0
+
+      - name: Create Dynamic Spec File (Nuclear Option Part 1)
+        run: |
+          Set-StrictMode -Version Latest
+          $entry_point = (Join-Path $env:BACKEND_DIR "main.py").Replace('\', '/')
+          $staging_ui_path = (Resolve-Path "${{ env.FRONTEND_DIR }}/out").Path.Replace('\', '/')
+          $other_service = if ("${{ env.BACKEND_DIR }}" -eq "web_service/backend") { "python_service" } else { "web_service" }
+
+          # Forcefully create non-empty __init__.py files in the detected backend directory
+          $init_path = (Join-Path $env:BACKEND_DIR "__init__.py")
+          if (-not (Test-Path $init_path)) {
+            Set-Content -Path $init_path -Value "# DUMMY"
+          }
+          if ($env:BACKEND_DIR -eq "web_service/backend") {
+            Set-Content -Path "web_service/__init__.py" -Value "# DUMMY"
+          }
+
+          # Get absolute paths for datas section
+          $backend_init = (Resolve-Path $init_path).Path.Replace('\', '/')
+          $parent_init_path = (Join-Path (Split-Path $env:BACKEND_DIR) "__init__.py")
+          $parent_init = ""
+          if (Test-Path $parent_init_path) {
+            $parent_init = (Resolve-Path $parent_init_path).Path.Replace('\', '/')
+          }
+
+          $specContent = @(
+          "# DYNAMICALLY GENERATED SPEC - DO NOT EDIT MANUALLY",
+          "import os",
+          "from pathlib import Path",
+          "from PyInstaller.utils.hooks import collect_data_files",
+          "block_cipher = None",
+          "a = Analysis(",
+          "    ['$entry_point'],",
+          "    pathex=[os.getcwd()],",
+          "    hiddenimports=['uvicorn.lifespan.on', 'uvicorn.loops.auto', 'uvicorn.protocols.http.h11_impl'],",
+          "    hookspath=[],",
+          "    runtime_hooks=[],",
+          "    excludes=['$other_service', 'tests'],",
+          "    win_no_prefer_redirects=False,",
+          "    win_private_assemblies=False,",
+          "    cipher=block_cipher,",
+          "    noarchive=False,",
+          ")",
+          "# Nuclear Option: Explicitly bundle the __init__.py files as data",
+          "a.datas += [",
+          "    ('$staging_ui_path', 'ui'),",
+          "    ('$backend_init', '${{ env.BACKEND_DIR }}'.Replace('/', '\\\\'))",
+          "]",
+          "if ('$parent_init' -ne '') { a.datas += [('$parent_init', (Split-Path '${{ env.BACKEND_DIR }}').Replace('/', '\\\\'))] }",
+          "pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)",
+          "exe = EXE(",
+          "    pyz,",
+          "    a.scripts,",
+          "    [],",
+          "    exclude_binaries=True,",
+          "    name='fortuna-backend',",
+          "    debug=False,",
+          "    bootloader_ignore_signals=False,",
+          "    strip=False,",
+          "    upx=True,",
+          "    console=False,",
+          "    icon=None,",
+          ")",
+          "coll = COLLECT(",
+          "    exe,",
+          "    a.binaries,",
+          "    a.zipfiles,",
+          "    a.datas,",
+          "    strip=False,",
+          "    upx=True,",
+          "    upx_exclude=[],",
+          "    name='fortuna-backend-dist',",
+          ")"
+          )
+          Set-Content -Path "simplified.spec" -Value ($specContent -join "`n")
+          Write-Host "✅ Dynamically generated 'simplified.spec' created."
+
+      - name: Build with PyInstaller
+        run: pyinstaller simplified.spec --clean --noconfirm
+
+      - name: Verify Executable Contents (Nuclear Option Part 2)
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $script = @(
+          'import sys, subprocess, os',
+          'exe_path = os.path.join("dist", "fortuna-backend-dist", "fortuna-backend.exe")',
+          'module_path = "${{ env.BACKEND_MODULE_PATH }}".replace(".", os.sep)',
+          'expected_file = os.path.join(module_path, "__init__.py")',
+          'print(f"--- Python-based Verification ---")',
+          'print(f"Checking for: {expected_file}")',
+          'try:',
+          '    result = subprocess.run(["pyi-archive_viewer", exe_path], capture_output=True, text=True, check=True)',
+          '    if expected_file in result.stdout:',
+          '        print(f"✅ SUCCESS: Found \'{expected_file}\' in executable archive.")',
+          '        sys.exit(0)',
+          '    else:',
+          '        print(f"❌ FAILURE: Did not find \'{expected_file}\' in executable archive.")',
+          '        print("--- Archive Contents ---")',
+          '        print(result.stdout)',
+          '        sys.exit(1)',
+          'except FileNotFoundError:',
+          '    print("Error: pyi-archive_viewer not found. Is PyInstaller installed?")',
+          '    sys.exit(1)',
+          'except subprocess.CalledProcessError as e:',
+          '    print(f"Error running pyi-archive_viewer: {e}")',
+          '    print(e.stderr)',
+          '    sys.exit(1)',
+          )
+          $script | Set-Content -Path "verify_exe.py" -Encoding utf8
+          python verify_exe.py
+          if ($LASTEXITCODE -ne 0) {
+            exit 1
+          }
+
+      - name: Upload Backend Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-dist-${{ steps.vars.outputs.build_id }}
+          path: dist/fortuna-backend-dist/
+          retention-days: 1
+
+  package-msi:
+    name: '💿 Package MSI'
+    runs-on: windows-latest
+    needs: build
+    outputs:
+      build_id: ${{ needs.build.outputs.build_id }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Download Backend Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-dist-${{ needs.build.outputs.build_id }}
+          path: staging
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Prepare WiX Project
+        run: |
+          Set-StrictMode -Version Latest
+          Copy-Item "${{ env.WIX_DIR }}/Product_WithService.wxs" "${{ env.WIX_DIR }}/Product.wxs" -Force
+          $wixProj = @(
+            '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">'
+            '  <PropertyGroup>'
+            '    <OutputName>Fortuna-WebService-Simplified</OutputName>'
+            '    <OutputType>Package</OutputType>'
+            '    <DefineConstants>SourceDir=../staging</DefineConstants>'
+            '  </PropertyGroup>'
+            '  <ItemGroup>'
+            '    <PackageReference Include="WixToolset.Util.wixext" Version="${{ env.WIX_VERSION }}" />'
+            '  </ItemGroup>'
+            '  <ItemGroup>'
+            '    <Compile Include="Product.wxs" />'
+            '  </ItemGroup>'
+            '</Project>'
+          )
+          Set-Content "${{ env.WIX_DIR }}/Fortuna.wixproj" -Value $wixProj -Encoding utf8
+
+      - name: Build MSI
+        working-directory: ${{ env.WIX_DIR }}
+        run: |
+          dotnet build Fortuna.wixproj -c Release -p:Platform=x64
+
+      - name: Upload MSI Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: msi-installer-${{ needs.build.outputs.build_id }}
+          path: ${{ env.WIX_DIR }}/bin/x64/Release/*.msi
+          retention-days: 1
+
+  smoke-test:
+    name: '🔬 Smoke Test'
+    runs-on: windows-latest
+    needs: package-msi
+    steps:
+      - name: Download MSI Installer
+        uses: actions/download-artifact@v4
+        with:
+          name: msi-installer-${{ needs.package-msi.outputs.build_id }}
+          path: msi-installer
+
+      - name: Install MSI
+        run: |
+          Set-StrictMode -Version Latest
+          $msi = Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse | Select-Object -First 1
+          if ($null -eq $msi) {
+            Write-Error "MSI file not found in artifact"
+            exit 1
+          }
+          Start-Process msiexec.exe -ArgumentList "/i `"$($msi.FullName)`" /qn" -Wait
+          $installDir = "C:\Program Files\Fortuna Faucet"
+          if (-not (Test-Path "$installDir\fortuna-backend.exe")) {
+            Write-Error "Application executable not found after installation"
+            exit 1
+          }
+          Write-Host "✅ Application appears to be installed"
+
+      - name: Launch Service & Verify Health
+        env:
+          SERVICE_PORT: '8102'
+        run: |
+          Set-StrictMode -Version Latest
+          $script = @(
+          'import os, sys, subprocess, socket, time',
+          'from contextlib import closing',
+          'HOST = "127.0.0.1"',
+          'PORT = int(os.environ.get("SERVICE_PORT", "8102"))',
+          'STARTUP_TIMEOUT = 60',
+          'POLL_INTERVAL = 0.5',
+          'def check_socket(host, port):',
+          '    with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as sock:',
+          '        return sock.connect_ex((host, port)) == 0',
+          '# Start the service via the command that the installer sets up',
+          'try:',
+          '    subprocess.run(["sc.exe", "start", "FortunaFaucetService"], check=True)',
+          'except subprocess.CalledProcessError as e:',
+          '    print(f"Error starting service: {e}")',
+          '    sys.exit(1)',
+          'print(f"Waiting for service to start on port {PORT}...")',
+          'start_time = time.time()',
+          'while time.time() - start_time < STARTUP_TIMEOUT:',
+          '    if check_socket(HOST, PORT):',
+          '        print(f"✅ Service is running and listening on port {PORT}.")',
+          '        sys.exit(0)',
+          '    time.sleep(POLL_INTERVAL)',
+          'print(f"❌ FATAL: Timed out after {STARTUP_TIMEOUT}s waiting for service.")',
+          'sys.exit(1)',
+          )
+          $script | Set-Content -Path "verify_install.py" -Encoding utf8
+          python verify_install.py
+          if ($LASTEXITCODE -ne 0) {
+            exit 1
+          }
+
+      - name: Cleanup
+        if: always()
+        run: |
+          sc.exe stop FortunaFaucetService
+          sc.exe delete FortunaFaucetService
