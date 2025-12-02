@@ -185,7 +185,7 @@ jobs:
 
           Write-Host "✓ Service executable: $($serviceExe.FullName) ($('{0:N0}' -f $serviceExe.Length) bytes)"
 
-      - name: ☢️ NUCLEAR FIX: Surgical File Injection
+      - name: ☢️ NUCLEAR FIX Surgical File Injection
         shell: pwsh
         run: |
           $injectionScript = @(
@@ -404,7 +404,7 @@ jobs:
             exit 1
           }
 
-      - name: '🧐 Forensically Guarantee Icon Paths (YAML Parser Method)'
+      - name: '🧐 Forensically Guarantee Icon Paths'
         shell: pwsh
         run: |
           Set-StrictMode -Version Latest
@@ -603,7 +603,7 @@ jobs:
           retention-days: 30
 
   smoke-test:
-    name: '🔬 Smoke Test (Install & Launch)'
+    name: '🔬 Smoke Test Install & Launch'
     runs-on: windows-latest
     timeout-minutes: 15
     needs:
@@ -682,7 +682,7 @@ jobs:
           Write-Host "🧹 Cleanup complete"
 
   diagnose-asgi-imports:
-    name: '🔍 ASGI Import Killer (Pre-Smoke Diagnostic)'
+    name: '🔍 ASGI Import Killer Pre-Smoke Diagnostic'
     runs-on: windows-latest
     timeout-minutes: 15
     needs: build-python-service

@@ -52,7 +52,7 @@ env:
 
 jobs:
   path-finder:
-    name: '🔎 Path Finder (Dynamic Backend Detection)'
+    name: '🔎 Path Finder Dynamic Backend Detection'
     runs-on: windows-latest
     outputs:
       backend_dir: ${{ steps.find-path.outputs.backend_dir }}
@@ -720,7 +720,7 @@ jobs:
           retention-days: 7
 
   diagnose-asgi-imports:
-    name: '🔍 ASGI Import Killer (Pre-Smoke Diagnostic)'
+    name: '🔍 ASGI Import Killer Pre-Smoke Diagnostic'
     runs-on: windows-latest
     timeout-minutes: 15
     needs: [path-finder, build-backend]
@@ -798,7 +798,7 @@ jobs:
           retention-days: 7
 
   smoke-test:
-    name: '🔬 Smoke Test (Diagnostic Overkill)'
+    name: '🔬 Smoke Test Diagnostic Overkill'
     runs-on: windows-latest
     timeout-minutes: 30
     needs: [path-finder, build-frontend, build-backend, diagnose-asgi-imports, diagnose-runtime]
