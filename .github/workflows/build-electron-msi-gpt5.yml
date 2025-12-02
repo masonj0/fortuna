@@ -573,6 +573,7 @@ jobs:
     timeout-minutes: 15
     needs:
       - build-electron-msi
+      - validate-environment
     steps:
       - name: 📥 Download MSI Installer
         uses: actions/download-artifact@v4
@@ -667,7 +668,9 @@ jobs:
     name: '📦 Stage Release Artifacts'
     runs-on: windows-latest
     timeout-minutes: 5
-    needs: [build-electron-msi]
+    needs:
+      - build-electron-msi
+      - validate-environment
     steps:
       - name: 📥 Download MSI Installer
         uses: actions/download-artifact@v4
