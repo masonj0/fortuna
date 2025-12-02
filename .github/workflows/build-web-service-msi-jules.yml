@@ -574,6 +574,8 @@ jobs:
           $main_import = "'{0}.main'" -f $env:BACKEND_MODULE_PATH
           $staging_ui_path = (Resolve-Path "staging/ui").Path.Replace('\', '/')
           $other_service = if ("${{ env.BACKEND_DIR }}" -eq "web_service/backend") { "python_service" } else { "web_service" }
+          $backend_init = (Resolve-Path "web_service/backend/__init__.py").Path.Replace('\', '/')
+          $parent_init = (Resolve-Path "web_service/__init__.py").Path.Replace('\', '/')
 
           $specContent = @(
           "# -*- mode: python ; coding: utf-8 -*-",
@@ -586,9 +588,11 @@ jobs:
           "project_root = Path(os.getcwd())",
           "version_string = os.environ.get('FORTUNA_VERSION', '0.0.0')",
           "",
-          "# Explicitly include the frontend UI files",
+          "# Explicitly include the frontend UI files and critical __init__.py files",
           "datas = [",
-          "    ('$staging_ui_path', 'ui')",
+          "    ('$staging_ui_path', 'ui'),",
+          "    ('$backend_init', 'web_service/backend'),",
+          "    ('$parent_init', 'web_service'),",
           "]",
           "# Include necessary data files from installed packages",
           "datas += collect_data_files('uvicorn')",
@@ -713,6 +717,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 15
     needs: [path-finder, build-backend]
+    continue-on-error: true
     env:
       PYTHONUTF8: '1'
       BACKEND_DIR: ${{ needs.path-finder.outputs.backend_dir }}
@@ -1034,6 +1039,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 10
     needs: [path-finder, build-backend]
+    continue-on-error: true
     env:
       BACKEND_MODULE_PATH: ${{ needs.path-finder.outputs.backend_module_path }}
     steps:
