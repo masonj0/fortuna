@@ -123,79 +123,92 @@ jobs:
           pip install -r ${{ env.BACKEND_DIR }}/requirements.txt
           pip install pyinstaller==6.6.0
 
-      - name: Create Dynamic Spec File (Nuclear Option Part 1)
+      - name: Create Dynamic webservice.spec for PyInstaller
         run: |
           Set-StrictMode -Version Latest
           $entry_point = (Join-Path $env:BACKEND_DIR "main.py").Replace('\', '/')
-          $staging_ui_path = (Resolve-Path "${{ env.FRONTEND_DIR }}/out").Path.Replace('\', '/')
-          $other_service = if ("${{ env.BACKEND_DIR }}" -eq "web_service/backend") { "python_service" } else { "web_service" }
+          $staging_ui_path = (Resolve-Path "web_platform/frontend/out").Path.Replace('\', '/')
+          $other_service = if ("$env:BACKEND_DIR" -eq "web_service/backend") { "python_service" } else { "web_service" }
 
-          # Forcefully create non-empty __init__.py files in the detected backend directory
+          # Forcefully create non-empty __init__.py files
           $init_path = (Join-Path $env:BACKEND_DIR "__init__.py")
-          if (-not (Test-Path $init_path)) {
-            Set-Content -Path $init_path -Value "# DUMMY"
-          }
+          if (-not (Test-Path $init_path)) { Set-Content -Path $init_path -Value "# DUMMY" }
           if ($env:BACKEND_DIR -eq "web_service/backend") {
-            Set-Content -Path "web_service/__init__.py" -Value "# DUMMY"
+             if (-not (Test-Path "web_service/__init__.py")) { Set-Content -Path "web_service/__init__.py" -Value "# DUMMY" }
           }
 
           # Get absolute paths for datas section
           $backend_init = (Resolve-Path $init_path).Path.Replace('\', '/')
+
+          # Check for parent init
           $parent_init_path = (Join-Path (Split-Path $env:BACKEND_DIR) "__init__.py")
           $parent_init = ""
           if (Test-Path $parent_init_path) {
             $parent_init = (Resolve-Path $parent_init_path).Path.Replace('\', '/')
           }
 
+          # Start building the Python Spec content
           $specContent = @(
-          "# DYNAMICALLY GENERATED SPEC - DO NOT EDIT MANUALLY",
-          "import os",
-          "from pathlib import Path",
-          "from PyInstaller.utils.hooks import collect_data_files",
-          "block_cipher = None",
-          "a = Analysis(",
-          "    ['$entry_point'],",
-          "    pathex=[os.getcwd()],",
-          "    hiddenimports=['uvicorn.lifespan.on', 'uvicorn.loops.auto', 'uvicorn.protocols.http.h11_impl'],",
-          "    hookspath=[],",
-          "    runtime_hooks=[],",
-          "    excludes=['$other_service', 'tests'],",
-          "    win_no_prefer_redirects=False,",
-          "    win_private_assemblies=False,",
-          "    cipher=block_cipher,",
-          "    noarchive=False,",
-          ")",
-          "# Nuclear Option: Explicitly bundle the __init__.py files as data",
-          "a.datas += [",
-          "    ('$staging_ui_path', 'ui'),",
-          "    ('$backend_init', '${{ env.BACKEND_DIR }}'.Replace('/', '\\\\'))",
-          "]",
-          "if ('$parent_init' -ne '') { a.datas += [('$parent_init', (Split-Path '${{ env.BACKEND_DIR }}').Replace('/', '\\\\'))] }",
-          "pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)",
-          "exe = EXE(",
-          "    pyz,",
-          "    a.scripts,",
-          "    [],",
-          "    exclude_binaries=True,",
-          "    name='fortuna-backend',",
-          "    debug=False,",
-          "    bootloader_ignore_signals=False,",
-          "    strip=False,",
-          "    upx=True,",
-          "    console=False,",
-          "    icon=None,",
-          ")",
-          "coll = COLLECT(",
-          "    exe,",
-          "    a.binaries,",
-          "    a.zipfiles,",
-          "    a.datas,",
-          "    strip=False,",
-          "    upx=True,",
-          "    upx_exclude=[],",
-          "    name='fortuna-backend-dist',",
-          ")"
+            "# -*- mode: python ; coding: utf-8 -*-",
+            "import os",
+            "from pathlib import Path",
+            "from PyInstaller.utils.hooks import collect_data_files",
+            "block_cipher = None",
+            "a = Analysis(",
+            "    ['$entry_point'],",
+            "    pathex=[os.getcwd()],",
+            "    hiddenimports=['uvicorn.lifespan.on', 'uvicorn.loops.auto', 'uvicorn.protocols.http.h11_impl'],",
+            "    hookspath=[],",
+            "    runtime_hooks=[],",
+            "    excludes=['$other_service', 'tests'],",
+            "    win_no_prefer_redirects=False,",
+            "    win_private_assemblies=False,",
+            "    cipher=block_cipher,",
+            "    noarchive=False,",
+            ")",
+            "# Nuclear Option: Explicitly bundle the __init__.py files as data",
+            "a.datas += [",
+            "    ('$staging_ui_path', 'ui'),",
+            "    ('$backend_init', 'web_service\\backend')"
           )
+
+          # LOGIC FIX: Evaluate this in PowerShell, then append valid Python code to the array
+          if ($parent_init -ne "") {
+             # Calculate the destination path in PowerShell
+             $dest = (Split-Path $env:BACKEND_DIR -Leaf)
+             # Append the Python line
+             $specContent += "    ,('$parent_init', '$dest')"
+          }
+
+          # Close the list and continue
+          $specContent += @(
+            "]",
+            "pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)",
+            "exe = EXE(",
+            "    pyz,",
+            "    a.scripts,",
+            "    [],",
+            "    exclude_binaries=True,",
+            "    name='fortuna-backend',",
+            "    debug=False,",
+            "    bootloader_ignore_signals=False,",
+            "    strip=False,",
+            "    upx=True,",
+            "    console=False,",
+            "    icon=None,",
+            ")",
+            "coll = COLLECT(",
+            "    exe,",
+            "    a.binaries,",
+            "    a.zipfiles,",
+            "    a.datas,",
+            "    strip=False,",
+            "    upx=True,",
+            "    upx_exclude=[],",
+            "    name='fortuna-backend-dist',",
+            ")"
+          )
+
           Set-Content -Path "simplified.spec" -Value ($specContent -join "`n")
           Write-Host "✅ Dynamically generated 'simplified.spec' created."
 
