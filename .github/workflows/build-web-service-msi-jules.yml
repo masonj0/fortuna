@@ -5,17 +5,6 @@ on:
   push:
     branches:
       - main
-      - session/jules1130b
-    tags:
-      - 'v*'
-    paths:
-      - 'python_service/**'
-      - 'web_service/backend/**'
-      - 'web_platform/frontend/**'
-      - 'fortuna-backend-webservice.spec'
-      - 'webservice.spec'
-      - '.github/workflows/build-web-service-msi-gpt5.yml'
-  workflow_dispatch:
 
 permissions:
   contents: read
