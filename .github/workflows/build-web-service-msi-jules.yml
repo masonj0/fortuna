@@ -53,6 +53,18 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: 🔍 VERIFY CRITICAL FILE EXISTS
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $critical_file = "web_service/backend/__init__.py"
+          if (Test-Path $critical_file) {
+            Write-Host "✅ Critical file '$critical_file' found." -ForegroundColor Green
+          } else {
+            Write-Host "❌ FATAL: Critical file '$critical_file' is MISSING. This will cause PyInstaller to fail." -ForegroundColor Red
+            exit 1
+          }
+
       - name: Detect Backend Path
         id: find-path
         run: |
