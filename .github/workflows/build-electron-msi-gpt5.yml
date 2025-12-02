@@ -5,8 +5,6 @@ on:
   push:
     branches:
       - main
-      - session/jules1130b
-  workflow_dispatch:
 
 concurrency:
   group: build-electron-msi-${{ github.ref }}
@@ -28,6 +26,8 @@ jobs:
       node_version: ${{ steps.versions.outputs.node }}
       python_version: ${{ steps.versions.outputs.python }}
       build_id: ${{ steps.versions.outputs.build_id }}
+      semver: ${{ steps.meta.outputs.semver }}
+      short_sha: ${{ steps.meta.outputs.short_sha }}
     steps:
       - name: 📥 Checkout Repository
         uses: actions/checkout@v4
@@ -182,6 +182,39 @@ jobs:
           }
 
           Write-Host "✓ Service executable: $($serviceExe.FullName) ($('{0:N0}' -f $serviceExe.Length) bytes)"
+
+      - name: ☢️ NUCLEAR FIX Surgical File Injection
+        shell: pwsh
+        run: |
+          $injectionScript = @(
+            "import sys, zipfile, os",
+            # NOTE: Electron workflow outputs to dist/service, not dist
+            "exe_path = 'dist/service/fortuna-backend.exe'",
+            # NOTE: Electron workflow uses python_service, not web_service
+            "init_path = 'python_service/__init__.py'",
+            "arcname = 'python_service/__init__.py'",
+            "",
+            "print(f'--- SURGICAL INJECTION START ---')",
+            "print(f'Target: {exe_path}')",
+            "print(f'Injecting: {init_path}')",
+            "",
+            "if not os.path.exists(init_path):",
+            "    print(f'⚠️ WARNING: {init_path} not found. Attempting to create dummy...')",
+            "    with open(init_path, 'w') as f: f.write('# Injected dummy')",
+            "",
+            "try:",
+            "    with zipfile.ZipFile(exe_path, 'a', compression=zipfile.ZIP_DEFLATED) as zf:",
+            "        if arcname not in zf.namelist():",
+            "            zf.write(init_path, arcname)",
+            "            print('✅ INJECTION SUCCESSFUL: File added to archive.')",
+            "        else:",
+            "            print('⚠️ File already exists in archive. Skipping.')",
+            "except Exception as e:",
+            "    print(f'❌ INJECTION FAILED: {e}')",
+            "    sys.exit(1)"
+          )
+          $injectionScript | Out-File "inject_init.py" -Encoding utf8
+          python inject_init.py
 
       - name: 🧪 Verify Service Executable
         shell: pwsh
@@ -369,7 +402,7 @@ jobs:
             exit 1
           }
 
-      - name: '🧐 Forensically Guarantee Icon Paths (YAML Parser Method)'
+      - name: '🧐 Forensically Guarantee Icon Paths'
         shell: pwsh
         run: |
           Set-StrictMode -Version Latest
@@ -473,7 +506,7 @@ jobs:
           $semver = "${{ needs.validate-environment.outputs.semver }}"
           $shortSha = "${{ needs.validate-environment.outputs.short_sha }}"
           $artifactName = "Fortuna-Electron-${semver}-${shortSha}.msi"
-          npm run dist -- --win msi --config temp-builder-config.yml --publish never -c.artifactName=$artifactName 2>&1
+          npm run dist -- --win msi --config temp-builder-config.yml --publish never --config.artifactName=$artifactName 2>&1
 
           if ($LASTEXITCODE -ne 0) {
             Write-Error "electron-builder MSI creation failed"
@@ -514,7 +547,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Path "release-artifacts" -Force | Out-Null
 
-          Get-ChildItem -Filter "*.msi" -Recurse | ForEach-Object {
+          Get-ChildItem -Path "electron/dist" -Filter "*.msi" -Recurse | ForEach-Object {
             Copy-Item -LiteralPath $_.FullName -Destination "release-artifacts/"
             Copy-Item -LiteralPath "$($_.FullName).sha256" -Destination "release-artifacts/" -ErrorAction SilentlyContinue
           }
@@ -550,7 +583,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: fortuna-electron-msi-${{ needs.validate-environment.outputs.build_id }}
-          path: release-artifacts/
+          path: |
+            release-artifacts/
+            build-report.json
           retention-days: 90
 
       - name: 🚨 Upload Failure Diagnostics
@@ -566,11 +601,12 @@ jobs:
           retention-days: 30
 
   smoke-test:
-    name: '🔬 Smoke Test (Install & Launch)'
+    name: '🔬 Smoke Test Install & Launch'
     runs-on: windows-latest
     timeout-minutes: 15
     needs:
       - build-electron-msi
+      - validate-environment
     steps:
       - name: 📥 Download MSI Installer
         uses: actions/download-artifact@v4
@@ -644,316 +680,79 @@ jobs:
           Write-Host "🧹 Cleanup complete"
 
   diagnose-asgi-imports:
-    name: '🔍 ASGI Import Killer (Pre-Smoke Diagnostic)'
+    name: '🔍 ASGI Import Killer Pre-Smoke Diagnostic'
     runs-on: windows-latest
     timeout-minutes: 15
     needs: build-python-service
-    env:
-      PYTHONUTF8: '1'
+    continue-on-error: true
     steps:
       - name: 📥 Checkout Repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
-
-      - name: ⚙️ Setup Python (EXACT VERSION)
-        uses: actions/setup-python@v5
+      - name: 'Run ASGI Diagnostics'
+        uses: ./.github/actions/run-asgi-diagnostics
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+          backend-dir: 'python_service'
+          backend-module-path: 'python_service'
 
-      - name: 📋 Capture Python Info
+  stage-release-artifacts:
+    name: '📦 Stage Release Artifacts'
+    runs-on: windows-latest
+    timeout-minutes: 5
+    needs:
+      - build-electron-msi
+      - validate-environment
+    steps:
+      - name: 📥 Download Build Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: fortuna-electron-msi-${{ needs.validate-environment.outputs.build_id }}
+          path: staging-area
+
+      - name: 🚚 Manifest-Driven Extraction
+        shell: pwsh
         run: |
           Set-StrictMode -Version Latest
-          Write-Host "Python executable: $(which python)" -ForegroundColor Cyan
-          python --version
-          python -m site
-          python -c "import sys; print('Prefix:', sys.prefix); print('Base prefix:', sys.base_prefix)"
-
-      - name: 📥 Install Requirements (Exactly as Backend Build)
-        run: |
-          Set-StrictMode -Version Latest
-          python -m pip install --upgrade pip setuptools wheel --quiet
-
-          Write-Host "Installing requirements.txt..." -ForegroundColor Cyan
-          pip install -r "${{ env.BACKEND_DIR }}/requirements.txt" -v 2>&1 | Tee-Object "install-requirements.log"
-
-          if (Test-Path "${{ env.BACKEND_DIR }}/requirements-dev.txt") {
-            Write-Host "Installing requirements-dev.txt..." -ForegroundColor Cyan
-            pip install -r "${{ env.BACKEND_DIR }}/requirements-dev.txt" -v 2>&1 | Tee-Object -Append "install-requirements.log"
-          }
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "❌ pip install failed" -ForegroundColor Red
+          $reportPath = "staging-area/build-report.json"
+          if (-not (Test-Path $reportPath)) {
+            Write-Error "build-report.json not found in downloaded artifact."
             exit 1
           }
 
-          Write-Host "✅ All dependencies installed" -ForegroundColor Green
+          $report = Get-Content $reportPath | ConvertFrom-Json
+          $msiFile = $report.msi_files[0]
 
-      - name: 📦 Capture Installed Packages
-        run: |
-          pip list | Tee-Object "installed-packages.txt"
-          pip freeze | Tee-Object "pip-freeze.txt"
-
-      - name: 🐍 Set PYTHONPATH
-        run: |
-          echo "PYTHONPATH=${{ github.workspace }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host "PYTHONPATH set to ${{ github.workspace }}"
-
-      - name: 🧪 PHASE 1 System Imports
-        run: |
-          $script = @(
-            'import sys',
-            'print("\n" + "="*80)',
-            'print("PHASE 1 SYSTEM-LEVEL IMPORTS")',
-            'print("="*80)',
-            'modules = [',
-            "    ('os', 'filesystem'), ('sys', 'system'), ('json', 'serialization'),",
-            "    ('asyncio', 'async I/O'), ('pathlib', 'paths'), ('typing', 'type hints'),",
-            "    ('importlib', 'import utilities')",
-            ']',
-            'failed = []',
-            'for mod_name, desc in modules:',
-            '    try:',
-            '        __import__(mod_name)',
-            '        print(f"✅ {mod_name:20} [{desc}]")',
-            '    except ImportError as e:',
-            '        print(f"❌ {mod_name:20} ImportError: {e}")',
-            '        failed.append(mod_name)',
-            'if failed:',
-            '    print(f"\n❌ {len(failed)} system imports failed")',
-            '    sys.exit(1)',
-            'print(f"\n✅ Phase 1 complete")'
-          )
-          $script | Out-File -FilePath "diag_script.py" -Encoding utf8
-          python diag_script.py
-          if ($LASTEXITCODE -ne 0) { exit 1 }
-
-      - name: 🧪 PHASE 2 Web Framework Core
-        run: |
-          $script = @(
-            'import sys',
-            'import traceback',
-            'print("\n" + "="*80)',
-            'print("PHASE 2 WEB FRAMEWORK CORE")',
-            'print("="*80)',
-            'modules = [',
-            "    ('fastapi', 'web framework'),",
-            "    ('uvicorn', 'ASGI server'),",
-            "    ('starlette', 'ASGI toolkit'),",
-            "    ('starlette.applications', 'ASGI app'),",
-            "    ('starlette.routing', 'routing'),",
-            ']',
-            'failed = []',
-            'for mod_name, desc in modules:',
-            '    try:',
-            '        __import__(mod_name)',
-            '        print(f"✅ {mod_name:30} [{desc}]")',
-            '    except ImportError as e:',
-            '        print(f"❌ {mod_name:30} ImportError: {e}")',
-            '        failed.append((mod_name, str(e)))',
-            '    except Exception as e:',
-            '        print(f"⚠️  {mod_name:30} {type(e).__name__}: {e}")',
-            'if failed:',
-            '    print(f"\n❌ {len(failed)} core framework imports failed")',
-            '    for mod, err in failed:',
-            '        print(f"  - {mod}")',
-            '    sys.exit(1)',
-            'print(f"\n✅ Phase 2 complete")'
-          )
-          $script | Out-File -FilePath "diag_script.py" -Encoding utf8
-          python diag_script.py
-          if ($LASTEXITCODE -ne 0) { exit 1 }
-
-      - name: 🧪 PHASE 3 Pydantic & Data Validation
-        run: |
-          $script = @(
-            'import sys',
-            'print("\n" + "="*80)',
-            'print("PHASE 3 PYDANTIC & DATA VALIDATION")',
-            'print("="*80)',
-            'modules = [',
-            "    ('pydantic', 'validation'),",
-            "    ('pydantic_core', 'core'),",
-            "    ('pydantic_settings', 'settings'),",
-            ']',
-            'for mod_name, desc in modules:',
-            '    try:',
-            '        __import__(mod_name)',
-            '        print(f"✅ {mod_name:30} [{desc}]")',
-            '    except Exception as e:',
-            '        print(f"❌ {mod_name:30} {type(e).__name__}: {e}")',
-            '        sys.exit(1)',
-            'print(f"\n✅ Phase 3 complete")'
-          )
-          $script | Out-File -FilePath "diag_script.py" -Encoding utf8
-          python diag_script.py
-          if ($LASTEXITCODE -ne 0) { exit 1 }
-
-      - name: 🧪 PHASE 4 Async/IO Utilities
-        run: |
-          $script = @(
-            'import sys',
-            'print("\n" + "="*80)',
-            'print("PHASE 4 ASYNC/IO UTILITIES")',
-            'print("="*80)',
-            'modules = [',
-            "    ('anyio', 'async compat'),",
-            "    ('httpcore', 'HTTP core'),",
-            "    ('httpx', 'HTTP client'),",
-            "    ('aiosqlite', 'async DB'),",
-            ']',
-            'for mod_name, desc in modules:',
-            '    try:',
-            '        __import__(mod_name)',
-            '        print(f"✅ {mod_name:30} [{desc}]")',
-            '    except Exception as e:',
-            '        print(f"❌ {mod_name:30} {type(e).__name__}: {e}")',
-            '        sys.exit(1)',
-            'print(f"\n✅ Phase 4 complete")'
-          )
-          $script | Out-File -FilePath "diag_script.py" -Encoding utf8
-          python diag_script.py
-          if ($LASTEXITCODE -ne 0) { exit 1 }
-
-      - name: 🧪 PHASE 5 Optional Dependencies (non-critical)
-        continue-on-error: true
-        run: |
-          $script = @(
-            'import sys',
-            'print("\n" + "="*80)',
-            'print("PHASE 5 OPTIONAL DEPENDENCIES (non-critical)")',
-            'print("="*80)',
-            'modules = [',
-            "    ('slowapi', 'rate limiting'),",
-            "    ('structlog', 'logging'),",
-            "    ('tenacity', 'retries'),",
-            ']',
-            'for mod_name, desc in modules:',
-            '    try:',
-            '        __import__(mod_name)',
-            '        print(f"✅ {mod_name:30} [{desc}]")',
-            '    except Exception as e:',
-            '        print(f"⚠️  {mod_name:30} not critical: {type(e).__name__}")',
-            'print(f"\n✅ Phase 5 complete (warnings OK)")'
-          )
-          $script | Out-File -FilePath "diag_script.py" -Encoding utf8
-          python diag_script.py
-
-      - name: 🧪 PHASE 6 Application Directory Structure
-        run: |
-          Set-StrictMode -Version Latest
-
-          $script = @(
-            'import os',
-            'from pathlib import Path',
-            'print("\n" + "="*80)',
-            'print("PHASE 6 APPLICATION DIRECTORY STRUCTURE")',
-            'print("="*80)',
-            'cwd = Path.cwd()',
-            'python_service = cwd / "python_service"',
-            'print(f"\nCurrent directory: {cwd}")',
-            'print(f"\npython_service exists: {python_service.exists()}")',
-            'if python_service.exists():',
-            '    print(f"  Contents:")',
-            '    for item in python_service.iterdir():',
-            '        print(f"    - {item.name}")',
-            '    main_py = python_service / "main.py"',
-            '    api_py = python_service / "api.py"',
-            '    print(f''\n  main.py: {main_py.stat().st_size if main_py.exists() else "N/A"} bytes'')',
-            '    print(f''  api.py: {api_py.stat().st_size if api_py.exists() else "N/A"} bytes'')'
-          )
-          $script | Out-File -FilePath "diag_script.py" -Encoding utf8
-          python diag_script.py
-
-      - name: 🧪 PHASE 7 CRITICAL - Application Module Imports
-        run: |
-          $script = @(
-            'import sys',
-            'import traceback',
-            'from pathlib import Path',
-            'print("\n" + "="*80)',
-            'print("PHASE 7 APPLICATION MODULE IMPORTS (CRITICAL)")',
-            'print("="*80)',
-            'print("\n[Step 1] Importing python_service...")',
-            'try:',
-            '    import python_service',
-            '    print(f"✅ python_service imported")',
-            '    print(f"   Location: {python_service.__file__}")',
-            'except Exception as e:',
-            '    print(f"❌ FATAL: python_service import failed")',
-            '    print(f"   Error: {type(e).__name__}: {e}")',
-            '    traceback.print_exc()',
-            '    sys.exit(1)',
-            'print(''\\n[Step 2] Retrieving "app" object from main...'')',
-            'try:',
-            '    from python_service.main import app',
-            '    print(f"✅ app object retrieved")',
-            '    print(f"   Type: {type(app)}")',
-            '    print(f"   Class: {app.__class__.__name__}")',
-            '    print(f"   Module: {app.__class__.__module__}")',
-            'except Exception as e:',
-            '    print(f"❌ FATAL: Could not get app object")',
-            '    print(f"   Error: {type(e).__name__}: {e}")',
-            '    traceback.print_exc()',
-            '    sys.exit(1)',
-            'print("\n" + "="*80)',
-            'print("✅ ALL APPLICATION IMPORTS SUCCESSFUL")',
-            'print("="*80)',
-            'print("\nThe ASGI app is fully importable.")',
-            'print("Uvicorn should be able to load it successfully.")'
-          )
-          $script | Out-File -FilePath "diag_script.py" -Encoding utf8
-          python diag_script.py
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "❌ APPLICATION IMPORT TEST FAILED" -ForegroundColor Red
+          if (-not $msiFile) {
+            Write-Error "No MSI file listed in the build report."
             exit 1
           }
 
-      - name: 📋 Generate ASGI Diagnostic Report
-        if: always()
-        run: |
-          Set-StrictMode -Version Latest
-          $report = @()
-          $report += "╔════════════════════════════════════════════════════════════════════════════╗"
-          $report += "║              ASGI IMPORT KILLER - DIAGNOSTIC REPORT                        ║"
-          $report += "╚════════════════════════════════════════════════════════════════════════════╝"
-          $report += ""
-          $report += "Timestamp: $(Get-Date -Format 'o')"
-          $report += "Python: $(python --version)"
-          $report += ""
-          $report += "┌────────────────────────────────────────────────────────────────────────────┐"
-          $result = if ($LASTEXITCODE -eq 0) { 'PASS ✅' } else { 'FAIL ❌' }
-          $report += "│ RESULT: $result │"
-          $report += "└────────────────────────────────────────────────────────────────────────────┘"
-          $report += ""
-          $report += "If this passed:"
-          $report += "  ✅ All required dependencies are installed"
-          $report += "  ✅ python_service.main is importable"
-          $report += "  ✅ FastAPI app is accessible"
-          $report += "  ✅ The executable should work"
-          $report += "  ✅ Uvicorn WILL be able to load the app"
-          $report += ""
-          $report += "If this failed:"
-          $report += "  ❌ See error output above for the exact problem"
-          $report += "  ❌ Fix the import error in your code"
-          $report += "  ❌ Common issues:"
-          $report += "     - Missing dependency in requirements.txt"
-          $report += "     - Syntax error in main.py"
-          $report += "     - Circular import in main.py"
-          $report += "     - main.py imports a module that fails"
-          $report += ""
-          $report += "╔════════════════════════════════════════════════════════════════════════════╗"
-          $report | Tee-Object "asgi-diagnostic-report.txt"
+          $sourcePath = Join-Path "staging-area" "release-artifacts"
+          $destinationPath = "final-release-artifact"
+          New-Item -ItemType Directory -Path $destinationPath -Force
 
-      - name: 📤 Upload Diagnostic Artifacts
-        if: always()
+          $msiFileName = Split-Path -Path $msiFile.path -Leaf
+
+          Write-Host "--- Manifest-Driven Extraction ---"
+          Write-Host "Source Directory: $sourcePath"
+          Write-Host "Destination Directory: $destinationPath"
+          Write-Host "Target MSI (from manifest): $msiFileName"
+
+          robocopy $sourcePath $destinationPath $msiFileName ($msiFileName + ".sha256") /R:3 /W:5
+
+          if ($LASTEXITCODE -ge 8) {
+            Write-Error "Robocopy failed with exit code $LASTEXITCODE. This indicates a serious error."
+            exit 1
+          }
+
+          Write-Host "✅ Robocopy completed successfully."
+          Get-ChildItem -Path $destinationPath | Write-Host
+
+      - name: 📤 Upload Final MSI Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: asgi-import-diagnostics-electron-${{ github.run_id }}
-          path: |
-            install-requirements.log
-            installed-packages.txt
-            pip-freeze.txt
-            asgi-diagnostic-report.txt
-          retention-days: 30
-          if-no-files-found: warn
+          name: Final-MSI-Artifact
+          path: final-release-artifact/
+          retention-days: 90

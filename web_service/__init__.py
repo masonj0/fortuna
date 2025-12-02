@@ -1,1 +1,3 @@
-# This file makes the web_service directory a Python package.
+"""Web service package for Fortuna Faucet."""
+__version__ = "1.0.0"
+__all__ = ["backend"]
