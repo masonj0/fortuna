@@ -579,7 +579,6 @@ jobs:
           Write-Host "Staging Destination: $destAbsolutePath"
 
           # Find all MSIs, but EXCLUDE any that are already inside the release-artifacts folder
-          # This prevents the "Copying file onto itself" infinite loop
           $msiFiles = Get-ChildItem -Path "." -Recurse -Filter "*.msi" |
                       Where-Object { $_.FullName -notlike "$destAbsolutePath*" }
 
@@ -591,16 +590,17 @@ jobs:
           foreach ($msi in $msiFiles) {
             Write-Host "Copying: $($msi.FullName)"
 
-            # Use Robocopy for robust copying
             $sourceDir = Split-Path $msi.FullName
             $fileName = $msi.Name
 
-            # /J = Unbuffered I/O (faster), /IS = Include Same, /IT = Include Tweaked
+            # /J = Unbuffered I/O, /IS = Include Same, /IT = Include Tweaked
             robocopy $sourceDir $destAbsolutePath $fileName /J /IS /IT
 
-            # Robocopy exit codes 0-7 are success
+            # Robocopy exit codes 0-7 are success.
+            # We check for failure (>7) but ignore success codes (1-7)
             if ($LASTEXITCODE -gt 7) {
               Write-Error "Robocopy failed for $fileName with code $LASTEXITCODE"
+              exit 1
             }
 
             # Handle the checksum file if it exists
@@ -612,6 +612,9 @@ jobs:
 
           Write-Host "✅ Staging complete. Contents of $destDir :"
           Get-ChildItem $destAbsolutePath | Select-Object Name, Length
+
+          # CRITICAL FIX: Force exit code 0 so Robocopy's "1" doesn't fail the build
+          exit 0
 
       - name: 📤 Upload Release Artifacts
         if: success()
