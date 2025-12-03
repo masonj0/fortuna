@@ -219,10 +219,6 @@ jobs:
     name: HatTrick Fusion Smoke Test
     runs-on: windows-latest
     needs: package-msi
-    env:
-      SERVICE_PORT: ${{ env.SERVICE_PORT }}
-      FRONTEND_PORT: ${{ env.FRONTEND_PORT }}
-      FIREWALL_RULE: ${{ env.FIREWALL_RULE }}
     steps:
       - uses: actions/download-artifact@v4
         with:
