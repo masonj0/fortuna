@@ -67,6 +67,12 @@ a = Analysis(
     noarchive=False,
 )
 
+# ☢️ PYZ INJECTION: Force __init__ files into the PYZ archive as modules
+# This is the definitive fix for ModuleNotFoundError at runtime.
+a.pure += [
+    ('python_service', str(project_root / 'python_service/__init__.py'), 'PYMODULE'),
+]
+
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 exe = EXE(
