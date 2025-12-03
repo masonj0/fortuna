@@ -22,9 +22,7 @@
     </Feature>
 
     <ui:WixUI Id="WixUI_InstallDir"
-              InstallDirectory="INSTALLFOLDER"
-              ApplicationFolderName="Fortuna Faucet"
-              ExeProperty="SERVICEEXE" />
+              InstallDirectory="INSTALLFOLDER" />
 
   </Package>
 
@@ -38,13 +36,13 @@
     </StandardDirectory>
 
     <ComponentGroup Id="ServiceComponents" Directory="INSTALLFOLDER">
-      <Component>
+      <Component Id="ServiceComponent" Guid="*">
         <File Id="ServiceExe"
               Source="$(var.SourceDir)/fortuna-webservice.exe"
               KeyPath="true" />
 
         <ServiceInstall Id="ServiceInstaller"
-                        Name="FortunaFaucetService"
+                        Name="FortunaWebService"
                         DisplayName="Fortuna Faucet Backend Service"
                         Description="Data aggregation and analysis engine for horse racing."
                         Start="auto"
@@ -52,39 +50,40 @@
                         ErrorControl="normal" />
 
         <ServiceControl Id="ServiceControl"
-                        Name="FortunaFaucetService"
+                        Name="FortunaWebService"
                         Start="install"
                         Stop="both"
                         Remove="uninstall"
                         Wait="true" />
 
-        <util:ServiceConfig FirstFailureActionType="restart"
+        <util:ServiceConfig ServiceName="FortunaWebService"
+                            FirstFailureActionType="restart"
                             SecondFailureActionType="restart"
                             ThirdFailureActionType="restart"
                             RestartServiceDelayInSeconds="60" />
 
         <fire:FirewallException Id="FirewallRule"
                                 Name="Fortuna Faucet"
-                                Port="[SERVICE_PORT]"
+                                Port="8102"
                                 Protocol="tcp"
                                 Scope="any" />
       </Component>
     </ComponentGroup>
 
     <ComponentGroup Id="RuntimeDirectoryComponents" Directory="INSTALLFOLDER">
-        <Component>
+        <Component Id="DataDirectoryComponent" Guid="*">
             <CreateFolder Directory="data" />
         </Component>
-        <Component>
+        <Component Id="JsonDirectoryComponent" Guid="*">
             <CreateFolder Directory="json" />
         </Component>
-        <Component>
+        <Component Id="LogsDirectoryComponent" Guid="*">
             <CreateFolder Directory="logs" />
         </Component>
     </ComponentGroup>
 
     <ComponentGroup Id="ShortcutComponents" Directory="ApplicationProgramsFolder">
-        <Component>
+        <Component Id="ShortcutComponent" Guid="*">
             <Shortcut Id="UninstallShortcut"
                       Name="Uninstall Fortuna Faucet"
                       Description="Removes the application"
