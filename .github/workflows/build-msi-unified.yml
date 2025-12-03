@@ -263,6 +263,14 @@ jobs:
           path: dist/fortuna-backend.exe
           retention-days: 1
 
+      - name: 📤 Upload Executable on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failed-executable-${{ steps.vars.outputs.build_id }}
+          path: dist/
+          retention-days: 5
+
   package-msi:
     name: '💿 Package MSI'
     runs-on: windows-latest
