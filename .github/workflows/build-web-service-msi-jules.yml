@@ -796,7 +796,7 @@ jobs:
             Write-Host "✅ Privileges granted successfully."
           }
 
-      - name: 🚀 LOOP 1: Install & Verify Service Registration
+      - name: '🚀 LOOP 1 - Install & Verify Service Registration'
         shell: pwsh
         run: |
           $msiPath = "${{ steps.find_msi.outputs.msi_path }}"
@@ -821,7 +821,7 @@ jobs:
 
           Write-Host "✅ Service is registered. State: $($service.Status)"
 
-      - name: 🚦 LOOP 2: Start Service & Verify Process
+      - name: '🚦 LOOP 2 - Start Service & Verify Process'
         shell: pwsh
         run: |
           Write-Host "Attempting to start the 'FortunaWebService'..."
@@ -847,7 +847,7 @@ jobs:
             exit 1
           }
 
-      - name: 🩺 LOOP 3: Health Check Endpoint
+      - name: '🩺 LOOP 3 - Health Check Endpoint'
         shell: pwsh
         run: |
           Write-Host "Starting health checks against http://localhost:${{ env.SERVICE_PORT }}${{ env.HEALTH_ENDPOINT }} (up to 60 seconds)..."
@@ -1044,10 +1044,28 @@ jobs:
         with:
           name: fortuna-service-msi-${{ github.run_id }}
           path: msi-installer
+      - name: 🚚 Stage Final Artifact
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $sourceDir = "msi-installer"
+          $destDir = "final-release-artifact"
+          New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+
+          robocopy $sourceDir $destDir /E
+
+          if ($LASTEXITCODE -ge 8) {
+            Write-Error "Robocopy failed with exit code $LASTEXITCODE. This indicates a serious error."
+            exit 1
+          }
+
+          Write-Host "✅ Robocopy completed successfully."
+          Get-ChildItem -Path $destDir | Write-Host
+          exit 0
 
       - name: 📤 Upload Final MSI Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Final-MSI-Artifact
-          path: msi-installer/
+          path: final-release-artifact/
           retention-days: 90

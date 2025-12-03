@@ -217,24 +217,22 @@ jobs:
           "exe = EXE(",
           "    pyz,",
           "    a.scripts,",
+          "    a.binaries,",
+          "    a.zipfiles,",
+          "    a.datas,",
           "    [],",
-          "    exclude_binaries=True,",
           "    name='fortuna-backend',",
           "    debug=False,",
           "    bootloader_ignore_signals=False,",
           "    strip=False,",
           "    upx=True,",
+          "    runtime_tmpdir=None,",
           "    console=True,",
-          ")",
-          "coll = COLLECT(",
-          "    exe,",
-          "    a.binaries,",
-          "    a.zipfiles,",
-          "    a.datas,",
-          "    strip=False,",
-          "    upx=True,",
-          "    upx_exclude=[],",
-          "    name='fortuna-backend',",
+          "    disable_windowed_traceback=False,",
+          "    argv_emulation=False,",
+          "    target_arch=None,",
+          "    codesign_identity=None,",
+          "    entitlements_file=None",
           ")"
           )
           Set-Content -Path "fortuna-backend-electron.spec" -Value $specContent
@@ -638,7 +636,6 @@ jobs:
             exit 1
           }
 
-          $robocopy_failed = $false
           foreach ($msi in $msiFiles) {
             Write-Host "Copying: $($msi.FullName)"
             $sourceDir = Split-Path $msi.FullName
@@ -646,10 +643,10 @@ jobs:
 
             robocopy $sourceDir $destAbsolutePath $fileName /J /IS /IT
 
-            # Robocopy exit codes >= 8 indicate a failure.
+            # Robocopy exit codes < 8 indicate success (files copied, extra files, etc.)
             if ($LASTEXITCODE -ge 8) {
               Write-Error "Robocopy failed for $fileName with code $LASTEXITCODE"
-              $robocopy_failed = $true
+              exit 1 # Exit immediately on a true failure
             }
 
             # Handle the checksum file if it exists
@@ -662,13 +659,8 @@ jobs:
           Write-Host "✅ Staging complete. Contents of $($destDir):"
           Get-ChildItem $destAbsolutePath | Select-Object Name, Length
 
-          if ($robocopy_failed) {
-            Write-Error "One or more Robocopy operations failed. Exiting with error."
-            exit 1
-          }
-
           Write-Host "All Robocopy operations were successful (exit codes 0-7)."
-          exit 0
+          exit 0 # Explicitly exit with success code 0
 
       - name: 📤 Upload Release Artifacts
         if: success()
