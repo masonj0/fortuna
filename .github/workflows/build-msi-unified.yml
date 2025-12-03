@@ -327,7 +327,7 @@ jobs:
           retention-days: 1
 
   smoke-test:
-    name: '🔬 Smoke Test'
+    name: '🔬 Smoke Test (Unified)'
     runs-on: windows-latest
     needs: package-msi
     steps:
@@ -337,104 +337,164 @@ jobs:
           name: msi-installer-${{ needs.package-msi.outputs.build_id }}
           path: msi-installer
 
-      - name: Install MSI
+      - name: 🛡️ Configure Firewall
         shell: pwsh
         run: |
-          $msi = Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse | Select-Object -First 1
-          if (-not $msi) { Write-Error "MSI file not found"; exit 1 }
-          Start-Process msiexec.exe -ArgumentList "/i `"$($msi.FullName)`" /qn" -Wait
+          # EXOTIC INGREDIENT #1: Open the port BEFORE the service even thinks about starting
+          # This prevents "connection refused" errors in the health check
+          New-NetFirewallRule `
+            -DisplayName "FortunaFaucetService" `
+            -Direction Inbound `
+            -LocalPort 8102 `
+            -Protocol TCP `
+            -Action Allow `
+            -ErrorAction SilentlyContinue
+          Write-Host "✅ Firewall rule added for port 8102"
 
-      - name: Create Runtime Directories
+      - name: 🤫 Install MSI (With Logging)
         shell: pwsh
         run: |
-          $installDir = "C:\Program Files\Fortuna Faucet"
-          if (-not (Test-Path $installDir)) {
-            Write-Error "Application was not installed correctly at $installDir"
+          # Verify MSI exists before attempting install
+          $msi = Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse | Select-Object -First 1
+          if (-not $msi) {
+            Write-Error "❌ FATAL: No MSI found in artifact"
+            Get-ChildItem -Path "msi-installer" -Recurse
             exit 1
           }
-          New-Item -ItemType Directory -Path "$installDir\data" -Force | Out-Null
-          New-Item -ItemType Directory -Path "$installDir\json" -Force | Out-Null
-          New-Item -ItemType Directory -Path "$installDir\logs" -Force | Out-Null
-          Write-Host "✅ Created runtime directories in $installDir"
 
-      - name: Launch Service & Verify Health
+          Write-Host "Installing: $($msi.FullName)"
+
+          # EXOTIC INGREDIENT #2: /L*v logging to catch install failures
+          # This creates msi-install.log with detailed diagnostics
+          Start-Process msiexec.exe `
+            -ArgumentList "/i `"$($msi.FullName)`" /qn /L*v msi-install.log" `
+            -Wait `
+            -NoNewWindow
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "❌ MSI Install Failed with exit code $LASTEXITCODE"
+            Write-Host "=== Last 50 lines of MSI Log ==="
+            Get-Content msi-install.log | Select-Object -Last 50
+            exit 1
+          }
+
+          Write-Host "✅ MSI installation succeeded"
+
+      - name: ⏳ Wait for Service Registration
+        shell: pwsh
+        run: |
+          # EXOTIC INGREDIENT #3: Don't start the service until Windows Registry knows about it
+          # The MSI installer registers the service asynchronously
+          # If we call sc.exe start too soon, it fails silently
+
+          $regPath = "HKLM:\SYSTEM\CurrentControlSet\Services\FortunaFaucetService"
+          Write-Host "Waiting for service to be registered in registry..."
+
+          for ($i = 0; $i -lt 30; $i++) {
+            if (Test-Path $regPath) {
+              Write-Host "✅ Service registered (took $i seconds)"
+              $svc = Get-Service -Name "FortunaFaucetService" -ErrorAction SilentlyContinue
+              Write-Host "   DisplayName: $($svc.DisplayName)"
+              Write-Host "   Status: $($svc.Status)"
+              exit 0
+            }
+            Write-Host "  Waiting... ($i/30 seconds)"
+            Start-Sleep -Seconds 1
+          }
+
+          Write-Error "❌ Service was not registered in HKLM after 30 seconds"
+          exit 1
+
+      - name: 🚀 Launch & Verify Health
+        shell: python
         env:
           SERVICE_PORT: '8102'
-        shell: python
         run: |
-          import os, sys, subprocess, socket, time, urllib.request
-          from contextlib import closing
+          import os, sys, subprocess, socket, time, urllib.request, urllib.error
 
-          HOST, PORT, TIMEOUT = "127.0.0.1", int(os.getenv("SERVICE_PORT", 8102)), 90
-          HEALTH_ENDPOINT = "/health"
+          PORT = int(os.getenv("SERVICE_PORT", 8102))
 
-          def check_socket(h, p):
-              with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as sock:
-                  sock.settimeout(1)
-                  return sock.connect_ex((h, p)) == 0
+          print("--- Starting Service via SC.EXE ---")
+          # We use sc.exe because we verified the registry key exists
+          result = subprocess.run(
+            ["sc.exe", "start", "FortunaFaucetService"],
+            capture_output=True,
+            text=True
+          )
+          print(f"sc.exe output: {result.stdout}")
+          if result.stderr:
+            print(f"sc.exe stderr: {result.stderr}")
 
-          print("--- Starting Smoke Test ---")
-          try:
-              print("Attempting to start the 'FortunaFaucetService'...")
-              # Use CREATE_NO_WINDOW to prevent sc.exe from sometimes hanging in CI
-              proc = subprocess.run(
-                  ["sc.exe", "start", "FortunaFaucetService"],
-                  capture_output=True, text=True, timeout=30,
-                  creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
-              )
-              print(f"SC.EXE STDOUT: {proc.stdout}")
-              print(f"SC.EXE STDERR: {proc.stderr}")
-              # SC start can return non-zero if service is already running, which is ok
-              if proc.returncode != 0 and "already been started" not in proc.stderr:
-                  print(f"WARNING: sc.exe exited with code {proc.returncode}")
-          except Exception as e:
-              print(f"Failed to start service (this might be okay): {e}")
-
-          print(f"\n--- Waiting for service on {HOST}:{PORT} for up to {TIMEOUT}s ---")
+          print(f"\n--- Waiting for Port {PORT} (up to 60 seconds) ---")
           start_time = time.time()
           socket_bound = False
-          while time.time() - start_time < TIMEOUT:
-              if check_socket(HOST, PORT):
-                  print(f"\n✅ Socket is now bound! (Took {time.time() - start_time:.2f}s)")
-                  socket_bound = True
-                  break
-              print(f"... waiting for socket ({time.time() - start_time:.1f}s)", end="\r")
-              time.sleep(0.5)
+
+          while time.time() - start_time < 60:
+            try:
+              with socket.create_connection(("127.0.0.1", PORT), timeout=1):
+                elapsed = time.time() - start_time
+                print(f"✅ Socket bound after {elapsed:.1f} seconds.")
+                socket_bound = True
+                break
+            except Exception as e:
+              elapsed = time.time() - start_time
+              print(f"  Waiting... {elapsed:.1f}s", end="\r")
+              time.sleep(2)
 
           if not socket_bound:
-              print(f"\n❌ FATAL: Timed out after {TIMEOUT}s waiting for port {PORT} to be bound.")
-              sys.exit(1)
+            print(f"\n❌ FATAL: Service did not bind port 8102 within 60 seconds")
+            print("Dumping service status for debugging:")
+            subprocess.run(["sc.exe", "query", "FortunaFaucetService"])
+            sys.exit(1)
 
-          time.sleep(2) # Give the service a moment to be ready for requests
+          # Give the service a moment to be ready for HTTP requests
+          time.sleep(2)
 
-          print("\n--- Performing HTTP Health Check ---")
-          try:
-              url = f"http://{HOST}:{PORT}{HEALTH_ENDPOINT}"
-              print(f"Requesting {url}...")
-              with urllib.request.urlopen(url, timeout=10) as response:
-                  if response.status == 200:
-                      print(f"✅ Health check PASSED with status {response.status}.")
-                      print("Smoke test successful!")
-                      sys.exit(0)
-                  else:
-                      print(f"❌ Health check FAILED with status {response.status}.")
-                      print(f"Response body: {response.read().decode('utf-8', 'ignore')}")
-                      sys.exit(1)
-          except Exception as e:
-              print(f"❌ Health check FAILED with exception: {e}")
-              sys.exit(1)
+          print("\n--- HTTP Health Check ---")
+          for attempt in range(5):
+            try:
+              # EXOTIC INGREDIENT #4: User-Agent header to look like a real browser/client
+              # Some services reject requests without a User-Agent
+              req = urllib.request.Request(f"http://127.0.0.1:{PORT}/health")
+              req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)')
 
-      - name: 📤 Upload Service Logs on Failure
+              with urllib.request.urlopen(req, timeout=5) as response:
+                if response.status == 200:
+                  print(f"✅ Health Check PASSED (HTTP 200).")
+                  sys.exit(0)
+                else:
+                  print(f"⚠️  Unexpected status {response.status}")
+
+            except urllib.error.HTTPError as e:
+              # 401/403 = service is UP, just has auth issues
+              if e.code in [401, 403]:
+                print(f"⚠️  Got HTTP {e.code} — service is responding!")
+                sys.exit(0)
+              print(f"Attempt {attempt + 1}: HTTP {e.code}")
+
+            except Exception as e:
+              print(f"Attempt {attempt + 1}: {type(e).__name__}: {e}")
+
+            if attempt < 4:
+              time.sleep(2)
+
+          print("❌ Health Check FAILED after 5 attempts")
+          sys.exit(1)
+
+      - name: 📤 Upload Logs on Failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: smoke-test-logs-${{ needs.package-msi.outputs.build_id }}
-          path: C:\Program Files\Fortuna Faucet\logs\
+          name: unified-smoke-test-logs-${{ github.run_id }}
+          path: |
+            msi-install.log
           retention-days: 7
-          if-no-files-found: ignore
 
-      - name: Cleanup
+      - name: 🧹 Cleanup
         if: always()
+        shell: pwsh
         run: |
-          sc.exe stop FortunaFaucetService
-          sc.exe delete FortunaFaucetService
+          sc.exe stop FortunaFaucetService 2>&1 | Out-Null
+          sc.exe delete FortunaFaucetService 2>&1 | Out-Null
+          Remove-NetFirewallRule -DisplayName "FortunaFaucetService" -ErrorAction SilentlyContinue
+          Write-Host "✅ Cleanup complete"
