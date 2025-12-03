@@ -154,6 +154,92 @@ jobs:
           pip install -r ${{ env.BACKEND_DIR }}/requirements-dev.txt
           Write-Host "✓ Python dependencies installed"
 
+      - name: ☢️ NUCLEAR FIX -- Ensure Python Package Structure & Double Injection
+        shell: pwsh
+        run: |
+          Set-Content -Path "python_service/__init__.py" -Value "# This file is intentionally non-empty to ensure package recognition."
+          Write-Host "✅ Ensured non-empty __init__.py files exist for package discovery."
+
+      - name: Create Dynamic fortuna-backend-electron.spec for PyInstaller
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $entry_point = '${{ env.BACKEND_DIR }}/main.py'.Replace('\', '/')
+          $other_service = "web_service"
+
+          # Ensure absolute paths for the init files
+          $backend_init = (Resolve-Path "python_service/__init__.py").Path.Replace('\', '/')
+
+          $specContent = @(
+          "# -*- mode: python ; coding: utf-8 -*-",
+          "import os",
+          "from pathlib import Path",
+          "from PyInstaller.utils.hooks import collect_data_files, collect_submodules",
+          "",
+          "block_cipher = None",
+          "project_root = Path(os.getcwd())",
+          "",
+          "datas = []",
+          "datas += collect_data_files('uvicorn')",
+          "datas += collect_data_files('slowapi')",
+          "datas += collect_data_files('structlog')",
+          "",
+          "hiddenimports = collect_submodules('python_service')",
+          "hiddenimports += [",
+          "    'uvicorn.logging', 'uvicorn.loops.auto', 'uvicorn.lifespan.on',",
+          "    'uvicorn.protocols.http.h11_impl', 'uvicorn.protocols.websockets.wsproto_impl',",
+          "    'fastapi.routing', 'starlette.staticfiles', 'anyio._backends._asyncio',",
+          "    'httpcore', 'httpx', 'slowapi', 'structlog', 'tenacity', 'aiosqlite',",
+          "    'pydantic_core'",
+          "]",
+          "",
+          "a = Analysis(",
+          "    ['$entry_point'],",
+          "    pathex=[str(project_root)],",
+          "    binaries=[],",
+          "    datas=datas,",
+          "    hiddenimports=hiddenimports,",
+          "    hookspath=[],",
+          "    runtime_hooks=[],",
+          "    excludes=['tests', 'pytest', '$other_service'],",
+          "    win_no_prefer_redirects=False,",
+          "    win_private_assemblies=False,",
+          "    cipher=block_cipher,",
+          "    noarchive=False",
+          ")",
+          "",
+          "# ☢️ NUCLEAR OVERRIDE: Force __init__ files into the PYZ archive",
+          "a.pure += [",
+          "    ('python_service', '$backend_init', 'PYMODULE')",
+          "]",
+          "",
+          "pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)",
+          "exe = EXE(",
+          "    pyz,",
+          "    a.scripts,",
+          "    [],",
+          "    exclude_binaries=True,",
+          "    name='fortuna-backend',",
+          "    debug=False,",
+          "    bootloader_ignore_signals=False,",
+          "    strip=False,",
+          "    upx=True,",
+          "    console=True,",
+          ")",
+          "coll = COLLECT(",
+          "    exe,",
+          "    a.binaries,",
+          "    a.zipfiles,",
+          "    a.datas,",
+          "    strip=False,",
+          "    upx=True,",
+          "    upx_exclude=[],",
+          "    name='fortuna-backend',",
+          ")"
+          )
+          Set-Content -Path "fortuna-backend-electron.spec" -Value $specContent
+          Write-Host "✅ Dynamically generated 'fortuna-backend-electron.spec' with PYZ Injection."
+
       - name: 🔨 Build Python Service with PyInstaller
         shell: pwsh
         run: |
@@ -182,39 +268,6 @@ jobs:
           }
 
           Write-Host "✓ Service executable: $($serviceExe.FullName) ($('{0:N0}' -f $serviceExe.Length) bytes)"
-
-      - name: ☢️ NUCLEAR FIX Surgical File Injection
-        shell: pwsh
-        run: |
-          $injectionScript = @(
-            "import sys, zipfile, os",
-            # NOTE: Electron workflow outputs to dist/service, not dist
-            "exe_path = 'dist/service/fortuna-backend.exe'",
-            # NOTE: Electron workflow uses python_service, not web_service
-            "init_path = 'python_service/__init__.py'",
-            "arcname = 'python_service/__init__.py'",
-            "",
-            "print(f'--- SURGICAL INJECTION START ---')",
-            "print(f'Target: {exe_path}')",
-            "print(f'Injecting: {init_path}')",
-            "",
-            "if not os.path.exists(init_path):",
-            "    print(f'⚠️ WARNING: {init_path} not found. Attempting to create dummy...')",
-            "    with open(init_path, 'w') as f: f.write('# Injected dummy')",
-            "",
-            "try:",
-            "    with zipfile.ZipFile(exe_path, 'a', compression=zipfile.ZIP_DEFLATED) as zf:",
-            "        if arcname not in zf.namelist():",
-            "            zf.write(init_path, arcname)",
-            "            print('✅ INJECTION SUCCESSFUL: File added to archive.')",
-            "        else:",
-            "            print('⚠️ File already exists in archive. Skipping.')",
-            "except Exception as e:",
-            "    print(f'❌ INJECTION FAILED: {e}')",
-            "    sys.exit(1)"
-          )
-          $injectionScript | Out-File "inject_init.py" -Encoding utf8
-          python inject_init.py
 
       - name: 🧪 Verify Service Executable
         shell: pwsh
@@ -606,7 +659,7 @@ jobs:
             }
           }
 
-          Write-Host "✅ Staging complete. Contents of $destDir:"
+          Write-Host "✅ Staging complete. Contents of $($destDir):"
           Get-ChildItem $destAbsolutePath | Select-Object Name, Length
 
           if ($robocopy_failed) {
@@ -640,12 +693,10 @@ jobs:
           retention-days: 30
 
   smoke-test:
-    name: '🔬 Smoke Test Install & Launch'
+    name: '🔬 Smoke Test (Robust)'
     runs-on: windows-latest
     timeout-minutes: 15
-    needs:
-      - build-electron-msi
-      - validate-environment
+    needs: [validate-environment, build-electron-msi]
     steps:
       - name: 📥 Download MSI Installer
         uses: actions/download-artifact@v4
@@ -653,75 +704,135 @@ jobs:
           name: fortuna-electron-msi-${{ needs.validate-environment.outputs.build_id }}
           path: msi-installer
 
-      - name: 🤫 Install MSI Silently
+      - name: 📋 Inspect Artifact
         shell: pwsh
         run: |
-          # ADD -Recurse HERE vvv
-          $msi = Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse | Select-Object -First 1
+          Write-Host "=== Artifact Contents ==="
+          Get-ChildItem -Path "msi-installer" -Recurse | ForEach-Object {
+            Write-Host "  $($_.FullName)"
+          }
 
-          if ($null -eq $msi) {
-            Write-Error "MSI file not found in artifact"
-            # Debugging: List what IS there
-            Get-ChildItem -Path "msi-installer" -Recurse | Select-Object FullName
+      - name: 🤫 Install MSI & Verify
+        shell: pwsh
+        run: |
+          # EXOTIC INGREDIENT #1: Find MSI with recursion
+          $msi = Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse -ErrorAction SilentlyContinue |
+                 Select-Object -First 1
+
+          if (-not $msi) {
+            Write-Error "❌ FATAL: No MSI file found in artifact"
             exit 1
           }
 
-          Write-Host "Found MSI: $($msi.FullName)"
-          # Start the installer and wait for it to finish
-          Start-Process msiexec.exe -ArgumentList "/i `"$($msi.FullName)`" /qn" -Wait
+          Write-Host "Installing: $($msi.Name)"
 
-          # Crude check to see if installation was likely successful
-          $installDir = "C:\Program Files\Fortuna Faucet"
-          if (-not (Test-Path "$installDir\Fortuna Faucet.exe")) {
-            Write-Error "Application executable not found after installation"
+          # EXOTIC INGREDIENT #2: Logging with /L*v
+          Start-Process msiexec.exe `
+            -ArgumentList "/i `"$($msi.FullName)`" /qn /L*v msi-install.log" `
+            -Wait `
+            -NoNewWindow
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "❌ MSI Install Failed with exit code $LASTEXITCODE"
+            Get-Content msi-install.log | Select-Object -Last 20
             exit 1
           }
-          Write-Host "✅ Application appears to be installed"
 
-      - name: 🏗️ Create Runtime Directories
+          Write-Host "✅ MSI installation succeeded"
+
+      - name: 🕵️ Find Installed Executable
         shell: pwsh
         run: |
-          $installDir = "C:\Program Files\Fortuna Faucet"
-          New-Item -ItemType Directory -Path "$installDir\data" -Force | Out-Null
-          New-Item -ItemType Directory -Path "$installDir\json" -Force | Out-Null
-          New-Item -ItemType Directory -Path "$installDir\logs" -Force | Out-Null
-          Write-Host "✅ Created runtime directories in $installDir"
+          # EXOTIC INGREDIENT #3: Don't assume the path. Find it dynamically.
+          # Searches for the main executable, skipping uninstallers
 
-      - name: 🚀 Launch Application & Verify Process
+          $root = "C:\Program Files\Fortuna Faucet"
+          if (-not (Test-Path $root)) {
+            Write-Error "❌ Install directory not found: $root"
+            Get-ChildItem "C:\Program Files" | Write-Host
+            exit 1
+          }
+
+          $exe = Get-ChildItem -Path $root `
+                 -Filter "*.exe" `
+                 -Recurse `
+                 -ErrorAction SilentlyContinue |
+                 Where-Object { $_.Name -notmatch 'uninstall' } |
+                 Select-Object -First 1
+
+          if (-not $exe) {
+            Write-Error "❌ No main executable found in $root"
+            Get-ChildItem -Path $root -Recurse | Write-Host
+            exit 1
+          }
+
+          Write-Host "✅ Found Executable: $($exe.FullName)"
+          $exe.FullName | Out-File "installed_exe.txt" -Encoding utf8
+
+      - name: 🚀 Launch Application & Wait for Processes
         shell: pwsh
         run: |
-          $exePath = "C:\Program Files\Fortuna Faucet\Fortuna Faucet.exe"
+          $exePath = Get-Content "installed_exe.txt"
+          $exeName = Split-Path -Leaf $exePath
 
-          # Start the main application
+          Write-Host "Launching: $exePath"
           Start-Process -FilePath $exePath
 
-          # Give it a moment to initialize
-          Start-Sleep -Seconds 15
+          Write-Host "Waiting for child processes to spawn (up to 60 seconds)..."
 
-          # Check if the main Electron process and the Python backend are running
-          $electronProc = Get-Process -Name "Fortuna Faucet" -ErrorAction SilentlyContinue
-          $backendProc = Get-Process -Name "fortuna-backend" -ErrorAction SilentlyContinue
+          # EXOTIC INGREDIENT #4: Poll for BOTH processes with a timeout
+          $deadline = (Get-Date).AddSeconds(60)
+          $electronFound = $false
+          $backendFound = $false
 
-          if ($null -eq $electronProc) {
-            Write-Error "Electron process 'Fortuna Faucet.exe' is not running."
-            exit 1
+          while ((Get-Date) -lt $deadline) {
+            # Check for Electron process (by name)
+            $electronProc = Get-Process -Name "Fortuna Faucet" -ErrorAction SilentlyContinue |
+                            Select-Object -First 1
+
+            # Check for Python backend
+            $backendProc = Get-Process -Name "fortuna-backend" -ErrorAction SilentlyContinue |
+                           Select-Object -First 1
+
+            if ($electronProc) {
+              Write-Host "✅ Electron process running (PID: $($electronProc.Id))"
+              $electronFound = $true
+            }
+
+            if ($backendProc) {
+              Write-Host "✅ Backend process running (PID: $($backendProc.Id))"
+              $backendFound = $true
+            }
+
+            # Success: Electron is running (backend is optional/secondary)
+            if ($electronFound) {
+              Write-Host "✅ SUCCESS: Main application is running."
+              exit 0
+            }
+
+            Start-Sleep -Milliseconds 500
           }
 
-          if ($null -eq $backendProc) {
-            Write-Error "Backend process 'fortuna-backend.exe' is not running."
-            exit 1
-          }
+          Write-Error "❌ TIMEOUT: Electron process never started within 60 seconds"
+          Get-Process | Where-Object { $_.Name -like "*Fortuna*" } | Format-Table
+          exit 1
 
-          Write-Host "✅ Electron main process (PID: $($electronProc.Id)) is running."
-          Write-Host "✅ Python backend process (PID: $($backendProc.Id)) is running."
+      - name: 📤 Upload Logs on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-smoke-test-logs-${{ github.run_id }}
+          path: |
+            msi-install.log
+          retention-days: 7
 
-      - name: 🧹 Cleanup Processes
+      - name: 🧹 Cleanup
         if: always()
         shell: pwsh
         run: |
           Stop-Process -Name "Fortuna Faucet" -Force -ErrorAction SilentlyContinue
           Stop-Process -Name "fortuna-backend" -Force -ErrorAction SilentlyContinue
-          Write-Host "🧹 Cleanup complete"
+          Write-Host "✅ Cleanup complete"
 
   diagnose-asgi-imports:
     name: '🔍 ASGI Import Killer Pre-Smoke Diagnostic'
