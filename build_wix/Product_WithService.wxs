@@ -22,7 +22,8 @@
     </Feature>
 
     <ui:WixUI Id="WixUI_InstallDir"
-              InstallDirectory="INSTALLFOLDER" />
+              InstallDirectory="INSTALLFOLDER"
+              ApplicationFolderName="Fortuna Faucet" />
 
   </Package>
 
