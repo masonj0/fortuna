@@ -20,6 +20,7 @@ jobs:
     outputs:
       backend_dir: ${{ steps.find-path.outputs.backend_dir }}
       backend_module_path: ${{ steps.find-path.outputs.backend_module_path }}
+      semver: ${{ steps.meta.outputs.semver }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -45,6 +46,20 @@ jobs:
           }
           "backend_dir=$backend_dir" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "backend_module_path=$backend_module_path" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Derive Build Metadata
+        id: meta
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ref = "${{ github.ref }}"
+          if ($ref -like 'refs/tags/v*') {
+            $semver = $ref -replace 'refs/tags/v', ''
+          } else {
+            $semver = "0.0.${{ github.run_number }}"
+          }
+          "semver=$semver" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Write-Host "🔖 Version: $semver"
 
   quality-gate:
     name: '✅ Quality Gate'
@@ -183,7 +198,7 @@ jobs:
             "    upx=True",
             ")"
           )
-          Set-Content -Path "pragmatic.spec" -Value $specContent
+          Set-Content -Path "pragmatic.spec" -Value ($specContent -join "`n")
           Write-Host "✅ Dynamically generated 'pragmatic.spec' created."
 
       - name: Build with PyInstaller
@@ -199,7 +214,7 @@ jobs:
   package-msi:
     name: '💿 Package MSI'
     runs-on: windows-latest
-    needs: build-executable
+    needs: [path-finder, build-executable]
     outputs:
       build_id: ${{ needs.build-executable.outputs.build_id }}
     steps:
@@ -226,7 +241,7 @@ jobs:
             '  <PropertyGroup>'
             '    <OutputName>Fortuna-WebService-Pragmatic</OutputName>'
             '    <OutputType>Package</OutputType>'
-            '    <DefineConstants>SourceDir=../staging</DefineConstants>'
+            '    <DefineConstants>SourceDir=../staging;Version=${{ needs.path-finder.outputs.semver }}</DefineConstants>'
             '  </PropertyGroup>'
             '  <ItemGroup>'
             '    <PackageReference Include="WixToolset.Util.wixext" Version="${{ env.WIX_VERSION }}" />'
@@ -236,7 +251,7 @@ jobs:
             '  </ItemGroup>'
             '</Project>'
           )
-          Set-Content "${{ env.WIX_DIR }}/Fortuna.wixproj" -Value $wixProj -Encoding utf8
+          Set-Content "${{ env.WIX_DIR }}/Fortuna.wixproj" -Value ($wixProj -join "`n")
 
       - name: Build MSI
         working-directory: ${{ env.WIX_DIR }}
