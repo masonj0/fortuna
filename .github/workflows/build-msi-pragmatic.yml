@@ -155,34 +155,34 @@ jobs:
           Set-Content -Path "web_service/backend/__init__.py" -Value "# PRAGMATIC" -Force
           Set-Content -Path "python_service/__init__.py" -Value "# PRAGMATIC" -Force
 
-          $specContent = @"
-# -*- mode: python ; coding: utf-8 -*-
-import os
-from PyInstaller.utils.hooks import collect_data_files
-a = Analysis(
-    ['$entry_point'],
-    pathex=[os.getcwd()],
-    hiddenimports=['uvicorn.lifespan.on', 'uvicorn.loops.auto', 'uvicorn.protocols.http.h11_impl'],
-    excludes=['$other_service', 'tests'],
-    datas=[
-        ('$staging_ui_path', 'ui'),
-        ('web_service/__init__.py', 'web_service'),
-        ('web_service/backend/__init__.py', 'web_service/backend'),
-        ('python_service/__init__.py', 'python_service')
-    ]
-)
-pyz = PYZ(a.pure, a.zipped_data)
-exe = EXE(
-    pyz,
-    a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    name='fortuna-backend',
-    console=False,
-    upx=True
-)
-"@
+          $specContent = @(
+            '# -*- mode: python ; coding: utf-8 -*-',
+            'import os',
+            'from PyInstaller.utils.hooks import collect_data_files',
+            "a = Analysis(",
+            "    ['$entry_point'],",
+            "    pathex=[os.getcwd()],",
+            "    hiddenimports=['uvicorn.lifespan.on', 'uvicorn.loops.auto', 'uvicorn.protocols.http.h11_impl'],",
+            "    excludes=['$other_service', 'tests'],",
+            "    datas=[",
+            "        ('$staging_ui_path', 'ui'),",
+            "        ('web_service/__init__.py', 'web_service'),",
+            "        ('web_service/backend/__init__.py', 'web_service/backend'),",
+            "        ('python_service/__init__.py', 'python_service')",
+            "    ]",
+            ")",
+            "pyz = PYZ(a.pure, a.zipped_data)",
+            "exe = EXE(",
+            "    pyz,",
+            "    a.scripts,",
+            "    a.binaries,",
+            "    a.zipfiles,",
+            "    a.datas,",
+            "    name='fortuna-backend',",
+            "    console=False,",
+            "    upx=True",
+            ")"
+          )
           Set-Content -Path "pragmatic.spec" -Value $specContent
           Write-Host "✅ Dynamically generated 'pragmatic.spec' created."
 
