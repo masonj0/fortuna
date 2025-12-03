@@ -1,0 +1,323 @@
+name: Pragmatic MSI Builder
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  NODE_VERSION: '20'
+  PYTHON_VERSION: '3.12'
+  DOTNET_VERSION: '8.0.x'
+  WIX_VERSION: '4.0.5'
+  FRONTEND_DIR: 'web_platform/frontend'
+  WIX_DIR: 'build_wix'
+
+jobs:
+  path-finder:
+    name: '🔎 Path Finder - Dynamic Backend Detection'
+    runs-on: windows-latest
+    outputs:
+      backend_dir: ${{ steps.find-path.outputs.backend_dir }}
+      backend_module_path: ${{ steps.find-path.outputs.backend_module_path }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Detect Backend Path
+        id: find-path
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $web_service_path = "web_service/backend"
+          $python_service_path = "python_service"
+          if (Test-Path (Join-Path $web_service_path "main.py")) {
+              $backend_dir = $web_service_path
+              $backend_module_path = "web_service.backend"
+              Write-Host "✅ Verdict: Detected 'web_service/backend' as the target."
+          } elseif (Test-Path (Join-Path $python_service_path "main.py")) {
+              $backend_dir = $python_service_path
+              $backend_module_path = "python_service"
+              Write-Host "✅ Verdict: Detected 'python_service' as the target."
+          } else {
+              Write-Error "❌ FATAL: Could not determine a valid backend directory."
+              exit 1
+          }
+          "backend_dir=$backend_dir" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "backend_module_path=$backend_module_path" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+  quality-gate:
+    name: '✅ Quality Gate'
+    runs-on: windows-latest
+    needs: path-finder
+    env:
+      BACKEND_DIR: ${{ needs.path-finder.outputs.backend_dir }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: |
+            ${{ env.BACKEND_DIR }}/requirements.txt
+            ${{ env.BACKEND_DIR }}/requirements-dev.txt
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if (Test-Path "${{ env.BACKEND_DIR }}/requirements-dev.txt") {
+            pip install -r ${{ env.BACKEND_DIR }}/requirements-dev.txt
+          } else {
+            # Fallback to standard requirements if -dev is not found
+            pip install -r ${{ env.BACKEND_DIR }}/requirements.txt
+          }
+
+      - name: Run Pytest
+        shell: pwsh
+        run: |
+          # Check if pytest is installed before trying to run it
+          $pytest_exists = Get-Command pytest -ErrorAction SilentlyContinue
+          if (-not $pytest_exists) {
+            Write-Host "ℹ️ pytest not found in dependencies, skipping tests."
+            exit 0
+          }
+
+          python -m pytest ${{ env.BACKEND_DIR }}
+
+          # Exit code 5 means no tests were found, which is not a failure in this context.
+          if ($LASTEXITCODE -eq 5) {
+            Write-Host "✅ Pytest returned exit code 5 (No tests found), which is acceptable."
+            exit 0
+          } elseif ($LASTEXITCODE -ne 0) {
+            Write-Error "❌ Pytest failed with exit code $LASTEXITCODE."
+            exit $LASTEXITCODE
+          }
+          Write-Host "✅ Pytest suite passed."
+
+  build-executable:
+    name: '🛠️ Build Executable'
+    runs-on: windows-latest
+    needs: [path-finder, quality-gate]
+    env:
+      BACKEND_DIR: ${{ needs.path-finder.outputs.backend_dir }}
+      BACKEND_MODULE_PATH: ${{ needs.path-finder.outputs.backend_module_path }}
+    outputs:
+      build_id: ${{ steps.vars.outputs.build_id }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set Build ID
+        id: vars
+        run: echo "build_id=${{ github.run_id }}-${{ github.run_attempt }}" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: '${{ env.FRONTEND_DIR }}/package-lock.json'
+
+      - name: Install Frontend Dependencies & Build
+        shell: pwsh
+        run: |
+          cd "${{ env.FRONTEND_DIR }}"
+          npm ci --prefer-offline
+          npm run build
+          cd ../..
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: '${{ env.BACKEND_DIR }}/requirements.txt'
+
+      - name: Install Backend Dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r ${{ env.BACKEND_DIR }}/requirements.txt
+          pip install pyinstaller==6.6.0
+
+      - name: Create Dynamic Spec for PyInstaller
+        shell: pwsh
+        run: |
+          $entry_point = (Join-Path $env:BACKEND_DIR "main.py").Replace('\', '/')
+          $staging_ui_path = (Resolve-Path "web_platform/frontend/out").Path.Replace('\', '/')
+          $other_service = if ("${{ env.BACKEND_DIR }}" -eq "web_service/backend") { "python_service" } else { "web_service" }
+
+          # Ensure __init__.py files exist and are not empty
+          Set-Content -Path "web_service/__init__.py" -Value "# PRAGMATIC" -Force
+          Set-Content -Path "web_service/backend/__init__.py" -Value "# PRAGMATIC" -Force
+          Set-Content -Path "python_service/__init__.py" -Value "# PRAGMATIC" -Force
+
+          $specContent = @(
+            '# -*- mode: python ; coding: utf-8 -*-',
+            'import os',
+            'from PyInstaller.utils.hooks import collect_data_files',
+            "a = Analysis(",
+            "    ['$entry_point'],",
+            "    pathex=[os.getcwd()],",
+            "    hiddenimports=['uvicorn.lifespan.on', 'uvicorn.loops.auto', 'uvicorn.protocols.http.h11_impl'],",
+            "    excludes=['$other_service', 'tests'],",
+            "    datas=[",
+            "        ('$staging_ui_path', 'ui'),",
+            "        ('web_service/__init__.py', 'web_service'),",
+            "        ('web_service/backend/__init__.py', 'web_service/backend'),",
+            "        ('python_service/__init__.py', 'python_service')",
+            "    ]",
+            ")",
+            "pyz = PYZ(a.pure, a.zipped_data)",
+            "exe = EXE(",
+            "    pyz,",
+            "    a.scripts,",
+            "    a.binaries,",
+            "    a.zipfiles,",
+            "    a.datas,",
+            "    name='fortuna-backend',",
+            "    console=False,",
+            "    upx=True",
+            ")"
+          )
+          Set-Content -Path "pragmatic.spec" -Value $specContent
+          Write-Host "✅ Dynamically generated 'pragmatic.spec' created."
+
+      - name: Build with PyInstaller
+        run: pyinstaller pragmatic.spec --clean --noconfirm
+
+      - name: Upload Backend Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-dist-${{ steps.vars.outputs.build_id }}
+          path: dist/fortuna-backend.exe
+          retention-days: 1
+
+  package-msi:
+    name: '💿 Package MSI'
+    runs-on: windows-latest
+    needs: build-executable
+    outputs:
+      build_id: ${{ needs.build-executable.outputs.build_id }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Download Backend Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-dist-${{ needs.build-executable.outputs.build_id }}
+          path: staging
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Prepare WiX Project
+        shell: pwsh
+        run: |
+          Copy-Item "${{ env.WIX_DIR }}/Product_WithService.wxs" "${{ env.WIX_DIR }}/Product.wxs" -Force
+          $wixProj = @(
+            '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">'
+            '  <PropertyGroup>'
+            '    <OutputName>Fortuna-WebService-Pragmatic</OutputName>'
+            '    <OutputType>Package</OutputType>'
+            '    <DefineConstants>SourceDir=../staging</DefineConstants>'
+            '  </PropertyGroup>'
+            '  <ItemGroup>'
+            '    <PackageReference Include="WixToolset.Util.wixext" Version="${{ env.WIX_VERSION }}" />'
+            '  </ItemGroup>'
+            '  <ItemGroup>'
+            '    <Compile Include="Product.wxs" />'
+            '  </ItemGroup>'
+            '</Project>'
+          )
+          Set-Content "${{ env.WIX_DIR }}/Fortuna.wixproj" -Value $wixProj -Encoding utf8
+
+      - name: Build MSI
+        working-directory: ${{ env.WIX_DIR }}
+        run: dotnet build Fortuna.wixproj -c Release -p:Platform=x64
+
+      - name: Upload MSI Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: msi-installer-${{ needs.build-executable.outputs.build_id }}
+          path: ${{ env.WIX_DIR }}/bin/x64/Release/*.msi
+          retention-days: 1
+
+  smoke-test:
+    name: '🔬 Smoke Test'
+    runs-on: windows-latest
+    needs: package-msi
+    steps:
+      - name: Download MSI Installer
+        uses: actions/download-artifact@v4
+        with:
+          name: msi-installer-${{ needs.package-msi.outputs.build_id }}
+          path: msi-installer
+
+      - name: Install MSI
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse | Select-Object -First 1
+          if (-not $msi) { Write-Error "MSI file not found"; exit 1 }
+          Start-Process msiexec.exe -ArgumentList "/i `"$($msi.FullName)`" /qn" -Wait
+
+      - name: Create Runtime Directories
+        shell: pwsh
+        run: |
+          $installDir = "C:\Program Files\Fortuna Faucet"
+          if (-not (Test-Path $installDir)) {
+            Write-Error "Application was not installed correctly at $installDir"
+            exit 1
+          }
+          New-Item -ItemType Directory -Path "$installDir\data" -Force | Out-Null
+          New-Item -ItemType Directory -Path "$installDir\json" -Force | Out-Null
+          New-Item -ItemType Directory -Path "$installDir\logs" -Force | Out-Null
+          Write-Host "✅ Created runtime directories in $installDir"
+
+      - name: Launch Service & Verify Health
+        env:
+          SERVICE_PORT: '8102'
+        shell: python
+        run: |
+          import os, sys, subprocess, socket, time
+          from contextlib import closing
+          HOST, PORT, TIMEOUT = "127.0.0.1", int(os.getenv("SERVICE_PORT", 8102)), 60
+          def check_socket(h, p):
+              with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as sock:
+                  return sock.connect_ex((h, p)) == 0
+          print("--- Starting Smoke Test ---")
+          try:
+              print("Attempting to start the 'FortunaFaucetService'...")
+              subprocess.run(["sc.exe", "start", "FortunaFaucetService"], check=True, capture_output=True, text=True)
+          except Exception as e:
+              print(f"Failed to start service (it may already be running): {e}")
+          print(f"Waiting for service on port {PORT}...")
+          start_time = time.time()
+          while time.time() - start_time < TIMEOUT:
+              if check_socket(HOST, PORT):
+                  print(f"✅ Service is running and listening on port {PORT}.")
+                  sys.exit(0)
+              time.sleep(0.5)
+          print(f"❌ FATAL: Timed out after {TIMEOUT}s waiting for service.")
+          sys.exit(1)
+
+      - name: 📤 Upload Service Logs on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-test-logs-${{ needs.package-msi.outputs.build_id }}
+          path: C:\Program Files\Fortuna Faucet\logs\
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Cleanup
+        if: always()
+        run: |
+          sc.exe stop FortunaFaucetService
+          sc.exe delete FortunaFaucetService
