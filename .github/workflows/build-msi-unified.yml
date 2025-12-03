@@ -305,6 +305,8 @@ jobs:
             '  </PropertyGroup>'
             '  <ItemGroup>'
             '    <PackageReference Include="WixToolset.Util.wixext" Version="${{ env.WIX_VERSION }}" />'
+            '    <PackageReference Include="WixToolset.Firewall.wixext" Version="${{ env.WIX_VERSION }}" />'
+            '    <PackageReference Include="WixToolset.UI.wixext" Version="${{ env.WIX_VERSION }}" />'
             '  </ItemGroup>'
             '  <ItemGroup>'
             '    <Compile Include="Product.wxs" />'
