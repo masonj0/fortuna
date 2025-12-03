@@ -519,91 +519,106 @@ jobs:
           Set-StrictMode -Version Latest
           pip freeze | Out-File backend-freeze.txt -Encoding utf8
 
-      - name: ☢️ NUCLEAR FIX -- Ensure Python Package Structure & Double Injection
-        if: steps.cache-backend.outputs.cache-hit != 'true'
-        run: |
-          Set-Content -Path "web_service/__init__.py" -Value "# This file is intentionally non-empty to ensure package recognition."
-          Set-Content -Path "web_service/backend/__init__.py" -Value "# This file is intentionally non-empty to ensure package recognition."
-          Write-Host "✅ Ensured non-empty __init__.py files exist for package discovery."
-
       - name: Create Dynamic webservice.spec for PyInstaller
         if: steps.cache-backend.outputs.cache-hit != 'true'
+        shell: python
+        env:
+          BACKEND_DIR: ${{ needs.path-finder.outputs.backend_dir }}
+          BACKEND_MODULE_PATH: ${{ needs.path-finder.outputs.backend_module_path }}
+          BACKEND_SPEC_FILE: ${{ needs.path-finder.outputs.spec_file }}
         run: |
-          Set-StrictMode -Version Latest
-          $entry_point = (Join-Path $env:BACKEND_DIR "main.py").Replace('\', '/')
-          $staging_ui_path = (Resolve-Path "staging/ui").Path.Replace('\', '/')
-          $other_service = if ("${{ env.BACKEND_DIR }}" -eq "web_service/backend") { "python_service" } else { "web_service" }
+          import os
+          from pathlib import Path
 
-          # Ensure absolute paths for the init files
-          $backend_init = (Resolve-Path "web_service/backend/__init__.py").Path.Replace('\', '/')
-          $parent_init = (Resolve-Path "web_service/__init__.py").Path.Replace('\', '/')
+          # Create __init__.py files in-memory to avoid filesystem race conditions
+          init_content = "# This file is intentionally non-empty to ensure package recognition."
 
-          $specContent = @(
-          "# -*- mode: python ; coding: utf-8 -*-",
-          "import os",
-          "from pathlib import Path",
-          "from PyInstaller.utils.hooks import collect_data_files, collect_submodules",
-          "",
-          "block_cipher = None",
-          "project_root = Path(os.getcwd())",
-          "",
-          "# Standard Data Collection",
-          "datas = [",
-          "    ('$staging_ui_path', 'ui'),",
-          "]",
-          "datas += collect_data_files('uvicorn')",
-          "datas += collect_data_files('slowapi')",
-          "datas += collect_data_files('structlog')",
-          "",
-          "hiddenimports = collect_submodules('${{ env.BACKEND_MODULE_PATH }}')",
-          "hiddenimports += [",
-          "    'uvicorn.logging', 'uvicorn.loops.auto', 'uvicorn.lifespan.on',",
-          "    'uvicorn.protocols.http.h11_impl', 'uvicorn.protocols.websockets.wsproto_impl',",
-          "    'fastapi.routing', 'starlette.staticfiles', 'anyio._backends._asyncio',",
-          "    'httpcore', 'httpx', 'slowapi', 'structlog', 'tenacity', 'aiosqlite',",
-          "    'pydantic_core', 'pydantic_settings.sources'",
-          "]",
-          "",
-          "a = Analysis(",
-          "    ['$entry_point'],",
-          "    pathex=[str(project_root)],",
-          "    binaries=[],",
-          "    datas=datas,",
-          "    hiddenimports=hiddenimports,",
-          "    hookspath=[],",
-          "    runtime_hooks=[],",
-          "    excludes=['tests', 'pytest', '$other_service'],",
-          "    win_no_prefer_redirects=False,",
-          "    win_private_assemblies=False,",
-          "    cipher=block_cipher,",
-          "    noarchive=False",
-          ")",
-          "",
-          "# ☢️ NUCLEAR OVERRIDE: Force __init__ files into the PYZ archive",
-          "# This puts them in the importable namespace, not just on the filesystem.",
-          "a.pure += [",
-          "    ('web_service', '$parent_init', 'PYMODULE'),",
-          "    ('web_service.backend', '$backend_init', 'PYMODULE')",
-          "]",
-          "",
-          "pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)",
-          "exe = EXE(",
-          "    pyz,",
-          "    a.scripts,",
-          "    a.binaries,",
-          "    a.zipfiles,",
-          "    a.datas,",
-          "    [],",
-          "    name='fortuna-backend',",
-          "    debug=False,",
-          "    bootloader_ignore_signals=False,",
-          "    strip=False,",
-          "    upx=True,",
-          "    console=False,",
-          ")"
+          # Ensure parent directories exist before writing files
+          Path("web_service").mkdir(exist_ok=True)
+          Path("web_service/backend").mkdir(exist_ok=True)
+
+          with open("web_service/__init__.py", "w") as f:
+              f.write(init_content)
+          with open("web_service/backend/__init__.py", "w") as f:
+              f.write(init_content)
+
+          print("✅ Ensured non-empty __init__.py files exist for package discovery.")
+
+          entry_point = os.path.join(os.environ['BACKEND_DIR'], "main.py").replace('\\', '/')
+          staging_ui_path = Path("staging/ui").resolve().as_posix()
+          other_service = "python_service" if "web_service" in os.environ['BACKEND_DIR'] else "web_service"
+          backend_init = Path("web_service/backend/__init__.py").resolve().as_posix()
+          parent_init = Path("web_service/__init__.py").resolve().as_posix()
+          spec_file = os.environ['BACKEND_SPEC_FILE']
+
+          spec_content = f"""
+          # -*- mode: python ; coding: utf-8 -*-
+          import os
+          from pathlib import Path
+          from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+
+          block_cipher = None
+          project_root = Path(os.getcwd())
+
+          # Standard Data Collection
+          datas = [
+              ('{staging_ui_path}', 'ui'),
+          ]
+          datas += collect_data_files('uvicorn')
+          datas += collect_data_files('slowapi')
+          datas += collect_data_files('structlog')
+
+          hiddenimports = collect_submodules('{os.environ["BACKEND_MODULE_PATH"]}')
+          hiddenimports += [
+              'uvicorn.logging', 'uvicorn.loops.auto', 'uvicorn.lifespan.on',
+              'uvicorn.protocols.http.h11_impl', 'uvicorn.protocols.websockets.wsproto_impl',
+              'fastapi.routing', 'starlette.staticfiles', 'anyio._backends._asyncio',
+              'httpcore', 'httpx', 'slowapi', 'structlog', 'tenacity', 'aiosqlite',
+              'pydantic_core', 'pydantic_settings.sources'
+          ]
+
+          a = Analysis(
+              ['{entry_point}'],
+              pathex=[str(project_root)],
+              binaries=[],
+              datas=datas,
+              hiddenimports=hiddenimports,
+              hookspath=[],
+              runtime_hooks=[],
+              excludes=['tests', 'pytest', '{other_service}'],
+              win_no_prefer_redirects=False,
+              win_private_assemblies=False,
+              cipher=block_cipher,
+              noarchive=False
           )
-          Set-Content -Path "${{ env.BACKEND_SPEC }}" -Value $specContent
-          Write-Host "✅ Dynamically generated '${{ env.BACKEND_SPEC }}' with PYZ Injection."
+
+          # ☢️ NUCLEAR OVERRIDE: Force __init__ files into the PYZ archive
+          # This puts them in the importable namespace, not just on the filesystem.
+          a.pure += [
+              ('web_service', '{parent_init}', 'PYMODULE'),
+              ('web_service.backend', '{backend_init}', 'PYMODULE')
+          ]
+
+          pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+          exe = EXE(
+              pyz,
+              a.scripts,
+              a.binaries,
+              a.zipfiles,
+              a.datas,
+              [],
+              name='fortuna-backend',
+              debug=False,
+              bootloader_ignore_signals=False,
+              strip=False,
+              upx=True,
+              console=False,
+          )
+          """
+          with open(spec_file, "w") as f:
+              f.write(spec_content)
+
+          print(f"✅ Dynamically generated '{spec_file}' with PYZ Injection.")
 
       - name: Create Required Backend Directories
         if: steps.cache-backend.outputs.cache-hit != 'true'
@@ -743,200 +758,162 @@ jobs:
           retention-days: 7
 
   smoke-test:
-    name: '🔬 Smoke Test (Inline & Robust)'
+    name: '🔬 Smoke Test (Triple-Loop Synthesis)'
     runs-on: windows-latest
-    timeout-minutes: 30
-    needs: [path-finder, build-frontend, build-backend, diagnose-asgi-imports, diagnose-runtime]
-    env:
-      PYTHONUTF8: '1'
-      FORTUNA_ENV: 'smoke-test'
-      BACKEND_DIR: ${{ needs.path-finder.outputs.backend_dir }}
+    timeout-minutes: 20
+    needs:
+      - build-backend
+      - package-msi-service # Run after packaging is complete
     steps:
-      - name: 📥 Download Backend Executable
+      - name: 📥 Download MSI Installer
         uses: actions/download-artifact@v4
         with:
-          name: backend-executable-${{ github.run_id }}
-          path: dist
+          name: fortuna-service-msi-${{ github.run_id }}
+          path: msi-installer
 
-      - name: 📥 Download Frontend Build
-        uses: actions/download-artifact@v4
-        with:
-          name: frontend-build-${{ github.run_id }}
-          path: frontend-dist
-        continue-on-error: true
-
-      - name: 🏗️ Setup Required Directories
+      - name: 🕵️ Find MSI Installer
+        id: find_msi
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Path "data" -Force | Out-Null
-          New-Item -ItemType Directory -Path "json" -Force | Out-Null
-          New-Item -ItemType Directory -Path "logs" -Force | Out-Null
-          Write-Host "✅ Directories created"
+          $msi = Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse | Select-Object -First 1
+          if (-not $msi) {
+            Write-Error "❌ No MSI found in the artifact!"
+            Get-ChildItem -Path "msi-installer" -Recurse | Write-Host
+            exit 1
+          }
+          Write-Host "✅ Found MSI: $($msi.FullName)"
+          "msi_path=$($msi.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
-      - name: "🧪 Backend Service Smoke Test (Native Python)"
-        shell: python
-        env:
-          EXE_PATH: dist/fortuna-backend.exe
-          SERVICE_PORT: '8102'
-        run: |
-          import subprocess, time, socket, sys, os, urllib.request, urllib.error
-
-          exe = os.environ['EXE_PATH']
-          port = int(os.environ.get('SERVICE_PORT', 8102))
-
-          print(f"🚀 Launching {exe} on port {port}...")
-
-          # EXOTIC INGREDIENT #1: Native Python Popen with environment variables
-          # (No PowerShell interference, clean process spawning)
-          env = os.environ.copy()
-          env['PYTHONUNBUFFERED'] = '1'
-          env['PORT'] = str(port)
-
-          try:
-            proc = subprocess.Popen(
-              [exe],
-              env=env,
-              stdout=subprocess.PIPE,
-              stderr=subprocess.PIPE,
-              text=True,
-              creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
-            )
-            print(f"✅ Process spawned (PID: {proc.pid})")
-          except Exception as e:
-            print(f"❌ Failed to spawn process: {e}")
-            sys.exit(1)
-
-          # EXOTIC INGREDIENT #2: Wait for socket with timeout
-          start = time.time()
-          socket_ready = False
-
-          print(f"\n--- Waiting for port {port} to bind (up to 60 seconds) ---")
-          while time.time() - start < 60:
-            try:
-              with socket.create_connection(('127.0.0.1', port), timeout=1):
-                elapsed = time.time() - start
-                print(f"✅ Port {port} is open! (took {elapsed:.1f}s)")
-                socket_ready = True
-                break
-            except:
-              elapsed = time.time() - start
-              print(f"  Waiting... {elapsed:.1f}s", end="\r")
-              time.sleep(1)
-
-          if not socket_ready:
-            print(f"\n❌ TIMEOUT: Port {port} never opened")
-            proc.terminate()
-            sys.exit(1)
-
-          # Give service a moment to stabilize
-          time.sleep(2)
-
-          # EXOTIC INGREDIENT #3: Health check with retries
-          print(f"\n--- Health Check (with retries) ---")
-          for attempt in range(5):
-            try:
-              req = urllib.request.Request(f"http://127.0.0.1:{port}/health")
-              req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)')
-
-              with urllib.request.urlopen(req, timeout=5) as response:
-                if response.status == 200:
-                  print(f"✅ Health Check PASSED (HTTP 200)")
-                  proc.terminate()
-                  sys.exit(0)
-
-            except urllib.error.HTTPError as e:
-              if e.code in [401, 403]:
-                print(f"⚠️  Got HTTP {e.code} — service is responding!")
-                proc.terminate()
-                sys.exit(0)
-              print(f"Attempt {attempt + 1}: HTTP {e.code}")
-
-            except Exception as e:
-              print(f"Attempt {attempt + 1}: {type(e).__name__}: {e}")
-
-            if attempt < 4:
-              time.sleep(2)
-
-          print("❌ Health check failed after retries")
-          proc.terminate()
-          sys.exit(1)
-
-      - name: "🌐 Frontend Health Check (Simple Loop)"
+      - name: 🛡️ Grant Full Control to SYSTEM for Temp Directory
         shell: pwsh
         run: |
-          # EXOTIC INGREDIENT #4: Simple HTTP check instead of heavy Playwright
-          # If your frontend is served separately, start it first:
-          # npm install -g serve
-          # serve -s frontend-dist -l 3000 &
-
-          Write-Host "Checking Backend API (port 8102)..."
-
-          for ($i = 0; $i -lt 10; $i++) {
-            try {
-              # Test the API endpoint (backend should still be running from previous step)
-              $response = Invoke-WebRequest `
-                -Uri "http://127.0.0.1:8102/health" `
-                -UseBasicParsing `
-                -TimeoutSec 2 `
-                -ErrorAction Stop
-
-              if ($response.StatusCode -eq 200) {
-                Write-Host "✅ Backend API is still responding."
-                exit 0
-              }
-            } catch {
-              Write-Host "Attempt $($i + 1)/10: unavailable (waiting...)"
-              Start-Sleep -Seconds 2
-            }
+          $tempPath = $env:TEMP
+          Write-Host "Granting SYSTEM FullControl on $tempPath"
+          icacls $tempPath /grant "NT AUTHORITY\SYSTEM:(OI)(CI)F" /T
+          if ($LASTEXITCODE -ne 0) {
+            Write-Warning "icacls command failed, but continuing..."
+          } else {
+            Write-Host "✅ Privileges granted successfully."
           }
 
-          Write-Warning "⚠️  Backend health check failed (but service may have terminated correctly)"
-          # We don't exit 1 here — the main service test already passed
-          exit 0
+      - name: 🚀 LOOP 1: Install & Verify Service Registration
+        shell: pwsh
+        run: |
+          $msiPath = "${{ steps.find_msi.outputs.msi_path }}"
+          Write-Host "Starting installation of $msiPath..."
+
+          $proc = Start-Process msiexec.exe -ArgumentList "/i `"$msiPath`" /qn /L*v msi-install.log" -Wait -PassThru
+
+          # Allow exit code 3010 (reboot required)
+          if ($proc.ExitCode -ne 0 -and $proc.ExitCode -ne 3010) {
+            Write-Error "❌ MSI installation failed with exit code $($proc.ExitCode)."
+            Get-Content msi-install.log -Tail 50 | Write-Host
+            exit 1
+          }
+
+          Write-Host "✅ Installation completed (Exit Code: $($proc.ExitCode)). Verifying service registration..."
+
+          $service = Get-Service -Name "FortunaWebService" -ErrorAction SilentlyContinue
+          if (-not $service) {
+            Write-Error "❌ FATAL: Service 'FortunaWebService' was not registered."
+            exit 1
+          }
+
+          Write-Host "✅ Service is registered. State: $($service.Status)"
+
+      - name: 🚦 LOOP 2: Start Service & Verify Process
+        shell: pwsh
+        run: |
+          Write-Host "Attempting to start the 'FortunaWebService'..."
+          Start-Service -Name "FortunaWebService"
+
+          Write-Host "Waiting for process to appear (up to 30 seconds)..."
+          $deadline = (Get-Date).AddSeconds(30)
+          $processFound = $false
+
+          while ((Get-Date) -lt $deadline) {
+            $proc = Get-Process -Name "fortuna-webservice" -ErrorAction SilentlyContinue
+            if ($proc) {
+              Write-Host "✅ Process 'fortuna-webservice.exe' is running (PID: $($proc.Id))."
+              $processFound = $true
+              break
+            }
+            Start-Sleep -Seconds 1
+          }
+
+          if (-not $processFound) {
+            Write-Error "❌ FATAL: Process did not start after 30 seconds."
+            Get-EventLog -LogName Application -Source "FortunaWebService" -Newest 10 | Format-List
+            exit 1
+          }
+
+      - name: 🩺 LOOP 3: Health Check Endpoint
+        shell: pwsh
+        run: |
+          Write-Host "Starting health checks against http://localhost:${{ env.SERVICE_PORT }}${{ env.HEALTH_ENDPOINT }} (up to 60 seconds)..."
+          $deadline = (Get-Date).AddSeconds(60)
+          $healthCheckPassed = $false
+
+          while ((Get-Date) -lt $deadline) {
+            try {
+              $response = Invoke-WebRequest -Uri "http://localhost:${{ env.SERVICE_PORT }}${{ env.HEALTH_ENDPOINT }}" -UseBasicParsing -TimeoutSec 5
+              if ($response.StatusCode -eq 200) {
+                Write-Host "✅ Health check PASSED with status 200."
+                $healthCheckPassed = $true
+                break
+              }
+            } catch {
+              # This will catch connection refused, timeouts, etc.
+              Write-Host "  ... waiting for service to be ready."
+            }
+            Start-Sleep -Seconds 2
+          }
+
+          if (-not $healthCheckPassed) {
+            Write-Error "❌ FATAL: Health check endpoint did not return 200 within the time limit."
+            exit 1
+          }
 
       - name: 📊 Capture Diagnostics on Failure
         if: failure()
         shell: pwsh
         run: |
           Write-Host "=== Capturing Failure Diagnostics ==="
-
-          # Event log
-          Get-EventLog -LogName System -Newest 20 -ErrorAction SilentlyContinue |
-            Where-Object { $_.EntryType -eq "Error" } |
-            Out-File diagnostic-eventlog.txt
-
-          # Install directory
-          Get-ChildItem "C:\Program Files\Fortuna Faucet" -Recurse -ErrorAction SilentlyContinue |
-            Out-File install-contents.txt
-
-          Write-Host "✅ Diagnostics captured"
+          Get-Content msi-install.log | Out-File diagnostic-install-log.txt
+          Get-EventLog -LogName Application -Source "FortunaWebService" -Newest 20 | Format-List | Out-File diagnostic-eventlog.txt
+          Get-Service -Name "FortunaWebService" | Format-List | Out-File diagnostic-service-state.txt
+          Get-Process -Name "fortuna-webservice" -ErrorAction SilentlyContinue | Format-List | Out-File diagnostic-process-state.txt
+          netstat -anob > diagnostic-netstat.txt
+          Write-Host "✅ Diagnostics captured."
 
       - name: 📤 Upload Diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: jules-smoke-test-failure-${{ github.run_id }}
-          path: |
-            diagnostic-*.txt
-            install-contents.txt
+          path: diagnostic-*.txt
           retention-days: 30
-          if-no-files-found: warn
 
       - name: 🧹 Cleanup
         if: always()
         shell: pwsh
         run: |
-          # Kill any remaining processes
-          Get-Process -Name "fortuna-backend" -ErrorAction SilentlyContinue | Stop-Process -Force
-          Get-Process -Name "python" -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "*fortuna*" } | Stop-Process -Force
+          Write-Host "Cleaning up..."
+          Stop-Service -Name "FortunaWebService" -Force -ErrorAction SilentlyContinue
+          # Uninstall may not always work, especially if the service is stuck, but we try.
+          $msiPath = "${{ steps.find_msi.outputs.msi_path }}"
+          if (Test-Path $msiPath) {
+            Start-Process msiexec.exe -ArgumentList "/x `"$msiPath`" /qn" -Wait
+          }
+          Get-Process -Name "fortuna-webservice" -ErrorAction SilentlyContinue | Stop-Process -Force
+          Write-Host "✅ Cleanup complete."
 
-          Write-Host "✅ Cleanup complete"
 
   package-msi-service:
     name: '💿 Package Service MSI'
     runs-on: windows-latest
     timeout-minutes: 25
-    needs: [path-finder, repo-preflight, smoke-test]
+    needs: [path-finder, repo-preflight, build-backend]
     env:
       WIX_HASH: ${{ needs.repo-preflight.outputs.wix_definition_hash }}
       BUILD_VERSION: ${{ needs.repo-preflight.outputs.semver }}
