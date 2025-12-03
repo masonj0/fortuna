@@ -183,39 +183,6 @@ jobs:
 
           Write-Host "✓ Service executable: $($serviceExe.FullName) ($('{0:N0}' -f $serviceExe.Length) bytes)"
 
-      - name: ☢️ NUCLEAR FIX Surgical File Injection
-        shell: pwsh
-        run: |
-          $injectionScript = @(
-            "import sys, zipfile, os",
-            # NOTE: Electron workflow outputs to dist/service, not dist
-            "exe_path = 'dist/service/fortuna-backend.exe'",
-            # NOTE: Electron workflow uses python_service, not web_service
-            "init_path = 'python_service/__init__.py'",
-            "arcname = 'python_service/__init__.py'",
-            "",
-            "print(f'--- SURGICAL INJECTION START ---')",
-            "print(f'Target: {exe_path}')",
-            "print(f'Injecting: {init_path}')",
-            "",
-            "if not os.path.exists(init_path):",
-            "    print(f'⚠️ WARNING: {init_path} not found. Attempting to create dummy...')",
-            "    with open(init_path, 'w') as f: f.write('# Injected dummy')",
-            "",
-            "try:",
-            "    with zipfile.ZipFile(exe_path, 'a', compression=zipfile.ZIP_DEFLATED) as zf:",
-            "        if arcname not in zf.namelist():",
-            "            zf.write(init_path, arcname)",
-            "            print('✅ INJECTION SUCCESSFUL: File added to archive.')",
-            "        else:",
-            "            print('⚠️ File already exists in archive. Skipping.')",
-            "except Exception as e:",
-            "    print(f'❌ INJECTION FAILED: {e}')",
-            "    sys.exit(1)"
-          )
-          $injectionScript | Out-File "inject_init.py" -Encoding utf8
-          python inject_init.py
-
       - name: 🧪 Verify Service Executable
         shell: pwsh
         run: |
@@ -606,7 +573,7 @@ jobs:
             }
           }
 
-          Write-Host "✅ Staging complete. Contents of $destDir:"
+          Write-Host "✅ Staging complete. Contents of $($destDir):"
           Get-ChildItem $destAbsolutePath | Select-Object Name, Length
 
           if ($robocopy_failed) {
