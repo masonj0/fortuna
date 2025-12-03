@@ -5,8 +5,6 @@ on:
   push:
     branches:
       - main
-      - session/jules1130b
-  workflow_dispatch:
 
 concurrency:
   group: build-electron-msi-${{ github.ref }}
@@ -544,18 +542,6 @@ jobs:
             $hash | Out-File -FilePath "$($msi.FullName).sha256"
           }
 
-      - name: 📦 Stage Artifacts for Release
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Path "release-artifacts" -Force | Out-Null
-
-          Get-ChildItem -Path "electron/dist" -Filter "*.msi" -Recurse | ForEach-Object {
-            Copy-Item -LiteralPath $_.FullName -Destination "release-artifacts/"
-            Copy-Item -LiteralPath "$($_.FullName).sha256" -Destination "release-artifacts/" -ErrorAction SilentlyContinue
-          }
-
-          Get-ChildItem -Path "release-artifacts/" | Out-Host
-
       - name: 📊 Generate Build Report
         if: always()
         shell: pwsh
@@ -579,6 +565,53 @@ jobs:
 
           $report | ConvertTo-Json | Out-File -FilePath "build-report.json"
           Get-Content "build-report.json" | Out-Host
+
+      - name: 📦 Stage Artifacts (Self-Discovery)
+        shell: pwsh
+        run: |
+          $destDir = "release-artifacts"
+          $destPath = Resolve-Path $destDir -ErrorAction SilentlyContinue
+          if ($null -eq $destPath) {
+            $destPath = New-Item -ItemType Directory -Path $destDir -Force
+          }
+          $destAbsolutePath = $destPath.FullName
+
+          Write-Host "Staging Destination: $destAbsolutePath"
+
+          # Find all MSIs, but EXCLUDE any that are already inside the release-artifacts folder
+          # This prevents the "Copying file onto itself" infinite loop
+          $msiFiles = Get-ChildItem -Path "." -Recurse -Filter "*.msi" |
+                      Where-Object { $_.FullName -notlike "$destAbsolutePath*" }
+
+          if ($msiFiles.Count -eq 0) {
+            Write-Error "No MSI files found to stage!"
+            exit 1
+          }
+
+          foreach ($msi in $msiFiles) {
+            Write-Host "Copying: $($msi.FullName)"
+
+            # Use Robocopy for robust copying
+            $sourceDir = Split-Path $msi.FullName
+            $fileName = $msi.Name
+
+            # /J = Unbuffered I/O (faster), /IS = Include Same, /IT = Include Tweaked
+            robocopy $sourceDir $destAbsolutePath $fileName /J /IS /IT
+
+            # Robocopy exit codes 0-7 are success
+            if ($LASTEXITCODE -gt 7) {
+              Write-Error "Robocopy failed for $fileName with code $LASTEXITCODE"
+            }
+
+            # Handle the checksum file if it exists
+            $shaPath = "$($msi.FullName).sha256"
+            if (Test-Path $shaPath) {
+              Copy-Item -LiteralPath $shaPath -Destination $destAbsolutePath -Force
+            }
+          }
+
+          Write-Host "✅ Staging complete. Contents of $destDir :"
+          Get-ChildItem $destAbsolutePath | Select-Object Name, Length
 
       - name: 📤 Upload Release Artifacts
         if: success()
@@ -619,12 +652,17 @@ jobs:
       - name: 🤫 Install MSI Silently
         shell: pwsh
         run: |
-          $msi = Get-ChildItem -Path "msi-installer" -Filter "*.msi" | Select-Object -First 1
+          # ADD -Recurse HERE vvv
+          $msi = Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse | Select-Object -First 1
+
           if ($null -eq $msi) {
             Write-Error "MSI file not found in artifact"
+            # Debugging: List what IS there
+            Get-ChildItem -Path "msi-installer" -Recurse | Select-Object FullName
             exit 1
           }
 
+          Write-Host "Found MSI: $($msi.FullName)"
           # Start the installer and wait for it to finish
           Start-Process msiexec.exe -ArgumentList "/i `"$($msi.FullName)`" /qn" -Wait
 
