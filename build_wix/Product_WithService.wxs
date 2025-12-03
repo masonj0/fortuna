@@ -65,7 +65,7 @@
 
         <fire:FirewallException Id="FirewallRule"
                                 Name="Fortuna Faucet"
-                                Port="[SERVICE_PORT]"
+                                Port="8102"
                                 Protocol="tcp"
                                 Scope="any" />
       </Component>
