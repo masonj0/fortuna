@@ -569,16 +569,14 @@ jobs:
       - name: 📦 Stage Artifacts (Self-Discovery)
         shell: pwsh
         run: |
+          Set-StrictMode -Version Latest
           $destDir = "release-artifacts"
-          $destPath = Resolve-Path $destDir -ErrorAction SilentlyContinue
-          if ($null -eq $destPath) {
-            $destPath = New-Item -ItemType Directory -Path $destDir -Force
-          }
-          $destAbsolutePath = $destPath.FullName
+          New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+          $destAbsolutePath = (Resolve-Path $destDir).Path
 
           Write-Host "Staging Destination: $destAbsolutePath"
 
-          # Find all MSIs, but EXCLUDE any that are already inside the release-artifacts folder
+          # Find all MSIs, excluding any inside the destination folder.
           $msiFiles = Get-ChildItem -Path "." -Recurse -Filter "*.msi" |
                       Where-Object { $_.FullName -notlike "$destAbsolutePath*" }
 
@@ -587,20 +585,18 @@ jobs:
             exit 1
           }
 
+          $robocopy_failed = $false
           foreach ($msi in $msiFiles) {
             Write-Host "Copying: $($msi.FullName)"
-
             $sourceDir = Split-Path $msi.FullName
             $fileName = $msi.Name
 
-            # /J = Unbuffered I/O, /IS = Include Same, /IT = Include Tweaked
             robocopy $sourceDir $destAbsolutePath $fileName /J /IS /IT
 
-            # Robocopy exit codes 0-7 are success.
-            # We check for failure (>7) but ignore success codes (1-7)
-            if ($LASTEXITCODE -gt 7) {
+            # Robocopy exit codes >= 8 indicate a failure.
+            if ($LASTEXITCODE -ge 8) {
               Write-Error "Robocopy failed for $fileName with code $LASTEXITCODE"
-              exit 1
+              $robocopy_failed = $true
             }
 
             # Handle the checksum file if it exists
@@ -610,10 +606,15 @@ jobs:
             }
           }
 
-          Write-Host "✅ Staging complete. Contents of $destDir :"
+          Write-Host "✅ Staging complete. Contents of $destDir:"
           Get-ChildItem $destAbsolutePath | Select-Object Name, Length
 
-          # CRITICAL FIX: Force exit code 0 so Robocopy's "1" doesn't fail the build
+          if ($robocopy_failed) {
+            Write-Error "One or more Robocopy operations failed. Exiting with error."
+            exit 1
+          }
+
+          Write-Host "All Robocopy operations were successful (exit codes 0-7)."
           exit 0
 
       - name: 📤 Upload Release Artifacts
