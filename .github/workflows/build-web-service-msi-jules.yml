@@ -1044,10 +1044,28 @@ jobs:
         with:
           name: fortuna-service-msi-${{ github.run_id }}
           path: msi-installer
+      - name: 🚚 Stage Final Artifact
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $sourceDir = "msi-installer"
+          $destDir = "final-release-artifact"
+          New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+
+          robocopy $sourceDir $destDir /E
+
+          if ($LASTEXITCODE -ge 8) {
+            Write-Error "Robocopy failed with exit code $LASTEXITCODE. This indicates a serious error."
+            exit 1
+          }
+
+          Write-Host "✅ Robocopy completed successfully."
+          Get-ChildItem -Path $destDir | Write-Host
+          exit 0
 
       - name: 📤 Upload Final MSI Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Final-MSI-Artifact
-          path: msi-installer/
+          path: final-release-artifact/
           retention-days: 90
