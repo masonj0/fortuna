@@ -1336,7 +1336,7 @@ jobs:
     name: '📦 Stage Release Artifacts'
     runs-on: windows-latest
     timeout-minutes: 5
-    needs: [package-msi-service]
+    needs: [package-msi-service, repo-preflight]
     steps:
       - name: 📥 Download MSI Installer
         uses: actions/download-artifact@v4
