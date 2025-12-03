@@ -573,7 +573,7 @@ jobs:
             }
           }
 
-          Write-Host "✅ Staging complete. Contents of $destDir:"
+          Write-Host "✅ Staging complete. Contents of $($destDir):"
           Get-ChildItem $destAbsolutePath | Select-Object Name, Length
 
           if ($robocopy_failed) {

@@ -188,7 +188,7 @@ jobs:
             '',
             '# Standard Data Collection (UI, package data, etc.)',
             'datas = [',
-            "    ('$staging_ui_path', 'ui')",
+            "    ('$staging_ui_path', 'ui'),",
             ']',
             "datas += collect_data_files('uvicorn')",
             "datas += collect_data_files('slowapi')",
@@ -196,7 +196,7 @@ jobs:
             "datas += collect_data_files('certifi')",
             '',
             'hiddenimports = set()',
-            'hiddenimports.update($submodules)',
+            "hiddenimports.update($submodules)",
             'hiddenimports.update([',
             "    'uvicorn.logging', 'uvicorn.loops.auto', 'uvicorn.lifespan.on',",
             "    'uvicorn.protocols.http.h11_impl', 'uvicorn.protocols.websockets.wsproto_impl',",
@@ -249,12 +249,12 @@ jobs:
             '    entitlements_file=None',
             ')'
           )
-          # The pragmatic workflow uses a different spec file name, so we need to reflect that
-          Set-Content -Path "pragmatic.spec" -Value ($specContent -join "`n")
-          Write-Host "✅ Dynamically generated 'pragmatic.spec' (unified logic) created."
+          # Use a unique name for the unified workflow's spec file
+          Set-Content -Path "unified.spec" -Value ($specContent -join "`n")
+          Write-Host "✅ Dynamically generated 'unified.spec' created."
 
       - name: Build with PyInstaller
-        run: pyinstaller pragmatic.spec --clean --noconfirm
+        run: pyinstaller unified.spec --clean --noconfirm
 
       - name: Upload Backend Artifact
         uses: actions/upload-artifact@v4
