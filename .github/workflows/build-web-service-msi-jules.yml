@@ -531,60 +531,61 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
           $entry_point = (Join-Path $env:BACKEND_DIR "main.py").Replace('\', '/')
-          $submodules = "collect_submodules('{0}')" -f $env:BACKEND_MODULE_PATH
-          $main_import = "'{0}.main'" -f $env:BACKEND_MODULE_PATH
           $staging_ui_path = (Resolve-Path "staging/ui").Path.Replace('\', '/')
           $other_service = if ("${{ env.BACKEND_DIR }}" -eq "web_service/backend") { "python_service" } else { "web_service" }
+
+          # Ensure absolute paths for the init files
           $backend_init = (Resolve-Path "web_service/backend/__init__.py").Path.Replace('\', '/')
           $parent_init = (Resolve-Path "web_service/__init__.py").Path.Replace('\', '/')
 
           $specContent = @(
           "# -*- mode: python ; coding: utf-8 -*-",
-          "# DYNAMICALLY GENERATED SPEC - DO NOT EDIT MANUALLY",
           "import os",
           "from pathlib import Path",
           "from PyInstaller.utils.hooks import collect_data_files, collect_submodules",
           "",
           "block_cipher = None",
           "project_root = Path(os.getcwd())",
-          "version_string = os.environ.get('FORTUNA_VERSION', '0.0.0')",
           "",
-          "# DOUBLE INJECTION PART 1: Explicitly include the frontend UI files and critical __init__.py files",
+          "# Standard Data Collection",
           "datas = [",
           "    ('$staging_ui_path', 'ui'),",
-          "    ('$backend_init', 'web_service/backend'),",
-          "    ('$parent_init', 'web_service'),",
           "]",
-          "# Include necessary data files from installed packages",
           "datas += collect_data_files('uvicorn')",
           "datas += collect_data_files('slowapi')",
           "datas += collect_data_files('structlog')",
-          "datas += collect_data_files('certifi')",
           "",
-          "hiddenimports = set()",
-          "hiddenimports.update($submodules)",
-          "hiddenimports.update([",
+          "hiddenimports = collect_submodules('${{ env.BACKEND_MODULE_PATH }}')",
+          "hiddenimports += [",
           "    'uvicorn.logging', 'uvicorn.loops.auto', 'uvicorn.lifespan.on',",
           "    'uvicorn.protocols.http.h11_impl', 'uvicorn.protocols.websockets.wsproto_impl',",
           "    'fastapi.routing', 'starlette.staticfiles', 'anyio._backends._asyncio',",
           "    'httpcore', 'httpx', 'slowapi', 'structlog', 'tenacity', 'aiosqlite',",
-          "    'pydantic_core', 'pydantic_settings.sources', $main_import",
-          "])",
+          "    'pydantic_core', 'pydantic_settings.sources'",
+          "]",
           "",
           "a = Analysis(",
           "    ['$entry_point'],",
           "    pathex=[str(project_root)],",
           "    binaries=[],",
           "    datas=datas,",
-          "    hiddenimports=sorted(hiddenimports),",
+          "    hiddenimports=hiddenimports,",
           "    hookspath=[],",
           "    runtime_hooks=[],",
-          "    excludes=['tests', 'pytest', '$other_service'], # CRITICAL: Exclude the other service",
+          "    excludes=['tests', 'pytest', '$other_service'],",
           "    win_no_prefer_redirects=False,",
           "    win_private_assemblies=False,",
           "    cipher=block_cipher,",
           "    noarchive=False",
           ")",
+          "",
+          "# ☢️ NUCLEAR OVERRIDE: Force __init__ files into the PYZ archive",
+          "# This puts them in the importable namespace, not just on the filesystem.",
+          "a.pure += [",
+          "    ('web_service', '$parent_init', 'PYMODULE'),",
+          "    ('web_service.backend', '$backend_init', 'PYMODULE')",
+          "]",
+          "",
           "pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)",
           "exe = EXE(",
           "    pyz,",
@@ -598,17 +599,11 @@ jobs:
           "    bootloader_ignore_signals=False,",
           "    strip=False,",
           "    upx=True,",
-          "    runtime_tmpdir=None,",
           "    console=False,",
-          "    disable_windowed_traceback=False,",
-          "    argv_emulation=False,",
-          "    target_arch=None,",
-          "    codesign_identity=None,",
-          "    entitlements_file=None",
           ")"
           )
           Set-Content -Path "${{ env.BACKEND_SPEC }}" -Value $specContent
-          Write-Host "✅ Dynamically generated '${{ env.BACKEND_SPEC }}' created."
+          Write-Host "✅ Dynamically generated '${{ env.BACKEND_SPEC }}' with PYZ Injection."
 
       - name: Create Required Backend Directories
         if: steps.cache-backend.outputs.cache-hit != 'true'
@@ -625,42 +620,6 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
           pyinstaller "${{ env.BACKEND_SPEC }}" --clean --log-level=WARN --noconfirm
-
-      - name: ☢️ DOUBLE INJECTION PART 2 -- Surgical File Implant
-        if: steps.cache-backend.outputs.cache-hit != 'true'
-        shell: python
-        run: |
-          import zipfile
-          from pathlib import Path
-
-          exe_path = Path("dist/fortuna-backend.exe")
-          implant_files = {
-              "web_service/__init__.py": Path("web_service/__init__.py"),
-              "web_service/backend/__init__.py": Path("web_service/backend/__init__.py")
-          }
-
-          print("--- POST-MORTEM SURGICAL IMPLANT ---")
-          print(f"Target executable: {exe_path}")
-
-          if not exe_path.exists():
-              print("ERROR: Executable not found.")
-              exit(1)
-
-          try:
-              with zipfile.ZipFile(exe_path, "a") as zf:
-                  for archive_path, file_path in implant_files.items():
-                      if not file_path.exists():
-                          print(f"ERROR: Source file for implant not found: {file_path}")
-                          continue
-
-                      archive_path_std = archive_path.replace('\\', '/')
-                      print(f"Injecting '{file_path}' into archive as '{archive_path_std}'...")
-                      zf.write(file_path, archive_path_std)
-                      print("  -> Success.")
-              print("✅ All surgical implants completed successfully.")
-          except Exception as e:
-              print(f"❌ FAILED: An unexpected error occurred during implant: {e}")
-              exit(1)
 
       - name: Report Cache Status
         run: |
@@ -762,19 +721,16 @@ jobs:
           Write-Host "\n--- Archive Contents ---"
           $archiveContents | Out-Host
 
-          # Normalize expected path to forward slashes
+          # FIX: Normalize slashes for comparison
           $expectedInitFile = ($env:BACKEND_MODULE_PATH.Replace('.', '/') + '/__init__.py')
-          Write-Host "\n--- Verification ---"
-          Write-Host "Searching for key module file: '$expectedInitFile'..."
 
-          # FIX: Normalize the archive output to forward slashes before matching
+          # Check for the file, replacing backslashes with forward slashes in the output
           $found = $archiveContents | ForEach-Object { $_.Replace('\', '/') } | Select-String -Pattern $expectedInitFile -SimpleMatch -Quiet
 
           if ($found) {
             Write-Host "✅ SUCCESS: Key module file found inside the executable archive." -ForegroundColor Green
           } else {
             Write-Error "❌ FAILURE: Key module file '$expectedInitFile' NOT found inside the executable."
-            # Don't exit 1 here if you want to trust the injection step, but for now let's keep it strict
             exit 1
           }
 
