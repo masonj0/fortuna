@@ -796,7 +796,7 @@ jobs:
             Write-Host "✅ Privileges granted successfully."
           }
 
-      - name: 🚀 LOOP 1: Install & Verify Service Registration
+      - name: '🚀 LOOP 1 - Install & Verify Service Registration'
         shell: pwsh
         run: |
           $msiPath = "${{ steps.find_msi.outputs.msi_path }}"
@@ -821,7 +821,7 @@ jobs:
 
           Write-Host "✅ Service is registered. State: $($service.Status)"
 
-      - name: 🚦 LOOP 2: Start Service & Verify Process
+      - name: '🚦 LOOP 2 - Start Service & Verify Process'
         shell: pwsh
         run: |
           Write-Host "Attempting to start the 'FortunaWebService'..."
@@ -847,7 +847,7 @@ jobs:
             exit 1
           }
 
-      - name: 🩺 LOOP 3: Health Check Endpoint
+      - name: '🩺 LOOP 3 - Health Check Endpoint'
         shell: pwsh
         run: |
           Write-Host "Starting health checks against http://localhost:${{ env.SERVICE_PORT }}${{ env.HEALTH_ENDPOINT }} (up to 60 seconds)..."
