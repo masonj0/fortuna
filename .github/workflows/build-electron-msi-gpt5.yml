@@ -154,6 +154,92 @@ jobs:
           pip install -r ${{ env.BACKEND_DIR }}/requirements-dev.txt
           Write-Host "✓ Python dependencies installed"
 
+      - name: ☢️ NUCLEAR FIX -- Ensure Python Package Structure & Double Injection
+        shell: pwsh
+        run: |
+          Set-Content -Path "python_service/__init__.py" -Value "# This file is intentionally non-empty to ensure package recognition."
+          Write-Host "✅ Ensured non-empty __init__.py files exist for package discovery."
+
+      - name: Create Dynamic fortuna-backend-electron.spec for PyInstaller
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $entry_point = '${{ env.BACKEND_DIR }}/main.py'.Replace('\', '/')
+          $other_service = "web_service"
+
+          # Ensure absolute paths for the init files
+          $backend_init = (Resolve-Path "python_service/__init__.py").Path.Replace('\', '/')
+
+          $specContent = @(
+          "# -*- mode: python ; coding: utf-8 -*-",
+          "import os",
+          "from pathlib import Path",
+          "from PyInstaller.utils.hooks import collect_data_files, collect_submodules",
+          "",
+          "block_cipher = None",
+          "project_root = Path(os.getcwd())",
+          "",
+          "datas = []",
+          "datas += collect_data_files('uvicorn')",
+          "datas += collect_data_files('slowapi')",
+          "datas += collect_data_files('structlog')",
+          "",
+          "hiddenimports = collect_submodules('python_service')",
+          "hiddenimports += [",
+          "    'uvicorn.logging', 'uvicorn.loops.auto', 'uvicorn.lifespan.on',",
+          "    'uvicorn.protocols.http.h11_impl', 'uvicorn.protocols.websockets.wsproto_impl',",
+          "    'fastapi.routing', 'starlette.staticfiles', 'anyio._backends._asyncio',",
+          "    'httpcore', 'httpx', 'slowapi', 'structlog', 'tenacity', 'aiosqlite',",
+          "    'pydantic_core'",
+          "]",
+          "",
+          "a = Analysis(",
+          "    ['$entry_point'],",
+          "    pathex=[str(project_root)],",
+          "    binaries=[],",
+          "    datas=datas,",
+          "    hiddenimports=hiddenimports,",
+          "    hookspath=[],",
+          "    runtime_hooks=[],",
+          "    excludes=['tests', 'pytest', '$other_service'],",
+          "    win_no_prefer_redirects=False,",
+          "    win_private_assemblies=False,",
+          "    cipher=block_cipher,",
+          "    noarchive=False",
+          ")",
+          "",
+          "# ☢️ NUCLEAR OVERRIDE: Force __init__ files into the PYZ archive",
+          "a.pure += [",
+          "    ('python_service', '$backend_init', 'PYMODULE')",
+          "]",
+          "",
+          "pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)",
+          "exe = EXE(",
+          "    pyz,",
+          "    a.scripts,",
+          "    [],",
+          "    exclude_binaries=True,",
+          "    name='fortuna-backend',",
+          "    debug=False,",
+          "    bootloader_ignore_signals=False,",
+          "    strip=False,",
+          "    upx=True,",
+          "    console=True,",
+          ")",
+          "coll = COLLECT(",
+          "    exe,",
+          "    a.binaries,",
+          "    a.zipfiles,",
+          "    a.datas,",
+          "    strip=False,",
+          "    upx=True,",
+          "    upx_exclude=[],",
+          "    name='fortuna-backend',",
+          ")"
+          )
+          Set-Content -Path "fortuna-backend-electron.spec" -Value $specContent
+          Write-Host "✅ Dynamically generated 'fortuna-backend-electron.spec' with PYZ Injection."
+
       - name: 🔨 Build Python Service with PyInstaller
         shell: pwsh
         run: |
@@ -182,39 +268,6 @@ jobs:
           }
 
           Write-Host "✓ Service executable: $($serviceExe.FullName) ($('{0:N0}' -f $serviceExe.Length) bytes)"
-
-      - name: ☢️ NUCLEAR FIX Surgical File Injection
-        shell: pwsh
-        run: |
-          $injectionScript = @(
-            "import sys, zipfile, os",
-            # NOTE: Electron workflow outputs to dist/service, not dist
-            "exe_path = 'dist/service/fortuna-backend.exe'",
-            # NOTE: Electron workflow uses python_service, not web_service
-            "init_path = 'python_service/__init__.py'",
-            "arcname = 'python_service/__init__.py'",
-            "",
-            "print(f'--- SURGICAL INJECTION START ---')",
-            "print(f'Target: {exe_path}')",
-            "print(f'Injecting: {init_path}')",
-            "",
-            "if not os.path.exists(init_path):",
-            "    print(f'⚠️ WARNING: {init_path} not found. Attempting to create dummy...')",
-            "    with open(init_path, 'w') as f: f.write('# Injected dummy')",
-            "",
-            "try:",
-            "    with zipfile.ZipFile(exe_path, 'a', compression=zipfile.ZIP_DEFLATED) as zf:",
-            "        if arcname not in zf.namelist():",
-            "            zf.write(init_path, arcname)",
-            "            print('✅ INJECTION SUCCESSFUL: File added to archive.')",
-            "        else:",
-            "            print('⚠️ File already exists in archive. Skipping.')",
-            "except Exception as e:",
-            "    print(f'❌ INJECTION FAILED: {e}')",
-            "    sys.exit(1)"
-          )
-          $injectionScript | Out-File "inject_init.py" -Encoding utf8
-          python inject_init.py
 
       - name: 🧪 Verify Service Executable
         shell: pwsh
@@ -606,7 +659,7 @@ jobs:
             }
           }
 
-          Write-Host "✅ Staging complete. Contents of $destDir:"
+          Write-Host "✅ Staging complete. Contents of $($destDir):"
           Get-ChildItem $destAbsolutePath | Select-Object Name, Length
 
           if ($robocopy_failed) {
