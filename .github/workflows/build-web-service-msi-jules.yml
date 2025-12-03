@@ -1072,13 +1072,32 @@ jobs:
 
       - name: '🚀 Start Frontend Server'
         run: |
+          Set-StrictMode -Version Latest
           serve -s frontend-dist -l 3000 > frontend-server.log 2>&1 &
-          Start-Sleep -Seconds 5
-          $proc = Get-Process -Name "serve"
-          $frontendPid = $proc.Id
-          Write-Host "✅ Frontend server started with PID: $frontendPid"
+
+          # Poll for the 'node' process to start, as 'serve' is a node script
+          $startTime = Get-Date
+          $timeout = New-TimeSpan -Seconds 20
+          $proc = $null
+          while ((Get-Date) -lt ($startTime + $timeout)) {
+              $proc = Get-Process -Name "node" -ErrorAction SilentlyContinue
+              if ($null -ne $proc) {
+                  break
+              }
+              Start-Sleep -Seconds 1
+              Write-Host "Waiting for frontend server (node.exe) process..."
+          }
+
+          if ($null -eq $proc) {
+              Write-Error "Failed to find 'node.exe' process for frontend server within timeout."
+              Get-Content frontend-server.log -ErrorAction SilentlyContinue
+              exit 1
+          }
+
+          $frontendPid = $proc[0].Id
+          Write-Host "✅ Frontend server (node.exe) started with PID: $frontendPid"
           $frontendPid | Out-File "frontend.pid" -Encoding ascii
-          Start-Sleep -Seconds 3
+          Start-Sleep -Seconds 3 # Give it a final moment to be ready to accept connections
 
       - name: '🧪 Frontend UI Verification'
         shell: pwsh
