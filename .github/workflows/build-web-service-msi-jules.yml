@@ -5,17 +5,6 @@ on:
   push:
     branches:
       - main
-      - session/jules1130b
-    tags:
-      - 'v*'
-    paths:
-      - 'python_service/**'
-      - 'web_service/backend/**'
-      - 'web_platform/frontend/**'
-      - 'fortuna-backend-webservice.spec'
-      - 'webservice.spec'
-      - '.github/workflows/build-web-service-msi-gpt5.yml'
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -560,7 +549,7 @@ jobs:
           "project_root = Path(os.getcwd())",
           "version_string = os.environ.get('FORTUNA_VERSION', '0.0.0')",
           "",
-          "# Explicitly include the frontend UI files and critical __init__.py files",
+          "# DOUBLE INJECTION PART 1: Explicitly include the frontend UI files and critical __init__.py files",
           "datas = [",
           "    ('$staging_ui_path', 'ui'),",
           "    ('$backend_init', 'web_service/backend'),",
@@ -773,14 +762,19 @@ jobs:
           Write-Host "\n--- Archive Contents ---"
           $archiveContents | Out-Host
 
-          $expectedInitFile = ($env:BACKEND_MODULE_PATH.Replace('.', '\') + '\__init__.py')
+          # Normalize expected path to forward slashes
+          $expectedInitFile = ($env:BACKEND_MODULE_PATH.Replace('.', '/') + '/__init__.py')
           Write-Host "\n--- Verification ---"
-          Write-Host "Searching for key module file: '$expectedInitFile' in archive contents..."
+          Write-Host "Searching for key module file: '$expectedInitFile'..."
 
-          if ($archiveContents | Select-String -Pattern $expectedInitFile -Quiet -SimpleMatch) {
+          # FIX: Normalize the archive output to forward slashes before matching
+          $found = $archiveContents | ForEach-Object { $_.Replace('\', '/') } | Select-String -Pattern $expectedInitFile -SimpleMatch -Quiet
+
+          if ($found) {
             Write-Host "✅ SUCCESS: Key module file found inside the executable archive." -ForegroundColor Green
           } else {
-            Write-Error "❌ FAILURE: Key module file '$expectedInitFile' NOT found inside the executable. This confirms a bundling error."
+            Write-Error "❌ FAILURE: Key module file '$expectedInitFile' NOT found inside the executable."
+            # Don't exit 1 here if you want to trust the injection step, but for now let's keep it strict
             exit 1
           }
 
