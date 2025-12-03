@@ -15,7 +15,7 @@ env:
 
 jobs:
   path-finder:
-    name: '🔎 Path Finder Dynamic Backend Detection'
+    name: '🔎 Path Finder - Dynamic Backend Detection'
     runs-on: windows-latest
     outputs:
       backend_dir: ${{ steps.find-path.outputs.backend_dir }}
@@ -124,73 +124,92 @@ jobs:
           pip install pyinstaller==6.6.0
 
       - name: Create Dynamic webservice.spec for PyInstaller
+        if: steps.cache-backend.outputs.cache-hit != 'true'
         run: |
           Set-StrictMode -Version Latest
           $entry_point = (Join-Path $env:BACKEND_DIR "main.py").Replace('\', '/')
           $staging_ui_path = (Resolve-Path "web_platform/frontend/out").Path.Replace('\', '/')
           $other_service = if ("$env:BACKEND_DIR" -eq "web_service/backend") { "python_service" } else { "web_service" }
 
-          # Forcefully create non-empty __init__.py files and get their absolute paths
-          $backend_init_path = (Resolve-Path (Join-Path $env:BACKEND_DIR "__init__.py")).Path.Replace('\', '/')
-          Set-Content -Path $backend_init_path -Value "# NON-EMPTY" -Force
-
-          $parent_init_datas = ""
+          # Forcefully create non-empty __init__.py files if missing
+          $init_path = (Join-Path $env:BACKEND_DIR "__init__.py")
+          if (-not (Test-Path $init_path)) { Set-Content -Path $init_path -Value "# DUMMY" }
           if ($env:BACKEND_DIR -eq "web_service/backend") {
-            $parent_init_path = (Resolve-Path "web_service/__init__.py").Path.Replace('\', '/')
-            Set-Content -Path $parent_init_path -Value "# NON-EMPTY" -Force
-            # Correctly calculate the destination path relative to the package root
-            $parent_dest = "web_service"
-            $parent_init_datas = "    ('$parent_init_path', '$parent_dest'),"
+             if (-not (Test-Path "web_service/__init__.py")) { Set-Content -Path "web_service/__init__.py" -Value "# DUMMY" }
           }
 
-          # Correctly calculate the backend's destination path
+          # Get absolute paths for datas section
+          $backend_init = (Resolve-Path $init_path).Path.Replace('\', '/')
+          # Calculate destination path inside the archive (e.g. 'web_service\backend')
           $backend_dest = $env:BACKEND_DIR.Replace('/', '\')
 
-          # Build the spec content as a single string list
+          # Check for parent init
+          $parent_init_path = (Join-Path (Split-Path $env:BACKEND_DIR) "__init__.py")
+          $parent_init = ""
+          if (Test-Path $parent_init_path) {
+            $parent_init = (Resolve-Path $parent_init_path).Path.Replace('\', '/')
+          }
+
+          # Start building the Python Spec content
           $specContent = @(
-              '# -*- mode: python ; coding: utf-8 -*-',
-              'import os',
-              'from pathlib import Path',
-              'from PyInstaller.utils.hooks import collect_data_files, collect_submodules',
-              'block_cipher = None',
-              'a = Analysis(',
-              "    ['$entry_point'],",
-              '    pathex=[os.getcwd()],',
-              "    hiddenimports=['uvicorn.lifespan.on', 'uvicorn.loops.auto', 'uvicorn.protocols.http.h11_impl'] + collect_submodules('${{ env.BACKEND_MODULE_PATH }}'),",
-              '    hookspath=[],',
-              '    runtime_hooks=[],',
-              "    excludes=['$other_service', 'tests'],",
-              '    win_no_prefer_redirects=False,',
-              '    win_private_assemblies=False,',
-              '    cipher=block_cipher,',
-              '    noarchive=False,',
-              ')',
-              '# Add data files',
-              'a.datas += [',
-              "    ('$staging_ui_path', 'ui'),",
-              "    ('$backend_init_path', '$backend_dest'),",
-              $parent_init_datas,
-              "]",
-              'pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)',
-              'exe = EXE(',
-              '    pyz,',
-              '    a.scripts,',
-              '    a.binaries,',
-              '    a.zipfiles,',
-              '    a.datas,',
-              '    [],',
-              "    name='fortuna-backend',",
-              '    debug=False,',
-              '    bootloader_ignore_signals=False,',
-              '    strip=False,',
-              '    upx=True,',
-              '    console=False,',
-              '    icon=None,',
-              ')'
+            "# -*- mode: python ; coding: utf-8 -*-",
+            "import os",
+            "from pathlib import Path",
+            "from PyInstaller.utils.hooks import collect_data_files",
+            "block_cipher = None",
+            "a = Analysis(",
+            "    ['$entry_point'],",
+            "    pathex=[os.getcwd()],",
+            "    hiddenimports=['uvicorn.lifespan.on', 'uvicorn.loops.auto', 'uvicorn.protocols.http.h11_impl'],",
+            "    hookspath=[],",
+            "    runtime_hooks=[],",
+            "    excludes=['$other_service', 'tests'],",
+            "    win_no_prefer_redirects=False,",
+            "    win_private_assemblies=False,",
+            "    cipher=block_cipher,",
+            "    noarchive=False,",
+            ")",
+            "# Explicitly bundle the __init__.py files as data",
+            "a.datas += [",
+            "    ('$staging_ui_path', 'ui'),",
+            "    ('$backend_init', '$backend_dest')"
+          )
+
+          # Append parent init if it exists (PowerShell logic outside Python string)
+          if ($parent_init -ne "") {
+             $dest = (Split-Path $env:BACKEND_DIR -Leaf)
+             $specContent += "    ,('$parent_init', '$dest')"
+          }
+
+          # Close the list and define the One-File EXE
+          $specContent += @(
+            "]",
+            "pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)",
+            "exe = EXE(",
+            "    pyz,",
+            "    a.scripts,",
+            "    a.binaries,",  # <--- CRITICAL: Include binaries here for One-File",
+            "    a.zipfiles,",  # <--- CRITICAL: Include zipfiles here for One-File",
+            "    a.datas,",     # <--- CRITICAL: Include datas here for One-File",
+            "    [],",
+            "    name='fortuna-backend',",
+            "    debug=False,",
+            "    bootloader_ignore_signals=False,",
+            "    strip=False,",
+            "    upx=True,",
+            "    upx_exclude=[],",
+            "    runtime_tmpdir=None,",
+            "    console=False,",
+            "    disable_windowed_traceback=False,",
+            "    argv_emulation=False,",
+            "    target_arch=None,",
+            "    codesign_identity=None,",
+            "    entitlements_file=None,",
+            ")"
           )
 
           Set-Content -Path "simplified.spec" -Value ($specContent -join "`n")
-          Write-Host "✅ Dynamically generated 'simplified.spec' for onefile build created."
+          Write-Host "✅ Dynamically generated 'simplified.spec' (One-File Mode) created."
 
       - name: Build with PyInstaller
         run: pyinstaller simplified.spec --clean --noconfirm

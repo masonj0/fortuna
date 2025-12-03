@@ -519,7 +519,7 @@ jobs:
           Set-StrictMode -Version Latest
           pip freeze | Out-File backend-freeze.txt -Encoding utf8
 
-      - name: ☢️ NUCLEAR FIX: Ensure Python Package Structure & Double Injection
+      - name: ☢️ NUCLEAR FIX -- Ensure Python Package Structure & Double Injection
         if: steps.cache-backend.outputs.cache-hit != 'true'
         run: |
           Set-Content -Path "web_service/__init__.py" -Value "# This file is intentionally non-empty to ensure package recognition."
@@ -626,46 +626,41 @@ jobs:
           Set-StrictMode -Version Latest
           pyinstaller "${{ env.BACKEND_SPEC }}" --clean --log-level=WARN --noconfirm
 
-      - name: ☢️ DOUBLE INJECTION PART 2: Surgical File Implant
+      - name: ☢️ DOUBLE INJECTION PART 2 -- Surgical File Implant
         if: steps.cache-backend.outputs.cache-hit != 'true'
+        shell: python
         run: |
-          Set-StrictMode -Version Latest
-          $script = @(
-          'import zipfile, os',
-          'from pathlib import Path',
-          '',
-          'exe_path = Path("dist/fortuna-backend.exe")',
-          'implant_files = {',
-          '    "web_service/__init__.py": Path("web_service/__init__.py"),',
-          '    "web_service/backend/__init__.py": Path("web_service/backend/__init__.py")',
-          '}',
-          '',
-          'print(f"--- POST-MORTEM SURGICAL IMPLANT ---")',
-          'print(f"Target executable: {exe_path}")',
-          '',
-          'if not exe_path.exists():',
-          '    print(f"ERROR: Executable not found.")',
-          '    exit(1)',
-          '',
-          'try:',
-          '    with zipfile.ZipFile(exe_path, "a") as zf:',
-          '        for archive_path, file_path in implant_files.items():',
-          '            if not file_path.exists():',
-          '                print(f"ERROR: Source file for implant not found: {file_path}")',
-          '                continue',
-          '',
-          "            archive_path_std = archive_path.replace('\\\\', '/')",
-          '            print(f"Injecting \'{file_path}\' into archive as \'{archive_path_std}\'...")',
-          '            zf.write(file_path, archive_path_std)',
-          '            print(f"  -> Success.")',
-          '    print("✅ All surgical implants completed successfully.")',
-          'except Exception as e:',
-          '    print(f"❌ FAILED: An unexpected error occurred during implant: {e}")',
-          '    exit(1)',
-          ''
-          )
-          $script | Set-Content -Path "implant.py" -Encoding utf8
-          python implant.py
+          import zipfile
+          from pathlib import Path
+
+          exe_path = Path("dist/fortuna-backend.exe")
+          implant_files = {
+              "web_service/__init__.py": Path("web_service/__init__.py"),
+              "web_service/backend/__init__.py": Path("web_service/backend/__init__.py")
+          }
+
+          print("--- POST-MORTEM SURGICAL IMPLANT ---")
+          print(f"Target executable: {exe_path}")
+
+          if not exe_path.exists():
+              print("ERROR: Executable not found.")
+              exit(1)
+
+          try:
+              with zipfile.ZipFile(exe_path, "a") as zf:
+                  for archive_path, file_path in implant_files.items():
+                      if not file_path.exists():
+                          print(f"ERROR: Source file for implant not found: {file_path}")
+                          continue
+
+                      archive_path_std = archive_path.replace('\\', '/')
+                      print(f"Injecting '{file_path}' into archive as '{archive_path_std}'...")
+                      zf.write(file_path, archive_path_std)
+                      print("  -> Success.")
+              print("✅ All surgical implants completed successfully.")
+          except Exception as e:
+              print(f"❌ FAILED: An unexpected error occurred during implant: {e}")
+              exit(1)
 
       - name: Report Cache Status
         run: |
@@ -1076,99 +1071,13 @@ jobs:
       # ═════════════════════════════════════════════════════════════════════════
       # PHASE 2 & 3: THE SOCKET HANDOVER (LAUNCH & VERIFY)
       # ═════════════════════════════════════════════════════════════════════════
-      - name: 🧪 Smoke Test via Native Python
-        shell: python
-        run: |
-          import subprocess
-          import time
-          import socket
-          import sys
-          import os
-          import urllib.request
-
-          EXE_PATH = r'dist/fortuna-backend.exe'
-          PORT = 8102
-          API_KEY = os.environ.get('API_KEY', '')
-
-          def wait_for_port(port, timeout=60):
-              start_time = time.time()
-              while time.time() - start_time < timeout:
-                  try:
-                      with socket.create_connection(('127.0.0.1', port), timeout=1):
-                          return True
-                  except (ConnectionRefusedError, socket.timeout):
-                      time.sleep(0.5)
-              return False
-
-          print(f"--- Native Python Smoke Test ---")
-          print(f"🚀 Launching executable: {EXE_PATH}")
-
-          # Set up environment for the subprocess
-          env = os.environ.copy()
-          env['PYTHONUNBUFFERED'] = '1'
-          env['HOST'] = '0.0.0.0'
-          env['PORT'] = str(PORT)
-          env['API_KEY'] = API_KEY
-          env['FORTUNA_ENV'] = 'smoke-test'
-
-          # Launch the backend executable
-          try:
-            process = subprocess.Popen(
-                [EXE_PATH],
-                env=env,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                encoding='utf-8',
-                errors='replace'
-            )
-          except FileNotFoundError:
-            print(f"❌ FATAL: Executable not found at '{EXE_PATH}'")
-            sys.exit(1)
-          except Exception as e:
-            print(f"❌ FATAL: Failed to launch process: {e}")
-            sys.exit(1)
-
-
-          print(f"⏳ Waiting for port {PORT} to become available (timeout: 60s)...")
-          if wait_for_port(PORT):
-              print(f"✅ Port {PORT} is open. Service appears to be running.")
-              # Simple health check
-              try:
-                  url = f'http://127.0.0.1:{PORT}/health'
-                  print(f"🔬 Performing health check against {url}...")
-                  with urllib.request.urlopen(url, timeout=10) as response:
-                      if response.status == 200:
-                          print(f"✅ Health check successful (HTTP {response.status}).")
-                      else:
-                          print(f"❌ Health check failed with status: {response.status}")
-                          process.terminate()
-                          sys.exit(1)
-              except Exception as e:
-                  print(f"❌ Health check request failed: {e}")
-                  process.terminate()
-                  sys.exit(1)
-          else:
-              print(f"❌ TIMEOUT: Service failed to bind to port {PORT} within the time limit.")
-              # Attempt to get output from the failed process
-              try:
-                  outs, errs = process.communicate(timeout=10)
-                  print("\n--- Process STDOUT ---")
-                  print(outs)
-                  print("\n--- Process STDERR ---")
-                  print(errs)
-                  print("----------------------")
-              except Exception as e:
-                  print(f"Could not get process output: {e}")
-              process.terminate()
-              sys.exit(1)
-
-          # If we get here, the service is running. Write the PID to a file.
-          with open('service.pid', 'w') as f:
-              f.write(str(process.pid))
-
-          print(f"✅ Service running in background with PID: {process.pid}. PID written to service.pid.")
-          # Do not terminate, let it run for subsequent steps
+      - name: 🚀 Launch Service & Verify Health (Socket Handover)
+        uses: ./.github/actions/run-smoke-test
+        with:
+          exe-path: 'dist/fortuna-backend.exe'
+          service-port: '8102'
+          health-endpoint: '/health'
+          api-key: ${{ env.API_KEY }}
 
       - name: 🔌 Test API Endpoint
         run: |
