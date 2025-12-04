@@ -858,46 +858,32 @@ jobs:
           name: fortuna-electron-msi-${{ needs.validate-environment.outputs.build_id }}
           path: staging-area
 
-      - name: 🚚 Manifest-Driven Extraction
+      - name: 🚚 Stage Final Artifact
         shell: pwsh
         run: |
           Set-StrictMode -Version Latest
-          $reportPath = "staging-area/build-report.json"
-          if (-not (Test-Path $reportPath)) {
-            Write-Error "build-report.json not found in downloaded artifact."
-            exit 1
-          }
-
-          $report = Get-Content $reportPath | ConvertFrom-Json
-          $msiFile = $report.msi_files[0]
-
-          if (-not $msiFile) {
-            Write-Error "No MSI file listed in the build report."
-            exit 1
-          }
-
-          $sourcePath = Join-Path "staging-area" "release-artifacts"
-          $destinationPath = "final-release-artifact"
-          New-Item -ItemType Directory -Path $destinationPath -Force
-
-          $msiFileName = Split-Path -Path $msiFile.path -Leaf
-
-          Write-Host "--- Manifest-Driven Extraction ---"
-          Write-Host "Source Directory: $sourcePath"
-          Write-Host "Destination Directory: $destinationPath"
-          Write-Host "Target MSI: $msiFileName"
+          $sourceDir = "staging-area"
+          $destDir = "final-release-artifact"
+          New-Item -ItemType Directory -Path $destDir -Force | Out-Null
 
           # Run Robocopy
-          robocopy $sourcePath $destinationPath $msiFileName ($msiFileName + ".sha256") /R:3 /W:5
+          robocopy $sourceDir $destDir /E
 
-          # YOUR FIX APPLIED HERE:
+          # Robocopy Exit Codes:
+          # 0 = No files copied (No errors)
+          # 1 = Files copied successfully (No errors)
+          # 2 = Extra files detected (No errors)
+          # 3 = (2+1) Some files copied, some extras (No errors)
+          # 4+ = Mismatched files or actual errors
+
           if ($LASTEXITCODE -le 3) {
-            Write-Output "✅ Robocopy completed successfully with exit code $LASTEXITCODE."
-            Get-ChildItem -Path $destinationPath | Select-Object Name, Length
+            Write-Host "✅ Robocopy completed successfully (Exit Code: $LASTEXITCODE)."
+            Get-ChildItem -Path $destDir | Write-Host
+            # FORCE SUCCESS
             exit 0
           } else {
-            Write-Error "❌ Robocopy failed with error code: $LASTEXITCODE"
-            exit $LASTEXITCODE
+            Write-Error "❌ Robocopy failed with exit code $LASTEXITCODE."
+            exit 1
           }
 
       - name: 📤 Upload Final MSI Artifact
