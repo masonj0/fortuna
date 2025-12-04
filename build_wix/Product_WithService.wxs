@@ -21,36 +21,40 @@
       <ComponentGroupRef Id="ShortcutComponents" />
     </Feature>
 
-    <ui:WixUI Id="WixUI_InstallDir"
-              InstallDirectory="INSTALLFOLDER" />
-
-    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+    <!-- The InstallDirectory attribute handles the WIXUI_INSTALLDIR property automatically in WiX v4, fixing WIX0091 -->
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
 
   </Package>
 
   <Fragment>
+    <!-- 1. DEFINE THE DIRECTORY STRUCTURE WITH IDs (Fixed WIX0094) -->
     <StandardDirectory Id="ProgramFiles64Folder">
-      <Directory Id="INSTALLFOLDER" Name="Fortuna Faucet" />
+      <Directory Id="INSTALLFOLDER" Name="Fortuna Faucet">
+        <!-- Explicitly define IDs for subfolders -->
+        <Directory Id="Dir_Data" Name="data" />
+        <Directory Id="Dir_Json" Name="json" />
+        <Directory Id="Dir_Logs" Name="logs" />
+      </Directory>
     </StandardDirectory>
 
     <StandardDirectory Id="ProgramMenuFolder">
         <Directory Id="ApplicationProgramsFolder" Name="Fortuna Faucet"/>
     </StandardDirectory>
 
+    <!-- 2. SERVICE COMPONENTS -->
     <ComponentGroup Id="ServiceComponents" Directory="INSTALLFOLDER">
       <Component Id="ServiceComponent" Guid="*">
         <File Id="ServiceExe"
               Source="$(var.SourceDir)/fortuna-webservice.exe"
-              KeyPath="true" />
+              KeyPath="yes" />
 
         <ServiceInstall Id="ServiceInstaller"
                         Name="FortunaWebService"
                         DisplayName="Fortuna Faucet Backend Service"
-                        Description="Data aggregation and analysis engine for horse racing."
+                        Description="Data aggregation and analysis engine."
                         Start="auto"
                         Type="ownProcess"
-                        ErrorControl="normal"
-                        Environment="FORTUNA_PORT=$(var.ServicePort)" />
+                        ErrorControl="normal" />
 
         <ServiceControl Id="ServiceControl"
                         Name="FortunaWebService"
@@ -70,21 +74,29 @@
                                 Port="8102"
                                 Protocol="tcp"
                                 Scope="any" />
+
+        <!-- 3. ENVIRONMENT VARIABLES (Fixes Port Mismatch & WIX0004 error) -->
+        <RegistryKey Root="HKLM" Key="SYSTEM\CurrentControlSet\Services\FortunaWebService">
+            <RegistryValue Name="Environment" Type="multiString" Value="PORT=8102[~]FORTUNA_PORT=8102" />
+        </RegistryKey>
       </Component>
     </ComponentGroup>
 
-    <ComponentGroup Id="RuntimeDirectoryComponents" Directory="INSTALLFOLDER">
-        <Component Id="DataDirectoryComponent" Guid="a2e3820a-606b-452f-b43f-b82b9a7852a0">
-            <CreateFolder Directory="data" />
+    <!-- 4. RUNTIME DIRECTORIES (Fixed WIX0094) -->
+    <ComponentGroup Id="RuntimeDirectoryComponents">
+        <!-- Reference the Directory IDs defined above -->
+        <Component Id="DataDirectoryComponent" Directory="Dir_Data" Guid="a2e3820a-606b-452f-b43f-b82b9a7852a0">
+            <CreateFolder />
         </Component>
-        <Component Id="JsonDirectoryComponent" Guid="b4d7ea21-821f-4a0b-9303-3a52e1f42d2a">
-            <CreateFolder Directory="json" />
+        <Component Id="JsonDirectoryComponent" Directory="Dir_Json" Guid="b4d7ea21-821f-4a0b-9303-3a52e1f42d2a">
+            <CreateFolder />
         </Component>
-        <Component Id="LogsDirectoryComponent" Guid="d66f6540-3f11-4475-9a67-9c9852f87a32">
-            <CreateFolder Directory="logs" />
+        <Component Id="LogsDirectoryComponent" Directory="Dir_Logs" Guid="d66f6540-3f11-4475-9a67-9c9852f87a32">
+            <CreateFolder />
         </Component>
     </ComponentGroup>
 
+    <!-- 5. SHORTCUTS -->
     <ComponentGroup Id="ShortcutComponents" Directory="ApplicationProgramsFolder">
         <Component Id="ShortcutComponent" Guid="*">
             <Shortcut Id="UninstallShortcut"
