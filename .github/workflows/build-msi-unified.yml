@@ -1,4 +1,4 @@
-# System Timestamp: 2025-12-03 22:44:34.655552917
+# System Timestamp: 2025-12-04 14:04:28.986665
 name: Unified MSI Builder (Jules's Gold Standard)
 
 on:
@@ -288,6 +288,17 @@ jobs:
         with:
           name: backend-dist-${{ needs.build-executable.outputs.build_id }}
           path: staging
+
+      - name: Rename Executable for WiX
+        shell: pwsh
+        run: |
+          if (Test-Path staging/fortuna-backend.exe) {
+            Rename-Item -Path staging/fortuna-backend.exe -NewName fortuna-webservice.exe -Force
+            Write-Host "✅ Renamed executable to fortuna-webservice.exe"
+          } else {
+            Write-Error "❌ Executable not found in staging directory!"
+            exit 1
+          }
 
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4

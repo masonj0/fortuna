@@ -2,7 +2,8 @@
 name: 🔨 Build Electron MSI Installer (Production)
 
 on:
-  workflow_dispatch:
+  push:
+    branches: ["main"]
 
 concurrency:
   group: build-electron-msi-${{ github.ref }}
