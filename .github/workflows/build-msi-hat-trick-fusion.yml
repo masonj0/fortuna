@@ -1,0 +1,313 @@
+# System Timestamp: 2025-12-03 22:44:34.655552917
+name: HatTrick Fusion (Perfected)
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+
+env:
+  NODE_VERSION: '20'
+  PYTHON_VERSION: '3.12'
+  DOTNET_VERSION: '8.0.x'
+  WIX_VERSION: '4.0.5'
+  SERVICE_PORT: '8102'
+  FRONTEND_PORT: '3000'
+  MSI_NAME: 'HatTrickFusion.msi'
+  FIREWALL_RULE: 'HatTrickFusion-Port'
+
+jobs:
+  # 1. Build Frontend First (so Backend can bundle it)
+  build-frontend:
+    name: Build Frontend
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Install and Build
+        run: |
+          cd web_platform/frontend
+          npm ci --prefer-offline --no-audit --no-fund
+          npm run build
+      - name: Upload Frontend
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: web_platform/frontend/out
+
+  # 2. Build Backend (Downloads Frontend to bundle it)
+  build-backend:
+    name: Build Backend Binary
+    runs-on: windows-latest
+    needs: build-frontend
+    outputs:
+      semver: ${{ steps.meta.outputs.semver }}
+      backend-dir: ${{ steps.meta.outputs.backend_dir }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Download Frontend for bundling
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-build
+          path: web_platform/frontend/out
+
+      - id: meta
+        shell: pwsh
+        run: |
+          $ver = if ("${{ github.ref }}" -match 'refs/tags/v(.*)') { $Matches[1] } else { "0.0.${{ github.run_number }}" }
+          $backendDir = if (Test-Path 'web_service/backend/main.py') { 'web_service/backend' } else { 'python_service' }
+          $modulePath = if (Test-Path 'web_service/backend/main.py') { 'web_service.backend' } else { 'python_service' }
+          "semver=$ver" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "backend_dir=$backendDir" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "module_path=$modulePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install Dependencies
+        run: |
+          pip install -r ${{ steps.meta.outputs.backend_dir }}/requirements.txt
+          pip install pyinstaller==6.6.0
+
+      - name: Generate PyInstaller Spec
+        shell: python
+        env:
+          BACKEND_DIR: ${{ steps.meta.outputs.backend_dir }}
+          MODULE_PATH: ${{ env.module_path }}
+        run: |
+          import os
+          from pathlib import Path
+
+          backend_dir = os.environ['BACKEND_DIR']
+          module_path = os.environ['MODULE_PATH']
+          entry = f"{backend_dir}/main.py"
+
+          # FIX: Ensure directories exist before writing __init__.py
+          p_init = Path("web_service/__init__.py")
+          b_init = Path("web_service/backend/__init__.py")
+
+          p_init.parent.mkdir(parents=True, exist_ok=True)
+          b_init.parent.mkdir(parents=True, exist_ok=True)
+
+          p_init.write_text("# HatTrick")
+          b_init.write_text("# HatTrick")
+
+          spec_content = f"""
+          # -*- mode: python ; coding: utf-8 -*-
+          from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+
+          block_cipher = None
+
+          a = Analysis(
+              ['{entry}'],
+              pathex=[],
+              binaries=[],
+              # Frontend is now present at this path
+              datas=collect_data_files('uvicorn') + collect_data_files('slowapi') + [('web_platform/frontend/out', 'ui')],
+              hiddenimports=collect_submodules('{module_path}') + ['uvicorn.logging', 'uvicorn.loops.auto', 'uvicorn.protocols.http.h11_impl'],
+              hookspath=[],
+              hooksconfig={{}},
+              runtime_hooks=[],
+              excludes=['tests', 'pytest'],
+              win_no_prefer_redirects=False,
+              win_private_assemblies=False,
+              cipher=block_cipher,
+              noarchive=False,
+          )
+
+          # PURE INJECTION (The Gold Standard)
+          a.pure += [
+              ('web_service', '{p_init}', 'PYMODULE'),
+              ('web_service.backend', '{b_init}', 'PYMODULE')
+          ]
+
+          pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+          exe = EXE(
+              pyz,
+              a.scripts,
+              a.binaries,
+              a.zipfiles,
+              a.datas,
+              [],
+              name='fortuna-backend',
+              debug=False,
+              bootloader_ignore_signals=False,
+              strip=False,
+              upx=True,
+              upx_exclude=[],
+              runtime_tmpdir=None,
+              console=False,
+              disable_windowed_traceback=False,
+              argv_emulation=False,
+              target_arch=None,
+              codesign_identity=None,
+              entitlements_file=None,
+          )
+          """
+          Path("hat-trick.spec").write_text(spec_content)
+          print("Generated spec")
+
+      - name: Build Executable
+        run: pyinstaller hat-trick.spec --clean --noconfirm
+
+      - name: Upload Backend
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-dist
+          path: dist/fortuna-backend.exe
+
+  package-msi:
+    name: Package MSI
+    runs-on: windows-latest
+    needs: build-backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: backend-dist
+          path: staging/backend
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Prepare WiX
+        shell: pwsh
+        run: |
+          if (-not (Test-Path build_wix)) { New-Item -ItemType Directory -Path build_wix | Out-Null }
+          Copy-Item build_wix/Product_WithService.wxs build_wix/Product.wxs -Force
+
+          if (Test-Path staging/backend/fortuna-backend.exe) {
+            Move-Item staging/backend/fortuna-backend.exe staging/backend/fortuna-webservice.exe -Force
+          }
+
+          $proj = @()
+          $proj += '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">'
+          $proj += '  <PropertyGroup>'
+          $proj += '    <OutputName>HatTrickFusion</OutputName>'
+          $proj += '    <OutputType>Package</OutputType>'
+          $proj += '    <DefineConstants>SourceDir=../staging;Version=${{ needs.build-backend.outputs.semver }}</DefineConstants>'
+          $proj += '    <Platforms>x64</Platforms>'
+          $proj += '  </PropertyGroup>'
+          $proj += '  <ItemGroup>'
+          $proj += '    <PackageReference Include="WixToolset.Firewall.wixext" Version="${{ env.WIX_VERSION }}" />'
+          $proj += '    <PackageReference Include="WixToolset.UI.wixext" Version="${{ env.WIX_VERSION }}" />'
+          $proj += '    <PackageReference Include="WixToolset.Util.wixext" Version="${{ env.WIX_VERSION }}" />'
+          $proj += '  </ItemGroup>'
+          $proj += '  <ItemGroup>'
+          $proj += '    <Compile Include="Product.wxs" />'
+          $proj += '  </ItemGroup>'
+          $proj += '</Project>'
+          Set-Content build_wix/Fortuna.wixproj ($proj -join "`n") -Encoding utf8
+
+      - name: Build MSI
+        working-directory: build_wix
+        run: dotnet build Fortuna.wixproj -c Release -p:Platform=x64
+
+      - name: Upload MSI
+        uses: actions/upload-artifact@v4
+        with:
+          name: hat-trick-msi
+          path: build_wix/bin/x64/Release/*.msi
+
+  smoke-test:
+    name: HatTrick Fusion Smoke Test
+    runs-on: windows-latest
+    needs: package-msi
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: hat-trick-msi
+          path: installer
+
+      - name: Verify and Install MSI
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem installer -Filter "*.msi" -Recurse | Select-Object -First 1
+          if (-not $msi) { throw "No MSI found" }
+          $msi.FullName | Set-Content -Path "msi-path.txt" -Encoding utf8
+
+          # Pre-warm firewall
+          if (-not (Get-NetFirewallRule -DisplayName $env:FIREWALL_RULE -ErrorAction SilentlyContinue)) {
+            New-NetFirewallRule -DisplayName $env:FIREWALL_RULE -Direction Inbound -LocalPort $env:SERVICE_PORT -Protocol TCP -Action Allow | Out-Null
+          }
+
+          Start-Process msiexec.exe -ArgumentList "/i `"$($msi.FullName)`" /qn /L*v installation.log" -Wait -NoNewWindow
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content installation.log -Tail 60 | ForEach-Object { Write-Error $_ }
+            throw "Installation failed"
+          }
+
+      - name: Health and Process Validation
+        shell: python
+        env:
+          PORT: ${{ env.SERVICE_PORT }}
+        run: |
+          import os, socket, time, urllib.request, urllib.error, subprocess, sys
+          port = int(os.environ["PORT"])
+
+          # Start Service
+          subprocess.run(["sc.exe", "start", "FortunaFaucetService"], check=False)
+
+          # Wait for Port
+          for _ in range(30):
+            try:
+              with socket.create_connection(("127.0.0.1", port), timeout=1):
+                break
+            except Exception:
+              time.sleep(1)
+          else:
+            print("❌ Port bind timeout")
+            subprocess.run(["sc.exe", "query", "FortunaFaucetService"])
+            sys.exit(1)
+
+          # Health Check
+          for _ in range(6):
+            try:
+              req = urllib.request.Request(f"http://127.0.0.1:{port}/health")
+              req.add_header("User-Agent", "HatTrickFusion/1.0")
+              with urllib.request.urlopen(req, timeout=5) as resp:
+                if resp.status == 200:
+                  print("✅ Health Check Passed")
+                  sys.exit(0)
+            except urllib.error.HTTPError as err:
+              if err.code in (401, 403):
+                print("✅ Service Up (Auth Required)")
+                sys.exit(0)
+            except Exception:
+              time.sleep(2)
+          sys.exit(1)
+
+      - name: Verify UI is Served from Backend
+        shell: pwsh
+        run: |
+          $uri = "http://127.0.0.1:${{ env.SERVICE_PORT }}/index.html"
+          Write-Host "Checking for frontend at $uri"
+          for ($i = 0; $i -lt 12; $i++) {
+            try {
+              $resp = Invoke-WebRequest -Uri $uri -TimeoutSec 3 -UseBasicParsing -ErrorAction Stop
+              if ($resp.StatusCode -eq 200) {
+                Write-Host "✅ UI is being served correctly."
+                exit 0
+              }
+            } catch {
+              Start-Sleep -Seconds 2
+            }
+          }
+          Write-Error "UI was not served from the backend."
+          exit 1
+
+      - name: Upload Logs on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hat-trick-fusion-logs
+          path: |
+            installation.log
+            C:\ProgramData\Fortuna\logs\*.log
+            C:\Program Files\Fortuna Faucet\
