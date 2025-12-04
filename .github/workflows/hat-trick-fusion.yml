@@ -186,24 +186,23 @@ jobs:
             Move-Item staging/backend/fortuna-backend.exe staging/backend/fortuna-webservice.exe -Force
           }
 
-          $proj = @(
-'<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">'
-'  <PropertyGroup>'
-'    <OutputName>HatTrickFusion</OutputName>'
-'    <OutputType>Package</OutputType>'
-'    <DefineConstants>SourceDir=../staging;Version=${{ needs.build-backend.outputs.semver }}</DefineConstants>'
-'    <Platforms>x64</Platforms>'
-'  </PropertyGroup>'
-'  <ItemGroup>'
-'    <PackageReference Include="WixToolset.Firewall.wixext" Version="${{ env.WIX_VERSION }}" />'
-'    <PackageReference Include="WixToolset.UI.wixext" Version="${{ env.WIX_VERSION }}" />'
-'    <PackageReference Include="WixToolset.Util.wixext" Version="${{ env.WIX_VERSION }}" />'
-'  </ItemGroup>'
-'  <ItemGroup>'
-'    <Compile Include="Product.wxs" />'
-'  </ItemGroup>'
-'</Project>'
-)
+          $proj = @()
+          $proj += '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">'
+          $proj += '  <PropertyGroup>'
+          $proj += '    <OutputName>HatTrickFusion</OutputName>'
+          $proj += '    <OutputType>Package</OutputType>'
+          $proj += '    <DefineConstants>SourceDir=../staging;Version=${{ needs.build-backend.outputs.semver }}</DefineConstants>'
+          $proj += '    <Platforms>x64</Platforms>'
+          $proj += '  </PropertyGroup>'
+          $proj += '  <ItemGroup>'
+          $proj += '    <PackageReference Include="WixToolset.Firewall.wixext" Version="${{ env.WIX_VERSION }}" />'
+          $proj += '    <PackageReference Include="WixToolset.UI.wixext" Version="${{ env.WIX_VERSION }}" />'
+          $proj += '    <PackageReference Include="WixToolset.Util.wixext" Version="${{ env.WIX_VERSION }}" />'
+          $proj += '  </ItemGroup>'
+          $proj += '  <ItemGroup>'
+          $proj += '    <Compile Include="Product.wxs" />'
+          $proj += '  </ItemGroup>'
+          $proj += '</Project>'
           Set-Content build_wix/Fortuna.wixproj ($proj -join "`n") -Encoding utf8
 
       - name: Build MSI
