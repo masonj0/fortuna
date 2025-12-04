@@ -302,6 +302,7 @@ jobs:
             '  <PropertyGroup>'
             '    <OutputName>Fortuna-WebService-Pragmatic</OutputName>'
             '    <OutputType>Package</OutputType>'
+            '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>'
             '    <DefineConstants>SourceDir=../staging;Version=${{ needs.path-finder.outputs.semver }}</DefineConstants>'
             '  </PropertyGroup>'
             '  <ItemGroup>'
