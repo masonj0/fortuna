@@ -49,7 +49,8 @@
                         Description="Data aggregation and analysis engine for horse racing."
                         Start="auto"
                         Type="ownProcess"
-                        ErrorControl="normal" />
+                        ErrorControl="normal"
+                        Environment="FORTUNA_PORT=$(var.ServicePort)" />
 
         <ServiceControl Id="ServiceControl"
                         Name="FortunaWebService"

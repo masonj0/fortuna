@@ -181,29 +181,19 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
           if (-not (Test-Path build_wix)) { New-Item -ItemType Directory -Path build_wix | Out-Null }
-
-          # Ensure a clean slate by removing the conflicting file before the copy.
-          if (Test-Path build_wix/Product_WithoutService.wxs) {
-            Remove-Item build_wix/Product_WithoutService.wxs -Force
-            Write-Host "✅ Removed conflicting Product_WithoutService.wxs"
-          }
           Copy-Item build_wix/Product_WithService.wxs build_wix/Product.wxs -Force
-          Write-Host "✅ Prepared Product.wxs for compilation."
 
           if (Test-Path staging/backend/fortuna-backend.exe) {
             Move-Item staging/backend/fortuna-backend.exe staging/backend/fortuna-webservice.exe -Force
           }
-
-          Write-Host "--- Verifying WiX build directory contents ---"
-          Get-ChildItem build_wix/*.wxs | ForEach-Object { Write-Host "  - $($_.Name)" }
-          Write-Host "-------------------------------------------"
 
           $proj = @()
           $proj += '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">'
           $proj += '  <PropertyGroup>'
           $proj += '    <OutputName>HatTrickFusion</OutputName>'
           $proj += '    <OutputType>Package</OutputType>'
-          $proj += '    <DefineConstants>SourceDir=../staging;Version=${{ needs.build-backend.outputs.semver }}</DefineConstants>'
+          $proj += '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>'
+          $proj += '    <DefineConstants>SourceDir=../staging;Version=${{ needs.build-backend.outputs.semver }};ServicePort=${{ env.SERVICE_PORT }}</DefineConstants>'
           $proj += '    <Platforms>x64</Platforms>'
           $proj += '  </PropertyGroup>'
           $proj += '  <ItemGroup>'
