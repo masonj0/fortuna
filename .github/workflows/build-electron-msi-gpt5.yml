@@ -887,17 +887,20 @@ jobs:
           Write-Host "--- Manifest-Driven Extraction ---"
           Write-Host "Source Directory: $sourcePath"
           Write-Host "Destination Directory: $destinationPath"
-          Write-Host "Target MSI (from manifest): $msiFileName"
+          Write-Host "Target MSI: $msiFileName"
 
+          # Run Robocopy
           robocopy $sourcePath $destinationPath $msiFileName ($msiFileName + ".sha256") /R:3 /W:5
 
-          if ($LASTEXITCODE -ge 8) {
-            Write-Error "Robocopy failed with exit code $LASTEXITCODE. This indicates a serious error."
-            exit 1
+          # YOUR FIX APPLIED HERE:
+          if ($LASTEXITCODE -le 3) {
+            Write-Output "✅ Robocopy completed successfully with exit code $LASTEXITCODE."
+            Get-ChildItem -Path $destinationPath | Select-Object Name, Length
+            exit 0
+          } else {
+            Write-Error "❌ Robocopy failed with error code: $LASTEXITCODE"
+            exit $LASTEXITCODE
           }
-
-          Write-Host "✅ Robocopy completed successfully."
-          Get-ChildItem -Path $destinationPath | Write-Host
 
       - name: 📤 Upload Final MSI Artifact
         uses: actions/upload-artifact@v4
