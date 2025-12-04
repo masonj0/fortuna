@@ -255,21 +255,6 @@ jobs:
           Set-Content -Path "unified.spec" -Value ($specContent -join "`n")
           Write-Host "✅ Dynamically generated 'unified.spec' created."
 
-      - name: Create Required Runtime Directories
-        shell: pwsh
-        run: |
-          Set-StrictMode -Version Latest
-          $dirs = @("data", "json", "logs")
-          foreach ($dir in $dirs) {
-            $path = Join-Path $env:BACKEND_DIR $dir
-            if (-not (Test-Path $path)) {
-              New-Item -ItemType Directory -Path $path -Force | Out-Null
-              Write-Host "✅ Created missing directory: $path"
-            } else {
-              Write-Host "ℹ️ Directory already exists: $path"
-            }
-          }
-
       - name: Build with PyInstaller
         run: pyinstaller unified.spec --clean --noconfirm
 

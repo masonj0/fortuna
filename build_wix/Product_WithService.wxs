@@ -29,8 +29,14 @@
   </Package>
 
   <Fragment>
+    <!-- 1. DEFINE THE DIRECTORY STRUCTURE WITH IDs -->
     <StandardDirectory Id="ProgramFiles64Folder">
-      <Directory Id="INSTALLFOLDER" Name="Fortuna Faucet" />
+      <Directory Id="INSTALLFOLDER" Name="Fortuna Faucet">
+        <!-- Define the subfolders and give them IDs -->
+        <Directory Id="Dir_Data" Name="data" />
+        <Directory Id="Dir_Json" Name="json" />
+        <Directory Id="Dir_Logs" Name="logs" />
+      </Directory>
     </StandardDirectory>
 
     <StandardDirectory Id="ProgramMenuFolder">
@@ -77,15 +83,17 @@
       </Component>
     </ComponentGroup>
 
-    <ComponentGroup Id="RuntimeDirectoryComponents" Directory="INSTALLFOLDER">
-        <Component Id="DataDirectoryComponent" Guid="a2e3820a-606b-452f-b43f-b82b9a7852a0">
-            <CreateFolder Directory="data" />
+    <!-- 2. REFERENCE THE IDs IN THE COMPONENTS -->
+    <ComponentGroup Id="RuntimeDirectoryComponents">
+        <!-- Use Directory="Dir_Data" (the ID), not "data" (the name) -->
+        <Component Id="DataDirectoryComponent" Directory="Dir_Data" Guid="a2e3820a-606b-452f-b43f-b82b9a7852a0">
+            <CreateFolder />
         </Component>
-        <Component Id="JsonDirectoryComponent" Guid="b4d7ea21-821f-4a0b-9303-3a52e1f42d2a">
-            <CreateFolder Directory="json" />
+        <Component Id="JsonDirectoryComponent" Directory="Dir_Json" Guid="b4d7ea21-821f-4a0b-9303-3a52e1f42d2a">
+            <CreateFolder />
         </Component>
-        <Component Id="LogsDirectoryComponent" Guid="d66f6540-3f11-4475-9a67-9c9852f87a32">
-            <CreateFolder Directory="logs" />
+        <Component Id="LogsDirectoryComponent" Directory="Dir_Logs" Guid="d66f6540-3f11-4475-9a67-9c9852f87a32">
+            <CreateFolder />
         </Component>
     </ComponentGroup>
 
