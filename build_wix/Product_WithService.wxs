@@ -49,8 +49,7 @@
                         Description="Data aggregation and analysis engine for horse racing."
                         Start="auto"
                         Type="ownProcess"
-                        ErrorControl="normal"
-                        Environment="FORTUNA_PORT=$(var.ServicePort)" />
+                        ErrorControl="normal" />
 
         <ServiceControl Id="ServiceControl"
                         Name="FortunaWebService"
@@ -70,6 +69,11 @@
                                 Port="8102"
                                 Protocol="tcp"
                                 Scope="any" />
+
+        <!-- This forces the app to listen on 8102 instead of default 8000 -->
+        <RegistryKey Root="HKLM" Key="SYSTEM\CurrentControlSet\Services\FortunaWebService">
+            <RegistryValue Name="Environment" Type="multiString" Value="PORT=8102[~]FORTUNA_PORT=8102" />
+        </RegistryKey>
       </Component>
     </ComponentGroup>
 
