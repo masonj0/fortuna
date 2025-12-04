@@ -1,3 +1,4 @@
+# System Timestamp: 2025-12-03 22:44:34.655552917
 name: HatTrick Fusion (Perfected)
 on:
   workflow_dispatch:
@@ -185,25 +186,24 @@ jobs:
             Move-Item staging/backend/fortuna-backend.exe staging/backend/fortuna-webservice.exe -Force
           }
 
-          # FIX: Added missing UI and Util extensions
-          $proj = @(
-            '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">'
-            '  <PropertyGroup>'
-            '    <OutputName>HatTrickFusion</OutputName>'
-            '    <OutputType>Package</OutputType>'
-            '    <DefineConstants>SourceDir=../staging;Version=${{ needs.build-backend.outputs.semver }}</DefineConstants>'
-            '    <Platforms>x64</Platforms>',
-            '  </PropertyGroup>',
-            '  <ItemGroup>',
-            '    <PackageReference Include="WixToolset.Firewall.wixext" Version="${{ env.WIX_VERSION }}" />',
-            '    <PackageReference Include="WixToolset.UI.wixext" Version="${{ env.WIX_VERSION }}" />',
-            '    <PackageReference Include="WixToolset.Util.wixext" Version="${{ env.WIX_VERSION }}" />',
-            '  </ItemGroup>',
-            '  <ItemGroup>',
-            '    <Compile Include="Product.wxs" />',
-            '  </ItemGroup>',
-            '</Project>'
-          )
+          $proj = @"
+<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">
+  <PropertyGroup>
+    <OutputName>HatTrickFusion</OutputName>
+    <OutputType>Package</OutputType>
+    <DefineConstants>SourceDir=../staging;Version=${{ needs.build-backend.outputs.semver }}</DefineConstants>
+    <Platforms>x64</Platforms>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="WixToolset.Firewall.wixext" Version="${{ env.WIX_VERSION }}" />
+    <PackageReference Include="WixToolset.UI.wixext" Version="${{ env.WIX_VERSION }}" />
+    <PackageReference Include="WixToolset.Util.wixext" Version="${{ env.WIX_VERSION }}" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Product.wxs" />
+  </ItemGroup>
+</Project>
+"@
           Set-Content build_wix/Fortuna.wixproj ($proj -join "`n") -Encoding utf8
 
       - name: Build MSI
