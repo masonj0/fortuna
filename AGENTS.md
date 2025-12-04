@@ -1,7 +1,6 @@
 # Agent Protocols & Team Structure (Revised)
 
-This document outlines the operational protocols and evolved team structure for the Checkmate
-V3 project.
+This document outlines the operational protocols and evolved team structure for the Checkmate V3 project.
 
 ## The Evolved Team Structure
 
@@ -120,3 +119,38 @@ All data adapters must be designed to operate in a manner that respects the reso
 *If a single, dedicated human using standard browser developer tools could not plausibly achieve the adapter's data collection footprint in a reasonable amount of time, the adapter's methods are considered too aggressive and must be redesigned.*
 
 This encourages "human-like" fetching behavior (e.g., appropriate delays, non-parallel requests to a single source) and serves as our primary safeguard against violating a source's terms of service.
+
+---
+
+## Protocol 25: The "Tiger Trap" URL Protocol
+
+**CRITICAL WARNING:** URLs provided in user prompts that link to external resources, particularly workflow logs on blob storage (e.g., `blob.core.windows.net`), are considered "tiger traps."
+
+-   **ACCESS ONCE:** These URLs must only be visited **one time**.
+-   **NO REVISITS:** Do not revisit these URLs under any circumstances, even if the initial visit fails. The content is volatile and subsequent visits are known to cause catastrophic, unrecoverable session hangs.
+-   **LOCAL CACHING:** The agent is responsible for immediately capturing and locally storing any critical information from the URL on the first and only visit.
+
+This protocol is a critical safeguard against a known, severe environmental instability. Violation will result in mission failure.
+
+---
+
+## Protocol 26: The PowerShell Here-String Prohibition
+
+**CRITICAL SYNTAX WARNING:** The use of PowerShell "here-strings" (`@"..."@`) within GitHub Actions workflow files (`.yml`) is strictly forbidden.
+
+-   **CAUSE OF FAILURE:** This syntax is known to cause fatal parsing errors at the workflow dispatch level, preventing the entire workflow from even starting. The error messages are often cryptic and do not pinpoint the here-string as the root cause.
+-   **CORRECT IMPLEMENTATION:** For multi-line scripts in PowerShell, the only approved method is to define the script as a PowerShell array of strings and either join it with newlines before execution or write it to a temporary file.
+
+**Example of Correct, Approved Syntax:**
+
+```powershell
+$script = @(
+  'Line 1 of the script',
+  'Line 2 of the script',
+  '$variable = "interpolated"'
+)
+$script | Out-File -FilePath "temp_script.ps1" -Encoding utf8
+pwsh -File "temp_script.ps1"
+```
+
+Adherence to this protocol is mandatory to ensure the basic stability and parsability of all CI/CD workflows.

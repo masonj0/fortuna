@@ -22,8 +22,9 @@
     </Feature>
 
     <ui:WixUI Id="WixUI_InstallDir"
-              InstallDirectory="INSTALLFOLDER"
-              ApplicationFolderName="Fortuna Faucet" />
+              InstallDirectory="INSTALLFOLDER" />
+
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
 
   </Package>
 
@@ -72,13 +73,13 @@
     </ComponentGroup>
 
     <ComponentGroup Id="RuntimeDirectoryComponents" Directory="INSTALLFOLDER">
-        <Component Id="DataDirectoryComponent" Guid="*">
+        <Component Id="DataDirectoryComponent" Guid="a2e3820a-606b-452f-b43f-b82b9a7852a0">
             <CreateFolder Directory="data" />
         </Component>
-        <Component Id="JsonDirectoryComponent" Guid="*">
+        <Component Id="JsonDirectoryComponent" Guid="b4d7ea21-821f-4a0b-9303-3a52e1f42d2a">
             <CreateFolder Directory="json" />
         </Component>
-        <Component Id="LogsDirectoryComponent" Guid="*">
+        <Component Id="LogsDirectoryComponent" Guid="d66f6540-3f11-4475-9a67-9c9852f87a32">
             <CreateFolder Directory="logs" />
         </Component>
     </ComponentGroup>
