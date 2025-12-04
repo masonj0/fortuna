@@ -284,18 +284,24 @@ jobs:
               time.sleep(2)
           sys.exit(1)
 
-      - name: Frontend Reachability
+      - name: Verify UI is Served from Backend
         shell: pwsh
         run: |
+          $uri = "http://127.0.0.1:${{ env.SERVICE_PORT }}/index.html"
+          Write-Host "Checking for frontend at $uri"
           for ($i = 0; $i -lt 12; $i++) {
             try {
-              $resp = Invoke-WebRequest -Uri "http://127.0.0.1:${{ env.FRONTEND_PORT }}" -TimeoutSec 3 -UseBasicParsing -ErrorAction Stop
-              if ($resp.StatusCode -eq 200) { exit 0 }
+              $resp = Invoke-WebRequest -Uri $uri -TimeoutSec 3 -UseBasicParsing -ErrorAction Stop
+              if ($resp.StatusCode -eq 200) {
+                Write-Host "✅ UI is being served correctly."
+                exit 0
+              }
             } catch {
               Start-Sleep -Seconds 2
             }
           }
-          Write-Warning "Frontend never responded"
+          Write-Error "UI was not served from the backend."
+          exit 1
 
       - name: Upload Logs on Failure
         if: failure()
