@@ -49,7 +49,7 @@
               KeyPath="yes" />
 
         <ServiceInstall Id="ServiceInstaller"
-                        Name="FortunaWebService"
+                        Name="FortunaFaucetService"
                         DisplayName="Fortuna Faucet Backend Service"
                         Description="Data aggregation and analysis engine."
                         Start="auto"
@@ -57,13 +57,13 @@
                         ErrorControl="normal" />
 
         <ServiceControl Id="ServiceControl"
-                        Name="FortunaWebService"
+                        Name="FortunaFaucetService"
                         Start="install"
                         Stop="both"
                         Remove="uninstall"
                         Wait="true" />
 
-        <util:ServiceConfig ServiceName="FortunaWebService"
+        <util:ServiceConfig ServiceName="FortunaFaucetService"
                             FirstFailureActionType="restart"
                             SecondFailureActionType="restart"
                             ThirdFailureActionType="restart"
@@ -76,7 +76,7 @@
                                 Scope="any" />
 
         <!-- 3. ENVIRONMENT VARIABLES (Fixes Port Mismatch & WIX0004 error) -->
-        <RegistryKey Root="HKLM" Key="SYSTEM\CurrentControlSet\Services\FortunaWebService">
+        <RegistryKey Root="HKLM" Key="SYSTEM\CurrentControlSet\Services\FortunaFaucetService">
             <RegistryValue Name="Environment" Type="multiString" Value="PORT=8102[~]FORTUNA_PORT=8102" />
         </RegistryKey>
       </Component>
