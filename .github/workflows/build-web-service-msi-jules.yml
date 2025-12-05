@@ -799,6 +799,11 @@ jobs:
       - name: '🚀 LOOP 1 - Install & Verify Service Registration'
         shell: pwsh
         run: |
+          if (Get-Service -Name FortunaFaucetService -ErrorAction SilentlyContinue) {
+            sc.exe stop FortunaFaucetService 2>&1 | Out-Null
+            sc.exe delete FortunaFaucetService 2>&1 | Out-Null
+          }
+
           $msiPath = "${{ steps.find_msi.outputs.msi_path }}"
           Write-Host "Starting installation of $msiPath..."
 
@@ -807,7 +812,6 @@ jobs:
           # Allow exit code 3010 (reboot required)
           if ($proc.ExitCode -ne 0 -and $proc.ExitCode -ne 3010) {
             Write-Error "❌ MSI installation failed with exit code $($proc.ExitCode)."
-            Get-Content msi-install.log -Tail 50 | Write-Host
             exit 1
           }
 
@@ -820,6 +824,17 @@ jobs:
           }
 
           Write-Host "✅ Service is registered. State: $($service.Status)"
+
+      - name: Emit MSI log tail
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path msi-install.log) {
+            Write-Host "`n=== msi-install.log (last 200 lines) ==="
+            Get-Content msi-install.log -Tail 200
+          } else {
+            Write-Host "No msi-install.log found"
+          }
 
       - name: '🚦 LOOP 2 - Start Service & Verify Process'
         shell: pwsh
@@ -878,20 +893,19 @@ jobs:
         if: failure()
         shell: pwsh
         run: |
-          Write-Host "=== Capturing Failure Diagnostics ==="
-          Get-Content msi-install.log | Out-File diagnostic-install-log.txt
-          Get-EventLog -LogName Application -Source "FortunaFaucetService" -Newest 20 | Format-List | Out-File diagnostic-eventlog.txt
-          Get-Service -Name "FortunaFaucetService" | Format-List | Out-File diagnostic-service-state.txt
-          Get-Process -Name "fortuna-webservice" -ErrorAction SilentlyContinue | Format-List | Out-File diagnostic-process-state.txt
-          netstat -anob > diagnostic-netstat.txt
-          Write-Host "✅ Diagnostics captured."
+          $diag = Join-Path $PWD "installer-diag"
+          Remove-Item $diag -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $diag | Out-Null
+          Copy-Item -Path msi-install.log -Destination $diag -Force
+          Copy-Item -Path "C:\ProgramData\Fortuna\logs\*.log" -Destination $diag -Force -ErrorAction SilentlyContinue
+          Copy-Item -Path "C:\Program Files\Fortuna Faucet\*" -Destination $diag -Recurse -Force -ErrorAction SilentlyContinue
 
       - name: 📤 Upload Diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: jules-smoke-test-failure-${{ github.run_id }}
-          path: diagnostic-*.txt
+          path: installer-diag
           retention-days: 30
 
       - name: 🧹 Cleanup
