@@ -27,19 +27,22 @@
   </Package>
 
   <Fragment>
-    <!-- 1. DEFINE THE DIRECTORY STRUCTURE WITH IDs (Fixed WIX0094) -->
+    <!-- 1. DIRECTORY STRUCTURE -->
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLFOLDER" Name="Fortuna Faucet">
-        <!-- Explicitly define IDs for subfolders -->
         <Directory Id="Dir_Data" Name="data" />
         <Directory Id="Dir_Json" Name="json" />
         <Directory Id="Dir_Logs" Name="logs" />
       </Directory>
     </StandardDirectory>
 
+    <!-- Start Menu Folder -->
     <StandardDirectory Id="ProgramMenuFolder">
         <Directory Id="ApplicationProgramsFolder" Name="Fortuna Faucet"/>
     </StandardDirectory>
+
+    <!-- Desktop Folder (NEW) -->
+    <StandardDirectory Id="DesktopFolder" />
 
     <!-- 2. SERVICE COMPONENTS -->
     <ComponentGroup Id="ServiceComponents" Directory="INSTALLFOLDER">
@@ -58,7 +61,6 @@
 
         <ServiceControl Id="ServiceControl"
                         Name="FortunaFaucetService"
-                        Start="install"
                         Stop="both"
                         Remove="uninstall"
                         Wait="true" />
@@ -75,16 +77,14 @@
                                 Protocol="tcp"
                                 Scope="any" />
 
-        <!-- 3. ENVIRONMENT VARIABLES (Fixes Port Mismatch & WIX0004 error) -->
         <RegistryKey Root="HKLM" Key="SYSTEM\CurrentControlSet\Services\FortunaFaucetService">
             <RegistryValue Name="Environment" Type="multiString" Value="PORT=8102[~]FORTUNA_PORT=8102" />
         </RegistryKey>
       </Component>
     </ComponentGroup>
 
-    <!-- 4. RUNTIME DIRECTORIES (Fixed WIX0094) -->
+    <!-- 3. RUNTIME DIRECTORIES -->
     <ComponentGroup Id="RuntimeDirectoryComponents">
-        <!-- Reference the Directory IDs defined above -->
         <Component Id="DataDirectoryComponent" Directory="Dir_Data" Guid="a2e3820a-606b-452f-b43f-b82b9a7852a0">
             <CreateFolder />
         </Component>
@@ -96,17 +96,35 @@
         </Component>
     </ComponentGroup>
 
-    <!-- 5. SHORTCUTS -->
-    <ComponentGroup Id="ShortcutComponents" Directory="ApplicationProgramsFolder">
-        <Component Id="ShortcutComponent" Guid="*">
+    <!-- 4. SHORTCUTS (UPDATED) -->
+    <ComponentGroup Id="ShortcutComponents">
+
+        <!-- Start Menu Shortcuts -->
+        <Component Id="StartMenuShortcuts" Guid="*" Directory="ApplicationProgramsFolder">
+            <!-- Shortcut to Launch the App (or Web Interface) -->
+            <!-- Since this is a service, we usually point to the Web UI URL -->
+            <util:InternetShortcut Id="WebShortcut"
+                                   Name="Fortuna Faucet Dashboard"
+                                   Target="http://localhost:8102" />
+
             <Shortcut Id="UninstallShortcut"
                       Name="Uninstall Fortuna Faucet"
                       Description="Removes the application"
                       Target="[System64Folder]msiexec.exe"
                       Arguments="/x [ProductCode]" />
+
             <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall" />
-            <RegistryValue Root="HKCU" Key="Software\Fortuna Faucet" Name="installed" Type="integer" Value="1" KeyPath="yes" />
+            <RegistryValue Root="HKCU" Key="Software\Fortuna Faucet" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
         </Component>
+
+        <!-- Desktop Shortcut -->
+        <Component Id="DesktopShortcut" Guid="*" Directory="DesktopFolder">
+            <util:InternetShortcut Id="DesktopWebShortcut"
+                                   Name="Fortuna Faucet"
+                                   Target="http://localhost:8102" />
+            <RegistryValue Root="HKCU" Key="Software\Fortuna Faucet" Name="DesktopShortcut" Type="integer" Value="1" KeyPath="yes" />
+        </Component>
+
     </ComponentGroup>
 
   </Fragment>
