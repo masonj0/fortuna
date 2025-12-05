@@ -300,17 +300,6 @@ jobs:
             exit 1
           }
 
-      - name: Rename Executable for WiX
-        shell: pwsh
-        run: |
-          if (Test-Path staging/fortuna-backend.exe) {
-            Rename-Item -Path staging/fortuna-backend.exe -NewName fortuna-webservice.exe -Force
-            Write-Host "✅ Renamed executable to fortuna-webservice.exe"
-          } else {
-            Write-Error "❌ Executable not found in staging directory!"
-            exit 1
-          }
-
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:
@@ -327,6 +316,7 @@ jobs:
             '    <OutputType>Package</OutputType>'
             '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>'
             '    <DefineConstants>SourceDir=../staging/backend;Version=${{ needs.path-finder.outputs.semver }};ServicePort=${{ env.SERVICE_PORT }}</DefineConstants>'
+            '    <BinderIncludeCabinetFilesInPackage>true</BinderIncludeCabinetFilesInPackage>'
             '  </PropertyGroup>'
             '  <ItemGroup>'
             '    <PackageReference Include="WixToolset.Util.wixext" Version="${{ env.WIX_VERSION }}" />'
