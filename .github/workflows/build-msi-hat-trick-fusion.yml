@@ -181,7 +181,16 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
           if (-not (Test-Path build_wix)) { New-Item -ItemType Directory -Path build_wix | Out-Null }
-          Copy-Item build_wix/Product_WithService.wxs build_wix/Product.wxs -Force
+
+          # Read the template
+          $wxsContent = Get-Content build_wix/Product_WithService.wxs -Raw
+
+          # 🛠️ FIX: Remove 'Start="install"' so MSI doesn't hang if service fails
+          # We also ensure Wait="true" is only for uninstall/stop, not start
+          $wxsContent = $wxsContent -replace 'Start="install"', ''
+
+          # Write it back to the build location
+          $wxsContent | Set-Content build_wix/Product.wxs -Encoding utf8
 
           if (Test-Path staging/backend/fortuna-backend.exe) {
             Move-Item staging/backend/fortuna-backend.exe staging/backend/fortuna-webservice.exe -Force
@@ -193,7 +202,7 @@ jobs:
           $proj += '    <OutputName>HatTrickFusion</OutputName>'
           $proj += '    <OutputType>Package</OutputType>'
           $proj += '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>'
-          $proj += '    <DefineConstants>SourceDir=../staging/backend;Version=${{ needs.build-backend.outputs.semver }};ServicePort=${{ env.SERVICE_PORT }}</DefineConstants>'
+          $proj += '    <DefineConstants>SourceDir=../staging/backend;Version=${{ needs.build-backend.outputs.semver }}</DefineConstants>'
           $proj += '    <Platforms>x64</Platforms>'
           $proj += '    <BinderIncludeCabinetFilesInPackage>true</BinderIncludeCabinetFilesInPackage>'
           $proj += '  </PropertyGroup>'

@@ -308,7 +308,10 @@ jobs:
       - name: Prepare WiX Project
         shell: pwsh
         run: |
-          Copy-Item "${{ env.WIX_DIR }}/Product_WithService.wxs" "${{ env.WIX_DIR }}/Product.wxs" -Force
+          $wxsContent = Get-Content "${{ env.WIX_DIR }}/Product_WithService.wxs" -Raw
+          $wxsContent = $wxsContent -replace 'Start="install"', ''
+          $wxsContent | Set-Content "${{ env.WIX_DIR }}/Product.wxs" -Encoding utf8
+
           $wixProj = @(
             '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">'
             '  <PropertyGroup>'
