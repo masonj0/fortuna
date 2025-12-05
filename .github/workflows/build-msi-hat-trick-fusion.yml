@@ -1,4 +1,4 @@
-# System Timestamp: 2025-12-03 22:44:34.655552917
+# System Timestamp: 2025-12-04 15:59:04.131963
 name: HatTrick Fusion (Perfected)
 on:
   workflow_dispatch:
@@ -193,7 +193,7 @@ jobs:
           $proj += '    <OutputName>HatTrickFusion</OutputName>'
           $proj += '    <OutputType>Package</OutputType>'
           $proj += '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>'
-          $proj += '    <DefineConstants>SourceDir=../staging;Version=${{ needs.build-backend.outputs.semver }};ServicePort=${{ env.SERVICE_PORT }}</DefineConstants>'
+          $proj += '    <DefineConstants>SourceDir=../staging/backend;Version=${{ needs.build-backend.outputs.semver }};ServicePort=${{ env.SERVICE_PORT }}</DefineConstants>'
           $proj += '    <Platforms>x64</Platforms>'
           $proj += '  </PropertyGroup>'
           $proj += '  <ItemGroup>'
