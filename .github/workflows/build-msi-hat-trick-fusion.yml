@@ -186,6 +186,12 @@ jobs:
           # Copy the authoritative template to the build location
           Copy-Item build_wix/Product_WithService.wxs build_wix/Product.wxs -Force
 
+          # Dynamically remove the problematic Start="install" attribute to prevent timeouts
+          $wxsPath = "build_wix/Product.wxs"
+          $wxsContent = Get-Content $wxsPath -Raw
+          $wxsContent = $wxsContent -replace 'Start="install"', ''
+          Set-Content -Path $wxsPath -Value $wxsContent -Encoding UTF8 -Force
+
           if (Test-Path staging/backend/fortuna-backend.exe) {
             Move-Item staging/backend/fortuna-backend.exe staging/backend/fortuna-webservice.exe -Force
           }
@@ -284,7 +290,7 @@ jobs:
           port = int(os.environ["PORT"])
 
           # Start Service
-          subprocess.run(["sc.exe", "start", "FortunaFaucetService"], check=False)
+          subprocess.run(["sc.exe", "start", "FortunaWebService"], check=False)
 
           # Wait for Port
           for _ in range(30):
@@ -295,7 +301,7 @@ jobs:
               time.sleep(1)
           else:
             print("❌ Port bind timeout")
-            subprocess.run(["sc.exe", "query", "FortunaFaucetService"])
+            subprocess.run(["sc.exe", "query", "FortunaWebService"])
             sys.exit(1)
 
           # Health Check

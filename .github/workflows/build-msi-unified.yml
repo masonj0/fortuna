@@ -312,6 +312,11 @@ jobs:
           # 1. Copy the template
           Copy-Item "${{ env.WIX_DIR }}/Product_WithService.wxs" "${{ env.WIX_DIR }}/Product.wxs" -Force
 
+          # 2. Dynamically remove the problematic Start="install" attribute to prevent timeouts
+          $wxsPath = "${{ env.WIX_DIR }}/Product.wxs"
+          $wxsContent = Get-Content $wxsPath -Raw
+          $wxsContent = $wxsContent -replace 'Start="install"', ''
+          Set-Content -Path $wxsPath -Value $wxsContent -Encoding UTF8 -Force
 
           # 3. Generate Project with CAB embedding enabled
           $wixProj = @(
@@ -362,7 +367,7 @@ jobs:
         shell: pwsh
         run: |
           New-NetFirewallRule `
-            -DisplayName "FortunaFaucetService" `
+            -DisplayName "FortunaWebService" `
             -Direction Inbound `
             -LocalPort 8102 `
             -Protocol TCP `
@@ -373,9 +378,9 @@ jobs:
       - name: 🤫 Install MSI (With Logging)
         shell: pwsh
         run: |
-          if (Get-Service -Name FortunaFaucetService -ErrorAction SilentlyContinue) {
-            sc.exe stop FortunaFaucetService 2>&1 | Out-Null
-            sc.exe delete FortunaFaucetService 2>&1 | Out-Null
+          if (Get-Service -Name FortunaWebService -ErrorAction SilentlyContinue) {
+            sc.exe stop FortunaWebService 2>&1 | Out-Null
+            sc.exe delete FortunaWebService 2>&1 | Out-Null
           }
 
           $msi = Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse | Select-Object -First 1
@@ -414,13 +419,13 @@ jobs:
       - name: ⏳ Wait for Service Registration
         shell: pwsh
         run: |
-          $regPath = "HKLM:\SYSTEM\CurrentControlSet\Services\FortunaFaucetService"
+          $regPath = "HKLM:\SYSTEM\CurrentControlSet\Services\FortunaWebService"
           Write-Host "Waiting for service to be registered in registry..."
 
           for ($i = 0; $i -lt 30; $i++) {
             if (Test-Path $regPath) {
               Write-Host "✅ Service registered (took $i seconds)"
-              $svc = Get-Service -Name "FortunaFaucetService" -ErrorAction SilentlyContinue
+              $svc = Get-Service -Name "FortunaWebService" -ErrorAction SilentlyContinue
               Write-Host "   DisplayName: $($svc.DisplayName)"
               Write-Host "   Status: $($svc.Status)"
               exit 0
@@ -443,7 +448,7 @@ jobs:
 
           print("--- Starting Service via SC.EXE ---")
           result = subprocess.run(
-            ["sc.exe", "start", "FortunaFaucetService"],
+            ["sc.exe", "start", "FortunaWebService"],
             capture_output=True,
             text=True
           )
@@ -470,7 +475,7 @@ jobs:
           if not socket_bound:
             print(f"\n❌ FATAL: Service did not bind port 8102 within 60 seconds")
             print("Dumping service status for debugging:")
-            subprocess.run(["sc.exe", "query", "FortunaFaucetService"])
+            subprocess.run(["sc.exe", "query", "FortunaWebService"])
             sys.exit(1)
 
           time.sleep(2)
@@ -525,7 +530,7 @@ jobs:
         if: always()
         shell: pwsh
         run: |
-          sc.exe stop FortunaFaucetService 2>&1 | Out-Null
-          sc.exe delete FortunaFaucetService 2>&1 | Out-Null
-          Remove-NetFirewallRule -DisplayName "FortunaFaucetService" -ErrorAction SilentlyContinue
+          sc.exe stop FortunaWebService 2>&1 | Out-Null
+          sc.exe delete FortunaWebService 2>&1 | Out-Null
+          Remove-NetFirewallRule -DisplayName "FortunaWebService" -ErrorAction SilentlyContinue
           Write-Host "✅ Cleanup complete"

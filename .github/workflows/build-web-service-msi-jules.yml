@@ -799,9 +799,9 @@ jobs:
       - name: '🚀 LOOP 1 - Install & Verify Service Registration'
         shell: pwsh
         run: |
-          if (Get-Service -Name FortunaFaucetService -ErrorAction SilentlyContinue) {
-            sc.exe stop FortunaFaucetService 2>&1 | Out-Null
-            sc.exe delete FortunaFaucetService 2>&1 | Out-Null
+          if (Get-Service -Name FortunaWebService -ErrorAction SilentlyContinue) {
+            sc.exe stop FortunaWebService 2>&1 | Out-Null
+            sc.exe delete FortunaWebService 2>&1 | Out-Null
           }
 
           $msiPath = "${{ steps.find_msi.outputs.msi_path }}"
@@ -817,9 +817,9 @@ jobs:
 
           Write-Host "✅ Installation completed (Exit Code: $($proc.ExitCode)). Verifying service registration..."
 
-          $service = Get-Service -Name "FortunaFaucetService" -ErrorAction SilentlyContinue
+          $service = Get-Service -Name "FortunaWebService" -ErrorAction SilentlyContinue
           if (-not $service) {
-            Write-Error "❌ FATAL: Service 'FortunaFaucetService' was not registered."
+            Write-Error "❌ FATAL: Service 'FortunaWebService' was not registered."
             exit 1
           }
 
@@ -839,8 +839,8 @@ jobs:
       - name: '🚦 LOOP 2 - Start Service & Verify Process'
         shell: pwsh
         run: |
-          Write-Host "Attempting to start the 'FortunaFaucetService'..."
-          Start-Service -Name "FortunaFaucetService"
+          Write-Host "Attempting to start the 'FortunaWebService'..."
+          Start-Service -Name "FortunaWebService"
 
           Write-Host "Waiting for process to appear (up to 30 seconds)..."
           $deadline = (Get-Date).AddSeconds(30)
@@ -858,7 +858,7 @@ jobs:
 
           if (-not $processFound) {
             Write-Error "❌ FATAL: Process did not start after 30 seconds."
-            Get-EventLog -LogName Application -Source "FortunaFaucetService" -Newest 10 | Format-List
+            Get-EventLog -LogName Application -Source "FortunaWebService" -Newest 10 | Format-List
             exit 1
           }
 
@@ -913,7 +913,7 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "Cleaning up..."
-          Stop-Service -Name "FortunaFaucetService" -Force -ErrorAction SilentlyContinue
+          Stop-Service -Name "FortunaWebService" -Force -ErrorAction SilentlyContinue
           # Uninstall may not always work, especially if the service is stuck, but we try.
           $msiPath = "${{ steps.find_msi.outputs.msi_path }}"
           if (Test-Path $msiPath) {
@@ -968,9 +968,12 @@ jobs:
       - name: Prepare WiX Project
         run: |
           Set-StrictMode -Version Latest
-          $wxsContent = Get-Content "${{ env.WIX_DIR }}/Product_WithService.wxs" -Raw
+          Copy-Item "${{ env.WIX_DIR }}/Product_WithService.wxs" "${{ env.WIX_DIR }}/Product.wxs" -Force
+
+          $wxsPath = "${{ env.WIX_DIR }}/Product.wxs"
+          $wxsContent = Get-Content $wxsPath -Raw
           $wxsContent = $wxsContent -replace 'Start="install"', ''
-          $wxsContent | Set-Content "${{ env.WIX_DIR }}/Product.wxs" -Encoding utf8
+          Set-Content -Path $wxsPath -Value $wxsContent -Encoding UTF8 -Force
 
           $wixProj = @(
             '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">'
