@@ -216,7 +216,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: hat-trick-msi
-          path: build_wix/bin/x64/Release/*.msi
+          path: build_wix/bin/x64/Release/*
 
   smoke-test:
     name: HatTrick Fusion Smoke Test

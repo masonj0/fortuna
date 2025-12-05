@@ -992,9 +992,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: fortuna-service-msi-${{ github.run_id }}
-          path: |
-            ${{ env.WIX_DIR }}/bin/x64/Release/*.msi
-            ${{ env.WIX_DIR }}/bin/x64/Release/*.sha256
+          path: ${{ env.WIX_DIR }}/bin/x64/Release/*
           retention-days: 10
 
   create-release:
