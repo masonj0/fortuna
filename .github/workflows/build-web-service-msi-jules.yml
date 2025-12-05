@@ -545,10 +545,10 @@ jobs:
           print("✅ Ensured non-empty __init__.py files exist for package discovery.")
 
           entry_point = os.path.join(os.environ['BACKEND_DIR'], "main.py").replace('\\', '/')
-          staging_ui_path = Path("staging/ui").as_posix()
+          staging_ui_path = Path("staging/ui").resolve().as_posix()
           other_service = "python_service" if "web_service" in os.environ['BACKEND_DIR'] else "web_service"
-          backend_init = Path("web_service/backend/__init__.py").as_posix()
-          parent_init = Path("web_service/__init__.py").as_posix()
+          backend_init = Path("web_service/backend/__init__.py").resolve().as_posix()
+          parent_init = Path("web_service/__init__.py").resolve().as_posix()
           spec_file = os.environ['BACKEND_SPEC_FILE']
 
           spec_content = f"""
@@ -963,6 +963,7 @@ jobs:
             '    <DefineConstants>SourceDir=staging;Version=${{ env.BUILD_VERSION }}</DefineConstants>'
             '    <Platforms>x64</Platforms>'
             '    <Version>${{ env.BUILD_VERSION }}</Version>'
+            '    <BinderIncludeCabinetFilesInPackage>true</BinderIncludeCabinetFilesInPackage>'
             '  </PropertyGroup>'
             '  <ItemGroup>'
             '    <PackageReference Include="WixToolset.Util.wixext" Version="${{ env.WIX_VERSION }}" />'

@@ -316,6 +316,7 @@ jobs:
             '    <OutputType>Package</OutputType>'
             '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>'
             '    <DefineConstants>SourceDir=../staging/backend;Version=${{ needs.path-finder.outputs.semver }};ServicePort=${{ env.SERVICE_PORT }}</DefineConstants>'
+            '    <BinderIncludeCabinetFilesInPackage>true</BinderIncludeCabinetFilesInPackage>'
             '  </PropertyGroup>'
             '  <ItemGroup>'
             '    <PackageReference Include="WixToolset.Util.wixext" Version="${{ env.WIX_VERSION }}" />'
