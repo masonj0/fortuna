@@ -240,9 +240,9 @@ jobs:
       - name: 🤫 Install MSI (With Logging)
         shell: pwsh
         run: |
-          if (Get-Service -Name FortunaFaucetService -ErrorAction SilentlyContinue) {
-            sc.exe stop FortunaFaucetService 2>&1 | Out-Null
-            sc.exe delete FortunaFaucetService 2>&1 | Out-Null
+          if (Get-Service -Name FortunaWebService -ErrorAction SilentlyContinue) {
+            sc.exe stop FortunaWebService 2>&1 | Out-Null
+            sc.exe delete FortunaWebService 2>&1 | Out-Null
           }
 
           $msi = Get-ChildItem -Path "installer" -Filter "*.msi" -Recurse | Select-Object -First 1
