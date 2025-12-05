@@ -1,0 +1,218 @@
+name: Electron Clean Room (Refined)
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '20'
+  PYTHON_VERSION: '3.12'
+  BACKEND_DIR: 'python_service'
+  FRONTEND_DIR: 'web_platform/frontend'
+  ELECTRON_DIR: 'electron'
+
+jobs:
+  build-and-package:
+    name: 📦 Build & Package
+    runs-on: windows-latest
+    outputs:
+      semver: ${{ steps.meta.outputs.semver }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 🏷️ Metadata
+        id: meta
+        shell: pwsh
+        run: |
+          $ver = if ("${{ github.ref }}" -match 'refs/tags/v(.*)') { $Matches[1] } else { "0.0.${{ github.run_number }}" }
+          "semver=$ver" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Write-Host "Build Version: $ver"
+
+      # --- BACKEND ---
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: 🐍 Build Python Backend
+        shell: python
+        env:
+          BACKEND_DIR: ${{ env.BACKEND_DIR }}
+        run: |
+          import os, sys
+          from pathlib import Path
+
+          # Install Deps
+          os.system(f"pip install -r {os.environ['BACKEND_DIR']}/requirements-dev.txt")
+          os.system("pip install pyinstaller==6.6.0")
+
+          # Ensure __init__ exists for package discovery
+          init_path = Path(f"{os.environ['BACKEND_DIR']}/__init__.py")
+          if not init_path.exists():
+              init_path.write_text("# Clean Room Injection")
+
+          # Generate Spec (The "Clean" a.pure Injection)
+          spec = f"""
+          # -*- mode: python ; coding: utf-8 -*-
+          from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+
+          block_cipher = None
+
+          a = Analysis(
+              ['{os.environ['BACKEND_DIR']}/main.py'],
+              pathex=[],
+              binaries=[],
+              datas=collect_data_files('uvicorn') + collect_data_files('slowapi'),
+              hiddenimports=collect_submodules('{os.environ['BACKEND_DIR']}'),
+              hookspath=[],
+              runtime_hooks=[],
+              excludes=['tests', 'pytest'],
+              win_no_prefer_redirects=False,
+              win_private_assemblies=False,
+              cipher=block_cipher,
+              noarchive=False,
+          )
+
+          # The Fix: Inject __init__ as a module
+          a.pure += [('{os.environ['BACKEND_DIR']}', '{init_path.as_posix()}', 'PYMODULE')]
+
+          pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+          exe = EXE(
+              pyz, a.scripts, [], exclude_binaries=True, name='fortuna-backend',
+              debug=False, bootloader_ignore_signals=False, strip=False, upx=True, console=True
+          )
+          coll = COLLECT(
+              exe, a.binaries, a.zipfiles, a.datas, strip=False, upx=True, name='fortuna-backend'
+          )
+          """
+          with open("backend.spec", "w") as f: f.write(spec)
+
+          # Build
+          os.system("pyinstaller backend.spec --clean --noconfirm --distpath electron/dist --workpath build/service")
+
+      # --- FRONTEND ---
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: '${{ env.FRONTEND_DIR }}/package-lock.json'
+
+      - name: 🎨 Build Frontend
+        shell: pwsh
+        run: |
+          cd ${{ env.FRONTEND_DIR }}
+          npm ci --prefer-offline
+          npm run build
+          # Ensure output exists
+          if (-not (Test-Path "out")) { throw "Frontend build failed to produce 'out' directory" }
+
+      # --- ELECTRON ---
+      - name: ⚡ Build Electron MSI
+        shell: pwsh
+        working-directory: ${{ env.ELECTRON_DIR }}
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          npm ci --prefer-offline
+
+          # Dynamic Config Patching (No external YAML parser needed)
+          $config = Get-Content "electron-builder-config.yml" -Raw
+          # Ensure icon path is correct (simple string replace if needed, or rely on relative paths)
+
+          $artifactName = "Fortuna-Electron-${{ steps.meta.outputs.semver }}.msi"
+
+          npm run dist -- --win msi --config electron-builder-config.yml --publish never --config.artifactName=$artifactName
+
+      - name: 📤 Upload MSI
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-msi
+          path: ${{ env.ELECTRON_DIR }}/dist/*.msi
+          retention-days: 1
+
+  smoke-test:
+    name: '🔬 Smoke Test'
+    runs-on: windows-latest
+    needs: build-and-package
+    steps:
+      - name: 📥 Download MSI
+        uses: actions/download-artifact@v4
+        with:
+          name: electron-msi
+          path: installer
+
+      - name: 🤫 Install & Verify
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem "installer" -Filter "*.msi" -Recurse | Select -First 1
+          if (!$msi) { throw "No MSI found" }
+
+          Write-Host "Installing $($msi.Name)..."
+          $proc = Start-Process msiexec.exe -ArgumentList "/i `"$($msi.FullName)`" /qn /L*v install.log" -Wait -PassThru
+
+          if ($proc.ExitCode -ne 0) {
+            Get-Content install.log -Tail 50
+            throw "Install failed with code $($proc.ExitCode)"
+          }
+
+      - name: 🚀 Launch & Wait (Dual Process)
+        shell: pwsh
+        run: |
+          # Dynamic Executable Finding
+          $root = "C:\Program Files\Fortuna Faucet"
+          $exe = Get-ChildItem $root -Filter "*.exe" -Recurse | Where { $_.Name -notmatch 'uninstall' } | Select -First 1
+          if (!$exe) { throw "Executable not found in $root" }
+
+          Start-Process $exe.FullName
+
+          Write-Host "Waiting for Electron + Python..."
+          for ($i=0; $i -lt 30; $i++) {
+            $e = Get-Process "Fortuna Faucet" -ErrorAction SilentlyContinue
+            $b = Get-Process "fortuna-backend" -ErrorAction SilentlyContinue
+
+            if ($e -and $b) {
+              Write-Host "✅ SUCCESS: App and Backend are running."
+              exit 0
+            }
+            Start-Sleep 2
+          }
+          throw "Timeout waiting for processes."
+
+      - name: 🧹 Cleanup
+        if: always()
+        run: Stop-Process -Name "Fortuna Faucet", "fortuna-backend" -Force -ErrorAction SilentlyContinue
+
+  release:
+    name: '📦 Release'
+    runs-on: windows-latest
+    needs: smoke-test
+    steps:
+      - name: 📥 Download MSI
+        uses: actions/download-artifact@v4
+        with:
+          name: electron-msi
+          path: staging
+
+      - name: 🚚 Robocopy Safe-Stage
+        shell: pwsh
+        run: |
+          $dest = "final-artifact"
+          New-Item -ItemType Directory -Path $dest -Force | Out-Null
+
+          # The "Clean Room" Robocopy Logic
+          robocopy staging $dest /E /np
+
+          # 0-3 = Success. 4+ = Error.
+          if ($LASTEXITCODE -le 3) {
+            Write-Host "✅ Staged successfully."
+            exit 0
+          } else {
+            throw "Robocopy failed with code $LASTEXITCODE"
+          }
+
+      - name: 📤 Upload Final
+        uses: actions/upload-artifact@v4
+        with:
+          name: Final-Electron-MSI
+          path: final-artifact/

@@ -1,0 +1,278 @@
+name: 🏎️ Build Electron MSI (Hybrid V12 Engine)
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '20'
+  PYTHON_VERSION: '3.12'
+  # Paths
+  BACKEND_DIR: 'python_service'
+  FRONTEND_DIR: 'web_platform/frontend'
+  ELECTRON_DIR: 'electron'
+
+jobs:
+  # ==================================================================================
+  # JOB 1: BUILD CORE (The "HatTrick" Engine)
+  # ==================================================================================
+  build-core:
+    name: '⚙️ Build Core Components'
+    runs-on: windows-latest
+    outputs:
+      semver: ${{ steps.meta.outputs.semver }}
+      build_id: ${{ steps.meta.outputs.build_id }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 🏷️ Metadata
+        id: meta
+        shell: pwsh
+        run: |
+          $ver = if ("${{ github.ref }}" -match 'refs/tags/v(.*)') { $Matches[1] } else { "0.0.${{ github.run_number }}" }
+          "semver=$ver" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "build_id=${{ github.run_id }}" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      # --- FRONTEND (Standard) ---
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: '${{ env.FRONTEND_DIR }}/package-lock.json'
+
+      - name: 🎨 Build Frontend
+        shell: pwsh
+        run: |
+          cd ${{ env.FRONTEND_DIR }}
+          npm ci --prefer-offline
+          npm run build
+
+      # --- BACKEND (The "HatTrick" Upgrade) ---
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: 📦 Install Python Deps
+        run: |
+          pip install -r ${{ env.BACKEND_DIR }}/requirements-dev.txt
+          pip install pyinstaller==6.6.0
+
+      - name: 📝 Generate Spec & Build (Native Python)
+        shell: python
+        env:
+          BACKEND_DIR: ${{ env.BACKEND_DIR }}
+        run: |
+          import os
+          from pathlib import Path
+          from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+
+          # 1. Prepare Paths
+          bk_dir = os.environ['BACKEND_DIR']
+          entry = f"{bk_dir}/main.py"
+
+          # 2. Ensure __init__.py exists (The "Clean Room" check)
+          init_path = Path(f"{bk_dir}/__init__.py")
+          if not init_path.exists():
+              init_path.write_text("# Hybrid Injection")
+
+          # 3. Generate Spec with a.pure Injection (The "HatTrick" Logic)
+          # This replaces the "Zip Injection" hack from the old Electron workflow
+          spec_content = f"""
+          # -*- mode: python ; coding: utf-8 -*-
+          from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+
+          block_cipher = None
+
+          a = Analysis(
+              ['{entry}'],
+              pathex=[],
+              binaries=[],
+              datas=collect_data_files('uvicorn') + collect_data_files('slowapi'),
+              hiddenimports=collect_submodules('{bk_dir}'),
+              hookspath=[],
+              runtime_hooks=[],
+              excludes=['tests', 'pytest'],
+              win_no_prefer_redirects=False,
+              win_private_assemblies=False,
+              cipher=block_cipher,
+              noarchive=False,
+          )
+
+          # 💎 THE UPGRADE: Inject __init__ into PURE archive
+          a.pure += [('{bk_dir}', '{init_path.as_posix()}', 'PYMODULE')]
+
+          pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+
+          exe = EXE(
+              pyz, a.scripts, [], exclude_binaries=True, name='fortuna-backend',
+              debug=False, bootloader_ignore_signals=False, strip=False, upx=True, console=True
+          )
+
+          # Electron needs a folder (COLLECT), not just a file
+          coll = COLLECT(
+              exe, a.binaries, a.zipfiles, a.datas,
+              strip=False, upx=True, name='fortuna-backend'
+          )
+          """
+
+          with open("hybrid.spec", "w") as f: f.write(spec_content)
+
+          # 4. Build
+          # Output directly to where Electron expects it (dist/service)
+          os.system("pyinstaller hybrid.spec --clean --noconfirm --distpath dist/service --workpath build/temp")
+
+      - name: 📤 Upload Core Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-build-${{ github.run_id }}
+          path: |
+            dist/service/fortuna-backend/
+            ${{ env.FRONTEND_DIR }}/out/
+          retention-days: 1
+
+  # ==================================================================================
+  # JOB 2: PACKAGE ELECTRON (The "Ironclad" Chassis)
+  # ==================================================================================
+  package-electron:
+    name: '⚡ Package Electron MSI'
+    runs-on: windows-latest
+    needs: build-core
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: '${{ env.ELECTRON_DIR }}/package-lock.json'
+
+      - name: 📥 Download Core Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: core-build-${{ github.run_id }}
+          path: downloaded_core
+
+      - name: 🚚 Stage Artifacts for Electron
+        shell: pwsh
+        run: |
+          # Move Python Backend to where electron-builder expects it
+          # (Adjust this path based on your electron-builder-config.yml)
+          $backendDest = "${{ env.ELECTRON_DIR }}/python_service-bin"
+          New-Item -ItemType Directory -Path $backendDest -Force | Out-Null
+          Copy-Item -Path "downloaded_core/fortuna-backend/*" -Destination $backendDest -Recurse -Force
+
+          # Move Frontend to where Electron expects it
+          $frontendDest = "${{ env.FRONTEND_DIR }}/out"
+          New-Item -ItemType Directory -Path $frontendDest -Force | Out-Null
+          Copy-Item -Path "downloaded_core/out/*" -Destination $frontendDest -Recurse -Force
+
+      - name: 🏗️ Build MSI
+        working-directory: ${{ env.ELECTRON_DIR }}
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          npm ci --prefer-offline
+          $ver = "${{ needs.build-core.outputs.semver }}"
+          npm run dist -- --win msi --config electron-builder-config.yml --publish never --config.artifactName="Fortuna-Electron-${ver}.msi"
+
+      - name: 📤 Upload MSI
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-msi-${{ github.run_id }}
+          path: ${{ env.ELECTRON_DIR }}/dist/*.msi
+          retention-days: 1
+
+  # ==================================================================================
+  # JOB 3: SMOKE TEST (The "Robust" Verification)
+  # ==================================================================================
+  smoke-test:
+    name: '🔬 Smoke Test'
+    runs-on: windows-latest
+    needs: package-electron
+    steps:
+      - name: 📥 Download MSI
+        uses: actions/download-artifact@v4
+        with:
+          name: electron-msi-${{ github.run_id }}
+          path: installer
+
+      - name: 🤫 Install & Verify
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem "installer" -Filter "*.msi" -Recurse | Select -First 1
+          if (!$msi) { throw "No MSI found" }
+
+          Write-Host "Installing $($msi.Name)..."
+          # EXOTIC INGREDIENT: PassThru for accurate exit codes
+          $proc = Start-Process msiexec.exe -ArgumentList "/i `"$($msi.FullName)`" /qn /L*v install.log" -Wait -PassThru
+
+          if ($proc.ExitCode -ne 0) {
+            Get-Content install.log -Tail 50
+            throw "Install failed with code $($proc.ExitCode)"
+          }
+
+      - name: 🚀 Launch & Wait (Dual Process)
+        shell: pwsh
+        run: |
+          # EXOTIC INGREDIENT: Dynamic Path Finding
+          $root = "C:\Program Files\Fortuna Faucet"
+          $exe = Get-ChildItem $root -Filter "*.exe" -Recurse | Where { $_.Name -notmatch 'uninstall' } | Select -First 1
+          if (!$exe) { throw "Executable not found in $root" }
+
+          Start-Process $exe.FullName
+
+          Write-Host "Waiting for Electron + Python..."
+          for ($i=0; $i -lt 30; $i++) {
+            $e = Get-Process "Fortuna Faucet" -ErrorAction SilentlyContinue
+            $b = Get-Process "fortuna-backend" -ErrorAction SilentlyContinue
+
+            if ($e -and $b) {
+              Write-Host "✅ SUCCESS: App (PID $($e.Id)) and Backend (PID $($b.Id)) are running."
+              exit 0
+            }
+            Start-Sleep 2
+          }
+          throw "Timeout waiting for processes."
+
+      - name: 🧹 Cleanup
+        if: always()
+        run: Stop-Process -Name "Fortuna Faucet", "fortuna-backend" -Force -ErrorAction SilentlyContinue
+
+  # ==================================================================================
+  # JOB 4: RELEASE (The "Triple-Tap" Staging)
+  # ==================================================================================
+  release:
+    name: '📦 Release'
+    runs-on: windows-latest
+    needs: smoke-test
+    steps:
+      - name: 📥 Download MSI
+        uses: actions/download-artifact@v4
+        with:
+          name: electron-msi-${{ github.run_id }}
+          path: staging
+
+      - name: 🚚 Robocopy Safe-Stage
+        shell: pwsh
+        run: |
+          $dest = "final-artifact"
+          New-Item -ItemType Directory -Path $dest -Force | Out-Null
+
+          # EXOTIC INGREDIENT: The Robocopy Logic that finally worked
+          robocopy staging $dest /E /np
+
+          # 0-3 = Success. 4+ = Error.
+          if ($LASTEXITCODE -le 3) {
+            Write-Host "✅ Staged successfully."
+            exit 0
+          } else {
+            throw "Robocopy failed with code $LASTEXITCODE"
+          }
+
+      - name: 📤 Upload Final
+        uses: actions/upload-artifact@v4
+        with:
+          name: Final-Electron-MSI
+          path: final-artifact/
