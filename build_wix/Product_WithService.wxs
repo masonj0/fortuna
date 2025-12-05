@@ -26,88 +26,56 @@
 
   </Package>
 
-  <Fragment>
-    <!-- 1. DEFINE THE DIRECTORY STRUCTURE WITH IDs (Fixed WIX0094) -->
-    <StandardDirectory Id="ProgramFiles64Folder">
-      <Directory Id="INSTALLFOLDER" Name="Fortuna Faucet">
-        <!-- Explicitly define IDs for subfolders -->
-        <Directory Id="Dir_Data" Name="data" />
-        <Directory Id="Dir_Json" Name="json" />
-        <Directory Id="Dir_Logs" Name="logs" />
-      </Directory>
-    </StandardDirectory>
+<Fragment>
+  <!-- 1. DIRECTORY STRUCTURE -->
+  <StandardDirectory Id="ProgramFiles64Folder">
+    <Directory Id="INSTALLFOLDER" Name="Fortuna Faucet">
+      <Directory Id="Dir_Data" Name="data" />
+      <Directory Id="Dir_Json" Name="json" />
+      <Directory Id="Dir_Logs" Name="logs" />
+    </Directory>
+  </StandardDirectory>
 
-    <StandardDirectory Id="ProgramMenuFolder">
-        <Directory Id="ApplicationProgramsFolder" Name="Fortuna Faucet"/>
-    </StandardDirectory>
+  <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ApplicationProgramsFolder" Name="Fortuna Faucet"/>
+  </StandardDirectory>
 
-    <!-- 2. SERVICE COMPONENTS -->
-    <ComponentGroup Id="ServiceComponents" Directory="INSTALLFOLDER">
-      <Component Id="ServiceComponent" Guid="*">
-        <File Id="ServiceExe"
-              Source="$(var.SourceDir)/fortuna-webservice.exe"
-              KeyPath="yes" />
+  <StandardDirectory Id="DesktopFolder" />
 
-        <ServiceInstall Id="ServiceInstaller"
-                        Name="FortunaFaucetService"
-                        DisplayName="Fortuna Faucet Backend Service"
-                        Description="Data aggregation and analysis engine."
-                        Start="auto"
-                        Type="ownProcess"
-                        ErrorControl="normal" />
+  <!-- 2. SERVICE COMPONENTS -->
+  <ComponentGroup Id="ServiceComponents" Directory="INSTALLFOLDER">
+    <Component Id="ServiceComponent" Guid="*">
+      <File Id="ServiceExe" Source="$(var.SourceDir)/fortuna-webservice.exe" KeyPath="yes" />
+      <ServiceInstall Id="ServiceInstaller" Name="FortunaWebService" DisplayName="Fortuna Faucet Backend Service" Description="Data aggregation engine." Start="auto" Type="ownProcess" ErrorControl="normal" />
+      <!-- CRITICAL: Start="install" REMOVED to prevent timeout -->
+      <ServiceControl Id="ServiceControl" Name="FortunaWebService" Stop="both" Remove="uninstall" Wait="true" />
+      <util:ServiceConfig ServiceName="FortunaWebService" FirstFailureActionType="restart" SecondFailureActionType="restart" ThirdFailureActionType="restart" RestartServiceDelayInSeconds="60" />
+      <fire:FirewallException Id="FirewallRule" Name="Fortuna Faucet" Port="8102" Protocol="tcp" Scope="any" />
+      <RegistryKey Root="HKLM" Key="SYSTEM\CurrentControlSet\Services\FortunaWebService">
+          <RegistryValue Name="Environment" Type="multiString" Value="PORT=8102[~]FORTUNA_PORT=8102" />
+      </RegistryKey>
+    </Component>
+  </ComponentGroup>
 
-        <ServiceControl Id="ServiceControl"
-                        Name="FortunaFaucetService"
-                        Start="install"
-                        Stop="both"
-                        Remove="uninstall"
-                        Wait="true" />
+  <!-- 3. RUNTIME DIRECTORIES -->
+  <ComponentGroup Id="RuntimeDirectoryComponents" Directory="INSTALLFOLDER">
+      <Component Id="DataDirectoryComponent" Guid="a2e3820a-606b-452f-b43f-b82b9a7852a0"><CreateFolder Directory="Dir_Data" /></Component>
+      <Component Id="JsonDirectoryComponent" Guid="b4d7ea21-821f-4a0b-9303-3a52e1f42d2a"><CreateFolder Directory="Dir_Json" /></Component>
+      <Component Id="LogsDirectoryComponent" Guid="d66f6540-3f11-4475-9a67-9c9852f87a32"><CreateFolder Directory="Dir_Logs" /></Component>
+  </ComponentGroup>
 
-        <util:ServiceConfig ServiceName="FortunaFaucetService"
-                            FirstFailureActionType="restart"
-                            SecondFailureActionType="restart"
-                            ThirdFailureActionType="restart"
-                            RestartServiceDelayInSeconds="60" />
-
-        <fire:FirewallException Id="FirewallRule"
-                                Name="Fortuna Faucet"
-                                Port="8102"
-                                Protocol="tcp"
-                                Scope="any" />
-
-        <!-- 3. ENVIRONMENT VARIABLES (Fixes Port Mismatch & WIX0004 error) -->
-        <RegistryKey Root="HKLM" Key="SYSTEM\CurrentControlSet\Services\FortunaFaucetService">
-            <RegistryValue Name="Environment" Type="multiString" Value="PORT=8102[~]FORTUNA_PORT=8102" />
-        </RegistryKey>
+  <!-- 4. SHORTCUTS (Fixed WIX0010) -->
+  <ComponentGroup Id="ShortcutComponents">
+      <Component Id="StartMenuShortcuts" Guid="*" Directory="ApplicationProgramsFolder">
+          <util:InternetShortcut Id="WebShortcut" Name="Fortuna Faucet Dashboard" Target="http://localhost:8102" />
+          <Shortcut Id="UninstallShortcut" Name="Uninstall Fortuna Faucet" Description="Removes the application" Target="[System64Folder]msiexec.exe" Arguments="/x [ProductCode]" />
+          <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall" />
+          <RegistryValue Root="HKCU" Key="Software\Fortuna Faucet" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
       </Component>
-    </ComponentGroup>
-
-    <!-- 4. RUNTIME DIRECTORIES (Fixed WIX0094) -->
-    <ComponentGroup Id="RuntimeDirectoryComponents">
-        <!-- Reference the Directory IDs defined above -->
-        <Component Id="DataDirectoryComponent" Directory="Dir_Data" Guid="a2e3820a-606b-452f-b43f-b82b9a7852a0">
-            <CreateFolder />
-        </Component>
-        <Component Id="JsonDirectoryComponent" Directory="Dir_Json" Guid="b4d7ea21-821f-4a0b-9303-3a52e1f42d2a">
-            <CreateFolder />
-        </Component>
-        <Component Id="LogsDirectoryComponent" Directory="Dir_Logs" Guid="d66f6540-3f11-4475-9a67-9c9852f87a32">
-            <CreateFolder />
-        </Component>
-    </ComponentGroup>
-
-    <!-- 5. SHORTCUTS -->
-    <ComponentGroup Id="ShortcutComponents" Directory="ApplicationProgramsFolder">
-        <Component Id="ShortcutComponent" Guid="*">
-            <Shortcut Id="UninstallShortcut"
-                      Name="Uninstall Fortuna Faucet"
-                      Description="Removes the application"
-                      Target="[System64Folder]msiexec.exe"
-                      Arguments="/x [ProductCode]" />
-            <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall" />
-            <RegistryValue Root="HKCU" Key="Software\Fortuna Faucet" Name="installed" Type="integer" Value="1" KeyPath="yes" />
-        </Component>
-    </ComponentGroup>
-
-  </Fragment>
+      <Component Id="DesktopShortcut" Guid="*" Directory="DesktopFolder">
+          <util:InternetShortcut Id="DesktopWebShortcut" Name="Fortuna Faucet" Target="http://localhost:8102" />
+          <RegistryValue Root="HKCU" Key="Software\Fortuna Faucet" Name="DesktopShortcut" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+  </ComponentGroup>
+</Fragment>
 </Wix>
