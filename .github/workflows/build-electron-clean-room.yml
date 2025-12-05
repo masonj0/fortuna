@@ -39,32 +39,35 @@ jobs:
         shell: python
         env:
           BACKEND_DIR: ${{ env.BACKEND_DIR }}
+          PYTHONUTF8: '1'
         run: |
-          import os, sys
+          import os
           from pathlib import Path
+          from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
-          # Install Deps
-          os.system(f"pip install -r {os.environ['BACKEND_DIR']}/requirements-dev.txt")
-          os.system("pip install pyinstaller==6.6.0")
+          # 1. Prepare Paths
+          bk_dir = os.environ['BACKEND_DIR']
+          entry = f"{bk_dir}/main.py"
 
-          # Ensure __init__ exists for package discovery
-          init_path = Path(f"{os.environ['BACKEND_DIR']}/__init__.py")
+          # 2. Ensure __init__.py exists (The "Clean Room" check)
+          init_path = Path(f"{bk_dir}/__init__.py")
           if not init_path.exists():
-              init_path.write_text("# Clean Room Injection")
+              init_path.write_text("# Hybrid Injection")
 
-          # Generate Spec (The "Clean" a.pure Injection)
-          spec = f"""
+          # 3. Generate Spec with a.pure Injection (The "HatTrick" Logic)
+          # This replaces the "Zip Injection" hack from the old Electron workflow
+          spec_content = f"""
           # -*- mode: python ; coding: utf-8 -*-
           from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
           block_cipher = None
 
           a = Analysis(
-              ['{os.environ['BACKEND_DIR']}/main.py'],
+              ['{entry}'],
               pathex=[],
               binaries=[],
               datas=collect_data_files('uvicorn') + collect_data_files('slowapi'),
-              hiddenimports=collect_submodules('{os.environ['BACKEND_DIR']}'),
+              hiddenimports=collect_submodules('{bk_dir}'),
               hookspath=[],
               runtime_hooks=[],
               excludes=['tests', 'pytest'],
@@ -74,22 +77,28 @@ jobs:
               noarchive=False,
           )
 
-          # The Fix: Inject __init__ as a module
-          a.pure += [('{os.environ['BACKEND_DIR']}', '{init_path.as_posix()}', 'PYMODULE')]
+          # THE UPGRADE: Inject __init__ into PURE archive
+          a.pure += [('{bk_dir}', '{init_path.as_posix()}', 'PYMODULE')]
 
           pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+
           exe = EXE(
               pyz, a.scripts, [], exclude_binaries=True, name='fortuna-backend',
               debug=False, bootloader_ignore_signals=False, strip=False, upx=True, console=True
           )
+
+          # Electron needs a folder (COLLECT), not just a file
           coll = COLLECT(
-              exe, a.binaries, a.zipfiles, a.datas, strip=False, upx=True, name='fortuna-backend'
+              exe, a.binaries, a.zipfiles, a.datas,
+              strip=False, upx=True, name='fortuna-backend'
           )
           """
-          with open("backend.spec", "w") as f: f.write(spec)
 
-          # Build
-          os.system("pyinstaller backend.spec --clean --noconfirm --distpath electron/dist --workpath build/service")
+          with open("hybrid.spec", "w") as f: f.write(spec_content)
+
+          # 4. Build
+          # Output directly to where Electron expects it (dist/service)
+          os.system("pyinstaller hybrid.spec --clean --noconfirm --distpath dist/service --workpath build/temp")
 
       # --- FRONTEND ---
       - uses: actions/setup-node@v4
