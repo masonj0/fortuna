@@ -387,13 +387,14 @@ jobs:
 
           Write-Host "Installing: $($msi.FullName)"
 
-          Start-Process msiexec.exe `
+          $proc = Start-Process msiexec.exe `
             -ArgumentList "/i `"$($msi.FullName)`" /qn /L*v msi-install.log" `
             -Wait `
-            -NoNewWindow
+            -NoNewWindow `
+            -PassThru
 
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "❌ MSI Install Failed with exit code $LASTEXITCODE"
+          if ($proc.ExitCode -ne 0) {
+            Write-Error "❌ MSI Install Failed with exit code $($proc.ExitCode)"
             exit 1
           }
 

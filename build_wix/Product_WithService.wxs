@@ -84,9 +84,9 @@
     </ComponentGroup>
 
     <!-- 3. RUNTIME DIRECTORIES -->
-    <ComponentGroup Id="RuntimeDirectoryComponents" Directory="INSTALLFOLDER">
-        <Component Id="DataDirectoryComponent" Guid="a2e3820a-606b-452f-b43f-b82b9a7852a0">
-            <CreateFolder Directory="Dir_Data" />
+    <ComponentGroup Id="RuntimeDirectoryComponents">
+        <Component Id="DataDirectoryComponent" Directory="Dir_Data" Guid="a2e3820a-606b-452f-b43f-b82b9a7852a0">
+            <CreateFolder />
         </Component>
         <Component Id="JsonDirectoryComponent" Guid="b4d7ea21-821f-4a0b-9303-3a52e1f42d2a">
             <CreateFolder Directory="Dir_Json" />

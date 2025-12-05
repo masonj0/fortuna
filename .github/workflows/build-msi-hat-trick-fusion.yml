@@ -248,17 +248,21 @@ jobs:
 
           Write-Host "Installing: $($msi.FullName)"
 
-          Start-Process msiexec.exe `
+          # FIX: Use -PassThru to capture the process object
+          $proc = Start-Process msiexec.exe `
             -ArgumentList "/i `"$($msi.FullName)`" /qn /L*v installation.log" `
             -Wait `
-            -NoNewWindow
+            -NoNewWindow `
+            -PassThru
 
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "❌ MSI Install Failed with exit code $LASTEXITCODE"
-            exit 1
+          # FIX: Check the specific process exit code
+          if ($proc.ExitCode -ne 0) {
+            Write-Error "❌ MSI Install Failed with exit code $($proc.ExitCode)"
+            Get-Content installation.log -Tail 60 | ForEach-Object { Write-Error $_ }
+            throw "Installation failed"
           }
 
-          Write-Host "✅ MSI installation succeeded"
+          Write-Host "✅ MSI installation succeeded (Exit Code: 0)"
 
       - name: Emit MSI log tail
         if: always()
