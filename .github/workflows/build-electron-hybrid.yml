@@ -63,6 +63,7 @@ jobs:
         shell: python
         env:
           BACKEND_DIR: ${{ env.BACKEND_DIR }}
+          PYTHONUTF8: '1'
         run: |
           import os
           from pathlib import Path

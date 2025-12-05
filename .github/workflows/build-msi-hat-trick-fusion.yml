@@ -202,7 +202,7 @@ jobs:
           $proj += '    <OutputName>HatTrickFusion</OutputName>'
           $proj += '    <OutputType>Package</OutputType>'
           $proj += '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>'
-          $proj += '    <DefineConstants>SourceDir=../staging/backend;Version=${{ needs.build-backend.outputs.semver }}</DefineConstants>'
+          $proj += '    <DefineConstants>SourceDir=../staging/backend;Version=${{ needs.build-backend.outputs.semver }};ServicePort=${{ env.SERVICE_PORT }}</DefineConstants>'
           $proj += '    <Platforms>x64</Platforms>'
           $proj += '    <BinderIncludeCabinetFilesInPackage>true</BinderIncludeCabinetFilesInPackage>'
           $proj += '  </PropertyGroup>'
@@ -240,9 +240,9 @@ jobs:
       - name: 🤫 Install MSI (With Logging)
         shell: pwsh
         run: |
-          if (Get-Service -Name FortunaFaucetService -ErrorAction SilentlyContinue) {
-            sc.exe stop FortunaFaucetService 2>&1 | Out-Null
-            sc.exe delete FortunaFaucetService 2>&1 | Out-Null
+          if (Get-Service -Name FortunaWebService -ErrorAction SilentlyContinue) {
+            sc.exe stop FortunaWebService 2>&1 | Out-Null
+            sc.exe delete FortunaWebService 2>&1 | Out-Null
           }
 
           $msi = Get-ChildItem -Path "installer" -Filter "*.msi" -Recurse | Select-Object -First 1
