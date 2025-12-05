@@ -183,14 +183,8 @@ jobs:
           Set-StrictMode -Version Latest
           if (-not (Test-Path build_wix)) { New-Item -ItemType Directory -Path build_wix | Out-Null }
 
-          # Read the template
-          $wxsContent = Get-Content build_wix/Product_WithService.wxs -Raw
-
-          # 🛠️ FIX: Remove 'Start="install"' so MSI doesn't hang if service fails
-          $wxsContent = $wxsContent -replace 'Start="install"', ''
-
-          # Write it back to the build location
-          $wxsContent | Set-Content build_wix/Product.wxs -Encoding utf8
+          # Copy the authoritative template to the build location
+          Copy-Item build_wix/Product_WithService.wxs build_wix/Product.wxs -Force
 
           if (Test-Path staging/backend/fortuna-backend.exe) {
             Move-Item staging/backend/fortuna-backend.exe staging/backend/fortuna-webservice.exe -Force
