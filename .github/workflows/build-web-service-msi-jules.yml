@@ -799,6 +799,11 @@ jobs:
       - name: '🚀 LOOP 1 - Install & Verify Service Registration'
         shell: pwsh
         run: |
+          if (Get-Service -Name FortunaWebService -ErrorAction SilentlyContinue) {
+            sc.exe stop FortunaWebService 2>&1 | Out-Null
+            sc.exe delete FortunaWebService 2>&1 | Out-Null
+          }
+
           $msiPath = "${{ steps.find_msi.outputs.msi_path }}"
           Write-Host "Starting installation of $msiPath..."
 
@@ -807,25 +812,35 @@ jobs:
           # Allow exit code 3010 (reboot required)
           if ($proc.ExitCode -ne 0 -and $proc.ExitCode -ne 3010) {
             Write-Error "❌ MSI installation failed with exit code $($proc.ExitCode)."
-            Get-Content msi-install.log -Tail 50 | Write-Host
             exit 1
           }
 
           Write-Host "✅ Installation completed (Exit Code: $($proc.ExitCode)). Verifying service registration..."
 
-          $service = Get-Service -Name "FortunaFaucetService" -ErrorAction SilentlyContinue
+          $service = Get-Service -Name "FortunaWebService" -ErrorAction SilentlyContinue
           if (-not $service) {
-            Write-Error "❌ FATAL: Service 'FortunaFaucetService' was not registered."
+            Write-Error "❌ FATAL: Service 'FortunaWebService' was not registered."
             exit 1
           }
 
           Write-Host "✅ Service is registered. State: $($service.Status)"
 
+      - name: Emit MSI log tail
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path msi-install.log) {
+            Write-Host "`n=== msi-install.log (last 200 lines) ==="
+            Get-Content msi-install.log -Tail 200
+          } else {
+            Write-Host "No msi-install.log found"
+          }
+
       - name: '🚦 LOOP 2 - Start Service & Verify Process'
         shell: pwsh
         run: |
-          Write-Host "Attempting to start the 'FortunaFaucetService'..."
-          Start-Service -Name "FortunaFaucetService"
+          Write-Host "Attempting to start the 'FortunaWebService'..."
+          Start-Service -Name "FortunaWebService"
 
           Write-Host "Waiting for process to appear (up to 30 seconds)..."
           $deadline = (Get-Date).AddSeconds(30)
@@ -843,7 +858,7 @@ jobs:
 
           if (-not $processFound) {
             Write-Error "❌ FATAL: Process did not start after 30 seconds."
-            Get-EventLog -LogName Application -Source "FortunaFaucetService" -Newest 10 | Format-List
+            Get-EventLog -LogName Application -Source "FortunaWebService" -Newest 10 | Format-List
             exit 1
           }
 
@@ -878,20 +893,19 @@ jobs:
         if: failure()
         shell: pwsh
         run: |
-          Write-Host "=== Capturing Failure Diagnostics ==="
-          Get-Content msi-install.log | Out-File diagnostic-install-log.txt
-          Get-EventLog -LogName Application -Source "FortunaFaucetService" -Newest 20 | Format-List | Out-File diagnostic-eventlog.txt
-          Get-Service -Name "FortunaFaucetService" | Format-List | Out-File diagnostic-service-state.txt
-          Get-Process -Name "fortuna-webservice" -ErrorAction SilentlyContinue | Format-List | Out-File diagnostic-process-state.txt
-          netstat -anob > diagnostic-netstat.txt
-          Write-Host "✅ Diagnostics captured."
+          $diag = Join-Path $PWD "installer-diag"
+          Remove-Item $diag -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $diag | Out-Null
+          Copy-Item -Path msi-install.log -Destination $diag -Force
+          Copy-Item -Path "C:\ProgramData\Fortuna\logs\*.log" -Destination $diag -Force -ErrorAction SilentlyContinue
+          Copy-Item -Path "C:\Program Files\Fortuna Faucet\*" -Destination $diag -Recurse -Force -ErrorAction SilentlyContinue
 
       - name: 📤 Upload Diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: jules-smoke-test-failure-${{ github.run_id }}
-          path: diagnostic-*.txt
+          path: installer-diag
           retention-days: 30
 
       - name: 🧹 Cleanup
@@ -899,7 +913,7 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "Cleaning up..."
-          Stop-Service -Name "FortunaFaucetService" -Force -ErrorAction SilentlyContinue
+          Stop-Service -Name "FortunaWebService" -Force -ErrorAction SilentlyContinue
           # Uninstall may not always work, especially if the service is stuck, but we try.
           $msiPath = "${{ steps.find_msi.outputs.msi_path }}"
           if (Test-Path $msiPath) {
@@ -955,11 +969,18 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
           Copy-Item "${{ env.WIX_DIR }}/Product_WithService.wxs" "${{ env.WIX_DIR }}/Product.wxs" -Force
+
+          $wxsPath = "${{ env.WIX_DIR }}/Product.wxs"
+          $wxsContent = Get-Content $wxsPath -Raw
+          $wxsContent = $wxsContent -replace 'Start="install"', ''
+          Set-Content -Path $wxsPath -Value $wxsContent -Encoding UTF8 -Force
+
           $wixProj = @(
             '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">'
             '  <PropertyGroup>'
             '    <OutputName>${{ steps.stage.outputs.msi_name }}</OutputName>'
             '    <OutputType>Package</OutputType>'
+            '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>'
             '    <DefineConstants>SourceDir=staging;Version=${{ env.BUILD_VERSION }}</DefineConstants>'
             '    <Platforms>x64</Platforms>'
             '    <Version>${{ env.BUILD_VERSION }}</Version>'
@@ -992,9 +1013,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: fortuna-service-msi-${{ github.run_id }}
-          path: |
-            ${{ env.WIX_DIR }}/bin/x64/Release/*.msi
-            ${{ env.WIX_DIR }}/bin/x64/Release/*.sha256
+          path: ${{ env.WIX_DIR }}/bin/x64/Release/*
           retention-days: 10
 
   create-release:

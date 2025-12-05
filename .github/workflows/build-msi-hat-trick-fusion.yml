@@ -181,7 +181,15 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
           if (-not (Test-Path build_wix)) { New-Item -ItemType Directory -Path build_wix | Out-Null }
+
+          # Copy the authoritative template to the build location
           Copy-Item build_wix/Product_WithService.wxs build_wix/Product.wxs -Force
+
+          # Dynamically remove the problematic Start="install" attribute to prevent timeouts
+          $wxsPath = "build_wix/Product.wxs"
+          $wxsContent = Get-Content $wxsPath -Raw
+          $wxsContent = $wxsContent -replace 'Start="install"', ''
+          Set-Content -Path $wxsPath -Value $wxsContent -Encoding UTF8 -Force
 
           if (Test-Path staging/backend/fortuna-backend.exe) {
             Move-Item staging/backend/fortuna-backend.exe staging/backend/fortuna-webservice.exe -Force
@@ -216,7 +224,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: hat-trick-msi
-          path: build_wix/bin/x64/Release/*.msi
+          path: build_wix/bin/x64/Release/*
 
   smoke-test:
     name: HatTrick Fusion Smoke Test
@@ -240,10 +248,33 @@ jobs:
             New-NetFirewallRule -DisplayName $env:FIREWALL_RULE -Direction Inbound -LocalPort $env:SERVICE_PORT -Protocol TCP -Action Allow | Out-Null
           }
 
-          Start-Process msiexec.exe -ArgumentList "/i `"$($msi.FullName)`" /qn /L*v installation.log" -Wait -NoNewWindow
-          if ($LASTEXITCODE -ne 0) {
+          Write-Host "Installing: $($msi.FullName)"
+
+          # FIX: Use -PassThru to capture the process object
+          $proc = Start-Process msiexec.exe `
+            -ArgumentList "/i `"$($msi.FullName)`" /qn /L*v installation.log" `
+            -Wait `
+            -NoNewWindow `
+            -PassThru
+
+          # FIX: Check the specific process exit code
+          if ($proc.ExitCode -ne 0) {
+            Write-Error "❌ MSI Install Failed with exit code $($proc.ExitCode)"
             Get-Content installation.log -Tail 60 | ForEach-Object { Write-Error $_ }
             throw "Installation failed"
+          }
+
+          Write-Host "✅ MSI installation succeeded (Exit Code: 0)"
+
+      - name: Emit MSI log tail
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path installation.log) {
+            Write-Host "`n=== installation.log (last 200 lines) ==="
+            Get-Content installation.log -Tail 200
+          } else {
+            Write-Host "No installation.log found"
           }
 
       - name: Health and Process Validation
@@ -255,7 +286,7 @@ jobs:
           port = int(os.environ["PORT"])
 
           # Start Service
-          subprocess.run(["sc.exe", "start", "FortunaFaucetService"], check=False)
+          subprocess.run(["sc.exe", "start", "FortunaWebService"], check=False)
 
           # Wait for Port
           for _ in range(30):
@@ -266,7 +297,7 @@ jobs:
               time.sleep(1)
           else:
             print("❌ Port bind timeout")
-            subprocess.run(["sc.exe", "query", "FortunaFaucetService"])
+            subprocess.run(["sc.exe", "query", "FortunaWebService"])
             sys.exit(1)
 
           # Health Check
@@ -305,12 +336,19 @@ jobs:
           Write-Error "UI was not served from the backend."
           exit 1
 
+      - name: Gather diagnostics
+        if: failure()
+        shell: pwsh
+        run: |
+          $diag = Join-Path $PWD "installer-diag"
+          Remove-Item $diag -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $diag | Out-Null
+          Copy-Item -Path installation.log -Destination $diag -Force
+          Copy-Item -Path "C:\ProgramData\Fortuna\logs\*.log" -Destination $diag -Force -ErrorAction SilentlyContinue
+          Copy-Item -Path "C:\Program Files\Fortuna Faucet\*" -Destination $diag -Recurse -Force -ErrorAction SilentlyContinue
       - name: Upload Logs on Failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: hat-trick-fusion-logs
-          path: |
-            installation.log
-            C:\ProgramData\Fortuna\logs\*.log
-            C:\Program Files\Fortuna Faucet\
+          name: hat-trick-fusion-logs-${{ github.run_id }}
+          path: installer-diag

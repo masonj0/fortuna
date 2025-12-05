@@ -308,7 +308,16 @@ jobs:
       - name: Prepare WiX Project
         shell: pwsh
         run: |
+          # 1. Copy the template
           Copy-Item "${{ env.WIX_DIR }}/Product_WithService.wxs" "${{ env.WIX_DIR }}/Product.wxs" -Force
+
+          # 2. Dynamically remove the problematic Start="install" attribute to prevent timeouts
+          $wxsPath = "${{ env.WIX_DIR }}/Product.wxs"
+          $wxsContent = Get-Content $wxsPath -Raw
+          $wxsContent = $wxsContent -replace 'Start="install"', ''
+          Set-Content -Path $wxsPath -Value $wxsContent -Encoding UTF8 -Force
+
+          # 3. Generate Project with CAB embedding enabled
           $wixProj = @(
             '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">'
             '  <PropertyGroup>'
@@ -338,7 +347,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: msi-installer-${{ needs.build-executable.outputs.build_id }}
-          path: ${{ env.WIX_DIR }}/bin/x64/Release/*.msi
+          path: ${{ env.WIX_DIR }}/bin/x64/Release/*
           retention-days: 1
 
   smoke-test:
@@ -355,10 +364,8 @@ jobs:
       - name: 🛡️ Configure Firewall
         shell: pwsh
         run: |
-          # EXOTIC INGREDIENT #1: Open the port BEFORE the service even thinks about starting
-          # This prevents "connection refused" errors in the health check
           New-NetFirewallRule `
-            -DisplayName "FortunaFaucetService" `
+            -DisplayName "FortunaWebService" `
             -Direction Inbound `
             -LocalPort 8102 `
             -Protocol TCP `
@@ -369,7 +376,11 @@ jobs:
       - name: 🤫 Install MSI (With Logging)
         shell: pwsh
         run: |
-          # Verify MSI exists before attempting install
+          if (Get-Service -Name FortunaWebService -ErrorAction SilentlyContinue) {
+            sc.exe stop FortunaWebService 2>&1 | Out-Null
+            sc.exe delete FortunaWebService 2>&1 | Out-Null
+          }
+
           $msi = Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse | Select-Object -First 1
           if (-not $msi) {
             Write-Error "❌ FATAL: No MSI found in artifact"
@@ -379,36 +390,40 @@ jobs:
 
           Write-Host "Installing: $($msi.FullName)"
 
-          # EXOTIC INGREDIENT #2: /L*v logging to catch install failures
-          # This creates msi-install.log with detailed diagnostics
-          Start-Process msiexec.exe `
+          $proc = Start-Process msiexec.exe `
             -ArgumentList "/i `"$($msi.FullName)`" /qn /L*v msi-install.log" `
             -Wait `
-            -NoNewWindow
+            -NoNewWindow `
+            -PassThru
 
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "❌ MSI Install Failed with exit code $LASTEXITCODE"
-            Write-Host "=== Last 50 lines of MSI Log ==="
-            Get-Content msi-install.log | Select-Object -Last 50
+          if ($proc.ExitCode -ne 0) {
+            Write-Error "❌ MSI Install Failed with exit code $($proc.ExitCode)"
             exit 1
           }
 
           Write-Host "✅ MSI installation succeeded"
 
+      - name: Emit MSI log tail
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path msi-install.log) {
+            Write-Host "`n=== msi-install.log (last 200 lines) ==="
+            Get-Content msi-install.log -Tail 200
+          } else {
+            Write-Host "No msi-install.log found"
+          }
+
       - name: ⏳ Wait for Service Registration
         shell: pwsh
         run: |
-          # EXOTIC INGREDIENT #3: Don't start the service until Windows Registry knows about it
-          # The MSI installer registers the service asynchronously
-          # If we call sc.exe start too soon, it fails silently
-
-          $regPath = "HKLM:\SYSTEM\CurrentControlSet\Services\FortunaFaucetService"
+          $regPath = "HKLM:\SYSTEM\CurrentControlSet\Services\FortunaWebService"
           Write-Host "Waiting for service to be registered in registry..."
 
           for ($i = 0; $i -lt 30; $i++) {
             if (Test-Path $regPath) {
               Write-Host "✅ Service registered (took $i seconds)"
-              $svc = Get-Service -Name "FortunaFaucetService" -ErrorAction SilentlyContinue
+              $svc = Get-Service -Name "FortunaWebService" -ErrorAction SilentlyContinue
               Write-Host "   DisplayName: $($svc.DisplayName)"
               Write-Host "   Status: $($svc.Status)"
               exit 0
@@ -430,9 +445,8 @@ jobs:
           PORT = int(os.getenv("SERVICE_PORT", 8102))
 
           print("--- Starting Service via SC.EXE ---")
-          # We use sc.exe because we verified the registry key exists
           result = subprocess.run(
-            ["sc.exe", "start", "FortunaFaucetService"],
+            ["sc.exe", "start", "FortunaWebService"],
             capture_output=True,
             text=True
           )
@@ -459,17 +473,14 @@ jobs:
           if not socket_bound:
             print(f"\n❌ FATAL: Service did not bind port 8102 within 60 seconds")
             print("Dumping service status for debugging:")
-            subprocess.run(["sc.exe", "query", "FortunaFaucetService"])
+            subprocess.run(["sc.exe", "query", "FortunaWebService"])
             sys.exit(1)
 
-          # Give the service a moment to be ready for HTTP requests
           time.sleep(2)
 
           print("\n--- HTTP Health Check ---")
           for attempt in range(5):
             try:
-              # EXOTIC INGREDIENT #4: User-Agent header to look like a real browser/client
-              # Some services reject requests without a User-Agent
               req = urllib.request.Request(f"http://127.0.0.1:{PORT}/health")
               req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)')
 
@@ -481,7 +492,6 @@ jobs:
                   print(f"⚠️  Unexpected status {response.status}")
 
             except urllib.error.HTTPError as e:
-              # 401/403 = service is UP, just has auth issues
               if e.code in [401, 403]:
                 print(f"⚠️  Got HTTP {e.code} — service is responding!")
                 sys.exit(0)
@@ -496,20 +506,29 @@ jobs:
           print("❌ Health Check FAILED after 5 attempts")
           sys.exit(1)
 
+      - name: Gather diagnostics
+        if: failure()
+        shell: pwsh
+        run: |
+          $diag = Join-Path $PWD "installer-diag"
+          Remove-Item $diag -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $diag | Out-Null
+          Copy-Item -Path msi-install.log -Destination $diag -Force
+          Copy-Item -Path "C:\ProgramData\Fortuna\logs\*.log" -Destination $diag -Force -ErrorAction SilentlyContinue
+          Copy-Item -Path "C:\Program Files\Fortuna Faucet\*" -Destination $diag -Recurse -Force -ErrorAction SilentlyContinue
       - name: 📤 Upload Logs on Failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: unified-smoke-test-logs-${{ github.run_id }}
-          path: |
-            msi-install.log
+          path: installer-diag
           retention-days: 7
 
       - name: 🧹 Cleanup
         if: always()
         shell: pwsh
         run: |
-          sc.exe stop FortunaFaucetService 2>&1 | Out-Null
-          sc.exe delete FortunaFaucetService 2>&1 | Out-Null
-          Remove-NetFirewallRule -DisplayName "FortunaFaucetService" -ErrorAction SilentlyContinue
+          sc.exe stop FortunaWebService 2>&1 | Out-Null
+          sc.exe delete FortunaWebService 2>&1 | Out-Null
+          Remove-NetFirewallRule -DisplayName "FortunaWebService" -ErrorAction SilentlyContinue
           Write-Host "✅ Cleanup complete"
