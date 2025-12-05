@@ -977,6 +977,7 @@ jobs:
             '  <PropertyGroup>'
             '    <OutputName>${{ steps.stage.outputs.msi_name }}</OutputName>'
             '    <OutputType>Package</OutputType>'
+            '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>'
             '    <DefineConstants>SourceDir=staging;Version=${{ env.BUILD_VERSION }}</DefineConstants>'
             '    <Platforms>x64</Platforms>'
             '    <Version>${{ env.BUILD_VERSION }}</Version>'
