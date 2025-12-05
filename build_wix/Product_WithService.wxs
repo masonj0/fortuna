@@ -88,11 +88,11 @@
         <Component Id="DataDirectoryComponent" Directory="Dir_Data" Guid="a2e3820a-606b-452f-b43f-b82b9a7852a0">
             <CreateFolder />
         </Component>
-        <Component Id="JsonDirectoryComponent" Directory="Dir_Json" Guid="b4d7ea21-821f-4a0b-9303-3a52e1f42d2a">
-            <CreateFolder />
+        <Component Id="JsonDirectoryComponent" Guid="b4d7ea21-821f-4a0b-9303-3a52e1f42d2a">
+            <CreateFolder Directory="Dir_Json" />
         </Component>
-        <Component Id="LogsDirectoryComponent" Directory="Dir_Logs" Guid="d66f6540-3f11-4475-9a67-9c9852f87a32">
-            <CreateFolder />
+        <Component Id="LogsDirectoryComponent" Guid="d66f6540-3f11-4475-9a67-9c9852f87a32">
+            <CreateFolder Directory="Dir_Logs" />
         </Component>
     </ComponentGroup>
 

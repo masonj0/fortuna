@@ -196,7 +196,7 @@ jobs:
           $proj += '    <OutputName>HatTrickFusion</OutputName>'
           $proj += '    <OutputType>Package</OutputType>'
           $proj += '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>'
-          $proj += '    <DefineConstants>SourceDir=../staging/backend;Version=${{ needs.build-backend.outputs.semver }};ServicePort=${{ env.SERVICE_PORT }}</DefineConstants>'
+          $proj += '    <DefineConstants>SourceDir=../staging/backend;Version=${{ needs.build-backend.outputs.semver }}</DefineConstants>'
           $proj += '    <Platforms>x64</Platforms>'
           $proj += '    <BinderIncludeCabinetFilesInPackage>true</BinderIncludeCabinetFilesInPackage>'
           $proj += '  </PropertyGroup>'
@@ -231,16 +231,19 @@ jobs:
           name: hat-trick-msi
           path: installer
 
-      - name: Verify and Install MSI
+      - name: 🤫 Install MSI (With Logging)
         shell: pwsh
         run: |
-          $msi = Get-ChildItem installer -Filter "*.msi" -Recurse | Select-Object -First 1
-          if (-not $msi) { throw "No MSI found" }
-          $msi.FullName | Set-Content -Path "msi-path.txt" -Encoding utf8
+          if (Get-Service -Name FortunaFaucetService -ErrorAction SilentlyContinue) {
+            sc.exe stop FortunaFaucetService 2>&1 | Out-Null
+            sc.exe delete FortunaFaucetService 2>&1 | Out-Null
+          }
 
-          # Pre-warm firewall
-          if (-not (Get-NetFirewallRule -DisplayName $env:FIREWALL_RULE -ErrorAction SilentlyContinue)) {
-            New-NetFirewallRule -DisplayName $env:FIREWALL_RULE -Direction Inbound -LocalPort $env:SERVICE_PORT -Protocol TCP -Action Allow | Out-Null
+          $msi = Get-ChildItem -Path "installer" -Filter "*.msi" -Recurse | Select-Object -First 1
+          if (-not $msi) {
+            Write-Error "❌ FATAL: No MSI found in artifact"
+            Get-ChildItem -Path "installer" -Recurse
+            exit 1
           }
 
           Write-Host "Installing: $($msi.FullName)"
