@@ -1,4 +1,4 @@
-# System Timestamp: 2025-11-30 10:29:10.703207
+# System Timestamp: 2025-12-04 16:01:12.318079
 name: Build Fortuna Faucet Web Service Installer (Synthesized Overkill)
 
 on:
@@ -813,9 +813,9 @@ jobs:
 
           Write-Host "✅ Installation completed (Exit Code: $($proc.ExitCode)). Verifying service registration..."
 
-          $service = Get-Service -Name "FortunaWebService" -ErrorAction SilentlyContinue
+          $service = Get-Service -Name "FortunaFaucetService" -ErrorAction SilentlyContinue
           if (-not $service) {
-            Write-Error "❌ FATAL: Service 'FortunaWebService' was not registered."
+            Write-Error "❌ FATAL: Service 'FortunaFaucetService' was not registered."
             exit 1
           }
 
@@ -824,8 +824,8 @@ jobs:
       - name: '🚦 LOOP 2 - Start Service & Verify Process'
         shell: pwsh
         run: |
-          Write-Host "Attempting to start the 'FortunaWebService'..."
-          Start-Service -Name "FortunaWebService"
+          Write-Host "Attempting to start the 'FortunaFaucetService'..."
+          Start-Service -Name "FortunaFaucetService"
 
           Write-Host "Waiting for process to appear (up to 30 seconds)..."
           $deadline = (Get-Date).AddSeconds(30)
@@ -843,7 +843,7 @@ jobs:
 
           if (-not $processFound) {
             Write-Error "❌ FATAL: Process did not start after 30 seconds."
-            Get-EventLog -LogName Application -Source "FortunaWebService" -Newest 10 | Format-List
+            Get-EventLog -LogName Application -Source "FortunaFaucetService" -Newest 10 | Format-List
             exit 1
           }
 
@@ -880,8 +880,8 @@ jobs:
         run: |
           Write-Host "=== Capturing Failure Diagnostics ==="
           Get-Content msi-install.log | Out-File diagnostic-install-log.txt
-          Get-EventLog -LogName Application -Source "FortunaWebService" -Newest 20 | Format-List | Out-File diagnostic-eventlog.txt
-          Get-Service -Name "FortunaWebService" | Format-List | Out-File diagnostic-service-state.txt
+          Get-EventLog -LogName Application -Source "FortunaFaucetService" -Newest 20 | Format-List | Out-File diagnostic-eventlog.txt
+          Get-Service -Name "FortunaFaucetService" | Format-List | Out-File diagnostic-service-state.txt
           Get-Process -Name "fortuna-webservice" -ErrorAction SilentlyContinue | Format-List | Out-File diagnostic-process-state.txt
           netstat -anob > diagnostic-netstat.txt
           Write-Host "✅ Diagnostics captured."
@@ -899,7 +899,7 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "Cleaning up..."
-          Stop-Service -Name "FortunaWebService" -Force -ErrorAction SilentlyContinue
+          Stop-Service -Name "FortunaFaucetService" -Force -ErrorAction SilentlyContinue
           # Uninstall may not always work, especially if the service is stuck, but we try.
           $msiPath = "${{ steps.find_msi.outputs.msi_path }}"
           if (Test-Path $msiPath) {
