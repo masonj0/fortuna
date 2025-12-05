@@ -187,7 +187,6 @@ jobs:
           $wxsContent = Get-Content build_wix/Product_WithService.wxs -Raw
 
           # 🛠️ FIX: Remove 'Start="install"' so MSI doesn't hang if service fails
-          # We also ensure Wait="true" is only for uninstall/stop, not start
           $wxsContent = $wxsContent -replace 'Start="install"', ''
 
           # Write it back to the build location
@@ -238,7 +237,7 @@ jobs:
           name: hat-trick-msi
           path: installer
 
-      - name: Verify and Install MSI
+      - name: 🤫 Install MSI (With Logging)
         shell: pwsh
         run: |
           if (Get-Service -Name FortunaFaucetService -ErrorAction SilentlyContinue) {
@@ -246,20 +245,26 @@ jobs:
             sc.exe delete FortunaFaucetService 2>&1 | Out-Null
           }
 
-          $msi = Get-ChildItem installer -Filter "*.msi" -Recurse | Select-Object -First 1
-          if (-not $msi) { throw "No MSI found" }
-          $msi.FullName | Set-Content -Path "msi-path.txt" -Encoding utf8
-
-          # Pre-warm firewall
-          if (-not (Get-NetFirewallRule -DisplayName $env:FIREWALL_RULE -ErrorAction SilentlyContinue)) {
-            New-NetFirewallRule -DisplayName $env:FIREWALL_RULE -Direction Inbound -LocalPort $env:SERVICE_PORT -Protocol TCP -Action Allow | Out-Null
+          $msi = Get-ChildItem -Path "installer" -Filter "*.msi" -Recurse | Select-Object -First 1
+          if (-not $msi) {
+            Write-Error "❌ FATAL: No MSI found in artifact"
+            Get-ChildItem -Path "installer" -Recurse
+            exit 1
           }
 
-          Start-Process msiexec.exe -ArgumentList "/i `"$($msi.FullName)`" /qn /L*v installation.log" -Wait -NoNewWindow
+          Write-Host "Installing: $($msi.FullName)"
+
+          Start-Process msiexec.exe `
+            -ArgumentList "/i `"$($msi.FullName)`" /qn /L*v installation.log" `
+            -Wait `
+            -NoNewWindow
+
           if ($LASTEXITCODE -ne 0) {
-            Get-Content installation.log -Tail 60 | ForEach-Object { Write-Error $_ }
-            throw "Installation failed"
+            Write-Error "❌ MSI Install Failed with exit code $LASTEXITCODE"
+            exit 1
           }
+
+          Write-Host "✅ MSI installation succeeded"
 
       - name: Emit MSI log tail
         if: always()
@@ -331,7 +336,7 @@ jobs:
           Write-Error "UI was not served from the backend."
           exit 1
 
-      - name: Gather diagnostics (installation.log + outputs)
+      - name: Gather diagnostics
         if: failure()
         shell: pwsh
         run: |
@@ -345,5 +350,5 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: hat-trick-fusion-logs
+          name: hat-trick-fusion-logs-${{ github.run_id }}
           path: installer-diag

@@ -38,7 +38,6 @@ env:
   MSI_STAGING_DIR: 'build_wix/staging'
   MSI_OUTPUT_DIR: 'dist'
   WIX_VERSION: '4.0.5'
-  UPGRADE_CODE: 'FA689549-366B-4C5C-A482-1132F9A34B10'
 
 jobs:
   path-finder:
