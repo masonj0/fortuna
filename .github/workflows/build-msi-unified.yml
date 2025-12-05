@@ -14,6 +14,7 @@ env:
   FRONTEND_DIR: 'web_platform/frontend'
   WIX_DIR: 'build_wix'
   SERVICE_PORT: '8102'
+  UPGRADE_CODE: 'FA689549-366B-4C5C-A482-1132F9A34B10'
 
 jobs:
   path-finder:
@@ -324,7 +325,8 @@ jobs:
             '    <OutputName>Fortuna-WebService-Pragmatic</OutputName>'
             '    <OutputType>Package</OutputType>'
             '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>'
-            '    <DefineConstants>SourceDir=../staging/backend;Version=${{ needs.path-finder.outputs.semver }};ServicePort=${{ env.SERVICE_PORT }}</DefineConstants>'
+            '    <DefineConstants>SourceDir=../staging;Version=${{ needs.path-finder.outputs.semver }}</DefineConstants>'
+            # FIX: Embed the CAB file so we don't get Error 1311
             '    <BinderIncludeCabinetFilesInPackage>true</BinderIncludeCabinetFilesInPackage>'
             '  </PropertyGroup>'
             '  <ItemGroup>'
