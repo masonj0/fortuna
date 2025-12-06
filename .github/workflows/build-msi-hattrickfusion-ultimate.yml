@@ -409,7 +409,7 @@ jobs:
             throw "Install failed with code $($proc.ExitCode)"
           }
 
-      - name: ⏳ Loop 1: Service Registration
+      - name: '⏳ Loop 1 - Service Registration'
         shell: pwsh
         run: |
           $reg = "HKLM:\SYSTEM\CurrentControlSet\Services\FortunaWebService"
@@ -419,7 +419,7 @@ jobs:
           }
           throw "Service failed to register in Registry"
 
-      - name: 🚀 Loop 2: Launch & Port Bind
+      - name: '🚀 Loop 2 - Launch & Port Bind'
         shell: python
         env:
           PORT: ${{ env.SERVICE_PORT }}
@@ -444,7 +444,7 @@ jobs:
           subprocess.run(["sc.exe", "query", "FortunaWebService"])
           sys.exit(1)
 
-      - name: 🩺 Loop 3: Health Check
+      - name: '🩺 Loop 3 - Health Check'
         shell: python
         env:
           PORT: ${{ env.SERVICE_PORT }}
@@ -468,7 +468,7 @@ jobs:
               time.sleep(2)
           sys.exit(1)
 
-      - name: 🌐 Loop 4: UI Verification
+      - name: '🌐 Loop 4 - UI Verification'
         shell: pwsh
         run: |
           $uri = "http://127.0.0.1:${{ env.SERVICE_PORT }}/index.html"
