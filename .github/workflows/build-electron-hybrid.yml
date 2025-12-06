@@ -54,12 +54,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
 
-      - name: 📦 Install Python Deps
-        run: |
-          pip install -r ${{ env.BACKEND_DIR }}/requirements-dev.txt
-          pip install pyinstaller==6.6.0
-
-      - name: 📝 Generate Spec & Build (Native Python)
+      - name: 📦 Build Python Backend
         shell: python
         env:
           BACKEND_DIR: ${{ env.BACKEND_DIR }}
@@ -67,19 +62,23 @@ jobs:
         run: |
           import os
           from pathlib import Path
+
+          # 1. Install Dependencies
+          os.system(f"pip install -r {os.environ['BACKEND_DIR']}/requirements-dev.txt")
+          os.system("pip install pyinstaller==6.6.0")
+
           from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
-          # 1. Prepare Paths
+          # 2. Prepare Paths
           bk_dir = os.environ['BACKEND_DIR']
           entry = f"{bk_dir}/main.py"
 
-          # 2. Ensure __init__.py exists (The "Clean Room" check)
+          # 3. Ensure __init__.py exists (The "Clean Room" check)
           init_path = Path(f"{bk_dir}/__init__.py")
           if not init_path.exists():
               init_path.write_text("# Hybrid Injection")
 
-          # 3. Generate Spec with a.pure Injection (The "HatTrick" Logic)
-          # This replaces the "Zip Injection" hack from the old Electron workflow
+          # 4. Generate Spec with a.pure Injection (The "HatTrick" Logic)
           spec_content = f"""
           # -*- mode: python ; coding: utf-8 -*-
           from PyInstaller.utils.hooks import collect_data_files, collect_submodules
@@ -101,7 +100,7 @@ jobs:
               noarchive=False,
           )
 
-          # 💎 THE UPGRADE: Inject __init__ into PURE archive
+          # THE UPGRADE: Inject __init__ into PURE archive
           a.pure += [('{bk_dir}', '{init_path.as_posix()}', 'PYMODULE')]
 
           pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
@@ -118,10 +117,9 @@ jobs:
           )
           """
 
-          with open("hybrid.spec", "w") as f: f.write(spec_content)
+          with open("hybrid.spec", "w", encoding="utf-8") as f: f.write(spec_content)
 
-          # 4. Build
-          # Output directly to where Electron expects it (dist/service)
+          # 5. Build
           os.system("pyinstaller hybrid.spec --clean --noconfirm --distpath dist/service --workpath build/temp")
 
       - name: 📤 Upload Core Artifacts
