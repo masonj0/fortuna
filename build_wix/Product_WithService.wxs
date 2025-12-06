@@ -32,7 +32,7 @@
 
     <!-- UI Configuration -->
     <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
-    <WixVariable Id="WixUILicenseRtf" Value="build_wix/license.rtf" />
+    <WixVariable Id="WixUILicenseRtf" Value="license.rtf" />
     <!-- Note: If you don't have a license.rtf, remove the line above, or WiX will error. -->
 
   </Package>
