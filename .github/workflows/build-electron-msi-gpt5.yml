@@ -450,7 +450,6 @@ jobs:
           New-Item -ItemType Directory -Path $dest -Force | Out-Null
           Copy-Item -Path "python-service-bin/*" -Destination $dest -Recurse -Force
           Write-Host "✅ Backend staged to $dest"
-
       - name: 📥 Install Electron Dependencies
         shell: pwsh
         working-directory: electron

@@ -836,22 +836,18 @@ jobs:
             Write-Host "No msi-install.log found"
           }
 
-      - name: '🚀 LOOP 2 - Start Service & Poll Port'
+      - name: 🚀 Active Port Poll
         shell: pwsh
         run: |
-          Write-Host "Attempting to start the 'FortunaWebService'..."
-          Start-Service -Name "FortunaWebService"
-
-          Write-Host "Polling for port ${{ env.SERVICE_PORT }} to be active..."
           $start = Get-Date
           while ((Get-Date) - $start -lt (New-TimeSpan -Seconds 30)) {
-            if (Test-NetConnection -ComputerName localhost -Port ${{ env.SERVICE_PORT }} -InformationLevel Quiet) {
-              Write-Host "✅ Service is listening on port ${{ env.SERVICE_PORT }}."
-              exit 0
+            if (Test-NetConnection -ComputerName localhost -Port 8102 -InformationLevel Quiet) {
+              Write-Host "✅ Service is listening."
+              return
             }
             Start-Sleep 1
           }
-          throw "❌ Service failed to bind port ${{ env.SERVICE_PORT }} within 30 seconds."
+          throw "❌ Service failed to bind port 8102 within 30 seconds."
 
       - name: '🩺 LOOP 3 - Health Check Endpoint'
         shell: pwsh
