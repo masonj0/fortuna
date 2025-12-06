@@ -227,12 +227,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: backend-dist-${{ needs.path-finder.outputs.build_id }}
-          path: |
-            dist/fortuna-backend.exe
-            dist/fortuna-backend.exe.sha256
-            backend-freeze.txt
+          path: dist/
           retention-days: 3
-
   # ==================================================================================
   # JOB 4: PACKAGE MSI (WiX v4 with NuGet Caching)
   # ==================================================================================
@@ -280,8 +276,24 @@ jobs:
           $wxs = Get-Content "${{ env.WIX_DIR }}/Product_WithService.wxs" -Raw
           $wxs = $wxs -replace 'Start="install"', ''
           $wxs | Set-Content "${{ env.WIX_DIR }}/Product.wxs" -Encoding utf8
-          # Rename EXE
-          Move-Item staging/backend/fortuna-backend.exe staging/backend/fortuna-webservice.exe -Force
+          # --- ROBUST EXECUTABLE STAGING ---
+          $searchRoot = 'staging/backend'
+          # 1. Debug: List contents so we can see where the file actually is
+          Write-Host 'Contents of staging/backend:'
+          Get-ChildItem -Path $searchRoot -Recurse | Select-Object FullName
+          # 2. Find the file recursively (handles 'dist/' nesting)
+          $sourceExe = Get-ChildItem -Path $searchRoot -Filter 'fortuna-backend.exe' -Recurse | Select-Object -First 1
+          if ($null -ne $sourceExe) {
+              Write-Host "✅ Found executable at: $($sourceExe.FullName)"
+
+              # 3. Move and Rename to the path WiX expects
+              $destPath = Join-Path $searchRoot 'fortuna-webservice.exe'
+              Move-Item -Path $sourceExe.FullName -Destination $destPath -Force
+              Write-Host "✅ Staged for WiX at: $destPath"
+          } else {
+              Write-Error "❌ FATAL: fortuna-backend.exe not found in $searchRoot"
+              exit 1
+          }
           # Generate Project
           $proj = @(
             '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">'
@@ -370,12 +382,9 @@ jobs:
           PORT: ${{ env.SERVICE_PORT }}
         run: |
           import os, socket, time, urllib.request, urllib.error, subprocess, sys
-
           port = int(os.environ["PORT"])
-
           print("--- Starting Service ---")
           subprocess.run(["sc.exe", "start", "FortunaWebService"], check=False)
-
           print(f"--- Waiting for Port {port} (60s) ---")
           for _ in range(60):
             try:

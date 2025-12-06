@@ -64,6 +64,21 @@ jobs:
           if (-not (Test-Path "out")) { throw "Frontend build failed to produce 'out' directory" }
 
       # --- ELECTRON ---
+      - name: 📄 Ensure WiX License Exists for electron-builder
+        shell: pwsh
+        run: |
+          # electron-builder uses build_wix/license.rtf by convention
+          $wixDir = 'build_wix'
+          if (-not (Test-Path $wixDir)) { New-Item -ItemType Directory -Path $wixDir | Out-Null }
+          $licensePath = Join-Path $wixDir 'license.rtf'
+          if (-not (Test-Path $licensePath)) {
+            Write-Host '⚠️ License file missing. Generating placeholder for electron-builder...'
+            $rtfContent = '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\f0\fs24 END USER LICENSE AGREEMENT\par\par This is a placeholder license for Fortuna Faucet. Please replace with actual terms.}'
+            Set-Content -Path $licensePath -Value $rtfContent -Encoding Ascii
+            Write-Host '✅ Placeholder license.rtf created.'
+          } else {
+            Write-Host '✅ Existing license.rtf found.'
+          }
       - name: ⚡ Build Electron MSI
         shell: pwsh
         working-directory: ${{ env.ELECTRON_DIR }}
