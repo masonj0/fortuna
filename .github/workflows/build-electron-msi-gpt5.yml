@@ -442,6 +442,14 @@ jobs:
           name: frontend-dist-${{ needs.validate-environment.outputs.build_id }}
           path: web_platform/frontend/out
 
+      - name: 🚚 Stage Backend for Electron Builder
+        shell: pwsh
+        run: |
+          # FIX: Move the backend to where electron-builder expects it
+          $dest = "electron/python_service-bin"
+          New-Item -ItemType Directory -Path $dest -Force | Out-Null
+          Copy-Item -Path "python-service-bin/*" -Destination $dest -Recurse -Force
+          Write-Host "✅ Backend staged to $dest"
       - name: 📥 Install Electron Dependencies
         shell: pwsh
         working-directory: electron
