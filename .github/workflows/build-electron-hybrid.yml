@@ -54,73 +54,17 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
 
+      - name: 🐍 Install Python Dependencies
+        run: |
+          pip install -r ${{ env.BACKEND_DIR }}/requirements-dev.txt
+          pip install pyinstaller==6.6.0
+
       - name: 📦 Build Python Backend
-        shell: python
+        shell: pwsh
         env:
           BACKEND_DIR: ${{ env.BACKEND_DIR }}
           PYTHONUTF8: '1'
-        run: |
-          import os
-          from pathlib import Path
-
-          # 1. Install Dependencies
-          os.system(f"pip install -r {os.environ['BACKEND_DIR']}/requirements-dev.txt")
-          os.system("pip install pyinstaller==6.6.0")
-
-          from PyInstaller.utils.hooks import collect_data_files, collect_submodules
-
-          # 2. Prepare Paths
-          bk_dir = os.environ['BACKEND_DIR']
-          entry = f"{bk_dir}/main.py"
-
-          # 3. Ensure __init__.py exists (The "Clean Room" check)
-          init_path = Path(f"{bk_dir}/__init__.py")
-          if not init_path.exists():
-              init_path.write_text("# Hybrid Injection")
-
-          # 4. Generate Spec with a.pure Injection (The "HatTrick" Logic)
-          spec_content = f"""
-          # -*- mode: python ; coding: utf-8 -*-
-          from PyInstaller.utils.hooks import collect_data_files, collect_submodules
-
-          block_cipher = None
-
-          a = Analysis(
-              ['{entry}'],
-              pathex=[],
-              binaries=[],
-              datas=collect_data_files('uvicorn') + collect_data_files('slowapi'),
-              hiddenimports=collect_submodules('{bk_dir}'),
-              hookspath=[],
-              runtime_hooks=[],
-              excludes=['tests', 'pytest'],
-              win_no_prefer_redirects=False,
-              win_private_assemblies=False,
-              cipher=block_cipher,
-              noarchive=False,
-          )
-
-          # THE UPGRADE: Inject __init__ into PURE archive
-          a.pure += [('{bk_dir}', '{init_path.as_posix()}', 'PYMODULE')]
-
-          pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
-
-          exe = EXE(
-              pyz, a.scripts, [], exclude_binaries=True, name='fortuna-backend',
-              debug=False, bootloader_ignore_signals=False, strip=False, upx=True, console=True
-          )
-
-          # Electron needs a folder (COLLECT), not just a file
-          coll = COLLECT(
-              exe, a.binaries, a.zipfiles, a.datas,
-              strip=False, upx=True, name='fortuna-backend'
-          )
-          """
-
-          with open("hybrid.spec", "w", encoding="utf-8") as f: f.write(spec_content)
-
-          # 5. Build
-          os.system("pyinstaller hybrid.spec --clean --noconfirm --distpath dist/service --workpath build/temp")
+        run: python scripts/generate_spec_electron.py
 
       - name: 📤 Upload Core Artifacts
         uses: actions/upload-artifact@v4
