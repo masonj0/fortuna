@@ -544,7 +544,7 @@ jobs:
 
           print("✅ Ensured non-empty __init__.py files exist for package discovery.")
 
-          entry_point = os.path.join(os.environ['BACKEND_DIR'], "main.py").replace('\\', '/')
+          entry_point = os.path.join(os.environ['BACKEND_DIR'], "service_entry.py").replace('\\', '/')
           staging_ui_path = Path("staging/ui").resolve().as_posix()
           other_service = "python_service" if "web_service" in os.environ['BACKEND_DIR'] else "web_service"
           backend_init = Path("web_service/backend/__init__.py").resolve().as_posix()
@@ -574,7 +574,7 @@ jobs:
               'uvicorn.protocols.http.h11_impl', 'uvicorn.protocols.websockets.wsproto_impl',
               'fastapi.routing', 'starlette.staticfiles', 'anyio._backends._asyncio',
               'httpcore', 'httpx', 'slowapi', 'structlog', 'tenacity', 'aiosqlite',
-              'pydantic_core', 'pydantic_settings.sources'
+              'pydantic_core', 'pydantic_settings.sources', 'win32timezone'
           ]
 
           a = Analysis(

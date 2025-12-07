@@ -160,37 +160,25 @@ jobs:
         run: |
           import os
           from pathlib import Path
+
           bk_dir = os.environ['BACKEND_DIR']
           mod_path = os.environ['MODULE_PATH']
-          entry = f"{bk_dir}/main.py"
-          # Ensure __init__ exists for all potential packages
-          # This covers both 'web_service' and 'python_service' structures
-          inits = [
-              "web_service/__init__.py",
-              "web_service/backend/__init__.py",
-              "python_service/__init__.py"
-          ]
-          pure_injections = []
-          for p in inits:
-              path = Path(p)
-              # Only create if parent dir exists (don't create python_service if we are in web_service mode)
-              if path.parent.exists():
-                  if not path.exists():
-                      path.write_text("# HatTrick Injection")
-                  # Convert path to module name (e.g. web_service/backend -> web_service.backend)
-                  mod_name = str(path.parent).replace(os.sep, '.')
-                  pure_injections.append(f"('{mod_name}', '{path.as_posix()}', 'PYMODULE')")
-          injection_str = ",\n    ".join(pure_injections)
+          # CHANGE: Point to the new service wrapper
+          entry = f"{bk_dir}/service_entry.py"
+
           spec = f"""
           # -*- mode: python ; coding: utf-8 -*-
           from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+
           block_cipher = None
+
           a = Analysis(
               ['{entry}'],
               pathex=[],
               binaries=[],
               datas=collect_data_files('uvicorn') + collect_data_files('slowapi') + [('{os.environ['FRONTEND_OUT']}', 'ui')],
-              hiddenimports=collect_submodules('{mod_path}'),
+              # CHANGE: Add win32timezone to hidden imports (critical for pywin32)
+              hiddenimports=collect_submodules('{mod_path}') + ['win32timezone'],
               hookspath=[],
               runtime_hooks=[],
               excludes=['tests', 'pytest'],
@@ -199,10 +187,6 @@ jobs:
               cipher=block_cipher,
               noarchive=False,
           )
-          # ☢️ PURE INJECTION (Dynamic)
-          a.pure += [
-              {injection_str}
-          ]
           pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
           exe = EXE(
               pyz, a.scripts, a.binaries, a.zipfiles, a.datas, [],
@@ -210,7 +194,6 @@ jobs:
           )
           """
           with open("hat-trick.spec", "w") as f: f.write(spec)
-          # Build
           os.system("pyinstaller hat-trick.spec --clean --noconfirm")
       - name: Verify & Hash Executable
         shell: pwsh
@@ -271,49 +254,36 @@ jobs:
       - name: Prepare WiX
         shell: pwsh
         run: |
+          Set-StrictMode -Version Latest
           if (-not (Test-Path build_wix)) { New-Item -ItemType Directory -Path build_wix | Out-Null }
-          # Copy Template & Patch (Remove Start="install")
-          $wxs = Get-Content "${{ env.WIX_DIR }}/Product_WithService.wxs" -Raw
-          $wxs = $wxs -replace 'Start="install"', ''
-          $wxs | Set-Content "${{ env.WIX_DIR }}/Product.wxs" -Encoding utf8
-          # --- ROBUST EXECUTABLE STAGING ---
-          $searchRoot = 'staging/backend'
-          # 1. Debug: List contents so we can see where the file actually is
-          Write-Host 'Contents of staging/backend:'
-          Get-ChildItem -Path $searchRoot -Recurse | Select-Object FullName
-          # 2. Find the file recursively (handles 'dist/' nesting)
-          $sourceExe = Get-ChildItem -Path $searchRoot -Filter 'fortuna-backend.exe' -Recurse | Select-Object -First 1
-          if ($null -ne $sourceExe) {
-              Write-Host "✅ Found executable at: $($sourceExe.FullName)"
 
-              # 3. Move and Rename to the path WiX expects
-              $destPath = Join-Path $searchRoot 'fortuna-webservice.exe'
-              Move-Item -Path $sourceExe.FullName -Destination $destPath -Force
-              Write-Host "✅ Staged for WiX at: $destPath"
-          } else {
-              Write-Error "❌ FATAL: fortuna-backend.exe not found in $searchRoot"
-              exit 1
+          # Copy template
+          Copy-Item build_wix/Product_WithService.wxs build_wix/Product.wxs -Force
+
+          # Stage Executable
+          if (Test-Path staging/backend/fortuna-backend.exe) {
+            Move-Item staging/backend/fortuna-backend.exe staging/backend/fortuna-webservice.exe -Force
           }
-          # Generate Project
+
+          # Generate Valid .wixproj
           $proj = @(
-            '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">'
-            '  <PropertyGroup>'
-            '    <OutputName>HatTrickFusion</OutputName>'
-            '    <OutputType>Package</OutputType>'
-            '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>'
-            '    <DefineConstants>SourceDir=../staging/backend;Version=${{ needs.path-finder.outputs.semver }};ServicePort=${{ env.SERVICE_PORT }}</DefineConstants>'
-            '    <Platforms>x64</Platforms>'
-            '    <BinderIncludeCabinetFilesInPackage>true</BinderIncludeCabinetFilesInPackage>'
-            '  </PropertyGroup>'
-            '  <ItemGroup>'
-            '    <PackageReference Include="WixToolset.Firewall.wixext" Version="${{ env.WIX_VERSION }}" />'
-            '    <PackageReference Include="WixToolset.UI.wixext" Version="${{ env.WIX_VERSION }}" />'
-            '    <PackageReference Include="WixToolset.Util.wixext" Version="${{ env.WIX_VERSION }}" />'
-            '  </ItemGroup>'
-            '  <ItemGroup><Compile Include="Product.wxs" /></ItemGroup>'
+            '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">',
+            '  <PropertyGroup>',
+            '    <OutputName>HatTrickFusion</OutputName>',
+            '    <OutputType>Package</OutputType>',
+            '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>',
+            '    <DefineConstants>SourceDir=../staging/backend;Version=${{ needs.path-finder.outputs.semver }};ServicePort=${{ env.SERVICE_PORT }}</DefineConstants>',
+            '    <Platforms>x64</Platforms>',
+            '  </PropertyGroup>',
+            '  <ItemGroup>',
+            '    <PackageReference Include="WixToolset.Firewall.wixext" Version="${{ env.WIX_VERSION }}" />',
+            '    <PackageReference Include="WixToolset.UI.wixext" Version="${{ env.WIX_VERSION }}" />',
+            '    <PackageReference Include="WixToolset.Util.wixext" Version="${{ env.WIX_VERSION }}" />',
+            '  </ItemGroup>',
+            '  <ItemGroup><Compile Include="Product.wxs" /></ItemGroup>',
             '</Project>'
           )
-          Set-Content "${{ env.WIX_DIR }}/Fortuna.wixproj" -Value ($proj -join "`n") -Encoding utf8
+          Set-Content build_wix/Fortuna.wixproj ($proj -join "`r`n") -Encoding utf8
       - name: Build MSI
         working-directory: ${{ env.WIX_DIR }}
         run: dotnet build Fortuna.wixproj -c Release -p:Platform=x64
@@ -360,7 +330,9 @@ jobs:
           $msi = Get-ChildItem installer -Filter "*.msi" -Recurse | Select -First 1
           if (!$msi) { throw "No MSI found" }
           Write-Host "Installing $($msi.Name)..."
-          $proc = Start-Process msiexec.exe -ArgumentList "/i `"$($msi.FullName)`" /qn /L*v install.log" -Wait -PassThru
+          $msiPath = $msi.FullName
+          $args = "/i `"$msiPath`" /qn /Lv installation.log"
+          $proc = Start-Process msiexec.exe -ArgumentList $args -Wait -NoNewWindow -PassThru
           if ($proc.ExitCode -ne 0) {
             Get-Content install.log -Tail 50
             throw "Install failed with code $($proc.ExitCode)"

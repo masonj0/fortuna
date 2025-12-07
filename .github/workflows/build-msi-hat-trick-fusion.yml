@@ -75,30 +75,22 @@ jobs:
           pip install -r ${{ steps.meta.outputs.backend_dir }}/requirements.txt
           pip install pyinstaller==6.6.0
 
-      - name: Generate PyInstaller Spec
+      - name: Generate Spec & Build
         shell: python
         env:
           BACKEND_DIR: ${{ steps.meta.outputs.backend_dir }}
           MODULE_PATH: ${{ env.module_path }}
+          FRONTEND_OUT: web_platform/frontend/out
         run: |
           import os
           from pathlib import Path
 
-          backend_dir = os.environ['BACKEND_DIR']
-          module_path = os.environ['MODULE_PATH']
-          entry = f"{backend_dir}/main.py"
+          bk_dir = os.environ['BACKEND_DIR']
+          mod_path = os.environ['MODULE_PATH']
+          # CHANGE: Point to the new service wrapper
+          entry = f"{bk_dir}/service_entry.py"
 
-          # FIX: Ensure directories exist before writing __init__.py
-          p_init = Path("web_service/__init__.py")
-          b_init = Path("web_service/backend/__init__.py")
-
-          p_init.parent.mkdir(parents=True, exist_ok=True)
-          b_init.parent.mkdir(parents=True, exist_ok=True)
-
-          p_init.write_text("# HatTrick")
-          b_init.write_text("# HatTrick")
-
-          spec_content = f"""
+          spec = f"""
           # -*- mode: python ; coding: utf-8 -*-
           from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
@@ -108,11 +100,10 @@ jobs:
               ['{entry}'],
               pathex=[],
               binaries=[],
-              # Frontend is now present at this path
-              datas=collect_data_files('uvicorn') + collect_data_files('slowapi') + [('web_platform/frontend/out', 'ui')],
-              hiddenimports=collect_submodules('{module_path}') + ['uvicorn.logging', 'uvicorn.loops.auto', 'uvicorn.protocols.http.h11_impl'],
+              datas=collect_data_files('uvicorn') + collect_data_files('slowapi') + [('{os.environ['FRONTEND_OUT']}', 'ui')],
+              # CHANGE: Add win32timezone to hidden imports (critical for pywin32)
+              hiddenimports=collect_submodules('{mod_path}') + ['win32timezone'],
               hookspath=[],
-              hooksconfig={{}},
               runtime_hooks=[],
               excludes=['tests', 'pytest'],
               win_no_prefer_redirects=False,
@@ -120,41 +111,14 @@ jobs:
               cipher=block_cipher,
               noarchive=False,
           )
-
-          # PURE INJECTION (The Gold Standard)
-          a.pure += [
-              ('web_service', '{p_init}', 'PYMODULE'),
-              ('web_service.backend', '{b_init}', 'PYMODULE')
-          ]
-
           pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
           exe = EXE(
-              pyz,
-              a.scripts,
-              a.binaries,
-              a.zipfiles,
-              a.datas,
-              [],
-              name='fortuna-backend',
-              debug=False,
-              bootloader_ignore_signals=False,
-              strip=False,
-              upx=True,
-              upx_exclude=[],
-              runtime_tmpdir=None,
-              console=False,
-              disable_windowed_traceback=False,
-              argv_emulation=False,
-              target_arch=None,
-              codesign_identity=None,
-              entitlements_file=None,
+              pyz, a.scripts, a.binaries, a.zipfiles, a.datas, [],
+              name='fortuna-backend', debug=False, bootloader_ignore_signals=False, strip=False, upx=True, console=False
           )
           """
-          Path("hat-trick.spec").write_text(spec_content)
-          print("Generated spec")
-
-      - name: Build Executable
-        run: pyinstaller hat-trick.spec --clean --noconfirm
+          with open("hat-trick.spec", "w") as f: f.write(spec)
+          os.system("pyinstaller hat-trick.spec --clean --noconfirm")
 
       - name: Upload Backend
         uses: actions/upload-artifact@v4
@@ -196,39 +160,33 @@ jobs:
           Set-StrictMode -Version Latest
           if (-not (Test-Path build_wix)) { New-Item -ItemType Directory -Path build_wix | Out-Null }
 
-          # Copy the authoritative template to the build location
+          # Copy template
           Copy-Item build_wix/Product_WithService.wxs build_wix/Product.wxs -Force
 
-          # Dynamically remove the problematic Start="install" attribute to prevent timeouts
-          $wxsPath = "build_wix/Product.wxs"
-          $wxsContent = Get-Content $wxsPath -Raw
-          $wxsContent = $wxsContent -replace 'Start="install"', ''
-          Set-Content -Path $wxsPath -Value $wxsContent -Encoding UTF8 -Force
-
+          # Stage Executable
           if (Test-Path staging/backend/fortuna-backend.exe) {
             Move-Item staging/backend/fortuna-backend.exe staging/backend/fortuna-webservice.exe -Force
           }
 
-          $proj = @()
-          $proj += '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">'
-          $proj += '  <PropertyGroup>'
-          $proj += '    <OutputName>HatTrickFusion</OutputName>'
-          $proj += '    <OutputType>Package</OutputType>'
-          $proj += '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>'
-          $proj += '    <DefineConstants>SourceDir=../staging/backend;Version=${{ needs.build-backend.outputs.semver }};ServicePort=${{ env.SERVICE_PORT }}</DefineConstants>'
-          $proj += '    <Platforms>x64</Platforms>'
-          $proj += '    <BinderIncludeCabinetFilesInPackage>true</BinderIncludeCabinetFilesInPackage>'
-          $proj += '  </PropertyGroup>'
-          $proj += '  <ItemGroup>'
-          $proj += '    <PackageReference Include="WixToolset.Firewall.wixext" Version="${{ env.WIX_VERSION }}" />'
-          $proj += '    <PackageReference Include="WixToolset.UI.wixext" Version="${{ env.WIX_VERSION }}" />'
-          $proj += '    <PackageReference Include="WixToolset.Util.wixext" Version="${{ env.WIX_VERSION }}" />'
-          $proj += '  </ItemGroup>'
-          $proj += '  <ItemGroup>'
-          $proj += '    <Compile Include="Product.wxs" />'
-          $proj += '  </ItemGroup>'
-          $proj += '</Project>'
-          Set-Content build_wix/Fortuna.wixproj ($proj -join "`n") -Encoding utf8
+          # Generate Valid .wixproj
+          $proj = @(
+            '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">',
+            '  <PropertyGroup>',
+            '    <OutputName>HatTrickFusion</OutputName>',
+            '    <OutputType>Package</OutputType>',
+            '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>',
+            '    <DefineConstants>SourceDir=../staging/backend;Version=${{ needs.build-backend.outputs.semver }};ServicePort=${{ env.SERVICE_PORT }}</DefineConstants>',
+            '    <Platforms>x64</Platforms>',
+            '  </PropertyGroup>',
+            '  <ItemGroup>',
+            '    <PackageReference Include="WixToolset.Firewall.wixext" Version="${{ env.WIX_VERSION }}" />',
+            '    <PackageReference Include="WixToolset.UI.wixext" Version="${{ env.WIX_VERSION }}" />',
+            '    <PackageReference Include="WixToolset.Util.wixext" Version="${{ env.WIX_VERSION }}" />',
+            '  </ItemGroup>',
+            '  <ItemGroup><Compile Include="Product.wxs" /></ItemGroup>',
+            '</Project>'
+          )
+          Set-Content build_wix/Fortuna.wixproj ($proj -join "`r`n") -Encoding utf8
 
       - name: Build MSI
         working-directory: build_wix
@@ -276,14 +234,10 @@ jobs:
 
           Write-Host "Installing: $($msi.FullName)"
 
-          # FIX: Use -PassThru to capture the process object
-          $proc = Start-Process msiexec.exe `
-            -ArgumentList "/i `"$($msi.FullName)`" /qn /L*v installation.log" `
-            -Wait `
-            -NoNewWindow `
-            -PassThru
+          $msiPath = $msi.FullName
+          $args = "/i `"$msiPath`" /qn /Lv installation.log"
+          $proc = Start-Process msiexec.exe -ArgumentList $args -Wait -NoNewWindow -PassThru
 
-          # FIX: Check the specific process exit code
           if ($proc.ExitCode -ne 0) {
             Write-Error "❌ MSI Install Failed with exit code $($proc.ExitCode)"
             Get-Content installation.log -Tail 60 | ForEach-Object { Write-Error $_ }
