@@ -236,7 +236,7 @@ jobs:
 
           $msiPath = $msi.FullName
           # FIX: Quote escaping
-          $args = "/i `"$msiPath`" /qn /Lv installation.log"
+          $args = "/i `"$msiPath`" /qn /L*v installation.log"
           $proc = Start-Process msiexec.exe -ArgumentList $args -Wait -NoNewWindow -PassThru
 
           if ($proc.ExitCode -ne 0) {

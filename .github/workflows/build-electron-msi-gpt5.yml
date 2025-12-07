@@ -182,7 +182,7 @@ jobs:
           $backend_init = (Resolve-Path "python_service/__init__.py").Path.Replace('\\', '/')
 
           $specContent = @(
-            "# -*- mode: python ; coding: utf-8 -*-",
+            "# -- mode: python ; coding: utf-8 --",
             "import os",
             "from pathlib import Path",
             "from PyInstaller.utils.hooks import collect_data_files, collect_submodules",
@@ -197,59 +197,59 @@ jobs:
             "",
             "hiddenimports = collect_submodules('python_service')",
             "hiddenimports += [",
-            "    'uvicorn.logging', 'uvicorn.loops.auto', 'uvicorn.lifespan.on',",
-            "    'uvicorn.protocols.http.h11_impl', 'uvicorn.protocols.websockets.wsproto_impl',",
-            "    'fastapi.routing', 'starlette.staticfiles', 'anyio._backends._asyncio',",
-            "    'httpcore', 'httpx', 'slowapi', 'structlog', 'tenacity', 'aiosqlite',",
-            "    'pydantic_core'",
+            " 'uvicorn.logging', 'uvicorn.loops.auto', 'uvicorn.lifespan.on',",
+            " 'uvicorn.protocols.http.h11_impl', 'uvicorn.protocols.websockets.wsproto_impl',",
+            " 'fastapi.routing', 'starlette.staticfiles', 'anyio._backends._asyncio',",
+            " 'httpcore', 'httpx', 'slowapi', 'structlog', 'tenacity', 'aiosqlite',",
+            " 'pydantic_core'",
             "]",
             "",
             "a = Analysis(",
-            "    ['$entry_point'],",
-            "    pathex=[str(project_root)],",
-            "    binaries=[],",
-            "    datas=datas,",
-            "    hiddenimports=hiddenimports,",
-            "    hookspath=[],",
-            "    runtime_hooks=[],",
-            "    excludes=['tests', 'pytest', '$other_service'],",
-            "    win_no_prefer_redirects=False,",
-            "    win_private_assemblies=False,",
-            "    cipher=block_cipher,",
-            "    noarchive=False",
+            " ['$entry_point'],",
+            " pathex=[str(project_root)],",
+            " binaries=[],",
+            " datas=datas,",
+            " hiddenimports=hiddenimports,",
+            " hookspath=[],",
+            " runtime_hooks=[],",
+            " excludes=['tests', 'pytest', '$other_service'],",
+            " win_no_prefer_redirects=False,",
+            " win_private_assemblies=False,",
+            " cipher=block_cipher,",
+            " noarchive=False",
             ")",
             "",
-            "# ☢️ NUCLEAR OVERRIDE: Force __init__ files into the PYZ archive",
+            "# ☢️ NUCLEAR OVERRIDE: Force init files into the PYZ archive",
             "a.pure += [",
-            "    ('python_service', '$backend_init', 'PYMODULE')",
+            " ('python_service', '$backend_init', 'PYMODULE')",
             "]",
             "",
             "pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)",
             "exe = EXE(",
-            "    pyz,",
-            "    a.scripts,",
-            "    a.binaries,",
-            "    a.zipfiles,",
-            "    a.datas,",
-            "    [],",
-            "    name='fortuna-backend',",
-            "    debug=False,",
-            "    bootloader_ignore_signals=False,",
-            "    strip=False,",
-            "    upx=True,",
-            "    runtime_tmpdir=None,",
-            "    console=True,",
-            "    disable_windowed_traceback=False,",
-            "    argv_emulation=False,",
-            "    target_arch=None,",
-            "    codesign_identity=None,",
-            "    entitlements_file=None",
+            " pyz,",
+            " a.scripts,",
+            " a.binaries,",
+            " a.zipfiles,",
+            " a.datas,",
+            " [],",
+            " name='fortuna-backend',",
+            " debug=False,",
+            " bootloader_ignore_signals=False,",
+            " strip=False,",
+            " upx=True,",
+            " runtime_tmpdir=None,",
+            " console=True,",
+            " disable_windowed_traceback=False,",
+            " argv_emulation=False,",
+            " target_arch=None,",
+            " codesign_identity=None,",
+            " entitlements_file=None",
             ")"
           )
           Set-Content -Path "fortuna-backend-electron.spec" -Value $specContent
           Write-Host "✅ Dynamically generated 'fortuna-backend-electron.spec' with PYZ Injection."
 
-      - name: 🧱 Build Python Service with PyInstaller
+      - name: 🔨 Build Python Service with PyInstaller
         shell: pwsh
         run: |
           $specFile = 'fortuna-backend-electron.spec'
@@ -278,7 +278,7 @@ jobs:
 
           Write-Host "✓ Service executable: $($serviceExe.FullName) ($('{0:N0}' -f $serviceExe.Length) bytes)"
 
-      - name: 🔬 Verify Service Executable
+      - name: 🧪 Verify Service Executable
         shell: pwsh
         run: |
           $serviceExe = Get-ChildItem -Path ".\\dist\\service" -Filter "*.exe" | Select-Object -First 1
@@ -343,7 +343,7 @@ jobs:
           }
           npm list --depth=0
 
-      - name: 🧱 Build Frontend
+      - name: 🔨 Build Frontend
         shell: pwsh
         working-directory: web_platform/frontend
         run: |
@@ -390,7 +390,7 @@ jobs:
       - name: 📥 Checkout Repository
         uses: actions/checkout@v4
 
-      - name: 🕵️ Forensic Asset Verification
+      - name: 🧐 Forensic Asset Verification
         shell: pwsh
         run: |
           Set-StrictMode -Version Latest
@@ -406,9 +406,9 @@ jobs:
             if (Test-Path -LiteralPath $asset.Path) {
               $file_info = Get-Item -LiteralPath $asset.Path
               $hash = (Get-FileHash -LiteralPath $asset.Path -Algorithm SHA256).Hash
-              Write-Host "  ✅ FOUND: $($file_info.Length) bytes, SHA256: $($hash.Substring(0,12))" -ForegroundColor Green
+              Write-Host " ✅ FOUND: $($file_info.Length) bytes, SHA256: $($hash.Substring(0,12))" -ForegroundColor Green
             } else {
-              Write-Host "  ❌ MISSING" -ForegroundColor Red
+              Write-Host " ❌ MISSING" -ForegroundColor Red
               $all_assets_found = $false
             }
           }
@@ -418,7 +418,7 @@ jobs:
             Write-Host "\\n--- Filesystem State ---"
             Write-Host "Listing contents of 'electron/assets' directory for debugging:"
             Get-ChildItem -Path "electron/assets" -Recurse | ForEach-Object {
-              Write-Host "  - $($_.FullName.Replace($env:GITHUB_WORKSPACE, ''))"
+              Write-Host " - $($_.FullName.Replace($env:GITHUB_WORKSPACE, ''))"
             }
             exit 1
           }
@@ -460,7 +460,7 @@ jobs:
           #FIX: Move the backend to where electron-builder expects it
           $dest = "electron/python_service-bin"
           New-Item -ItemType Directory -Path $dest -Force | Out-Null
-          Move-Item -Path "python-service-bin/*" -Destination $dest -Force
+          Move-Item -Path "python-service-bin/" -Destination $dest -Force
           Write-Host "✅ Backend staged to $dest"
 
       - name: 📥 Install Electron Dependencies
@@ -473,7 +473,7 @@ jobs:
             exit 1
           }
 
-      - name: '🕵️ Forensically Guarantee Icon Paths'
+      - name: '🧐 Forensically Guarantee Icon Paths'
         shell: pwsh
         run: |
           Set-StrictMode -Version Latest
@@ -510,18 +510,18 @@ jobs:
           # We unconditionally remove them here to prevent schema validation errors, catching the error if they don't exist.
           try {
             $config.msi.PSObject.Properties.Remove('installerIcon')
-            Write-Host "  -> Removed 'msi.installerIcon' property." -ForegroundColor Yellow
+            Write-Host " -> Removed 'msi.installerIcon' property." -ForegroundColor Yellow
           } catch {
-            Write-Host "  -> 'msi.installerIcon' property did not exist, no action needed."
+            Write-Host " -> 'msi.installerIcon' property did not exist, no action needed."
           }
           try {
             $config.msi.PSObject.Properties.Remove('uninstallerIcon')
-            Write-Host "  -> Removed 'msi.uninstallerIcon' property." -ForegroundColor Yellow
+            Write-Host " -> Removed 'msi.uninstallerIcon' property." -ForegroundColor Yellow
           } catch {
-            Write-Host "  -> 'msi.uninstallerIcon' property did not exist, no action needed."
+            Write-Host " -> 'msi.uninstallerIcon' property did not exist, no action needed."
           }
 
-          Write-Host "  -> Set win.icon to '$normalizedIconPath'" -ForegroundColor Green
+          Write-Host " -> Set win.icon to '$normalizedIconPath'" -ForegroundColor Green
 
           # 5. Convert back to YAML and write to a NEW temporary config file
           $tempConfigPath = 'electron/temp-builder-config.yml'
@@ -566,7 +566,7 @@ jobs:
           } else {
             Write-Host '✅ Existing license.rtf found.'
           }
-      - name: 🧱 Build Electron Application
+      - name: 🔨 Build Electron Application
         shell: pwsh
         working-directory: electron
         run: |
@@ -622,7 +622,7 @@ jobs:
 
             # Generate checksum
             $hash = (Get-FileHash -LiteralPath $msi.FullName -Algorithm SHA256).Hash
-            Write-Host "  SHA256: $hash"
+            Write-Host " SHA256: $hash"
             $hash | Out-File -FilePath "$($msi.FullName).sha256"
           }
 
@@ -662,7 +662,7 @@ jobs:
 
           # Find all MSIs, excluding any inside the destination folder.
           $msiFiles = Get-ChildItem -Path "." -Recurse -Filter "*.msi" |
-                      Where-Object { $_.FullName -notlike "$destAbsolutePath*" }
+            Where-Object { $_.FullName -notlike "$destAbsolutePath" }
 
           if ($msiFiles.Count -eq 0) {
             Write-Error "No MSI files found to stage!"
@@ -717,12 +717,12 @@ jobs:
           name: fortuna-electron-msi-${{ needs.validate-environment.outputs.build_id }}
           path: msi-installer
 
-      - name: 📝 Inspect Artifact
+      - name: 📋 Inspect Artifact
         shell: pwsh
         run: |
           Write-Host "=== Artifact Contents ==="
           Get-ChildItem -Path "msi-installer" -Recurse | ForEach-Object {
-            Write-Host "  $($_.FullName)"
+            Write-Host " $($_.FullName)"
           }
 
       - name: 🤫 Install MSI & Verify
@@ -730,7 +730,7 @@ jobs:
         run: |
           # EXOTIC INGREDIENT #1: Find MSI with recursion
           $msi = Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse -ErrorAction SilentlyContinue |
-                 Select-Object -First 1
+            Select-Object -First 1
 
           if (-not $msi) {
             Write-Error "❌ FATAL: No MSI file found in artifact"
@@ -740,15 +740,15 @@ jobs:
           Write-Host "Installing: $($msi.Name)"
 
           # EXOTIC INGREDIENT #2: Logging with /L*v
-          $proc = Start-Process msiexec.exe `
-            -ArgumentList "/i `"$($msi.FullName)`" /qn /L*v msi-install.log" `
-            -Wait `
+          $proc = Start-Process msiexec.exe
+            -ArgumentList "/i `"$($msi.FullName)`" /qn /L*v msi-install.log"
+            -Wait
             -PassThru
 
           if ($proc.ExitCode -ne 0) {
             Write-Error "❌ MSI Install Failed with exit code $($proc.ExitCode)"
             if (Test-Path msi-install.log) {
-                Get-Content msi-install.log | Select-Object -Last 50
+              Get-Content msi-install.log | Select-Object -Last 50
             }
             exit 1
           }
@@ -768,12 +768,12 @@ jobs:
             exit 1
           }
 
-          $exe = Get-ChildItem -Path $root `
-                 -Filter "*.exe" `
-                 -Recurse `
-                 -ErrorAction SilentlyContinue |
-                 Where-Object { $_.Name -notmatch 'uninstall' } |
-                 Select-Object -First 1
+          $exe = Get-ChildItem -Path $root
+            -Filter "*.exe"
+            -Recurse
+            -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -notmatch 'uninstall' } |
+            Select-Object -First 1
 
           if (-not $exe) {
             Write-Error "❌ No main executable found in $root"
@@ -801,13 +801,11 @@ jobs:
           $backendFound = $false
 
           while ((Get-Date) -lt $deadline) {
-            # Check for Electron process (by name)
-            $electronProc = Get-Process -Name "Fortuna Faucet" -ErrorAction SilentlyContinue |
-                            Select-Object -First 1
+            # Check for Electron process
+            $electronProc = Get-Process -Name "Fortuna Faucet" -ErrorAction SilentlyContinue | Select-Object -First 1
 
             # Check for Python backend
-            $backendProc = Get-Process -Name "fortuna-backend" -ErrorAction SilentlyContinue |
-                           Select-Object -First 1
+            $backendProc = Get-Process -Name "fortuna-backend" -ErrorAction SilentlyContinue | Select-Object -First 1
 
             if ($electronProc) {
               Write-Host "✅ Electron process running (PID: $($electronProc.Id))"
@@ -819,16 +817,16 @@ jobs:
               $backendFound = $true
             }
 
-            # Success: Both Electron and Python backend must be running
+            # FIX: Require BOTH processes
             if ($electronFound -and $backendFound) {
-              Write-Host "✅ SUCCESS: Main application and backend are running."
+              Write-Host "✅ SUCCESS: Main application AND Backend are running."
               exit 0
             }
 
             Start-Sleep -Milliseconds 500
           }
 
-          Write-Error "❌ TIMEOUT: Electron process never started within 60 seconds"
+          Write-Error "❌ TIMEOUT: One or both processes failed to stabilize."
           Get-Process | Where-Object { $_.Name -like "*Fortuna*" } | Format-Table
           exit 1
 
@@ -889,25 +887,13 @@ jobs:
           $destDir = "final-release-artifact"
           New-Item -ItemType Directory -Path $destDir -Force | Out-Null
 
-          # Run Robocopy
-          robocopy $sourceDir $destDir /E
-
-          # Robocopy Exit Codes:
-          # 0 = No files copied (No errors)
-          # 1 = Files copied successfully (No errors)
-          # 2 = Extra files detected (No errors)
-          # 3 = (2+1) Some files copied, some extras (No errors)
-          # 4+ = Mismatched files or actual errors
-
-          if ($LASTEXITCODE -le 3) {
-            Write-Host "✅ Robocopy completed successfully (Exit Code: $LASTEXITCODE)."
-            Get-ChildItem -Path $destDir | Write-Host
-            # FORCE SUCCESS
-            exit 0
-          } else {
-            Write-Error "❌ Robocopy failed with exit code $LASTEXITCODE."
-            exit 1
+          # FIX: $. -> $_.
+          Get-ChildItem -Path $sourceDir -Recurse | ForEach-Object {
+            $destPath = Join-Path $destDir $_.Name
+            Move-Item -Path $_.FullName -Destination $destPath -Force
           }
+
+          Write-Host "✅ Artifacts staged to $destDir"
 
       - name: 📤 Upload Final MSI Artifact
         uses: actions/upload-artifact@v4
