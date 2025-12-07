@@ -160,39 +160,33 @@ jobs:
           Set-StrictMode -Version Latest
           if (-not (Test-Path build_wix)) { New-Item -ItemType Directory -Path build_wix | Out-Null }
 
-          # Copy the authoritative template to the build location
+          # Copy template
           Copy-Item build_wix/Product_WithService.wxs build_wix/Product.wxs -Force
 
-          # Dynamically remove the problematic Start="install" attribute to prevent timeouts
-          $wxsPath = "build_wix/Product.wxs"
-          $wxsContent = Get-Content $wxsPath -Raw
-          $wxsContent = $wxsContent -replace 'Start="install"', ''
-          Set-Content -Path $wxsPath -Value $wxsContent -Encoding UTF8 -Force
-
+          # Stage Executable
           if (Test-Path staging/backend/fortuna-backend.exe) {
             Move-Item staging/backend/fortuna-backend.exe staging/backend/fortuna-webservice.exe -Force
           }
 
-          $proj = @()
-          $proj += '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">'
-          $proj += '  <PropertyGroup>'
-          $proj += '    <OutputName>HatTrickFusion</OutputName>'
-          $proj += '    <OutputType>Package</OutputType>'
-          $proj += '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>'
-          $proj += '    <DefineConstants>SourceDir=../staging/backend;Version=${{ needs.build-backend.outputs.semver }};ServicePort=${{ env.SERVICE_PORT }}</DefineConstants>'
-          $proj += '    <Platforms>x64</Platforms>'
-          $proj += '    <BinderIncludeCabinetFilesInPackage>true</BinderIncludeCabinetFilesInPackage>'
-          $proj += '  </PropertyGroup>'
-          $proj += '  <ItemGroup>'
-          $proj += '    <PackageReference Include="WixToolset.Firewall.wixext" Version="${{ env.WIX_VERSION }}" />'
-          $proj += '    <PackageReference Include="WixToolset.UI.wixext" Version="${{ env.WIX_VERSION }}" />'
-          $proj += '    <PackageReference Include="WixToolset.Util.wixext" Version="${{ env.WIX_VERSION }}" />'
-          $proj += '  </ItemGroup>'
-          $proj += '  <ItemGroup>'
-          $proj += '    <Compile Include="Product.wxs" />'
-          $proj += '  </ItemGroup>'
-          $proj += '</Project>'
-          Set-Content build_wix/Fortuna.wixproj ($proj -join "`n") -Encoding utf8
+          # Generate Valid .wixproj
+          $proj = @(
+            '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">',
+            '  <PropertyGroup>',
+            '    <OutputName>HatTrickFusion</OutputName>',
+            '    <OutputType>Package</OutputType>',
+            '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>',
+            '    <DefineConstants>SourceDir=../staging/backend;Version=${{ needs.build-backend.outputs.semver }};ServicePort=${{ env.SERVICE_PORT }}</DefineConstants>',
+            '    <Platforms>x64</Platforms>',
+            '  </PropertyGroup>',
+            '  <ItemGroup>',
+            '    <PackageReference Include="WixToolset.Firewall.wixext" Version="${{ env.WIX_VERSION }}" />',
+            '    <PackageReference Include="WixToolset.UI.wixext" Version="${{ env.WIX_VERSION }}" />',
+            '    <PackageReference Include="WixToolset.Util.wixext" Version="${{ env.WIX_VERSION }}" />',
+            '  </ItemGroup>',
+            '  <ItemGroup><Compile Include="Product.wxs" /></ItemGroup>',
+            '</Project>'
+          )
+          Set-Content build_wix/Fortuna.wixproj ($proj -join "`r`n") -Encoding utf8
 
       - name: Build MSI
         working-directory: build_wix
@@ -240,14 +234,10 @@ jobs:
 
           Write-Host "Installing: $($msi.FullName)"
 
-          # FIX: Use -PassThru to capture the process object
-          $proc = Start-Process msiexec.exe `
-            -ArgumentList "/i `"$($msi.FullName)`" /qn /L*v installation.log" `
-            -Wait `
-            -NoNewWindow `
-            -PassThru
+          $msiPath = $msi.FullName
+          $args = "/i `"$msiPath`" /qn /Lv installation.log"
+          $proc = Start-Process msiexec.exe -ArgumentList $args -Wait -NoNewWindow -PassThru
 
-          # FIX: Check the specific process exit code
           if ($proc.ExitCode -ne 0) {
             Write-Error "❌ MSI Install Failed with exit code $($proc.ExitCode)"
             Get-Content installation.log -Tail 60 | ForEach-Object { Write-Error $_ }
