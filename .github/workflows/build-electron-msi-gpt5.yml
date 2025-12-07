@@ -442,6 +442,14 @@ jobs:
           name: frontend-dist-${{ needs.validate-environment.outputs.build_id }}
           path: web_platform/frontend/out
 
+      - name: 🚚 Stage Backend for Electron Builder
+        shell: pwsh
+        run: |
+          # FIX: Move the backend to where electron-builder expects it
+          $dest = "electron/python_service-bin"
+          New-Item -ItemType Directory -Path $dest -Force | Out-Null
+          Move-Item -Path "python-service-bin/*" -Destination $dest -Force
+          Write-Host "✅ Backend staged to $dest"
       - name: 📥 Install Electron Dependencies
         shell: pwsh
         working-directory: electron
@@ -651,30 +659,18 @@ jobs:
           }
 
           foreach ($msi in $msiFiles) {
-            Write-Host "Copying: $($msi.FullName)"
-            $sourceDir = Split-Path $msi.FullName
-            $fileName = $msi.Name
-
-            robocopy $sourceDir $destAbsolutePath $fileName /J /IS /IT
-
-            # Robocopy exit codes < 8 indicate success (files copied, extra files, etc.)
-            if ($LASTEXITCODE -ge 8) {
-              Write-Error "Robocopy failed for $fileName with code $LASTEXITCODE"
-              exit 1 # Exit immediately on a true failure
-            }
+            Write-Host "Moving: $($msi.FullName)"
+            Move-Item $msi.FullName $destAbsolutePath -Force
 
             # Handle the checksum file if it exists
             $shaPath = "$($msi.FullName).sha256"
             if (Test-Path $shaPath) {
-              Copy-Item -LiteralPath $shaPath -Destination $destAbsolutePath -Force
+              Move-Item -LiteralPath $shaPath -Destination $destAbsolutePath -Force
             }
           }
 
           Write-Host "✅ Staging complete. Contents of $($destDir):"
           Get-ChildItem $destAbsolutePath | Select-Object Name, Length
-
-          Write-Host "All Robocopy operations were successful (exit codes 0-7)."
-          exit 0 # Explicitly exit with success code 0
 
       - name: 📤 Upload Release Artifacts
         if: success()
