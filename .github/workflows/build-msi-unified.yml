@@ -161,103 +161,50 @@ jobs:
           pip install -r ${{ env.BACKEND_DIR }}/requirements.txt
           pip install pyinstaller==6.6.0
 
-      - name: Create Dynamic Spec for PyInstaller
-        shell: pwsh
+      - name: Generate Spec & Build
+        shell: python
+        env:
+          BACKEND_DIR: ${{ env.BACKEND_DIR }}
+          MODULE_PATH: ${{ env.BACKEND_MODULE_PATH }}
+          FRONTEND_OUT: ${{ env.FRONTEND_DIR }}/out
         run: |
-          Set-StrictMode -Version Latest
-          $entry_point = (Join-Path $env:BACKEND_DIR "main.py").Replace('\', '/')
-          $submodules = "collect_submodules('{0}')" -f $env:BACKEND_MODULE_PATH
-          $main_import = "'{0}.main'" -f $env:BACKEND_MODULE_PATH
-          $staging_ui_path = (Resolve-Path "web_platform/frontend/out").Path.Replace('\', '/')
-          $other_service = if ("${{ env.BACKEND_DIR }}" -eq "web_service/backend") { "python_service" } else { "web_service" }
-          $backend_init = (Resolve-Path "web_service/backend/__init__.py").Path.Replace('\', '/')
-          $parent_init = (Resolve-Path "web_service/__init__.py").Path.Replace('\', '/')
-          $python_service_init = (Resolve-Path "python_service/__init__.py").Path.Replace('\', '/')
+          import os
+          from pathlib import Path
 
-          # Ensure __init__.py files exist and are not empty to guarantee package recognition
-          Set-Content -Path "web_service/__init__.py" -Value "# UNIFIED" -Force
-          Set-Content -Path "web_service/backend/__init__.py" -Value "# UNIFIED" -Force
-          Set-Content -Path "python_service/__init__.py" -Value "# UNIFIED" -Force
+          bk_dir = os.environ['BACKEND_DIR']
+          mod_path = os.environ['MODULE_PATH']
+          # CHANGE: Point to the new service wrapper
+          entry = f"{bk_dir}/service_entry.py"
 
-          $specContent = @(
-            '# -*- mode: python ; coding: utf-8 -*-',
-            '# DYNAMICALLY GENERATED SPEC - DO NOT EDIT MANUALLY',
-            'import os',
-            'from pathlib import Path',
-            'from PyInstaller.utils.hooks import collect_data_files, collect_submodules',
-            '',
-            'block_cipher = None',
-            'project_root = Path(os.getcwd())',
-            '',
-            '# Standard Data Collection (UI, package data, etc.)',
-            'datas = [',
-            "    ('$staging_ui_path', 'ui'),",
-            ']',
-            "datas += collect_data_files('uvicorn')",
-            "datas += collect_data_files('slowapi')",
-            "datas += collect_data_files('structlog')",
-            "datas += collect_data_files('certifi')",
-            '',
-            'hiddenimports = set()',
-            "hiddenimports.update($submodules)",
-            'hiddenimports.update([',
-            "    'uvicorn.logging', 'uvicorn.loops.auto', 'uvicorn.lifespan.on',",
-            "    'uvicorn.protocols.http.h11_impl', 'uvicorn.protocols.websockets.wsproto_impl',",
-            "    'fastapi.routing', 'starlette.staticfiles', 'anyio._backends._asyncio',",
-            "    'httpcore', 'httpx', 'slowapi', 'structlog', 'tenacity', 'aiosqlite',",
-            "    'pydantic_core', 'pydantic_settings.sources', $main_import",
-            '])',
-            '',
-            'a = Analysis(',
-            "    ['$entry_point'],",
-            '    pathex=[str(project_root)],',
-            '    binaries=[],',
-            '    datas=datas,',
-            '    hiddenimports=sorted(hiddenimports),',
-            '    hookspath=[],',
-            '    runtime_hooks=[],',
-            "    excludes=['tests', 'pytest', '$other_service'], # CRITICAL: Exclude the other service",
-            '    win_no_prefer_redirects=False,',
-            '    win_private_assemblies=False,',
-            '    cipher=block_cipher,',
-            '    noarchive=False',
-            ')',
-            '',
-            "# ☢️ PYZ INJECTION: Force __init__ files into the PYZ archive as modules",
-            "a.pure += [",
-            "    ('web_service', '$parent_init', 'PYMODULE'),",
-            "    ('web_service.backend', '$backend_init', 'PYMODULE'),",
-            "    ('python_service', '$python_service_init', 'PYMODULE')",
-            "]",
-            '',
-            'pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)',
-            'exe = EXE(',
-            '    pyz,',
-            '    a.scripts,',
-            '    a.binaries,',
-            '    a.zipfiles,',
-            '    a.datas,',
-            '    [],',
-            "    name='fortuna-backend',",
-            '    debug=False,',
-            '    bootloader_ignore_signals=False,',
-            '    strip=False,',
-            '    upx=True,',
-            '    runtime_tmpdir=None,',
-            '    console=False,',
-            '    disable_windowed_traceback=False,',
-            '    argv_emulation=False,',
-            '    target_arch=None,',
-            '    codesign_identity=None,',
-            '    entitlements_file=None',
-            ')'
+          spec = f"""
+          # -*- mode: python ; coding: utf-8 -*-
+          from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+
+          block_cipher = None
+
+          a = Analysis(
+              ['{entry}'],
+              pathex=[],
+              binaries=[],
+              datas=collect_data_files('uvicorn') + collect_data_files('slowapi') + [('{os.environ['FRONTEND_OUT']}', 'ui')],
+              # CHANGE: Add win32timezone to hidden imports (critical for pywin32)
+              hiddenimports=collect_submodules('{mod_path}') + ['win32timezone'],
+              hookspath=[],
+              runtime_hooks=[],
+              excludes=['tests', 'pytest'],
+              win_no_prefer_redirects=False,
+              win_private_assemblies=False,
+              cipher=block_cipher,
+              noarchive=False,
           )
-          # Use a unique name for the unified workflow's spec file
-          Set-Content -Path "unified.spec" -Value ($specContent -join "`n")
-          Write-Host "✅ Dynamically generated 'unified.spec' created."
-
-      - name: Build with PyInstaller
-        run: pyinstaller unified.spec --clean --noconfirm
+          pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+          exe = EXE(
+              pyz, a.scripts, a.binaries, a.zipfiles, a.datas, [],
+              name='fortuna-backend', debug=False, bootloader_ignore_signals=False, strip=False, upx=True, console=False
+          )
+          """
+          with open("unified.spec", "w") as f: f.write(spec)
+          os.system("pyinstaller unified.spec --clean --noconfirm")
 
       - name: Upload Backend Artifact
         uses: actions/upload-artifact@v4
