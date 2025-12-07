@@ -37,7 +37,8 @@
     <StandardDirectory Id="DesktopFolder" />
 
     <ComponentGroup Id="ServiceComponents" Directory="INSTALLFOLDER">
-      <Component Id="ServiceExecutable" Guid="YOUR-GUID-HERE-OR-AUTO-GEN">
+      <!-- FIX: Changed Guid from placeholder to '*' for auto-generation -->
+      <Component Id="ServiceExecutable" Guid="*">
         <File Id="FortunaEXE" Source="$(var.SourceDir)/fortuna-webservice.exe" KeyPath="yes" />
         <ServiceInstall Id="ServiceInstaller" Type="ownProcess" Name="FortunaWebService" DisplayName="Fortuna Faucet Web Service" Description="Background service for Fortuna Faucet" Start="auto" Account="LocalSystem" ErrorControl="normal" Vital="yes" />
         <ServiceControl Id="StartService" Start="install" Stop="both" Remove="uninstall" Name="FortunaWebService" Wait="yes" />
