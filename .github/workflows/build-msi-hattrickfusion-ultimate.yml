@@ -394,7 +394,7 @@ jobs:
             except:
               time.sleep(1)
 
-          print("❌ Port bind timeout")
+          print("[X] Port bind timeout")
           subprocess.run(["sc.exe", "query", "FortunaWebService"])
           sys.exit(1)
 

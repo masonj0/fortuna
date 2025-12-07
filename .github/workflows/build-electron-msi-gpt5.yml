@@ -448,7 +448,7 @@ jobs:
           # FIX: Move the backend to where electron-builder expects it
           $dest = "electron/python_service-bin"
           New-Item -ItemType Directory -Path $dest -Force | Out-Null
-          Move-Item -Path "python-service-bin/*" -Destination $dest -Recurse -Force
+          Move-Item -Path "python-service-bin/*" -Destination $dest -Force
           Write-Host "✅ Backend staged to $dest"
       - name: 📥 Install Electron Dependencies
         shell: pwsh
