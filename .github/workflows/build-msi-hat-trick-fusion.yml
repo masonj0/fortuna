@@ -254,6 +254,11 @@ jobs:
           name: hat-trick-msi
           path: installer
 
+      - name: 🛡️ Firewall Rule
+        shell: pwsh
+        run: |
+          New-NetFirewallRule -DisplayName "HatTrick-Test" -Direction Inbound -LocalPort ${{ env.SERVICE_PORT }} -Protocol TCP -Action Allow
+
       - name: 🤫 Install MSI (With Logging)
         shell: pwsh
         run: |
