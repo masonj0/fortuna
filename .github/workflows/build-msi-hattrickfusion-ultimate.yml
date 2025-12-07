@@ -267,22 +267,18 @@ jobs:
             Move-Item staging/backend/fortuna-backend.exe staging/backend/fortuna-webservice.exe -Force
           }
 
-          # Generate Valid .wixproj
+          # FIX: Generate Valid .wixproj (replaced empty strings with XML)
           $proj = @(
             '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">',
             '  <PropertyGroup>',
-            '    <OutputName>HatTrickFusion</OutputName>',
-            '    <OutputType>Package</OutputType>',
             '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>',
-            '    <DefineConstants>SourceDir=../staging/backend;Version=${{ needs.path-finder.outputs.semver }};ServicePort=${{ env.SERVICE_PORT }}</DefineConstants>',
+            '    <OutputType>Package</OutputType>',
+            '    <DefineConstants>SourceDir=../staging/backend;Version=${{ needs.build-backend.outputs.semver }};ServicePort=${{ env.SERVICE_PORT }}</DefineConstants>',
             '    <Platforms>x64</Platforms>',
             '  </PropertyGroup>',
             '  <ItemGroup>',
-            '    <PackageReference Include="WixToolset.Firewall.wixext" Version="${{ env.WIX_VERSION }}" />',
-            '    <PackageReference Include="WixToolset.UI.wixext" Version="${{ env.WIX_VERSION }}" />',
-            '    <PackageReference Include="WixToolset.Util.wixext" Version="${{ env.WIX_VERSION }}" />',
+            '    <Compile Include="Product.wxs" />',
             '  </ItemGroup>',
-            '  <ItemGroup><Compile Include="Product.wxs" /></ItemGroup>',
             '</Project>'
           )
           Set-Content build_wix/Fortuna.wixproj ($proj -join "`r`n") -Encoding utf8
