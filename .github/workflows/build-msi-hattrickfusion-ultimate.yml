@@ -325,7 +325,7 @@ jobs:
           $sha = "${{ needs.path-finder.outputs.short_sha }}"
           $old = "${{ env.WIX_DIR }}/bin/x64/Release/HatTrickFusion.msi"
           $new = "${{ env.WIX_DIR }}/bin/x64/Release/HatTrickFusion-${ver}-${sha}.msi"
-          Rename-Item $old $new
+          Move-Item $old $new
           $hash = (Get-FileHash $new -Algorithm SHA256).Hash
           $hash | Out-File "$new.sha256" -Encoding utf8
           Write-Host "✅ MSI Created: $new"
@@ -470,23 +470,7 @@ jobs:
           name: backend-dist-${{ needs.path-finder.outputs.build_id }}
           path: backend
       - name: Create SBOM
-        run: |
-          python - <<'PY'
-          import json
-          from datetime import datetime
-          from pathlib import Path
-          freeze = Path('backend/backend-freeze.txt')
-          packages = []
-          if freeze.exists():
-              for line in freeze.read_text().splitlines():
-                  if '==' in line: packages.append({'name': line.split('==')[0], 'version': line.split('==')[1]})
-          sbom = {
-              'spdxVersion': 'SPDX-2.3',
-              'name': 'HatTrick Fusion Backend',
-              'packages': packages
-          }
-          Path('sbom.json').write_text(json.dumps(sbom, indent=2))
-          PY
+        run: python .github/scripts/generate_sbom.py
       - name: Upload SBOM
         uses: actions/upload-artifact@v4
         with:
