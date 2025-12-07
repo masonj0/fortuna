@@ -325,7 +325,7 @@ jobs:
           $sha = "${{ needs.path-finder.outputs.short_sha }}"
           $old = "${{ env.WIX_DIR }}/bin/x64/Release/HatTrickFusion.msi"
           $new = "${{ env.WIX_DIR }}/bin/x64/Release/HatTrickFusion-${ver}-${sha}.msi"
-          Rename-Item $old $new
+          Move-Item $old $new
           $hash = (Get-FileHash $new -Algorithm SHA256).Hash
           $hash | Out-File "$new.sha256" -Encoding utf8
           Write-Host "✅ MSI Created: $new"
@@ -456,13 +456,35 @@ jobs:
           sc.exe delete FortunaWebService
           Remove-NetFirewallRule -DisplayName "${{ env.FIREWALL_RULE }}" -ErrorAction SilentlyContinue
   # ==================================================================================
-  # JOB 6: RELEASE (On Tag)
+  # JOB 6: GENERATE SBOM (The Missing Piece)
+  # ==================================================================================
+  generate-sbom:
+    name: '📜 Generate SBOM'
+    runs-on: ubuntu-latest
+    # FIX: Added path-finder to needs so we can access build_id
+    needs: [build-backend, path-finder]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: backend-dist-${{ needs.path-finder.outputs.build_id }}
+          path: backend
+      - name: Create SBOM
+        run: python .github/scripts/generate_sbom.py
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ needs.path-finder.outputs.build_id }}
+          path: sbom.json
+
+  # ==================================================================================
+  # JOB 7: RELEASE (On Tag)
   # ==================================================================================
   release:
     name: '📦 Create Release'
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [smoke-test, path-finder]
+    needs: [smoke-test, path-finder, generate-sbom]
     permissions:
       contents: write
     steps:

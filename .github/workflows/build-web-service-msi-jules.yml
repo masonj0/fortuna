@@ -836,31 +836,18 @@ jobs:
             Write-Host "No msi-install.log found"
           }
 
-      - name: '🚦 LOOP 2 - Start Service & Verify Process'
+      - name: 🚀 Active Port Poll
         shell: pwsh
         run: |
-          Write-Host "Attempting to start the 'FortunaWebService'..."
-          Start-Service -Name "FortunaWebService"
-
-          Write-Host "Waiting for process to appear (up to 30 seconds)..."
-          $deadline = (Get-Date).AddSeconds(30)
-          $processFound = $false
-
-          while ((Get-Date) -lt $deadline) {
-            $proc = Get-Process -Name "fortuna-webservice" -ErrorAction SilentlyContinue
-            if ($proc) {
-              Write-Host "✅ Process 'fortuna-webservice.exe' is running (PID: $($proc.Id))."
-              $processFound = $true
-              break
+          $start = Get-Date
+          while ((Get-Date) - $start -lt (New-TimeSpan -Seconds 30)) {
+            if (Test-NetConnection -ComputerName localhost -Port 8102 -InformationLevel Quiet) {
+              Write-Host "✅ Service is listening."
+              return
             }
-            Start-Sleep -Seconds 1
+            Start-Sleep 1
           }
-
-          if (-not $processFound) {
-            Write-Error "❌ FATAL: Process did not start after 30 seconds."
-            Get-EventLog -LogName Application -Source "FortunaWebService" -Newest 10 | Format-List
-            exit 1
-          }
+          throw "❌ Service failed to bind port 8102 within 30 seconds."
 
       - name: '🩺 LOOP 3 - Health Check Endpoint'
         shell: pwsh

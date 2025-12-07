@@ -245,6 +245,10 @@ jobs:
     runs-on: windows-latest
     needs: package-msi
     steps:
+      - name: 🛡️ Firewall Rule
+        shell: pwsh
+        run: |
+          New-NetFirewallRule -DisplayName "HatTrick-Test" -Direction Inbound -LocalPort ${{ env.SERVICE_PORT }} -Protocol TCP -Action Allow
       - uses: actions/download-artifact@v4
         with:
           name: hat-trick-msi
