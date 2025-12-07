@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from unittest.mock import Mock
 from unittest.mock import patch
 
-import fakeredis.aioredis
+import fakeredis.asyncio as fake_redis_async
 import httpx
 import pytest
 import pytest_asyncio
@@ -61,7 +61,7 @@ def client():
 
     # This patch is critical. It replaces the real Redis connection with a fake one.
     with patch(
-        "redis.from_url", new_callable=lambda: fakeredis.aioredis.FakeRedis.from_url
+        "redis.from_url", new_callable=lambda: fake_redis_async.FakeRedis.from_url
     ), patch(
         "python_service.credentials_manager.SecureCredentialsManager.get_betfair_credentials",
         return_value=("test_user", "test_pass"),

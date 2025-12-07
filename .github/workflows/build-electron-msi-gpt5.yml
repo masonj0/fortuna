@@ -1,4 +1,4 @@
-# System Timestamp: 2025-12-03 22:44:34.655552917
+# System Timestamp: 2025-12-07 15:30:00
 name: 🔨 Build Electron MSI Installer (Production)
 
 on:
@@ -36,8 +36,8 @@ jobs:
       - name: 🔍 Verify Critical Files Exist
         shell: pwsh
         run: |
+          # FIX: Removed dynamic spec file from check
           $criticalFiles = @(
-            'fortuna-backend-electron.spec',
             'electron/electron-builder-config.yml',
             'web_platform/frontend/package.json',
             '${{ env.BACKEND_DIR }}/requirements-dev.txt',
@@ -66,7 +66,7 @@ jobs:
             }
           }
 
-          $manifest | ConvertTo-Json | Out-File -FilePath ".\validation-manifest.json"
+          $manifest | ConvertTo-Json | Out-File -FilePath ".\\validation-manifest.json"
           Write-Host "Manifest saved"
 
       - name: 📊 Capture Version Information
@@ -98,7 +98,7 @@ jobs:
           # Disk space
           Get-Volume | Out-File "debug-artifacts/disk-space.txt"
 
-          # File permissions
+          # File permissions - FIX: $. to $_.
           Get-ChildItem -Recurse -Include "*.yml", "*.spec", "*.json" -ErrorAction SilentlyContinue |
             ForEach-Object { "{0} {1}" -f $_.FullName, $_.Length } |
             Out-File "debug-artifacts/file-manifest.txt"
@@ -153,9 +153,21 @@ jobs:
           pip install -r ${{ env.BACKEND_DIR }}/requirements-dev.txt
           Write-Host "✓ Python dependencies installed"
 
+      - name: 🧪 Run Unit Tests (TDD Integration)
+        shell: pwsh
+        run: |
+          Write-Host "Installing Test Dependencies..."
+          pip install pytest pytest-asyncio
+
+          Write-Host "Running Test Suite..."
+          # This will run all tests in the 'tests/' directory using configuration from pytest.ini
+          # If this step fails, the build stops here (Shift Left).
+          pytest
+
       - name: ☢️ NUCLEAR FIX -- Ensure Python Package Structure & Double Injection
         shell: pwsh
         run: |
+          # FIX: init.py -> __init__.py
           Set-Content -Path "python_service/__init__.py" -Value "# This file is intentionally non-empty to ensure package recognition."
           Write-Host "✅ Ensured non-empty __init__.py files exist for package discovery."
 
@@ -163,81 +175,81 @@ jobs:
         shell: pwsh
         run: |
           Set-StrictMode -Version Latest
-          $entry_point = '${{ env.BACKEND_DIR }}/main.py'.Replace('\', '/')
+          $entry_point = '${{ env.BACKEND_DIR }}/main.py'.Replace('\\', '/')
           $other_service = "web_service"
 
-          # Ensure absolute paths for the init files
-          $backend_init = (Resolve-Path "python_service/__init__.py").Path.Replace('\', '/')
+          # Ensure absolute paths for the init files - FIX: init.py -> __init__.py
+          $backend_init = (Resolve-Path "python_service/__init__.py").Path.Replace('\\', '/')
 
           $specContent = @(
-          "# -*- mode: python ; coding: utf-8 -*-",
-          "import os",
-          "from pathlib import Path",
-          "from PyInstaller.utils.hooks import collect_data_files, collect_submodules",
-          "",
-          "block_cipher = None",
-          "project_root = Path(os.getcwd())",
-          "",
-          "datas = []",
-          "datas += collect_data_files('uvicorn')",
-          "datas += collect_data_files('slowapi')",
-          "datas += collect_data_files('structlog')",
-          "",
-          "hiddenimports = collect_submodules('python_service')",
-          "hiddenimports += [",
-          "    'uvicorn.logging', 'uvicorn.loops.auto', 'uvicorn.lifespan.on',",
-          "    'uvicorn.protocols.http.h11_impl', 'uvicorn.protocols.websockets.wsproto_impl',",
-          "    'fastapi.routing', 'starlette.staticfiles', 'anyio._backends._asyncio',",
-          "    'httpcore', 'httpx', 'slowapi', 'structlog', 'tenacity', 'aiosqlite',",
-          "    'pydantic_core'",
-          "]",
-          "",
-          "a = Analysis(",
-          "    ['$entry_point'],",
-          "    pathex=[str(project_root)],",
-          "    binaries=[],",
-          "    datas=datas,",
-          "    hiddenimports=hiddenimports,",
-          "    hookspath=[],",
-          "    runtime_hooks=[],",
-          "    excludes=['tests', 'pytest', '$other_service'],",
-          "    win_no_prefer_redirects=False,",
-          "    win_private_assemblies=False,",
-          "    cipher=block_cipher,",
-          "    noarchive=False",
-          ")",
-          "",
-          "# ☢️ NUCLEAR OVERRIDE: Force __init__ files into the PYZ archive",
-          "a.pure += [",
-          "    ('python_service', '$backend_init', 'PYMODULE')",
-          "]",
-          "",
-          "pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)",
-          "exe = EXE(",
-          "    pyz,",
-          "    a.scripts,",
-          "    a.binaries,",
-          "    a.zipfiles,",
-          "    a.datas,",
-          "    [],",
-          "    name='fortuna-backend',",
-          "    debug=False,",
-          "    bootloader_ignore_signals=False,",
-          "    strip=False,",
-          "    upx=True,",
-          "    runtime_tmpdir=None,",
-          "    console=True,",
-          "    disable_windowed_traceback=False,",
-          "    argv_emulation=False,",
-          "    target_arch=None,",
-          "    codesign_identity=None,",
-          "    entitlements_file=None",
-          ")"
+            "# -*- mode: python ; coding: utf-8 -*-",
+            "import os",
+            "from pathlib import Path",
+            "from PyInstaller.utils.hooks import collect_data_files, collect_submodules",
+            "",
+            "block_cipher = None",
+            "project_root = Path(os.getcwd())",
+            "",
+            "datas = []",
+            "datas += collect_data_files('uvicorn')",
+            "datas += collect_data_files('slowapi')",
+            "datas += collect_data_files('structlog')",
+            "",
+            "hiddenimports = collect_submodules('python_service')",
+            "hiddenimports += [",
+            "    'uvicorn.logging', 'uvicorn.loops.auto', 'uvicorn.lifespan.on',",
+            "    'uvicorn.protocols.http.h11_impl', 'uvicorn.protocols.websockets.wsproto_impl',",
+            "    'fastapi.routing', 'starlette.staticfiles', 'anyio._backends._asyncio',",
+            "    'httpcore', 'httpx', 'slowapi', 'structlog', 'tenacity', 'aiosqlite',",
+            "    'pydantic_core'",
+            "]",
+            "",
+            "a = Analysis(",
+            "    ['$entry_point'],",
+            "    pathex=[str(project_root)],",
+            "    binaries=[],",
+            "    datas=datas,",
+            "    hiddenimports=hiddenimports,",
+            "    hookspath=[],",
+            "    runtime_hooks=[],",
+            "    excludes=['tests', 'pytest', '$other_service'],",
+            "    win_no_prefer_redirects=False,",
+            "    win_private_assemblies=False,",
+            "    cipher=block_cipher,",
+            "    noarchive=False",
+            ")",
+            "",
+            "# ☢️ NUCLEAR OVERRIDE: Force __init__ files into the PYZ archive",
+            "a.pure += [",
+            "    ('python_service', '$backend_init', 'PYMODULE')",
+            "]",
+            "",
+            "pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)",
+            "exe = EXE(",
+            "    pyz,",
+            "    a.scripts,",
+            "    a.binaries,",
+            "    a.zipfiles,",
+            "    a.datas,",
+            "    [],",
+            "    name='fortuna-backend',",
+            "    debug=False,",
+            "    bootloader_ignore_signals=False,",
+            "    strip=False,",
+            "    upx=True,",
+            "    runtime_tmpdir=None,",
+            "    console=True,",
+            "    disable_windowed_traceback=False,",
+            "    argv_emulation=False,",
+            "    target_arch=None,",
+            "    codesign_identity=None,",
+            "    entitlements_file=None",
+            ")"
           )
           Set-Content -Path "fortuna-backend-electron.spec" -Value $specContent
           Write-Host "✅ Dynamically generated 'fortuna-backend-electron.spec' with PYZ Injection."
 
-      - name: 🔨 Build Python Service with PyInstaller
+      - name: 🧱 Build Python Service with PyInstaller
         shell: pwsh
         run: |
           $specFile = 'fortuna-backend-electron.spec'
@@ -248,8 +260,8 @@ jobs:
           }
 
           pyinstaller `
-            --distpath ".\dist\service" `
-            --workpath ".\build\service" `
+            --distpath ".\\dist\\service" `
+            --workpath ".\\build\\service" `
             --clean `
             $specFile
 
@@ -258,7 +270,7 @@ jobs:
             exit $LASTEXITCODE
           }
 
-          $serviceExe = Get-ChildItem -Path ".\dist\service" -Filter "*.exe" | Select-Object -First 1
+          $serviceExe = Get-ChildItem -Path ".\\dist\\service" -Filter "*.exe" | Select-Object -First 1
           if ($null -eq $serviceExe) {
             Write-Error "No executable generated by PyInstaller"
             exit 1
@@ -266,10 +278,10 @@ jobs:
 
           Write-Host "✓ Service executable: $($serviceExe.FullName) ($('{0:N0}' -f $serviceExe.Length) bytes)"
 
-      - name: 🧪 Verify Service Executable
+      - name: 🔬 Verify Service Executable
         shell: pwsh
         run: |
-          $serviceExe = Get-ChildItem -Path ".\dist\service" -Filter "*.exe" | Select-Object -First 1
+          $serviceExe = Get-ChildItem -Path ".\\dist\\service" -Filter "*.exe" | Select-Object -First 1
 
           if ($null -eq $serviceExe) {
             Write-Error "Service executable not found"
@@ -331,7 +343,7 @@ jobs:
           }
           npm list --depth=0
 
-      - name: 🔨 Build Frontend
+      - name: 🧱 Build Frontend
         shell: pwsh
         working-directory: web_platform/frontend
         run: |
@@ -342,13 +354,13 @@ jobs:
             exit 1
           }
 
-          $outDir = Get-Item -Path ".\out" -ErrorAction SilentlyContinue
+          $outDir = Get-Item -Path ".\\out" -ErrorAction SilentlyContinue
           if ($null -eq $outDir) {
             Write-Error "No out/ directory generated"
             exit 1
           }
 
-          $fileCount = (Get-ChildItem -Recurse -Path ".\out" | Measure-Object).Count
+          $fileCount = (Get-ChildItem -Recurse -Path ".\\out" | Measure-Object).Count
           Write-Host "✓ Frontend built: $fileCount files"
 
       - name: 📤 Upload Frontend Artifact
@@ -378,7 +390,7 @@ jobs:
       - name: 📥 Checkout Repository
         uses: actions/checkout@v4
 
-      - name: 🧐 Forensic Asset Verification
+      - name: 🕵️ Forensic Asset Verification
         shell: pwsh
         run: |
           Set-StrictMode -Version Latest
@@ -403,7 +415,7 @@ jobs:
 
           if (-not $all_assets_found) {
             Write-Error "CRITICAL: One or more required assets are missing."
-            Write-Host "\n--- Filesystem State ---"
+            Write-Host "\\n--- Filesystem State ---"
             Write-Host "Listing contents of 'electron/assets' directory for debugging:"
             Get-ChildItem -Path "electron/assets" -Recurse | ForEach-Object {
               Write-Host "  - $($_.FullName.Replace($env:GITHUB_WORKSPACE, ''))"
@@ -411,7 +423,7 @@ jobs:
             exit 1
           }
 
-          Write-Host "\n✅ All critical assets verified." -ForegroundColor Green
+          Write-Host "\\n✅ All critical assets verified." -ForegroundColor Green
   build-electron-msi:
     name: 🚀 Build Electron MSI Package
     runs-on: windows-latest
@@ -445,11 +457,12 @@ jobs:
       - name: 🚚 Stage Backend for Electron Builder
         shell: pwsh
         run: |
-          # FIX: Move the backend to where electron-builder expects it
+          #FIX: Move the backend to where electron-builder expects it
           $dest = "electron/python_service-bin"
           New-Item -ItemType Directory -Path $dest -Force | Out-Null
           Move-Item -Path "python-service-bin/*" -Destination $dest -Force
           Write-Host "✅ Backend staged to $dest"
+
       - name: 📥 Install Electron Dependencies
         shell: pwsh
         working-directory: electron
@@ -460,7 +473,7 @@ jobs:
             exit 1
           }
 
-      - name: '🧐 Forensically Guarantee Icon Paths'
+      - name: '🕵️ Forensically Guarantee Icon Paths'
         shell: pwsh
         run: |
           Set-StrictMode -Version Latest
@@ -487,7 +500,7 @@ jobs:
           $config = Get-Content $configPath | ConvertFrom-Yaml
 
           # 3. Normalize the icon path for YAML
-          $normalizedIconPath = $absoluteIconPath.Replace('\', '/')
+          $normalizedIconPath = $absoluteIconPath.Replace('\\', '/')
 
           # 4. Update the icon paths in the configuration object
           $config.win.icon = $normalizedIconPath
@@ -516,7 +529,7 @@ jobs:
           Write-Host "✅ Successfully created temporary config '$tempConfigPath' with corrected icon paths."
 
           # 6. Display final config for verification
-          Write-Host "\n--- Final Config ---"
+          Write-Host "\\n--- Final Config ---"
           Get-Content $tempConfigPath | Write-Host
           Write-Host "--------------------"
 
@@ -542,19 +555,18 @@ jobs:
       - name: 📄 Ensure WiX License Exists for electron-builder
         shell: pwsh
         run: |
-          # electron-builder uses build_wix/license.rtf by convention
-          $wixDir = 'build_wix'
-          if (-not (Test-Path $wixDir)) { New-Item -ItemType Directory -Path $wixDir | Out-Null }
-          $licensePath = Join-Path $wixDir 'license.rtf'
+          if (-not (Test-Path 'build_wix')) { New-Item -ItemType Directory -Path 'build_wix' | Out-Null }
+          $licensePath = 'build_wix/license.rtf'
           if (-not (Test-Path $licensePath)) {
-            Write-Host '⚠️ License file missing. Generating placeholder for electron-builder...'
-            $rtfContent = '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\f0\fs24 END USER LICENSE AGREEMENT\par\par This is a placeholder license for Fortuna Faucet. Please replace with actual terms.}'
+            Write-Host '⚠️ License file missing. Generating placeholder...'
+            # FIX: Use Base64 decoding to avoid RTF escape sequence issues in PowerShell/YAML
+            $rtfContent = [System.Text.Encoding]::ASCII.GetString([System.Convert]::FromBase64String("e1xydGYxXGFuc2lcZGVmZjB7XGZvbnR0Ymx7XGYwIEFyaWFsO319XGYwXGZzMjQgRU5EIFVTRVIgTElDRU5TRSBBR1JFRU1FTlRccGFyXHBhciBUaGlzIGlzIGEgcGxhY2Vob2xkZXIgbGljZW5zZSBmb3IgRm9ydHVuYSBGYXVjZXQuIFBsZWFzZSByZXBsYWNlIHdpdGggYWN0dWFsIHRlcm1zLn0="))
             Set-Content -Path $licensePath -Value $rtfContent -Encoding Ascii
             Write-Host '✅ Placeholder license.rtf created.'
           } else {
             Write-Host '✅ Existing license.rtf found.'
           }
-      - name: 🔨 Build Electron Application
+      - name: 🧱 Build Electron Application
         shell: pwsh
         working-directory: electron
         run: |
@@ -587,7 +599,6 @@ jobs:
           }
 
           Write-Host "✓ MSI build completed"
-
 
       - name: 🔍 Verify MSI Output
         shell: pwsh
@@ -706,7 +717,7 @@ jobs:
           name: fortuna-electron-msi-${{ needs.validate-environment.outputs.build_id }}
           path: msi-installer
 
-      - name: 📋 Inspect Artifact
+      - name: 📝 Inspect Artifact
         shell: pwsh
         run: |
           Write-Host "=== Artifact Contents ==="
@@ -750,10 +761,10 @@ jobs:
           # EXOTIC INGREDIENT #3: Don't assume the path. Find it dynamically.
           # Searches for the main executable, skipping uninstallers
 
-          $root = "C:\Program Files\Fortuna Faucet"
+          $root = "C:\\Program Files\\Fortuna Faucet"
           if (-not (Test-Path $root)) {
             Write-Error "❌ Install directory not found: $root"
-            Get-ChildItem "C:\Program Files" | Write-Host
+            Get-ChildItem "C:\\Program Files" | Write-Host
             exit 1
           }
 
@@ -790,11 +801,13 @@ jobs:
           $backendFound = $false
 
           while ((Get-Date) -lt $deadline) {
-            # Check for Electron process
-            $electronProc = Get-Process -Name "Fortuna Faucet" -ErrorAction SilentlyContinue | Select-Object -First 1
+            # Check for Electron process (by name)
+            $electronProc = Get-Process -Name "Fortuna Faucet" -ErrorAction SilentlyContinue |
+                            Select-Object -First 1
 
             # Check for Python backend
-            $backendProc = Get-Process -Name "fortuna-backend" -ErrorAction SilentlyContinue | Select-Object -First 1
+            $backendProc = Get-Process -Name "fortuna-backend" -ErrorAction SilentlyContinue |
+                           Select-Object -First 1
 
             if ($electronProc) {
               Write-Host "✅ Electron process running (PID: $($electronProc.Id))"
@@ -806,16 +819,16 @@ jobs:
               $backendFound = $true
             }
 
-            # FIX: Require BOTH processes
+            # Success: Both Electron and Python backend must be running
             if ($electronFound -and $backendFound) {
-              Write-Host "✅ SUCCESS: Main application AND Backend are running."
+              Write-Host "✅ SUCCESS: Main application and backend are running."
               exit 0
             }
 
             Start-Sleep -Milliseconds 500
           }
 
-          Write-Error "❌ TIMEOUT: One or both processes failed to stabilize."
+          Write-Error "❌ TIMEOUT: Electron process never started within 60 seconds"
           Get-Process | Where-Object { $_.Name -like "*Fortuna*" } | Format-Table
           exit 1
 
@@ -876,13 +889,25 @@ jobs:
           $destDir = "final-release-artifact"
           New-Item -ItemType Directory -Path $destDir -Force | Out-Null
 
-          # FIX: Use Move-Item instead of Robocopy
-          Get-ChildItem -Path $sourceDir -Recurse | ForEach-Object {
-            $destPath = Join-Path $destDir $_.Name
-            Move-Item -Path $_.FullName -Destination $destPath -Force
-          }
+          # Run Robocopy
+          robocopy $sourceDir $destDir /E
 
-          Write-Host "✅ Artifacts staged to $destDir"
+          # Robocopy Exit Codes:
+          # 0 = No files copied (No errors)
+          # 1 = Files copied successfully (No errors)
+          # 2 = Extra files detected (No errors)
+          # 3 = (2+1) Some files copied, some extras (No errors)
+          # 4+ = Mismatched files or actual errors
+
+          if ($LASTEXITCODE -le 3) {
+            Write-Host "✅ Robocopy completed successfully (Exit Code: $LASTEXITCODE)."
+            Get-ChildItem -Path $destDir | Write-Host
+            # FORCE SUCCESS
+            exit 0
+          } else {
+            Write-Error "❌ Robocopy failed with exit code $LASTEXITCODE."
+            exit 1
+          }
 
       - name: 📤 Upload Final MSI Artifact
         uses: actions/upload-artifact@v4
