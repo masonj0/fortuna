@@ -210,3 +210,4 @@ wrapt==2.0.1
 # The following packages are considered to be unsafe in a requirements file:
 # pip
 # setuptools
+pywin32==306; sys_platform == 'win32'
