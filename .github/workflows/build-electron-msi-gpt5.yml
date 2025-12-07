@@ -157,7 +157,8 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "Installing Test Dependencies..."
-          pip install pytest pytest-asyncio
+          # FIX: Explicitly install all test dependencies identified in logs
+          pip install pytest pytest-asyncio httpx asgi-lifespan fakeredis
 
           Write-Host "Running Test Suite..."
           # This will run all tests in the 'tests/' directory using configuration from pytest.ini

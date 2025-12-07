@@ -171,15 +171,19 @@ jobs:
             Move-Item staging/backend/fortuna-backend.exe staging/backend/fortuna-webservice.exe -Force
           }
 
-          # FIX: Generate Valid .wixproj (replaced empty strings with XML)
+          # FIX: Generate Valid .wixproj with Extensions
           $proj = @(
             '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">',
             '  <PropertyGroup>',
             '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>',
             '    <OutputType>Package</OutputType>',
-            '    <DefineConstants>SourceDir=../staging/backend;Version=${{ needs.build-backend.outputs.semver }};ServicePort=${{ env.SERVICE_PORT }}</DefineConstants>',
             '    <Platforms>x64</Platforms>',
             '  </PropertyGroup>',
+            '  <ItemGroup>',
+            '    <PackageReference Include="WixToolset.UI.wixext" Version="${{ env.WIX_VERSION }}" />',
+            '    <PackageReference Include="WixToolset.Firewall.wixext" Version="${{ env.WIX_VERSION }}" />',
+            '    <PackageReference Include="WixToolset.Util.wixext" Version="${{ env.WIX_VERSION }}" />',
+            '  </ItemGroup>',
             '  <ItemGroup>',
             '    <Compile Include="Product.wxs" />',
             '  </ItemGroup>',
@@ -189,7 +193,9 @@ jobs:
 
       - name: Build MSI
         working-directory: build_wix
-        run: dotnet build Fortuna.wixproj -c Release -p:Platform=x64
+        # FIX: Pass variables directly to build command to ensure they are resolved
+        run: |
+          dotnet build Fortuna.wixproj -c Release -p:Platform=x64 -p:Version=${{ needs.build-backend.outputs.semver }} -p:SourceDir=../staging/backend -p:ServicePort=${{ env.SERVICE_PORT }}
 
       - name: Upload MSI
         uses: actions/upload-artifact@v4
