@@ -164,10 +164,12 @@ jobs:
           bk_dir = os.environ['BACKEND_DIR']
           mod_path = os.environ['MODULE_PATH']
           # CHANGE: Point to the new service wrapper
-          entry = f"{bk_dir}/service_entry.py"
+          entry = f"{bk_dir}/main.py"
+          frontend_out = os.environ['FRONTEND_OUT']
 
+          # FIX: Fixed quoting in datas list to avoid syntax error
           spec = f"""
-          # -*- mode: python ; coding: utf-8 -*-
+          # -- mode: python ; coding: utf-8 --
           from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
           block_cipher = None
@@ -176,7 +178,7 @@ jobs:
               ['{entry}'],
               pathex=[],
               binaries=[],
-              datas=collect_data_files('uvicorn') + collect_data_files('slowapi') + [('{os.environ['FRONTEND_OUT']}', 'ui')],
+              datas=collect_data_files('uvicorn') + collect_data_files('slowapi') + [('{frontend_out}', 'ui')],
               # CHANGE: Add win32timezone to hidden imports (critical for pywin32)
               hiddenimports=collect_submodules('{mod_path}') + ['win32timezone'],
               hookspath=[],
@@ -265,22 +267,18 @@ jobs:
             Move-Item staging/backend/fortuna-backend.exe staging/backend/fortuna-webservice.exe -Force
           }
 
-          # Generate Valid .wixproj
+          # FIX: Generate Valid .wixproj (replaced empty strings with XML)
           $proj = @(
             '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">',
             '  <PropertyGroup>',
-            '    <OutputName>HatTrickFusion</OutputName>',
-            '    <OutputType>Package</OutputType>',
             '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>',
-            '    <DefineConstants>SourceDir=../staging/backend;Version=${{ needs.path-finder.outputs.semver }};ServicePort=${{ env.SERVICE_PORT }}</DefineConstants>',
+            '    <OutputType>Package</OutputType>',
+            '    <DefineConstants>SourceDir=../staging/backend;Version=${{ needs.build-backend.outputs.semver }};ServicePort=${{ env.SERVICE_PORT }}</DefineConstants>',
             '    <Platforms>x64</Platforms>',
             '  </PropertyGroup>',
             '  <ItemGroup>',
-            '    <PackageReference Include="WixToolset.Firewall.wixext" Version="${{ env.WIX_VERSION }}" />',
-            '    <PackageReference Include="WixToolset.UI.wixext" Version="${{ env.WIX_VERSION }}" />',
-            '    <PackageReference Include="WixToolset.Util.wixext" Version="${{ env.WIX_VERSION }}" />',
+            '    <Compile Include="Product.wxs" />',
             '  </ItemGroup>',
-            '  <ItemGroup><Compile Include="Product.wxs" /></ItemGroup>',
             '</Project>'
           )
           Set-Content build_wix/Fortuna.wixproj ($proj -join "`r`n") -Encoding utf8
