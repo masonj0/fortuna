@@ -160,37 +160,25 @@ jobs:
         run: |
           import os
           from pathlib import Path
+
           bk_dir = os.environ['BACKEND_DIR']
           mod_path = os.environ['MODULE_PATH']
-          entry = f"{bk_dir}/main.py"
-          # Ensure __init__ exists for all potential packages
-          # This covers both 'web_service' and 'python_service' structures
-          inits = [
-              "web_service/__init__.py",
-              "web_service/backend/__init__.py",
-              "python_service/__init__.py"
-          ]
-          pure_injections = []
-          for p in inits:
-              path = Path(p)
-              # Only create if parent dir exists (don't create python_service if we are in web_service mode)
-              if path.parent.exists():
-                  if not path.exists():
-                      path.write_text("# HatTrick Injection")
-                  # Convert path to module name (e.g. web_service/backend -> web_service.backend)
-                  mod_name = str(path.parent).replace(os.sep, '.')
-                  pure_injections.append(f"('{mod_name}', '{path.as_posix()}', 'PYMODULE')")
-          injection_str = ",\n    ".join(pure_injections)
+          # CHANGE: Point to the new service wrapper
+          entry = f"{bk_dir}/service_entry.py"
+
           spec = f"""
           # -*- mode: python ; coding: utf-8 -*-
           from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+
           block_cipher = None
+
           a = Analysis(
               ['{entry}'],
               pathex=[],
               binaries=[],
               datas=collect_data_files('uvicorn') + collect_data_files('slowapi') + [('{os.environ['FRONTEND_OUT']}', 'ui')],
-              hiddenimports=collect_submodules('{mod_path}'),
+              # CHANGE: Add win32timezone to hidden imports (critical for pywin32)
+              hiddenimports=collect_submodules('{mod_path}') + ['win32timezone'],
               hookspath=[],
               runtime_hooks=[],
               excludes=['tests', 'pytest'],
@@ -199,10 +187,6 @@ jobs:
               cipher=block_cipher,
               noarchive=False,
           )
-          # ☢️ PURE INJECTION (Dynamic)
-          a.pure += [
-              {injection_str}
-          ]
           pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
           exe = EXE(
               pyz, a.scripts, a.binaries, a.zipfiles, a.datas, [],
@@ -210,7 +194,6 @@ jobs:
           )
           """
           with open("hat-trick.spec", "w") as f: f.write(spec)
-          # Build
           os.system("pyinstaller hat-trick.spec --clean --noconfirm")
       - name: Verify & Hash Executable
         shell: pwsh

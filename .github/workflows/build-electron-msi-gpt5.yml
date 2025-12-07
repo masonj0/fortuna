@@ -790,13 +790,11 @@ jobs:
           $backendFound = $false
 
           while ((Get-Date) -lt $deadline) {
-            # Check for Electron process (by name)
-            $electronProc = Get-Process -Name "Fortuna Faucet" -ErrorAction SilentlyContinue |
-                            Select-Object -First 1
+            # Check for Electron process
+            $electronProc = Get-Process -Name "Fortuna Faucet" -ErrorAction SilentlyContinue | Select-Object -First 1
 
             # Check for Python backend
-            $backendProc = Get-Process -Name "fortuna-backend" -ErrorAction SilentlyContinue |
-                           Select-Object -First 1
+            $backendProc = Get-Process -Name "fortuna-backend" -ErrorAction SilentlyContinue | Select-Object -First 1
 
             if ($electronProc) {
               Write-Host "✅ Electron process running (PID: $($electronProc.Id))"
@@ -808,16 +806,16 @@ jobs:
               $backendFound = $true
             }
 
-            # Success: Electron is running (backend is optional/secondary)
-            if ($electronFound) {
-              Write-Host "✅ SUCCESS: Main application is running."
+            # FIX: Require BOTH processes
+            if ($electronFound -and $backendFound) {
+              Write-Host "✅ SUCCESS: Main application AND Backend are running."
               exit 0
             }
 
             Start-Sleep -Milliseconds 500
           }
 
-          Write-Error "❌ TIMEOUT: Electron process never started within 60 seconds"
+          Write-Error "❌ TIMEOUT: One or both processes failed to stabilize."
           Get-Process | Where-Object { $_.Name -like "*Fortuna*" } | Format-Table
           exit 1
 
@@ -878,25 +876,13 @@ jobs:
           $destDir = "final-release-artifact"
           New-Item -ItemType Directory -Path $destDir -Force | Out-Null
 
-          # Run Robocopy
-          robocopy $sourceDir $destDir /E
-
-          # Robocopy Exit Codes:
-          # 0 = No files copied (No errors)
-          # 1 = Files copied successfully (No errors)
-          # 2 = Extra files detected (No errors)
-          # 3 = (2+1) Some files copied, some extras (No errors)
-          # 4+ = Mismatched files or actual errors
-
-          if ($LASTEXITCODE -le 3) {
-            Write-Host "✅ Robocopy completed successfully (Exit Code: $LASTEXITCODE)."
-            Get-ChildItem -Path $destDir | Write-Host
-            # FORCE SUCCESS
-            exit 0
-          } else {
-            Write-Error "❌ Robocopy failed with exit code $LASTEXITCODE."
-            exit 1
+          # FIX: Use Move-Item instead of Robocopy
+          Get-ChildItem -Path $sourceDir -Recurse | ForEach-Object {
+            $destPath = Join-Path $destDir $_.Name
+            Move-Item -Path $_.FullName -Destination $destPath -Force
           }
+
+          Write-Host "✅ Artifacts staged to $destDir"
 
       - name: 📤 Upload Final MSI Artifact
         uses: actions/upload-artifact@v4
