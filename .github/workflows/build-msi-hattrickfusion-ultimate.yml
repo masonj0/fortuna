@@ -341,6 +341,34 @@ jobs:
           $hash | Out-File "$new.sha256" -Encoding utf8
           Write-Host "✅ MSI Created: $new"
           "msi_name=$(Split-Path $new -Leaf)" | Out-File $env:GITHUB_OUTPUT -Append
+
+      - name: '🐤 The Canary (Malware Pre-Flight)'
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $msi = Get-ChildItem -Recurse -Filter "*.msi" | Select-Object -First 1
+          if (!$msi) { Write-Warning "No MSI found to scan."; exit 0 }
+
+          Write-Host "🔍 Scanning $($msi.Name) with Windows Defender..."
+          $defender = "C:\Program Files\Windows Defender\MpCmdRun.exe"
+
+          if (-not (Test-Path $defender)) {
+              Write-Warning "Windows Defender CLI not found at expected path."
+              exit 0
+          }
+
+          # ScanType 3 = File/Custom Scan
+          $proc = Start-Process -FilePath $defender -ArgumentList "-Scan -ScanType 3 -File `"$($msi.FullName)`"" -Wait -PassThru -NoNewWindow
+
+          if ($proc.ExitCode -eq 0) {
+              Write-Host "✅ CLEAN: Windows Defender found no threats." -ForegroundColor Green
+          } elseif ($proc.ExitCode -eq 2) {
+              Write-Error "🚨 THREAT DETECTED: Windows Defender flagged this installer!"
+              exit 1
+          } else {
+              Write-Warning "⚠️ Scan completed with inconclusive exit code: $($proc.ExitCode)"
+          }
+
       - name: Upload MSI
         uses: actions/upload-artifact@v4
         with:
