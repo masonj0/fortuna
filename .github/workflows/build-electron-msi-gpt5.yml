@@ -355,13 +355,13 @@ jobs:
             exit 1
           }
 
-          $outDir = Get-Item -Path ".\\out" -ErrorAction SilentlyContinue
+          $outDir = Get-Item -Path "out" -ErrorAction SilentlyContinue
           if ($null -eq $outDir) {
             Write-Error "No out/ directory generated"
             exit 1
           }
 
-          $fileCount = (Get-ChildItem -Recurse -Path ".\\out" | Measure-Object).Count
+          $fileCount = (Get-ChildItem -Recurse -Path "out" | Measure-Object).Count
           Write-Host "✓ Frontend built: $fileCount files"
 
       - name: 📤 Upload Frontend Artifact
@@ -957,7 +957,7 @@ jobs:
           $destDir = "final-release-artifact"
           New-Item -ItemType Directory -Path $destDir -Force | Out-Null
 
-          # FIX: $. -> $_.
+          # FIX: $. to $_.
           Get-ChildItem -Path $sourceDir -Recurse | ForEach-Object {
             $destPath = Join-Path $destDir $_.Name
             Move-Item -Path $_.FullName -Destination $destPath -Force

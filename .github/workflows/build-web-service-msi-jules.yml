@@ -524,17 +524,18 @@ jobs:
           BACKEND_DIR: ${{ needs.path-finder.outputs.backend_dir }}
           BACKEND_MODULE_PATH: ${{ needs.path-finder.outputs.backend_module_path }}
           BACKEND_SPEC_FILE: ${{ needs.path-finder.outputs.spec_file }}
+          FRONTEND_OUT: ${{ env.FRONTEND_DIR }}/out
         run: |
           import os
           from pathlib import Path
 
-          bk_dir = os.environ['BACKEND_DIR']
-          mod_path = os.environ['MODULE_PATH']
-          # CHANGE: Point to the new service wrapper
-          entry = f"{bk_dir}/main.py"
-          frontend_out = os.environ['FRONTEND_OUT']
+          # FIX: Normalize paths to forward slashes to avoid f-string backslash hell
+          bk_dir = os.environ['BACKEND_DIR'].replace('\\', '/')
+          mod_path = os.environ['BACKEND_MODULE_PATH']
+          frontend_out = os.environ['FRONTEND_OUT'].replace('\\', '/')
 
-          # FIX: Fixed quoting in datas list to avoid syntax error
+          entry = f"{bk_dir}/main.py"
+
           spec = f"""
           # -- mode: python ; coding: utf-8 --
           from PyInstaller.utils.hooks import collect_data_files, collect_submodules
@@ -546,7 +547,6 @@ jobs:
               pathex=[],
               binaries=[],
               datas=collect_data_files('uvicorn') + collect_data_files('slowapi') + [('{frontend_out}', 'ui')],
-              # CHANGE: Add win32timezone to hidden imports (critical for pywin32)
               hiddenimports=collect_submodules('{mod_path}') + ['win32timezone'],
               hookspath=[],
               runtime_hooks=[],

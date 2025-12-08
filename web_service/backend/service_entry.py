@@ -8,10 +8,16 @@ import os
 import uvicorn
 import multiprocessing
 import threading
+from pathlib import Path
 
-# Adjust this import to match your actual app structure
-# If main.py is in the same folder, this works:
-from main import app
+# FIX: Ensure the current directory is in sys.path for relative imports in frozen state
+sys.path.insert(0, str(Path(__file__).parent))
+
+try:
+    from main import app
+except ImportError:
+    # Fallback for different packaging structures
+    from web_service.backend.main import app
 
 class FortunaSvc(win32serviceutil.ServiceFramework):
     _svc_name_ = 'FortunaWebService'

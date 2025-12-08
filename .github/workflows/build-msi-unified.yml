@@ -171,13 +171,12 @@ jobs:
           import os
           from pathlib import Path
 
-          bk_dir = os.environ['BACKEND_DIR']
+          bk_dir = os.environ['BACKEND_DIR'].replace('\\', '/')
           mod_path = os.environ['MODULE_PATH']
-          # CHANGE: Point to the new service wrapper
-          entry = f"{bk_dir}/main.py"
-          frontend_out = os.environ['FRONTEND_OUT']
+          frontend_out = os.environ['FRONTEND_OUT'].replace('\\', '/')
 
-          # FIX: Fixed quoting in datas list to avoid syntax error
+          entry = f"{bk_dir}/main.py"
+
           spec = f"""
           # -- mode: python ; coding: utf-8 --
           from PyInstaller.utils.hooks import collect_data_files, collect_submodules
@@ -189,7 +188,6 @@ jobs:
               pathex=[],
               binaries=[],
               datas=collect_data_files('uvicorn') + collect_data_files('slowapi') + [('{frontend_out}', 'ui')],
-              # CHANGE: Add win32timezone to hidden imports (critical for pywin32)
               hiddenimports=collect_submodules('{mod_path}') + ['win32timezone'],
               hookspath=[],
               runtime_hooks=[],
