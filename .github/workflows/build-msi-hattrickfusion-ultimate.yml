@@ -293,8 +293,16 @@ jobs:
           Set-StrictMode -Version Latest
           if (-not (Test-Path build_wix)) { New-Item -ItemType Directory -Path build_wix | Out-Null }
 
-          # Copy template
+          # Copy template and apply fix
           Copy-Item build_wix/Product_WithService.wxs build_wix/Product.wxs -Force
+          $wxsPath = "build_wix/Product.wxs"
+          [xml]$wxsContent = Get-Content $wxsPath
+          $serviceControl = $wxsContent.SelectSingleNode("//*[local-name()='ServiceControl']")
+          if ($serviceControl -and $serviceControl.HasAttribute("Start")) {
+              $serviceControl.RemoveAttribute("Start")
+              $wxsContent.Save($wxsPath)
+              Write-Host "✅ Dynamically removed 'Start=install' attribute from WiX template."
+          }
 
           # Stage Executable
           if (Test-Path staging/backend/fortuna-backend.exe) {

@@ -41,7 +41,7 @@ class FortunaSvc(win32serviceutil.ServiceFramework):
                               servicemanager.PYS_SERVICE_STARTED,
                               (self._svc_name_, ''))
 
-        config = uvicorn.Config(app, host='0.0.0.0', port=8102, log_config=None, reload=False)
+        config = uvicorn.Config(app, host='127.0.0.1', port=8102, log_config=None, reload=False)
         self.server = uvicorn.Server(config)
 
         # Run the server in a separate thread
