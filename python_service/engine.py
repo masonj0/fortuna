@@ -274,9 +274,8 @@ class OddsEngine:
 
     def _dedupe_races(self, races: List[Race]) -> List[Race]:
         """Deduplicates races and reconciles odds from different sources."""
-        races_copy = deepcopy(races)
         race_map: Dict[str, Race] = {}
-        for race in races_copy:
+        for race in races:
             key = self._race_key(race)
             if key not in race_map:
                 race_map[key] = race
@@ -289,7 +288,12 @@ class OddsEngine:
                         existing_runner.odds.update(new_runner.odds)
                     else:
                         existing_race.runners.append(new_runner)
-                existing_race.source += f", {race.source}"
+
+                # Ensure the source is a list and append new source if not present
+                if not isinstance(existing_race.source, list):
+                    existing_race.source = [existing_race.source]
+                if race.source not in existing_race.source:
+                    existing_race.source.append(race.source)
 
         return list(race_map.values())
 
