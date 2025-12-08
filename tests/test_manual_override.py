@@ -9,7 +9,8 @@ from tests.conftest import get_test_settings
 
 # Override settings for tests
 app.dependency_overrides[get_settings] = get_test_settings
-API_KEY = get_test_settings().API_KEY
+_settings = get_test_settings()
+API_KEY = getattr(_settings, "API_KEY", "test-override-key-123")
 
 
 @pytest.fixture
