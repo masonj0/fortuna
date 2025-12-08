@@ -326,7 +326,7 @@ jobs:
       - name: Build MSI
         working-directory: ${{ env.WIX_DIR }}
         run: |
-          dotnet build Fortuna.wixproj -c Release -p:Platform=x64 -p:DefineConstants="SourceDir=../staging/backend;Version=${{ needs.path-finder.outputs.semver }};ServicePort=${{ env.SERVICE_PORT }}"
+          dotnet build Fortuna.wixproj -c Release -p:Platform=x64 -p:Version=${{ needs.path-finder.outputs.semver }} -p:SourceDir=../staging/backend -p:ServicePort=${{ env.SERVICE_PORT }}
 
       - name: '🐤 The Canary (Malware Pre-Flight)'
         shell: pwsh
