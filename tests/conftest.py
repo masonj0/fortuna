@@ -1,6 +1,12 @@
 import pytest
 import shutil
 from pathlib import Path
+from unittest.mock import patch
+import asyncio
+import os
+from typing import AsyncGenerator, Generator
+from httpx import AsyncClient, ASGITransport
+from asgi_lifespan import LifespanManager
 
 CACHE_DIR = Path("python_service/cache")
 
@@ -11,11 +17,12 @@ async def clear_cache():
     yield
     if CACHE_DIR.exists():
         shutil.rmtree(CACHE_DIR)
-import asyncio
-import os
-from typing import AsyncGenerator, Generator
-from httpx import AsyncClient, ASGITransport
-from asgi_lifespan import LifespanManager
+
+@pytest.fixture(autouse=True)
+def mock_background_tasks():
+    # Prevent background tasks from spawning and crashing the closed event loop
+    with patch("python_service.api._initialize_heavy_resources_sync") as mock:
+        yield mock
 
 # --- 1. Redis Mocking ---
 try:

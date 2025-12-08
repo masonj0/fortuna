@@ -158,7 +158,14 @@ async def lifespan(app: FastAPI):
         await app.state.engine.close()
 
     await cache_manager.disconnect()
-    executor.shutdown(wait=False)
+
+    # Do not shut down the executor in a test environment, as it is shared
+    # across multiple test functions and app instances. Pytest will handle
+    # the process cleanup.
+    settings = get_settings()
+    if not settings.testing:
+        executor.shutdown(wait=False)
+
     log.info("Server shutdown sequence complete.")
 
 
