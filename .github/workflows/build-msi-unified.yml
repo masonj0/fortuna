@@ -147,6 +147,31 @@ jobs:
           npm run build
           cd ../..
 
+      - name: Generate Artifact Manifest
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $outDir = Resolve-Path "${{ env.FRONTEND_DIR }}/out"
+          # Fallback for different env var names in different workflows
+          if (-not (Test-Path $outDir)) { $outDir = Resolve-Path "${{ env.FRONTEND_BUILD_DIR }}" }
+
+          if (-not (Test-Path $outDir)) { Write-Error "❌ Build failed: 'out' dir missing"; exit 1 }
+
+          $manifestPath = "frontend-manifest.tsv"
+          "RelativePath`tSizeBytes`tSHA256" | Out-File $manifestPath -Encoding utf8
+
+          $files = Get-ChildItem -Path $outDir -Recurse -File
+          if ($files.Count -eq 0) { Write-Error "❌ Build failed: 'out' dir empty"; exit 1 }
+
+          Write-Host "✅ Frontend built: $($files.Count) files."
+
+          foreach ($f in $files) {
+            # FIX: Changed TrimStart('\\\\', '/') to TrimStart('\\', '/') to prevent char conversion error
+            $rel = $f.FullName.Substring($outDir.Path.Length).TrimStart('\','/')
+            $hash = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.Substring(0,16)
+            "$rel`t$($f.Length)`t$hash" | Out-File $manifestPath -Encoding utf8 -Append
+          }
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -171,13 +196,12 @@ jobs:
           import os
           from pathlib import Path
 
-          bk_dir = os.environ['BACKEND_DIR']
+          bk_dir = os.environ['BACKEND_DIR'].replace('\\', '/')
           mod_path = os.environ['MODULE_PATH']
-          # CHANGE: Point to the new service wrapper
-          entry = f"{bk_dir}/main.py"
-          frontend_out = os.environ['FRONTEND_OUT']
+          frontend_out = os.environ['FRONTEND_OUT'].replace('\\', '/')
 
-          # FIX: Fixed quoting in datas list to avoid syntax error
+          entry = f"{bk_dir}/main.py"
+
           spec = f"""
           # -- mode: python ; coding: utf-8 --
           from PyInstaller.utils.hooks import collect_data_files, collect_submodules
@@ -189,7 +213,6 @@ jobs:
               pathex=[],
               binaries=[],
               datas=collect_data_files('uvicorn') + collect_data_files('slowapi') + [('{frontend_out}', 'ui')],
-              # CHANGE: Add win32timezone to hidden imports (critical for pywin32)
               hiddenimports=collect_submodules('{mod_path}') + ['win32timezone'],
               hookspath=[],
               runtime_hooks=[],
@@ -304,6 +327,33 @@ jobs:
         working-directory: ${{ env.WIX_DIR }}
         run: |
           dotnet build Fortuna.wixproj -c Release -p:Platform=x64 -p:DefineConstants="SourceDir=../staging/backend;Version=${{ needs.path-finder.outputs.semver }};ServicePort=${{ env.SERVICE_PORT }}"
+
+      - name: '🐤 The Canary (Malware Pre-Flight)'
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $msi = Get-ChildItem -Recurse -Filter "*.msi" | Select-Object -First 1
+          if (!$msi) { Write-Warning "No MSI found to scan."; exit 0 }
+
+          Write-Host "🔍 Scanning $($msi.Name) with Windows Defender..."
+          $defender = "C:\Program Files\Windows Defender\MpCmdRun.exe"
+
+          if (-not (Test-Path $defender)) {
+              Write-Warning "Windows Defender CLI not found at expected path."
+              exit 0
+          }
+
+          # ScanType 3 = File/Custom Scan
+          $proc = Start-Process -FilePath $defender -ArgumentList "-Scan -ScanType 3 -File `"$($msi.FullName)`"" -Wait -PassThru -NoNewWindow
+
+          if ($proc.ExitCode -eq 0) {
+              Write-Host "✅ CLEAN: Windows Defender found no threats." -ForegroundColor Green
+          } elseif ($proc.ExitCode -eq 2) {
+              Write-Error "🚨 THREAT DETECTED: Windows Defender flagged this installer!"
+              exit 1
+          } else {
+              Write-Warning "⚠️ Scan completed with inconclusive exit code: $($proc.ExitCode)"
+          }
 
       - name: Upload MSI Artifact
         uses: actions/upload-artifact@v4
@@ -467,6 +517,49 @@ jobs:
 
           print("❌ Health Check FAILED after 5 attempts")
           sys.exit(1)
+
+      - name: '📸 The Paparazzi (Visual Proof)'
+        shell: pwsh
+        run: |
+          Write-Host "Installing Playwright for visual verification..."
+          python -m pip install playwright
+          python -m playwright install chromium
+
+          # Default to 8102 if SERVICE_PORT is not set
+          $port = "${{ env.SERVICE_PORT }}"
+          if ([string]::IsNullOrWhiteSpace($port)) { $port = "8102" }
+
+          Write-Host "Taking screenshot of http://localhost:$port..."
+          python -c "
+          from playwright.sync_api import sync_playwright
+          import sys
+
+          try:
+              with sync_playwright() as p:
+                  browser = p.chromium.launch()
+                  page = browser.new_page()
+                  # Try index.html, fall back to root if needed
+                  url = f'http://localhost:{sys.argv[1]}/index.html'
+                  print(f'Navigating to {url}...')
+                  page.goto(url)
+                  # Wait a moment for React/Next.js hydration if needed
+                  page.wait_for_timeout(2000)
+                  page.screenshot(path='proof-of-life.png', full_page=True)
+                  browser.close()
+              print('✅ Screenshot captured.')
+          except Exception as e:
+              print(f'❌ Screenshot failed: {e}')
+              # We do not fail the build for this; it is a bonus artifact.
+              sys.exit(0)
+          " $port
+
+      - name: 📤 Upload Visual Proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-proof-${{ github.run_id }}
+          path: proof-of-life.png
+          retention-days: 7
 
       - name: Gather diagnostics
         if: failure()
