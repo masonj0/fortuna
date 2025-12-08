@@ -37,7 +37,7 @@ async def test_get_races_endpoint_success(mock_fetch_all_odds, client):
     headers = {"X-API-Key": "a_secure_test_api_key_that_is_long_enough"}
 
     # ACT
-    response = client.get(f"/api/races?race_date={today.isoformat()}", headers=headers)
+    response = await client.get(f"/api/races?race_date={today.isoformat()}", headers=headers)
 
     # ASSERT
     assert response.status_code == 200
@@ -73,7 +73,7 @@ async def test_get_tipsheet_endpoint_success(tmp_path, client):
             await db.commit()
 
         # ACT
-        response = client.get(f"/api/tipsheet?date={post_time.date().isoformat()}")
+        response = await client.get(f"/api/tipsheet?date={post_time.date().isoformat()}")
 
         # ASSERT
         assert response.status_code == 200
@@ -84,23 +84,26 @@ async def test_get_tipsheet_endpoint_success(tmp_path, client):
         assert response_data[0]["score"] == 85.5
 
 
-def test_health_check_unauthenticated(client):
+@pytest.mark.asyncio
+async def test_health_check_unauthenticated(client):
     """Ensures the /health endpoint is accessible without an API key."""
-    response = client.get("/health")
+    response = await client.get("/health")
     assert response.status_code == 200
     json_response = response.json()
     assert json_response["status"] == "healthy"
 
 
-def test_api_key_authentication_failure(client):
+@pytest.mark.asyncio
+async def test_api_key_authentication_failure(client):
     """Ensures that endpoints are protected and fail with an invalid API key."""
-    response = client.get("/api/races/qualified/trifecta", headers={"X-API-KEY": "invalid_key"})
+    response = await client.get("/api/races/qualified/trifecta", headers={"X-API-KEY": "invalid_key"})
     assert response.status_code == 403
     assert "Invalid or missing API Key" in response.json()["detail"]
 
 
-def test_api_key_authentication_missing(client):
+@pytest.mark.asyncio
+async def test_api_key_authentication_missing(client):
     """Ensures that endpoints are protected and fail with a missing API key."""
-    response = client.get("/api/races/qualified/trifecta")
+    response = await client.get("/api/races/qualified/trifecta")
     assert response.status_code == 403
     assert "Not authenticated" in response.json()["detail"]
