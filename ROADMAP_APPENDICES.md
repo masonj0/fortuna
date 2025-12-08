@@ -49,3 +49,18 @@ This document tracks the strategic evolution of the Fortuna Faucet project.
   - **Data Persistence & Caching:** Implement a local SQLite database to cache race data, improving performance and enabling offline access.
   - **Operation: The Polisher:** Address technical debt by refactoring backend code to resolve deprecation warnings and align with modern library standards.
   - **Operation: The Shield:** Improve backend test coverage by adding unit tests for untested data adapters and the Electron main process.
+  - **Operation: The Auditor (Real-Time Verification)**
+    - **Goal:** Implement a 'Last Hour' retrospective dashboard to validate the 'Favorite to Place' strategy.
+    - **Core Logic:**
+      1.  **Snapshot:** Log every 'Qualifier' race prediction to a local DB (SQLite/Redis) with a timestamp and the predicted Favorite.
+      2.  **The Fetcher:** Periodically poll for official results of races that finished in the last 60 minutes.
+      3.  **The Verdict:** Compare the predicted Favorite against the official Finish Order.
+          - *Win:* Did it finish 1st, 2nd, (or 3rd)? -> CASHED.
+          - *Loss:* Did it finish out of the money? -> BURNED.
+      4.  **The 'Tiny Profit' Calc:** Calculate Net Profit based on the standard $2.00 tote unit.
+          - *Formula:* `Net Profit = (Official_Place_Payout - 2.00)`
+          - *Example:* Payout $2.60 -> Profit +$0.60. Payout $0.00 -> Profit -$2.00.
+    - **Data Sources:**
+      - *US Racing:* Scrape `https://www.equibase.com/static/chart/summary/index.html` (Free Summary Charts contain Final Odds & Payoffs).
+      - *UK/Dogs:* Use `The Racing API` or `GBGB` results endpoints.
+    - **UI:** Display a rolling 'Strike Rate' % and 'Net Profit (1H)' ticker.
