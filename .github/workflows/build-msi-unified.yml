@@ -147,6 +147,31 @@ jobs:
           npm run build
           cd ../..
 
+      - name: Generate Artifact Manifest
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $outDir = Resolve-Path "${{ env.FRONTEND_DIR }}/out"
+          # Fallback for different env var names in different workflows
+          if (-not (Test-Path $outDir)) { $outDir = Resolve-Path "${{ env.FRONTEND_BUILD_DIR }}" }
+
+          if (-not (Test-Path $outDir)) { Write-Error "❌ Build failed: 'out' dir missing"; exit 1 }
+
+          $manifestPath = "frontend-manifest.tsv"
+          "RelativePath`tSizeBytes`tSHA256" | Out-File $manifestPath -Encoding utf8
+
+          $files = Get-ChildItem -Path $outDir -Recurse -File
+          if ($files.Count -eq 0) { Write-Error "❌ Build failed: 'out' dir empty"; exit 1 }
+
+          Write-Host "✅ Frontend built: $($files.Count) files."
+
+          foreach ($f in $files) {
+            # FIX: Changed TrimStart('\\\\', '/') to TrimStart('\\', '/') to prevent char conversion error
+            $rel = $f.FullName.Substring($outDir.Path.Length).TrimStart('\','/')
+            $hash = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.Substring(0,16)
+            "$rel`t$($f.Length)`t$hash" | Out-File $manifestPath -Encoding utf8 -Append
+          }
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
