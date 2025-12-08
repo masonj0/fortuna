@@ -39,6 +39,8 @@ EXCLUDE_DIRS = {
 }
 
 EXCLUDE_FILES = {
+    # Exclude deactivated workflows
+    ".ymlx",
     # Exclude the manifests and archives themselves
     "MANIFEST_PART1.json",
     "MANIFEST_PART2.json",
@@ -89,7 +91,7 @@ def get_all_project_files():
             dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS]
 
             for name in files:
-                if name in EXCLUDE_FILES or name.endswith((".bmp", ".png", ".ico")):
+                if name in EXCLUDE_FILES or name.endswith((".bmp", ".png", ".ico", ".ymlx")):
                     continue
 
                 file_path = Path(root) / name
