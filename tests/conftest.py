@@ -1,4 +1,16 @@
 import pytest
+import shutil
+from pathlib import Path
+
+CACHE_DIR = Path("python_service/cache")
+
+@pytest.fixture
+async def clear_cache():
+    if CACHE_DIR.exists():
+        shutil.rmtree(CACHE_DIR)
+    yield
+    if CACHE_DIR.exists():
+        shutil.rmtree(CACHE_DIR)
 import asyncio
 import os
 from typing import AsyncGenerator, Generator
