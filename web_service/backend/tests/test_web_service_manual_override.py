@@ -3,7 +3,12 @@ import pytest
 
 # Use an absolute import as a workaround for the broken test environment.
 # Pytest is not recognizing this directory as part of a package, so relative imports fail.
-from manual_override_manager import ManualOverrideManager
+import sys
+from pathlib import Path
+# Add repo root to path to allow absolute imports
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+
+from web_service.backend.manual_override_manager import ManualOverrideManager
 
 
 @pytest.fixture
