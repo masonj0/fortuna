@@ -47,14 +47,17 @@
     </ComponentGroup>
 
     <ComponentGroup Id="RuntimeDirectoryComponents" Directory="INSTALLFOLDER">
-        <Component Id="DataDirectoryComponent" Guid="a2e3820a-606b-452f-b43f-b82b9a7852a0">
+        <Component Id="DataDirectoryComponent" Guid="*">
             <CreateFolder Directory="Dir_Data" />
+            <RegistryValue Root="HKCU" Key="Software\Fortuna Faucet\Directories" Name="Data" Type="string" Value="1" KeyPath="yes" />
         </Component>
-        <Component Id="JsonDirectoryComponent" Guid="b4d7ea21-821f-4a0b-9303-3a52e1f42d2a">
+        <Component Id="JsonDirectoryComponent" Guid="*">
             <CreateFolder Directory="Dir_Json" />
+            <RegistryValue Root="HKCU" Key="Software\Fortuna Faucet\Directories" Name="Json" Type="string" Value="1" KeyPath="yes" />
         </Component>
-        <Component Id="LogsDirectoryComponent" Guid="d66f6540-3f11-4475-9a67-9c9852f87a32">
+        <Component Id="LogsDirectoryComponent" Guid="*">
             <CreateFolder Directory="Dir_Logs" />
+            <RegistryValue Root="HKCU" Key="Software\Fortuna Faucet\Directories" Name="Logs" Type="string" Value="1" KeyPath="yes" />
         </Component>
     </ComponentGroup>
 
