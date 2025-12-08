@@ -16,18 +16,21 @@ class TestSettings:
     redis_url: str = "redis://localhost:6379"
     database_url: str = "sqlite+aiosqlite:///:memory:"
     testing: bool = True
+    # Add sensible defaults for engine/HTTP client initialization
+    HTTP_POOL_CONNECTIONS: int = 100
+    HTTP_MAX_KEEPALIVE: int = 20
+    API_KEY: str = "test-api-key-123"
+    MAX_CONCURRENT_REQUESTS: int = 50
+    # Add dummy values for adapter tests
+    GREYHOUND_API_URL: str = "http://test-greyhound-api.com"
+    THE_RACING_API_KEY: str = "test-racing-api-key"
 
 def get_test_settings() -> TestSettings:
     return TestSettings()
 
 # --- 3. Event Loop (Function Scope) ---
-# FIX: Changed scope to 'function' to match pytest-asyncio defaults and prevent shutdown errors
-@pytest.fixture(scope="function")
-def event_loop() -> Generator:
-    """Create an instance of the default event loop for each test case."""
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
+# FIX: The explicit event_loop fixture is removed. pytest-asyncio will now manage the loop.
+# This prevents a RuntimeError with the ThreadPoolExecutor during the app's lifespan startup.
 
 # --- 4. Redis Client Fixture ---
 @pytest.fixture
