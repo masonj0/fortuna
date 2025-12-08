@@ -83,13 +83,12 @@ async def app(mock_dangerous_dependencies, test_settings):
 
     # Increase timeout to 30s to prevent slow CI runners from failing
     async with LifespanManager(fastapi_app, startup_timeout=30) as manager:
-        yield manager
+        yield manager.app
 
 @pytest.fixture
 async def client(app):
-    from httpx import AsyncClient, ASGITransport
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        ac.app = app
+    from httpx import AsyncClient
+    async with AsyncClient(app=app, base_url="http://test") as ac:
         yield ac
 
 # =============================================================================

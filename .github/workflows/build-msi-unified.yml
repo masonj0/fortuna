@@ -299,9 +299,13 @@ jobs:
 
           # 2. Dynamically remove the problematic Start="install" attribute to prevent timeouts
           $wxsPath = "${{ env.WIX_DIR }}/Product.wxs"
-          $wxsContent = Get-Content $wxsPath -Raw
-          $wxsContent = $wxsContent -replace 'Start="install"', ''
-          Set-Content -Path $wxsPath -Value $wxsContent -Encoding UTF8 -Force
+          [xml]$wxsContent = Get-Content $wxsPath
+          $serviceControl = $wxsContent.SelectSingleNode("//*[local-name()='ServiceControl']")
+          if ($serviceControl -and $serviceControl.HasAttribute("Start")) {
+              $serviceControl.RemoveAttribute("Start")
+              $wxsContent.Save($wxsPath)
+              Write-Host "✅ Dynamically removed 'Start=install' attribute from WiX template."
+          }
 
           # 3. Generate Project with CAB embedding enabled
           $proj = @(
