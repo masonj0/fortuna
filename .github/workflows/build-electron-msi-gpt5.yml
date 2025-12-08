@@ -629,7 +629,6 @@ jobs:
 
       - name: '🐤 The Canary (Malware Pre-Flight)'
         shell: pwsh
-        continue-on-error: true
         run: |
           $msi = Get-ChildItem -Recurse -Filter "*.msi" | Select-Object -First 1
           if (!$msi) { Write-Warning "No MSI found to scan."; exit 0 }

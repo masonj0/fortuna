@@ -4,6 +4,7 @@ on:
     branches: ["main"]
     tags: ["v*"]
   workflow_dispatch:
+
 env:
   NODE_VERSION: '20'
   PYTHON_VERSION: '3.12'
@@ -17,12 +18,13 @@ env:
   WIX_DIR: 'build_wix'
   # Settings
   PYTHONUTF8: '1'
+
 jobs:
   # ==================================================================================
   # JOB 1: PATH FINDER (Dynamic Detection & Metadata)
   # ==================================================================================
   path-finder:
-    name: '🔎 Path Finder'
+    name: '🔍 Path Finder'
     runs-on: windows-latest
     timeout-minutes: 5
     outputs:
@@ -60,12 +62,13 @@ jobs:
           "semver=$ver" | Out-File $env:GITHUB_OUTPUT -Append
           "short_sha=$sha" | Out-File $env:GITHUB_OUTPUT -Append
           "build_id=$bid" | Out-File $env:GITHUB_OUTPUT -Append
-          Write-Host "🔖 Version: $ver | SHA: $sha | Build ID: $bid"
+          Write-Host "🏷️ Version: $ver | SHA: $sha | Build ID: $bid"
+
   # ==================================================================================
   # JOB 2: BUILD FRONTEND (Cached & Manifested)
   # ==================================================================================
   build-frontend:
-    name: '📦 Build Frontend'
+    name: '🎨 Build Frontend'
     runs-on: windows-latest
     needs: path-finder
     timeout-minutes: 20
@@ -81,7 +84,6 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.FRONTEND_DIR }}/out
-          # Cache key based on source files only (ignores readme/docs changes)
           key: ${{ runner.os }}-frontend-${{ hashFiles('**/package-lock.json', '**/*.js', '**/*.ts', '**/*.tsx', '**/*.css') }}
           restore-keys: |
             ${{ runner.os }}-frontend-
@@ -101,8 +103,8 @@ jobs:
           Write-Host "✅ Frontend built: $($files.Count) files."
           "RelativePath`tSizeBytes`tSHA256" | Out-File frontend-manifest.tsv -Encoding utf8
           foreach ($f in $files) {
-            $rel = $f.FullName.Substring($outDir.Path.Length).TrimStart('\','/')
-            $hash = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.Substring(0,16) # Partial hash for readability
+            $rel = $f.FullName.Substring($outDir.Path.Length).TrimStart('\\','/')
+            $hash = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.Substring(0,16)
             "$rel`t$($f.Length)`t$hash" | Out-File frontend-manifest.tsv -Encoding utf8 -Append
           }
       - name: Upload Frontend
@@ -113,8 +115,9 @@ jobs:
             ${{ env.FRONTEND_DIR }}/out
             frontend-manifest.tsv
           retention-days: 3
+
   # ==================================================================================
-  # JOB 3: BUILD BACKEND (Cached, Frozen & Injected)
+  # JOB 3: BUILD BACKEND (TDD, Cached, Frozen & Injected)
   # ==================================================================================
   build-backend:
     name: '🐍 Build Backend'
@@ -130,26 +133,32 @@ jobs:
         with:
           name: frontend-build-${{ needs.path-finder.outputs.build_id }}
           path: ${{ env.FRONTEND_DIR }}/out
-      # Remove the manifest file from the download so it doesn't get bundled into the UI folder
       - name: Clean Staging
         run: Remove-Item "${{ env.FRONTEND_DIR }}/out/frontend-manifest.tsv" -ErrorAction SilentlyContinue
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
-      - name: Install & Freeze Dependencies
+      - name: Install Dependencies
         run: |
           pip install -r ${{ env.BACKEND_DIR }}/requirements.txt
-          pip install pyinstaller==6.6.0 pytest
+          pip install pyinstaller==6.6.0 pytest pytest-asyncio httpx asgi-lifespan fakeredis
           pip freeze > backend-freeze.txt
-      - name: Bytecode Check (Fail Fast)
-        run: python -m compileall -q ${{ env.BACKEND_DIR }}
+
+      - name: 🧪 Run Unit Tests (TDD)
+        shell: pwsh
+        run: |
+          Write-Host "Running Test Suite..."
+          # If this fails, we stop here. Shift Left.
+          pytest
+
       - name: Cache PyInstaller Dist
         id: cache-backend
         uses: actions/cache@v4
         with:
           path: dist
           key: ${{ runner.os }}-backend-${{ hashFiles(format('{0}/**', env.BACKEND_DIR)) }}
+
       - name: Generate Spec & Build
         if: steps.cache-backend.outputs.cache-hit != 'true'
         shell: python
@@ -214,8 +223,9 @@ jobs:
           name: backend-dist-${{ needs.path-finder.outputs.build_id }}
           path: dist/
           retention-days: 3
+
   # ==================================================================================
-  # JOB 4: PACKAGE MSI (WiX v4 with NuGet Caching)
+  # JOB 4: PACKAGE MSI (WiX v4 with Dietician & Canary)
   # ==================================================================================
   package-msi:
     name: '💿 Package MSI'
@@ -233,21 +243,35 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
-      - name: Cache NuGet
-        uses: actions/cache@v4
-        with:
-          path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-${{ hashFiles('build_wix/**') }}
+
+      - name: '⚖️ The Dietician (Size Analysis)'
+        shell: pwsh
+        run: |
+          $target = "staging"
+          $limitMB = 300
+          Write-Host "--- 📊 Size Breakdown ---"
+          $files = Get-ChildItem -Path $target -Recurse -File -ErrorAction SilentlyContinue
+          if (!$files) { Write-Warning "No files found to weigh."; exit 0 }
+          $totalBytes = ($files | Measure-Object -Property Length -Sum).Sum
+          $totalMB = [math]::Round($totalBytes / 1MB, 2)
+          Write-Host "Total Payload Size: $totalMB MB"
+          if ($totalMB -gt $limitMB) {
+              Write-Warning "⚠️ BLOAT ALERT: Build exceeds $limitMB MB limit! Check the heaviest files below."
+          } else {
+              Write-Host "✅ Size within limits (< $limitMB MB)." -ForegroundColor Green
+          }
+          Write-Host "`n--- 🐘 Top 10 Heaviest Files ---"
+          $files | Sort-Object Length -Descending | Select-Object -First 10 @{N='File';E={$_.FullName.Replace($pwd,'')}}, @{N='Size(MB)';E={"{0:N2}" -f ($_.Length/1MB)}} | Format-Table -AutoSize
+
       - name: 📄 Ensure WiX License Exists
         shell: pwsh
         run: |
-          # Ensure directory exists
           if (-not (Test-Path build_wix)) { New-Item -ItemType Directory -Path build_wix | Out-Null }
           $licensePath = 'build_wix/license.rtf'
           if (-not (Test-Path $licensePath)) {
             Write-Host '⚠️ License file missing. Generating placeholder...'
-            # Minimal valid RTF content
-            $rtfContent = '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\f0\fs24 END USER LICENSE AGREEMENT\par\par This is a placeholder license for Fortuna Faucet. Please replace with actual terms.}'
+            # FIX: Use Base64 decoding to avoid RTF escape sequence issues
+            $rtfContent = [System.Text.Encoding]::ASCII.GetString([System.Convert]::FromBase64String("e1xydGYxXGFuc2lcZGVmZjB7XGZvbnR0Ymx7XGYwIEFyaWFsO319XGYwXGZzMjQgRU5EIFVTRVIgTElDRU5TRSBBR1JFRU1FTlRccGFyXHBhciBUaGlzIGlzIGEgcGxhY2Vob2xkZXIgbGljZW5zZSBmb3IgRm9ydHVuYSBGYXVjZXQuIFBsZWFzZSByZXBsYWNlIHdpdGggYWN0dWFsIHRlcm1zLn0="))
             Set-Content -Path $licensePath -Value $rtfContent -Encoding Ascii
             Write-Host '✅ Placeholder license.rtf created.'
           } else {
@@ -288,8 +312,22 @@ jobs:
           Set-Content build_wix/Fortuna.wixproj ($proj -join "`r`n") -Encoding utf8
       - name: Build MSI
         working-directory: ${{ env.WIX_DIR }}
+        # FIX: Pass variables via DefineConstants
+        run: dotnet build Fortuna.wixproj -c Release -p:Platform=x64 -p:DefineConstants="Version=${{ needs.path-finder.outputs.semver }};SourceDir=../staging/backend;ServicePort=${{ env.SERVICE_PORT }}"
+
+      - name: '🐤 The Canary (Malware Pre-Flight)'
+        shell: pwsh
         run: |
-          dotnet build Fortuna.wixproj -c Release -p:Platform=x64 -p:DefineConstants="SourceDir=../staging/backend;Version=${{ needs.path-finder.outputs.semver }};ServicePort=${{ env.SERVICE_PORT }}"
+          $msi = Get-ChildItem -Path "${{ env.WIX_DIR }}/bin/x64/Release" -Filter "*.msi" | Select-Object -First 1
+          if (!$msi) { Write-Warning "No MSI found to scan."; exit 0 }
+          Write-Host "🔍 Scanning $($msi.Name) with Windows Defender..."
+          $defender = "C:\Program Files\Windows Defender\MpCmdRun.exe"
+          if (-not (Test-Path $defender)) { Write-Warning "Windows Defender CLI not found."; exit 0 }
+          $proc = Start-Process -FilePath $defender -ArgumentList "-Scan -ScanType 3 -File `"$($msi.FullName)`"" -Wait -PassThru -NoNewWindow
+          if ($proc.ExitCode -eq 0) { Write-Host "✅ CLEAN: Windows Defender found no threats." -ForegroundColor Green }
+          elseif ($proc.ExitCode -eq 2) { Write-Error "🚨 THREAT DETECTED!"; exit 1 }
+          else { Write-Warning "⚠️ Scan inconclusive: $($proc.ExitCode)" }
+
       - name: Rename & Hash MSI
         id: name_msi
         shell: pwsh
@@ -337,8 +375,9 @@ jobs:
           name: msi-installer-${{ needs.path-finder.outputs.build_id }}
           path: ${{ env.WIX_DIR }}/bin/x64/Release/*
           retention-days: 7
+
   # ==================================================================================
-  # JOB 5: SMOKE TEST (Triple-Loop + Diagnostics)
+  # JOB 5: SMOKE TEST (Triple-Loop + Paparazzi)
   # ==================================================================================
   smoke-test:
     name: '🔬 Smoke Test'
@@ -401,7 +440,7 @@ jobs:
           subprocess.run(["sc.exe", "query", "FortunaWebService"])
           sys.exit(1)
 
-      - name: '🩺 Loop 3 - Health Check'
+      - name: '🏥 Loop 3 - Health Check'
         shell: python
         env:
           PORT: ${{ env.SERVICE_PORT }}
@@ -424,58 +463,39 @@ jobs:
               time.sleep(2)
           sys.exit(1)
 
-      - name: '🌐 Loop 4 - UI Verification'
-        shell: pwsh
-        run: |
-          $uri = "http://127.0.0.1:${{ env.SERVICE_PORT }}/index.html"
-          for ($i = 0; $i -lt 10; $i++) {
-            try {
-              $r = Invoke-WebRequest -Uri $uri -TimeoutSec 3 -UseBasicParsing -ErrorAction Stop
-              if ($r.StatusCode -eq 200) { Write-Host "✅ UI Served"; exit 0 }
-            } catch { Start-Sleep 2 }
-          }
-          Write-Warning "UI check failed (Backend is healthy though)"
       - name: '📸 The Paparazzi (Visual Proof)'
         shell: pwsh
         run: |
-          Write-Host "Installing Playwright for visual verification..."
+          Write-Host "Installing Playwright..."
           python -m pip install playwright
           python -m playwright install chromium
-
-          # Default to 8102 if SERVICE_PORT is not set
           $port = "${{ env.SERVICE_PORT }}"
-          if ([string]::IsNullOrWhiteSpace($port)) { $port = "8102" }
-
           Write-Host "Taking screenshot of http://localhost:$port..."
           python -c "
           from playwright.sync_api import sync_playwright
           import sys
-
           try:
               with sync_playwright() as p:
                   browser = p.chromium.launch()
                   page = browser.new_page()
-                  # Try index.html, fall back to root if needed
-                  url = f'http://localhost:{sys.argv[1]}/index.html'
-                  print(f'Navigating to {url}...')
-                  page.goto(url)
-                  # Wait a moment for React/Next.js hydration if needed
+                  page.goto(f'http://localhost:{sys.argv[1]}/index.html')
                   page.wait_for_timeout(2000)
                   page.screenshot(path='proof-of-life.png', full_page=True)
                   browser.close()
               print('✅ Screenshot captured.')
           except Exception as e:
               print(f'❌ Screenshot failed: {e}')
-              # We do not fail the build for this; it is a bonus artifact.
               sys.exit(0)
           " $port
 
       - name: 📤 Upload Visual Proof
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: visual-proof-${{ github.run_id }}
           path: proof-of-life.png
           retention-days: 7
+
       - name: 📊 Capture Diagnostics
         if: failure()
         shell: pwsh
@@ -499,13 +519,13 @@ jobs:
           sc.exe stop FortunaWebService
           sc.exe delete FortunaWebService
           Remove-NetFirewallRule -DisplayName "${{ env.FIREWALL_RULE }}" -ErrorAction SilentlyContinue
+
   # ==================================================================================
-  # JOB 6: GENERATE SBOM (The Missing Piece)
+  # JOB 6: GENERATE SBOM
   # ==================================================================================
   generate-sbom:
     name: '📜 Generate SBOM'
     runs-on: ubuntu-latest
-    # FIX: Added path-finder to needs so we can access build_id
     needs: [build-backend, path-finder]
     steps:
       - uses: actions/checkout@v4
@@ -514,7 +534,11 @@ jobs:
           name: backend-dist-${{ needs.path-finder.outputs.build_id }}
           path: backend
       - name: Create SBOM
-        run: python .github/scripts/generate_sbom.py
+        uses: anchore/sbom-action@v0
+        with:
+          path: backend
+          output-file: sbom.spdx.json
+          format: spdx-json
       - name: Upload SBOM
         uses: actions/upload-artifact@v4
         with:
@@ -525,7 +549,7 @@ jobs:
   # JOB 7: RELEASE (On Tag)
   # ==================================================================================
   release:
-    name: '📦 Create Release'
+    name: '🚀 Create Release'
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     needs: [smoke-test, path-finder, generate-sbom]
@@ -536,26 +560,16 @@ jobs:
         with:
           name: msi-installer-${{ needs.path-finder.outputs.build_id }}
           path: assets
+      - uses: actions/download-artifact@v4
+        with:
+          name: sbom-${{ needs.path-finder.outputs.build_id }}
+          path: assets
       - name: Generate Checksums
         run: |
           cd assets
-          # Generate standard SHA256SUMS
           sha256sum * > SHASUMS256.txt
-          # Generate detailed CHECKSUMS with header
-          echo "Fortuna Faucet Release Checksums" > CHECKSUMS.txt
-          echo "Generated: $(date)" >> CHECKSUMS.txt
-          echo "----------------------------------------" >> CHECKSUMS.txt
-          sha256sum * >> CHECKSUMS.txt
       - name: Publish Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            assets/*
+          files: assets/*
           generate_release_notes: true
-          body: |
-            ## Installation
-            1. Download the `.msi` file.
-            2. Run the installer.
-            3. The service will start automatically on port ${{ env.SERVICE_PORT }}.
-            ## Verification
-            Verify the integrity of your download using `SHASUMS256.txt`.
