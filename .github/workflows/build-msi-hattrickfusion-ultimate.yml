@@ -293,8 +293,11 @@ jobs:
           Set-StrictMode -Version Latest
           if (-not (Test-Path build_wix)) { New-Item -ItemType Directory -Path build_wix | Out-Null }
 
-          # Copy template
+          # Copy template and apply fix
           Copy-Item build_wix/Product_WithService.wxs build_wix/Product.wxs -Force
+          $wxsPath = "build_wix/Product.wxs"
+          (Get-Content $wxsPath -Raw) -replace 'Start="install"', '' | Set-Content -Path $wxsPath -Encoding UTF8 -Force
+          Write-Host "✅ Dynamically removed 'Start=install' attribute from WiX template."
 
           # Stage Executable
           if (Test-Path staging/backend/fortuna-backend.exe) {
