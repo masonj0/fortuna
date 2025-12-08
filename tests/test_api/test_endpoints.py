@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from python_service.api import app
@@ -5,8 +6,9 @@ from python_service.api import app
 client = TestClient(app)
 
 
-def test_health_check():
+@pytest.mark.asyncio
+async def test_health_check(client):
     """Tests the unauthenticated /health endpoint."""
-    response = client.get("/health")
+    response = await client.get("/health")
     assert response.status_code == 200
-    assert response.json()["status"] == "ok"
+    assert response.json()["status"] == "healthy"

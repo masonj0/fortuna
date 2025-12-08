@@ -50,7 +50,8 @@ def test_skip_request(manager: ManualOverrideManager):
     assert data is None
 
 
-def test_get_pending_overrides_endpoint(client):
+@pytest.mark.asyncio
+async def test_get_pending_overrides_endpoint(client):
     # ARRANGE
     # Access the manager *after* the TestClient has run the lifespan startup
     manager = client.app.state.manual_override_manager
@@ -58,7 +59,7 @@ def test_get_pending_overrides_endpoint(client):
     manager.register_failure("EndpointAdapter", "http://endpoint.com/data")
 
     # ACT
-    response = client.get("/api/manual-overrides/pending", headers={"X-API-Key": API_KEY})
+    response = await client.get("/api/manual-overrides/pending", headers={"X-API-Key": API_KEY})
     assert response.status_code == 200
     data = response.json()
     assert "pending_requests" in data
@@ -66,7 +67,8 @@ def test_get_pending_overrides_endpoint(client):
     assert data["pending_requests"][0]["adapter_name"] == "EndpointAdapter"
 
 
-def test_submit_manual_data_endpoint(client):
+@pytest.mark.asyncio
+async def test_submit_manual_data_endpoint(client):
     # ARRANGE
     manager = client.app.state.manual_override_manager
     manager.clear_old_requests(max_age_hours=-1)
@@ -76,7 +78,7 @@ def test_submit_manual_data_endpoint(client):
         "content": "<h1>Hello</h1>",
         "content_type": "html",
     }
-    response = client.post(
+    response = await client.post(
         "/api/manual-overrides/submit",
         json=submission,
         headers={"X-API-Key": API_KEY},
@@ -88,12 +90,13 @@ def test_submit_manual_data_endpoint(client):
     assert data[0] == "<h1>Hello</h1>"
 
 
-def test_skip_manual_override_endpoint(client):
+@pytest.mark.asyncio
+async def test_skip_manual_override_endpoint(client):
     # ARRANGE
     manager = client.app.state.manual_override_manager
     manager.clear_old_requests(max_age_hours=-1)
     request_id = manager.register_failure("SkipAdapter", "http://skip.com/data")
-    response = client.post(f"/api/manual-overrides/skip/{request_id}", headers={"X-API-Key": API_KEY})
+    response = await client.post(f"/api/manual-overrides/skip/{request_id}", headers={"X-API-Key": API_KEY})
     assert response.status_code == 200
     assert response.json()["status"] == "success"
     # Verify the request is no longer pending

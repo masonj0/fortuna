@@ -942,7 +942,7 @@ jobs:
         working-directory: ${{ env.WIX_DIR }}
         run: |
           Set-StrictMode -Version Latest
-          dotnet build Fortuna.wixproj -c Release -p:Platform=x64 -p:Version="${{ env.BUILD_VERSION }}" -p:SourceDir=../staging/backend -p:ServicePort=${{ env.SERVICE_PORT }}
+          dotnet build Fortuna.wixproj -c Release -p:Platform=x64 -p:DefineConstants="SourceDir=../${{ env.MSI_STAGING_DIR }};Version=${{ env.BUILD_VERSION }};ServicePort=${{ env.SERVICE_PORT }}"
           $msiFile = "bin/x64/Release/${{ steps.stage.outputs.msi_name }}"
           if (-not (Test-Path $msiFile)) { throw "MSI not created" }
           $hash = (Get-FileHash $msiFile -Algorithm SHA256).Hash

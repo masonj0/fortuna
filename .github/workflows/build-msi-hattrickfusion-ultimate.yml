@@ -288,7 +288,8 @@ jobs:
           Set-Content build_wix/Fortuna.wixproj ($proj -join "`r`n") -Encoding utf8
       - name: Build MSI
         working-directory: ${{ env.WIX_DIR }}
-        run: dotnet build Fortuna.wixproj -c Release -p:Platform=x64 -p:Version=${{ needs.path-finder.outputs.semver }} -p:SourceDir=../staging/backend -p:ServicePort=${{ env.SERVICE_PORT }}
+        run: |
+          dotnet build Fortuna.wixproj -c Release -p:Platform=x64 -p:DefineConstants="SourceDir=../staging/backend;Version=${{ needs.path-finder.outputs.semver }};ServicePort=${{ env.SERVICE_PORT }}"
       - name: Rename & Hash MSI
         id: name_msi
         shell: pwsh
@@ -406,6 +407,38 @@ jobs:
             } catch { Start-Sleep 2 }
           }
           Write-Warning "UI check failed (Backend is healthy though)"
+      - name: '📸 The Paparazzi (Visual Proof)'
+        shell: pwsh
+        run: |
+          Write-Host "Installing Playwright for visual verification..."
+          pip install playwright
+          playwright install chromium
+
+          Write-Host "Taking screenshot of http://localhost:${{ env.SERVICE_PORT }}..."
+          python -c "
+          from playwright.sync_api import sync_playwright
+          import sys
+
+          try:
+              with sync_playwright() as p:
+                  browser = p.chromium.launch()
+                  page = browser.new_page()
+                  page.goto('http://localhost:${{ env.SERVICE_PORT }}/index.html')
+                  # Wait for a specific element if you want to be fancy, e.g., page.wait_for_selector('#app')
+                  page.screenshot(path='proof-of-life.png', full_page=True)
+                  browser.close()
+              print('✅ Screenshot captured.')
+          except Exception as e:
+              print(f'❌ Screenshot failed: {e}')
+              sys.exit(1)
+          "
+
+      - name: 📤 Upload Visual Proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-proof-${{ github.run_id }}
+          path: proof-of-life.png
+          retention-days: 7
       - name: 📊 Capture Diagnostics
         if: failure()
         shell: pwsh
