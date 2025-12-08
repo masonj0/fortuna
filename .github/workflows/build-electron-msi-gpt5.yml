@@ -13,7 +13,7 @@ env:
   NODE_VERSION: '18'
   PYTHON_VERSION: '3.11'
   ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
-  BACKEND_DIR: 'python_service'
+  BACKEND_DIR: 'web_service/backend'
   PYTHONUTF8: '1'
 
 jobs:
@@ -153,23 +153,55 @@ jobs:
           pip install -r ${{ env.BACKEND_DIR }}/requirements-dev.txt
           Write-Host "✓ Python dependencies installed"
 
-      - name: 🧪 Run Unit Tests (TDD Integration)
-        continue-on-error: true
+      - name: 🧪 Run Unit Tests (Quality Gate)
         shell: pwsh
         run: |
           Write-Host "Installing Test Dependencies..."
-          # FIX: Explicitly install all test dependencies identified in logs
           pip install pytest pytest-asyncio httpx asgi-lifespan fakeredis
-
-          Write-Host "Running Test Suite..."
-          # This will run all tests in the 'tests/' directory using configuration from pytest.ini
-          # If this step fails, the build stops here (Shift Left).
-          pytest
+          # 1. Define the Failure Threshold
+          $MAX_ALLOWED_FAILURES = 30
+          Write-Host "Running Test Suite (Threshold: $MAX_ALLOWED_FAILURES failures)..."
+          # 2. Run Pytest and generate an XML report.
+          # We use 'cmd /c' and '|| true' to ensure the script doesn't die immediately on exit code 1.
+          cmd /c "pytest --junitxml=test-report.xml" || Write-Host "Pytest finished with issues."
+          # 3. Parse the XML Report
+          if (Test-Path "test-report.xml") {
+              [xml]$xml = Get-Content "test-report.xml"
+              # Sum up failures and errors
+              $failures = 0
+              $errors = 0
+              # Handle different XML structures (sometimes root is testsuites, sometimes testsuite)
+              if ($xml.testsuites) {
+                  $failures = [int]$xml.testsuites.failures
+                  $errors = [int]$xml.testsuites.errors
+              } elseif ($xml.testsuite) {
+                  $failures = [int]$xml.testsuite.failures
+                  $errors = [int]$xml.testsuite.errors
+              }
+              $total_issues = $failures + $errors
+              Write-Host "----------------------------------------"
+              Write-Host "📊 TEST RESULTS SUMMARY"
+              Write-Host "   Failures: $failures"
+              Write-Host "   Errors:   $errors"
+              Write-Host "   Total:    $total_issues"
+              Write-Host "   Limit:    $MAX_ALLOWED_FAILURES"
+              Write-Host "----------------------------------------"
+              # 4. The Decision Logic
+              if ($total_issues -gt $MAX_ALLOWED_FAILURES) {
+                  Write-Error "❌ CRITICAL: Too many tests failed ($total_issues). Limit is $MAX_ALLOWED_FAILURES."
+                  exit 1
+              } else {
+                  Write-Host "✅ ACCEPTABLE: Failure count is within tolerance. Proceeding with build..." -ForegroundColor Green
+              }
+          } else {
+              Write-Error "❌ FATAL: No test report generated. Pytest failed to start."
+              exit 1
+          }
 
       - name: ☢️ NUCLEAR FIX -- Ensure Python Package Structure & Double Injection
         shell: pwsh
         run: |
-          Set-Content -Path "python_service/__init__.py" -Value "# This file is intentionally non-empty to ensure package recognition."
+          Set-Content -Path "web_service/backend/__init__.py" -Value "# This file is intentionally non-empty to ensure package recognition."
           Write-Host "✅ Ensured non-empty __init__.py files exist for package discovery."
 
       - name: Create Dynamic fortuna-backend-electron.spec for PyInstaller
@@ -177,10 +209,10 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
           $entry_point = '${{ env.BACKEND_DIR }}/main.py'.Replace('\\', '/')
-          $other_service = "web_service"
+          $other_service = "python_service"
 
           # Ensure absolute paths for the init files
-          $backend_init = (Resolve-Path "python_service/__init__.py").Path.Replace('\\', '/')
+          $backend_init = (Resolve-Path "web_service/backend/__init__.py").Path.Replace('\\', '/')
 
           $specContent = @(
             "# -- mode: python ; coding: utf-8 --",
@@ -196,13 +228,13 @@ jobs:
             "datas += collect_data_files('slowapi')",
             "datas += collect_data_files('structlog')",
             "",
-            "hiddenimports = collect_submodules('python_service')",
+            "hiddenimports = collect_submodules('web_service.backend')",
             "hiddenimports += [",
             " 'uvicorn.logging', 'uvicorn.loops.auto', 'uvicorn.lifespan.on',",
             " 'uvicorn.protocols.http.h11_impl', 'uvicorn.protocols.websockets.wsproto_impl',",
             " 'fastapi.routing', 'starlette.staticfiles', 'anyio._backends._asyncio',",
             " 'httpcore', 'httpx', 'slowapi', 'structlog', 'tenacity', 'aiosqlite',",
-            " 'pydantic_core'",
+            " 'pydantic_core', 'pydantic_settings.sources'",
             "]",
             "",
             "a = Analysis(",
@@ -222,7 +254,7 @@ jobs:
             "",
             "# ☢️ NUCLEAR OVERRIDE: Force init files into the PYZ archive",
             "a.pure += [",
-            " ('python_service', '$backend_init', 'PYMODULE')",
+            " ('web_service.backend', '$backend_init', 'PYMODULE')",
             "]",
             "",
             "pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)",
@@ -737,6 +769,8 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 15
     needs: [validate-environment, build-electron-msi]
+    env:
+      FORTUNA_ENV: 'smoke-test'
     steps:
       - name: 📥 Download MSI Installer
         uses: actions/download-artifact@v4
