@@ -1,4 +1,4 @@
-name: 🏎️ Build Electron MSI (Hybrid V12 Engine)
+name:  Yudit Build Electron MSI (Hybrid V12 Engine)
 
 on:
   push:
@@ -26,7 +26,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: 🏷️ Metadata
+      - name: 🔖 Metadata
         id: meta
         shell: pwsh
         run: |
@@ -100,16 +100,18 @@ jobs:
       - name: 🚚 Stage Artifacts for Electron
         shell: pwsh
         run: |
-          # Move Python Backend to where electron-builder expects it
-          # (Adjust this path based on your electron-builder-config.yml)
+          # FIX: The backend is nested inside a 'service' directory from the artifact structure
+          $backendSource = "downloaded_core/service/fortuna-backend"
           $backendDest = "${{ env.ELECTRON_DIR }}/python_service-bin"
           New-Item -ItemType Directory -Path $backendDest -Force | Out-Null
-          Copy-Item -Path "downloaded_core/fortuna-backend/*" -Destination $backendDest -Recurse -Force
+          Copy-Item -Path "$($backendSource)/*" -Destination $backendDest -Recurse -Force
 
           # Move Frontend to where Electron expects it
+          $frontendSource = "downloaded_core/out"
           $frontendDest = "${{ env.FRONTEND_DIR }}/out"
           New-Item -ItemType Directory -Path $frontendDest -Force | Out-Null
-          Copy-Item -Path "downloaded_core/out/*" -Destination $frontendDest -Recurse -Force
+          Copy-Item -Path "$($frontendSource)/*" -Destination $frontendDest -Recurse -Force
+
 
       - name: 📄 Ensure WiX License Exists for electron-builder
         shell: pwsh

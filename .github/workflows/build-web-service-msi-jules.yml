@@ -309,8 +309,6 @@ jobs:
           pip install -r (Join-Path $env:BACKEND_DIR "requirements.txt")
           if (Test-Path (Join-Path $env:BACKEND_DIR "requirements-dev.txt")) {
             pip install -r (Join-Path $env:BACKEND_DIR "requirements-dev.txt")
-          } else {
-            Write-Host "ℹ️ requirements-dev.txt not found, skipping."
           }
 
       - name: Bytecode Compile (Fail Fast)
@@ -530,95 +528,42 @@ jobs:
           import os
           from pathlib import Path
 
-          # Create __init__.py files in-memory to avoid filesystem race conditions
-          init_content = "# This file is intentionally non-empty to ensure package recognition."
+          bk_dir = os.environ['BACKEND_DIR']
+          mod_path = os.environ['MODULE_PATH']
+          # CHANGE: Point to the new service wrapper
+          entry = f"{bk_dir}/main.py"
+          frontend_out = os.environ['FRONTEND_OUT']
 
-          # Ensure parent directories exist before writing files
-          Path("web_service").mkdir(exist_ok=True)
-          Path("web_service/backend").mkdir(exist_ok=True)
-
-          with open("web_service/__init__.py", "w") as f:
-              f.write(init_content)
-          with open("web_service/backend/__init__.py", "w") as f:
-              f.write(init_content)
-
-          print("✅ Ensured non-empty __init__.py files exist for package discovery.")
-
-          entry_point = os.path.join(os.environ['BACKEND_DIR'], "service_entry.py").replace('\\', '/')
-          staging_ui_path = Path("staging/ui").resolve().as_posix()
-          other_service = "python_service" if "web_service" in os.environ['BACKEND_DIR'] else "web_service"
-          backend_init = Path("web_service/backend/__init__.py").resolve().as_posix()
-          parent_init = Path("web_service/__init__.py").resolve().as_posix()
-          spec_file = os.environ['BACKEND_SPEC_FILE']
-
-          spec_content = f"""
-          # -*- mode: python ; coding: utf-8 -*-
-          import os
-          from pathlib import Path
+          # FIX: Fixed quoting in datas list to avoid syntax error
+          spec = f"""
+          # -- mode: python ; coding: utf-8 --
           from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
           block_cipher = None
-          project_root = Path(os.getcwd())
-
-          # Standard Data Collection
-          datas = [
-              ('{staging_ui_path}', 'ui'),
-          ]
-          datas += collect_data_files('uvicorn')
-          datas += collect_data_files('slowapi')
-          datas += collect_data_files('structlog')
-
-          hiddenimports = collect_submodules('{os.environ["BACKEND_MODULE_PATH"]}')
-          hiddenimports += [
-              'uvicorn.logging', 'uvicorn.loops.auto', 'uvicorn.lifespan.on',
-              'uvicorn.protocols.http.h11_impl', 'uvicorn.protocols.websockets.wsproto_impl',
-              'fastapi.routing', 'starlette.staticfiles', 'anyio._backends._asyncio',
-              'httpcore', 'httpx', 'slowapi', 'structlog', 'tenacity', 'aiosqlite',
-              'pydantic_core', 'pydantic_settings.sources', 'win32timezone'
-          ]
 
           a = Analysis(
-              ['{entry_point}'],
-              pathex=[str(project_root)],
+              ['{entry}'],
+              pathex=[],
               binaries=[],
-              datas=datas,
-              hiddenimports=hiddenimports,
+              datas=collect_data_files('uvicorn') + collect_data_files('slowapi') + [('{frontend_out}', 'ui')],
+              # CHANGE: Add win32timezone to hidden imports (critical for pywin32)
+              hiddenimports=collect_submodules('{mod_path}') + ['win32timezone'],
               hookspath=[],
               runtime_hooks=[],
-              excludes=['tests', 'pytest', '{other_service}'],
+              excludes=['tests', 'pytest'],
               win_no_prefer_redirects=False,
               win_private_assemblies=False,
               cipher=block_cipher,
-              noarchive=False
+              noarchive=False,
           )
-
-          # ☢️ NUCLEAR OVERRIDE: Force __init__ files into the PYZ archive
-          # This puts them in the importable namespace, not just on the filesystem.
-          a.pure += [
-              ('web_service', '{parent_init}', 'PYMODULE'),
-              ('web_service.backend', '{backend_init}', 'PYMODULE')
-          ]
-
           pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
           exe = EXE(
-              pyz,
-              a.scripts,
-              a.binaries,
-              a.zipfiles,
-              a.datas,
-              [],
-              name='fortuna-backend',
-              debug=False,
-              bootloader_ignore_signals=False,
-              strip=False,
-              upx=True,
-              console=False,
+              pyz, a.scripts, a.binaries, a.zipfiles, a.datas, [],
+              name='fortuna-backend', debug=False, bootloader_ignore_signals=False, strip=False, upx=True, console=False
           )
           """
-          with open(spec_file, "w") as f:
-              f.write(spec_content)
-
-          print(f"✅ Dynamically generated '{spec_file}' with PYZ Injection.")
+          with open("jules.spec", "w") as f: f.write(spec)
+          os.system("pyinstaller jules.spec --clean --noconfirm")
 
       - name: Create Required Backend Directories
         if: steps.cache-backend.outputs.cache-hit != 'true'
@@ -974,34 +919,30 @@ jobs:
           $wxsContent = $wxsContent -replace 'Start="install"', ''
           Set-Content -Path $wxsPath -Value $wxsContent -Encoding UTF8 -Force
 
-          $wixProj = @(
-            '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">'
-            '  <PropertyGroup>'
-            '    <OutputName>${{ steps.stage.outputs.msi_name }}</OutputName>'
-            '    <OutputType>Package</OutputType>'
-            '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>'
-            '    <DefineConstants>SourceDir=staging;Version=${{ env.BUILD_VERSION }};ServicePort=${{ env.SERVICE_PORT }}</DefineConstants>'
-            '    <Platforms>x64</Platforms>'
-            '    <Version>${{ env.BUILD_VERSION }}</Version>'
-            '    <BinderIncludeCabinetFilesInPackage>true</BinderIncludeCabinetFilesInPackage>'
-            '  </PropertyGroup>'
-            '  <ItemGroup>'
-            '    <PackageReference Include="WixToolset.Util.wixext" Version="${{ env.WIX_VERSION }}" />'
-            '    <PackageReference Include="WixToolset.Firewall.wixext" Version="${{ env.WIX_VERSION }}" />'
-            '    <PackageReference Include="WixToolset.UI.wixext" Version="${{ env.WIX_VERSION }}" />'
-            '  </ItemGroup>'
-            '  <ItemGroup>'
-            '    <Compile Include="Product.wxs" />'
-            '  </ItemGroup>'
+          $proj = @(
+            '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">',
+            '  <PropertyGroup>',
+            '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>',
+            '    <OutputType>Package</OutputType>',
+            '    <Platforms>x64</Platforms>',
+            '  </PropertyGroup>',
+            '  <ItemGroup>',
+            '    <PackageReference Include="WixToolset.UI.wixext" Version="${{ env.WIX_VERSION }}" />',
+            '    <PackageReference Include="WixToolset.Firewall.wixext" Version="${{ env.WIX_VERSION }}" />',
+            '    <PackageReference Include="WixToolset.Util.wixext" Version="${{ env.WIX_VERSION }}" />',
+            '  </ItemGroup>',
+            '  <ItemGroup>',
+            '    <Compile Include="Product.wxs" />',
+            '  </ItemGroup>',
             '</Project>'
           )
-          Set-Content "${{ env.WIX_DIR }}/Fortuna.wixproj" -Value $wixProj -Encoding utf8
+          Set-Content "${{ env.WIX_DIR }}/Fortuna.wixproj" -Value ($proj -join "`r`n") -Encoding utf8
 
       - name: Build MSI
         working-directory: ${{ env.WIX_DIR }}
         run: |
           Set-StrictMode -Version Latest
-          dotnet build Fortuna.wixproj -c Release -p:Platform=x64 -p:Version="${{ env.BUILD_VERSION }}"
+          dotnet build Fortuna.wixproj -c Release -p:Platform=x64 -p:DefineConstants="SourceDir=../${{ env.MSI_STAGING_DIR }};Version=${{ env.BUILD_VERSION }};ServicePort=${{ env.SERVICE_PORT }}"
           $msiFile = "bin/x64/Release/${{ steps.stage.outputs.msi_name }}"
           if (-not (Test-Path $msiFile)) { throw "MSI not created" }
           $hash = (Get-FileHash $msiFile -Algorithm SHA256).Hash
