@@ -15,61 +15,17 @@ env:
   WIX_DIR: 'build_wix'
   SERVICE_PORT: '8102'
   UPGRADE_CODE: 'FA689549-366B-4C5C-A482-1132F9A34B10'
+  # Mock API keys for service startup
+  API_KEY: mock_key
+  TVG_API_KEY: mock
+  GREYHOUND_API_URL: http://mock
+  FORTUNA_ENV: smoke-test
 
 jobs:
-  path-finder:
-    name: '🔎 Path Finder - Dynamic Backend Detection'
-    runs-on: windows-latest
-    outputs:
-      backend_dir: ${{ steps.find-path.outputs.backend_dir }}
-      backend_module_path: ${{ steps.find-path.outputs.backend_module_path }}
-      semver: ${{ steps.meta.outputs.semver }}
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Detect Backend Path
-        id: find-path
-        shell: pwsh
-        run: |
-          Set-StrictMode -Version Latest
-          $web_service_path = "web_service/backend"
-          $python_service_path = "python_service"
-          if (Test-Path (Join-Path $web_service_path "main.py")) {
-              $backend_dir = $web_service_path
-              $backend_module_path = "web_service.backend"
-              Write-Host "✅ Verdict: Detected 'web_service/backend' as the target."
-          } elseif (Test-Path (Join-Path $python_service_path "main.py")) {
-              $backend_dir = $python_service_path
-              $backend_module_path = "python_service"
-              Write-Host "✅ Verdict: Detected 'python_service' as the target."
-          } else {
-              Write-Error "❌ FATAL: Could not determine a valid backend directory."
-              exit 1
-          }
-          "backend_dir=$backend_dir" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "backend_module_path=$backend_module_path" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
-
-      - name: Derive Build Metadata
-        id: meta
-        shell: pwsh
-        run: |
-          Set-StrictMode -Version Latest
-          $ref = "${{ github.ref }}"
-          if ($ref -like 'refs/tags/v*') {
-            $semver = $ref -replace 'refs/tags/v', ''
-          } else {
-            $semver = "0.0.${{ github.run_number }}"
-          }
-          "semver=$semver" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          Write-Host "🔖 Version: $semver"
-
   quality-gate:
     name: '✅ Quality Gate'
     runs-on: windows-latest
-    needs: path-finder
-    env:
-      BACKEND_DIR: ${{ needs.path-finder.outputs.backend_dir }}
+    timeout-minutes: 30
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -80,17 +36,17 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
           cache-dependency-path: |
-            ${{ env.BACKEND_DIR }}/requirements.txt
-            ${{ env.BACKEND_DIR }}/requirements-dev.txt
+            web_service/backend/requirements.txt
+            web_service/backend/requirements-dev.txt
 
       - name: Install Python Dependencies
         run: |
           python -m pip install --upgrade pip
-          if (Test-Path "${{ env.BACKEND_DIR }}/requirements-dev.txt") {
-            pip install -r ${{ env.BACKEND_DIR }}/requirements-dev.txt
+          if (Test-Path "web_service/backend/requirements-dev.txt") {
+            pip install -r web_service/backend/requirements-dev.txt
           } else {
             # Fallback to standard requirements if -dev is not found
-            pip install -r ${{ env.BACKEND_DIR }}/requirements.txt
+            pip install -r web_service/backend/requirements.txt
           }
 
       - name: Run Pytest
@@ -103,7 +59,7 @@ jobs:
             exit 0
           }
 
-          python -m pytest ${{ env.BACKEND_DIR }}
+          python -m pytest web_service/backend
 
           # Exit code 5 means no tests were found, which is not a failure in this context.
           if ($LASTEXITCODE -eq 5) {
@@ -118,10 +74,11 @@ jobs:
   build-executable:
     name: '🛠️ Build Executable'
     runs-on: windows-latest
-    needs: [path-finder, quality-gate]
+    needs: [quality-gate]
+    timeout-minutes: 30
     env:
-      BACKEND_DIR: ${{ needs.path-finder.outputs.backend_dir }}
-      BACKEND_MODULE_PATH: ${{ needs.path-finder.outputs.backend_module_path }}
+      BACKEND_DIR: 'web_service/backend'
+      BACKEND_MODULE_PATH: 'web_service.backend'
     outputs:
       build_id: ${{ steps.vars.outputs.build_id }}
     steps:
@@ -249,7 +206,8 @@ jobs:
   package-msi:
     name: '💿 Package MSI'
     runs-on: windows-latest
-    needs: [path-finder, build-executable]
+    needs: [build-executable]
+    timeout-minutes: 30
     outputs:
       build_id: ${{ needs.build-executable.outputs.build_id }}
     steps:
@@ -329,8 +287,7 @@ jobs:
 
       - name: Build MSI
         working-directory: ${{ env.WIX_DIR }}
-        run: |
-          dotnet build Fortuna.wixproj -c Release -p:Platform=x64 -p:Version=${{ needs.path-finder.outputs.semver }} -p:SourceDir=../staging/backend -p:ServicePort=${{ env.SERVICE_PORT }}
+        run: dotnet build Fortuna.wixproj -c Release -p:Platform=x64 -p:DefineConstants="Version=0.0.${{ github.run_number }};SourceDir=../staging/backend;ServicePort=${{ env.SERVICE_PORT }}"
 
       - name: '🐤 The Canary (Malware Pre-Flight)'
         shell: pwsh

@@ -12,14 +12,33 @@ env:
   BACKEND_DIR: 'python_service'
   FRONTEND_DIR: 'web_platform/frontend'
   ELECTRON_DIR: 'electron'
+  # Mock API keys for service startup
+  API_KEY: mock_key
+  TVG_API_KEY: mock
+  GREYHOUND_API_URL: http://mock
+  FORTUNA_ENV: smoke-test
 
 jobs:
+  quality-gate:
+    name: 'Run Tests'
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: |
+          pip install -r python_service/requirements-dev.txt
+          pytest python_service/tests
   # ==================================================================================
   # JOB 1: BUILD CORE (The "HatTrick" Engine)
   # ==================================================================================
   build-core:
     name: '⚙️ Build Core Components'
     runs-on: windows-latest
+    timeout-minutes: 30
+    needs: quality-gate
     outputs:
       semver: ${{ steps.meta.outputs.semver }}
       build_id: ${{ steps.meta.outputs.build_id }}
@@ -87,6 +106,7 @@ jobs:
     name: '⚡ Package Electron MSI'
     runs-on: windows-latest
     needs: build-core
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -180,12 +200,18 @@ jobs:
     name: '🔬 Smoke Test'
     runs-on: windows-latest
     needs: package-electron
+    timeout-minutes: 30
     steps:
       - name: 📥 Download MSI
         uses: actions/download-artifact@v4
         with:
           name: electron-msi-${{ github.run_id }}
           path: installer
+
+      - name: Configure Firewall
+        shell: pwsh
+        run: |
+          New-NetFirewallRule -DisplayName "FortunaTest" -Direction Inbound -LocalPort 8102 -Protocol TCP -Action Allow
 
       - name: 🤫 Install & Verify
         shell: pwsh
@@ -338,6 +364,7 @@ jobs:
     name: '📦 Release'
     runs-on: windows-latest
     needs: smoke-test
+    timeout-minutes: 30
     steps:
       - name: 📥 Download MSI
         uses: actions/download-artifact@v4
