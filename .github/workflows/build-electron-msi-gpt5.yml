@@ -831,12 +831,7 @@ jobs:
             exit 1
           }
 
-          $exe = Get-ChildItem -Path $root
-            -Filter "*.exe"
-            -Recurse
-            -ErrorAction SilentlyContinue |
-            Where-Object { $_.Name -notmatch 'uninstall' } |
-            Select-Object -First 1
+          $exe = Get-ChildItem -Path $root -Filter "*.exe" -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch 'uninstall' } | Select-Object -First 1
 
           if (-not $exe) {
             Write-Error "❌ No main executable found in $root"
