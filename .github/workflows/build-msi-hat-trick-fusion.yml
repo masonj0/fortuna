@@ -172,6 +172,16 @@ jobs:
           # Copy template
           Copy-Item build_wix/Product_WithService.wxs build_wix/Product.wxs -Force
 
+          # Dynamically remove the problematic Start="install" attribute
+          $wxsPath = 'build_wix/Product.wxs'
+          $wxsContent = [xml](Get-Content $wxsPath)
+          $serviceControl = $wxsContent.SelectSingleNode("//*[local-name()='ServiceControl']")
+          if ($serviceControl -and $serviceControl.HasAttribute("Start")) {
+              $serviceControl.RemoveAttribute("Start")
+              $wxsContent.Save($wxsPath)
+              Write-Host "✅ Dynamically removed 'Start=install' attribute from WiX template."
+          }
+
           # Stage Executable
           if (Test-Path staging/backend/fortuna-backend.exe) {
             Move-Item staging/backend/fortuna-backend.exe staging/backend/fortuna-webservice.exe -Force
@@ -291,6 +301,15 @@ jobs:
           } else {
             Write-Host "No installation.log found"
           }
+
+      - name: Create Runtime Directories
+        shell: pwsh
+        run: |
+          $installDir = "C:\Program Files\Fortuna Faucet Service"
+          New-Item -ItemType Directory -Path "$installDir\data" -Force
+          New-Item -ItemType Directory -Path "$installDir\json" -Force
+          New-Item -ItemType Directory -Path "$installDir\logs" -Force
+          Write-Host "✅ Ensured runtime directories exist in $installDir"
 
       - name: Health and Process Validation
         shell: python
