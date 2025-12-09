@@ -66,13 +66,18 @@ jobs:
           PYTHONUTF8: '1'
         run: python scripts/generate_spec_electron.py
 
-      - name: 📤 Upload Core Artifacts
+      - name: 📤 Upload Backend Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: core-build-${{ github.run_id }}
-          path: |
-            dist/service/fortuna-backend/
-            ${{ env.FRONTEND_DIR }}/out/
+          name: backend-build-${{ github.run_id }}
+          path: dist/service/fortuna-backend/
+          retention-days: 1
+
+      - name: 📤 Upload Frontend Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build-${{ github.run_id }}
+          path: ${{ env.FRONTEND_DIR }}/out/
           retention-days: 1
 
   # ==================================================================================
@@ -91,26 +96,23 @@ jobs:
           cache: 'npm'
           cache-dependency-path: '${{ env.ELECTRON_DIR }}/package-lock.json'
 
-      - name: 📥 Download Core Artifacts
+      - name: 📥 Download Backend Artifact
         uses: actions/download-artifact@v4
         with:
-          name: core-build-${{ github.run_id }}
-          path: downloaded_core
+          name: backend-build-${{ github.run_id }}
+          path: ${{ env.ELECTRON_DIR }}/python_service-bin
+
+      - name: 📥 Download Frontend Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-build-${{ github.run_id }}
+          path: ${{ env.FRONTEND_DIR }}/out
 
       - name: 🚚 Stage Artifacts for Electron
         shell: pwsh
         run: |
-          # FIX: The backend is nested inside a 'service' directory from the artifact structure
-          $backendSource = "downloaded_core/service/fortuna-backend"
-          $backendDest = "${{ env.ELECTRON_DIR }}/python_service-bin"
-          New-Item -ItemType Directory -Path $backendDest -Force | Out-Null
-          Copy-Item -Path "$($backendSource)/*" -Destination $backendDest -Recurse -Force
-
-          # Move Frontend to where Electron expects it
-          $frontendSource = "downloaded_core/out"
-          $frontendDest = "${{ env.FRONTEND_DIR }}/out"
-          New-Item -ItemType Directory -Path $frontendDest -Force | Out-Null
-          Copy-Item -Path "$($frontendSource)/*" -Destination $frontendDest -Recurse -Force
+          # No staging needed, artifacts are downloaded to the correct locations
+          Write-Host "Backend and Frontend artifacts downloaded to their respective directories."
 
 
       - name: 📄 Ensure WiX License Exists for electron-builder
