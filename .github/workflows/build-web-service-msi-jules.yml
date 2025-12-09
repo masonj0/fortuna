@@ -549,6 +549,7 @@ jobs:
           bk_dir = os.environ['BACKEND_DIR'].replace('\\', '/')
           mod_path = os.environ['BACKEND_MODULE_PATH']
           frontend_out = os.environ['FRONTEND_OUT'].replace('\\', '/')
+          spec_file = os.environ['BACKEND_SPEC_FILE']
 
           entry = f"{bk_dir}/main.py"
 
@@ -578,8 +579,7 @@ jobs:
               name='fortuna-backend', debug=False, bootloader_ignore_signals=False, strip=False, upx=True, console=False
           )
           """
-          with open("jules.spec", "w") as f: f.write(spec)
-          os.system("pyinstaller jules.spec --clean --noconfirm")
+          with open(spec_file, "w") as f: f.write(spec)
 
       - name: Create Required Backend Directories
         if: steps.cache-backend.outputs.cache-hit != 'true'
@@ -589,6 +589,14 @@ jobs:
           New-Item -ItemType Directory -Path (Join-Path $env:BACKEND_DIR "json") -Force | Out-Null
           Write-Host "✅ Created required backend directories for PyInstaller." -ForegroundColor Green
 
+
+      - name: Build with PyInstaller
+        if: steps.cache-backend.outputs.cache-hit != 'true'
+        env:
+          FORTUNA_VERSION: ${{ needs.repo-preflight.outputs.semver }}
+        run: |
+          Set-StrictMode -Version Latest
+          pyinstaller "${{ env.BACKEND_SPEC }}" --clean --log-level=WARN --noconfirm
 
       - name: Report Cache Status
         run: |
