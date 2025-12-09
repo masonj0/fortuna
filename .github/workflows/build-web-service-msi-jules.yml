@@ -88,7 +88,7 @@ jobs:
           if ($web_service_main -and $web_service_api -and $web_service_init) {
             $backend_dir = $web_service_path
             $backend_module_path = "web_service.backend"
-            $spec_file = "webservice.spec"
+            $spec_file = "jules.spec"
             Write-Host "✅ Verdict: Detected 'web_service/backend' as the target." -ForegroundColor Green
           } elseif ($python_service_main -and $python_service_api -and $python_service_init) {
             $backend_dir = $python_service_path
@@ -589,13 +589,6 @@ jobs:
           New-Item -ItemType Directory -Path (Join-Path $env:BACKEND_DIR "json") -Force | Out-Null
           Write-Host "✅ Created required backend directories for PyInstaller." -ForegroundColor Green
 
-      - name: Build with PyInstaller
-        if: steps.cache-backend.outputs.cache-hit != 'true'
-        env:
-          FORTUNA_VERSION: ${{ needs.repo-preflight.outputs.semver }}
-        run: |
-          Set-StrictMode -Version Latest
-          pyinstaller "${{ env.BACKEND_SPEC }}" --clean --log-level=WARN --noconfirm
 
       - name: Report Cache Status
         run: |
@@ -756,6 +749,15 @@ jobs:
           } else {
             Write-Host "✅ Privileges granted successfully."
           }
+
+      - name: Create Runtime Directories
+        shell: pwsh
+        run: |
+          $installDir = "C:\Program Files\Fortuna Faucet Service"
+          New-Item -ItemType Directory -Path "$installDir\data" -Force
+          New-Item -ItemType Directory -Path "$installDir\json" -Force
+          New-Item -ItemType Directory -Path "$installDir\logs" -Force
+          Write-Host "✅ Ensured runtime directories exist in $installDir"
 
       - name: '🚀 LOOP 1 - Install & Verify Service Registration'
         shell: pwsh
@@ -984,6 +986,7 @@ jobs:
             '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>',
             '    <OutputType>Package</OutputType>',
             '    <Platforms>x64</Platforms>',
+            '    <DefineConstants>Version=$(Version);SourceDir=$(SourceDir);ServicePort=$(ServicePort)</DefineConstants>',
             '  </PropertyGroup>',
             '  <ItemGroup>',
             '    <PackageReference Include="WixToolset.UI.wixext" Version="${{ env.WIX_VERSION }}" />',
