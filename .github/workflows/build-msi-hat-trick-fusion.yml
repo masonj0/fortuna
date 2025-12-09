@@ -15,12 +15,18 @@ env:
   MSI_NAME: 'HatTrickFusion.msi'
   FIREWALL_RULE: 'HatTrickFusion-Port'
   UPGRADE_CODE: 'FA689549-366B-4C5C-A482-1132F9A34B10'
+  # Mock API keys for service startup
+  API_KEY: mock_key
+  TVG_API_KEY: mock
+  GREYHOUND_API_URL: http://mock
+  FORTUNA_ENV: smoke-test
 
 jobs:
   # 1. Build Frontend First (so Backend can bundle it)
   build-frontend:
     name: Build Frontend
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -43,6 +49,7 @@ jobs:
     name: Build Backend Binary
     runs-on: windows-latest
     needs: build-frontend
+    timeout-minutes: 30
     outputs:
       semver: ${{ steps.meta.outputs.semver }}
       backend-dir: ${{ steps.meta.outputs.backend_dir }}
@@ -59,11 +66,9 @@ jobs:
         shell: pwsh
         run: |
           $ver = if ("${{ github.ref }}" -match 'refs/tags/v(.*)') { $Matches[1] } else { "0.0.${{ github.run_number }}" }
-          $backendDir = if (Test-Path 'web_service/backend/main.py') { 'web_service/backend' } else { 'python_service' }
-          $modulePath = if (Test-Path 'web_service/backend/main.py') { 'web_service.backend' } else { 'python_service' }
           "semver=$ver" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "backend_dir=$backendDir" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "module_path=$modulePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "backend_dir=web_service/backend" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "module_path=web_service.backend" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - uses: actions/setup-python@v5
         with:
@@ -132,6 +137,7 @@ jobs:
     name: Package MSI
     runs-on: windows-latest
     needs: build-backend
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -232,6 +238,7 @@ jobs:
     name: HatTrick Fusion Smoke Test
     runs-on: windows-latest
     needs: package-msi
+    timeout-minutes: 30
     steps:
       - uses: actions/download-artifact@v4
         with:
