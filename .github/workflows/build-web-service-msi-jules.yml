@@ -88,7 +88,7 @@ jobs:
           if ($web_service_main -and $web_service_api -and $web_service_init) {
             $backend_dir = $web_service_path
             $backend_module_path = "web_service.backend"
-            $spec_file = "webservice.spec"
+            $spec_file = "jules.spec"
             Write-Host "✅ Verdict: Detected 'web_service/backend' as the target." -ForegroundColor Green
           } elseif ($python_service_main -and $python_service_api -and $python_service_init) {
             $backend_dir = $python_service_path
@@ -549,6 +549,7 @@ jobs:
           bk_dir = os.environ['BACKEND_DIR'].replace('\\', '/')
           mod_path = os.environ['BACKEND_MODULE_PATH']
           frontend_out = os.environ['FRONTEND_OUT'].replace('\\', '/')
+          spec_file = os.environ['BACKEND_SPEC_FILE']
 
           entry = f"{bk_dir}/main.py"
 
@@ -578,8 +579,7 @@ jobs:
               name='fortuna-backend', debug=False, bootloader_ignore_signals=False, strip=False, upx=True, console=False
           )
           """
-          with open("jules.spec", "w") as f: f.write(spec)
-          os.system("pyinstaller jules.spec --clean --noconfirm")
+          with open(spec_file, "w") as f: f.write(spec)
 
       - name: Create Required Backend Directories
         if: steps.cache-backend.outputs.cache-hit != 'true'
@@ -588,6 +588,7 @@ jobs:
           New-Item -ItemType Directory -Path (Join-Path $env:BACKEND_DIR "data") -Force | Out-Null
           New-Item -ItemType Directory -Path (Join-Path $env:BACKEND_DIR "json") -Force | Out-Null
           Write-Host "✅ Created required backend directories for PyInstaller." -ForegroundColor Green
+
 
       - name: Build with PyInstaller
         if: steps.cache-backend.outputs.cache-hit != 'true'
@@ -756,6 +757,15 @@ jobs:
           } else {
             Write-Host "✅ Privileges granted successfully."
           }
+
+      - name: Create Runtime Directories
+        shell: pwsh
+        run: |
+          $installDir = "C:\Program Files\Fortuna Faucet Service"
+          New-Item -ItemType Directory -Path "$installDir\data" -Force
+          New-Item -ItemType Directory -Path "$installDir\json" -Force
+          New-Item -ItemType Directory -Path "$installDir\logs" -Force
+          Write-Host "✅ Ensured runtime directories exist in $installDir"
 
       - name: '🚀 LOOP 1 - Install & Verify Service Registration'
         shell: pwsh
@@ -984,6 +994,7 @@ jobs:
             '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>',
             '    <OutputType>Package</OutputType>',
             '    <Platforms>x64</Platforms>',
+            '    <DefineConstants>Version=$(Version);SourceDir=$(SourceDir);ServicePort=$(ServicePort)</DefineConstants>',
             '  </PropertyGroup>',
             '  <ItemGroup>',
             '    <PackageReference Include="WixToolset.UI.wixext" Version="${{ env.WIX_VERSION }}" />',

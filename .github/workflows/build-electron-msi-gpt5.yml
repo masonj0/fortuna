@@ -497,11 +497,14 @@ jobs:
       - name: 🚚 Stage Backend for Electron Builder
         shell: pwsh
         run: |
-          #FIX: Move the backend to where electron-builder expects it
-          $dest = "electron/python_service-bin"
+          # FIX: The config looks for '../python-service-bin' relative to the 'electron' dir,
+          # so we place the artifact at the repo root.
+          $dest = "python-service-bin"
           New-Item -ItemType Directory -Path $dest -Force | Out-Null
-          Move-Item -Path "python-service-bin/" -Destination $dest -Force
-          Write-Host "✅ Backend staged to $dest"
+          Move-Item -Path "python-service-bin/*" -Destination $dest -Force
+          Write-Host "✅ Backend staged to root '$dest' directory."
+          Write-Host "Contents:"
+          Get-ChildItem -Path $dest -Recurse | ForEach-Object { Write-Host " - $($_.Name)" }
 
       - name: 📥 Install Electron Dependencies
         shell: pwsh
