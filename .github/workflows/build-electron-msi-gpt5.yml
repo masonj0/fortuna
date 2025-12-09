@@ -806,10 +806,7 @@ jobs:
           Write-Host "Installing: $($msi.Name)"
 
           # EXOTIC INGREDIENT #2: Logging with /L*v
-          $proc = Start-Process msiexec.exe
-            -ArgumentList "/i `"$($msi.FullName)`" /qn /L*v msi-install.log"
-            -Wait
-            -PassThru
+          $proc = Start-Process msiexec.exe -ArgumentList "/i `"$($msi.FullName)`" /qn /L*v msi-install.log" -Wait -PassThru
 
           if ($proc.ExitCode -ne 0) {
             Write-Error "❌ MSI Install Failed with exit code $($proc.ExitCode)"
