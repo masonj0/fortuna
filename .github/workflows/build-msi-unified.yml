@@ -206,7 +206,8 @@ jobs:
   package-msi:
     name: '💿 Package MSI'
     runs-on: windows-latest
-    needs: [path-finder, build-executable]
+    needs: [build-executable]
+    timeout-minutes: 30
     outputs:
       build_id: ${{ needs.build-executable.outputs.build_id }}
     steps:
