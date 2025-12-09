@@ -100,6 +100,8 @@ jobs:
           Get-CimInstance -ClassName Win32_OperatingSystem | Select-Object Caption, Version, BuildNumber | Out-File "debug-artifacts/os-version.txt"
 
           # Disk space
+          $free = (Get-Volume | Where DriveLetter -eq 'C').SizeRemaining
+          if ($free -lt 10GB) { Write-Error "Insufficient disk space"; exit 1 }
           Get-Volume | Out-File "debug-artifacts/disk-space.txt"
 
           # File permissions - FIX: $. to $_.
@@ -946,7 +948,6 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 15
     needs: build-python-service
-    continue-on-error: true
     steps:
       - name: 📥 Checkout Repository
         uses: actions/checkout@v4
@@ -963,9 +964,11 @@ jobs:
     name: '📦 Stage Release Artifacts'
     runs-on: windows-latest
     timeout-minutes: 5
+    if: success()
     needs:
       - build-electron-msi
       - validate-environment
+      - smoke-test
     steps:
       - name: 📥 Download Build Artifacts
         uses: actions/download-artifact@v4
