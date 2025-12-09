@@ -339,7 +339,7 @@ jobs:
       - name: Build MSI
         working-directory: ${{ env.WIX_DIR }}
         # FIX: Pass variables via DefineConstants
-        run: dotnet build Fortuna.wixproj -c Release -p:Platform=x64 -p:DefineConstants="Version=0.0.${{ github.run_number }};SourceDir=../staging/backend;ServicePort=${{ env.SERVICE_PORT }}"
+        run: dotnet build Fortuna.wixproj -c Release -p:Platform=x64 -p:Version="0.0.${{ github.run_number }}" -p:SourceDir="../staging/backend" -p:ServicePort="${{ env.SERVICE_PORT }}"
 
       - name: '🐤 The Canary (Malware Pre-Flight)'
         shell: pwsh
@@ -360,13 +360,29 @@ jobs:
         run: |
           $ver = "${{ needs.build-backend.outputs.semver }}"
           $sha = "${{ needs.build-backend.outputs.short_sha }}"
-          $old = "${{ env.WIX_DIR }}/bin/x64/Release/HatTrickFusion.msi"
-          $new = "${{ env.WIX_DIR }}/bin/x64/Release/HatTrickFusion-${ver}-${sha}.msi"
-          Move-Item $old $new
-          $hash = (Get-FileHash $new -Algorithm SHA256).Hash
-          $hash | Out-File "$new.sha256" -Encoding utf8
-          Write-Host "✅ MSI Created: $new"
-          "msi_name=$(Split-Path $new -Leaf)" | Out-File $env:GITHUB_OUTPUT -Append
+
+          # FIX: Don't assume the name. Find whatever MSI was built.
+          $releaseDir = "${{ env.WIX_DIR }}/bin/x64/Release"
+          $msiFound = Get-ChildItem -Path $releaseDir -Filter "*.msi" | Select-Object -First 1
+
+          if (-not $msiFound) {
+            Write-Error "❌ FATAL: No MSI file found in $releaseDir. Build may have failed silently."
+            exit 1
+          }
+
+          Write-Host "Found built MSI: $($msiFound.Name)"
+
+          $targetName = "HatTrickFusion-${ver}-${sha}.msi"
+          $newPath = Join-Path $releaseDir $targetName
+
+          Move-Item -Path $msiFound.FullName -Destination $newPath -Force
+
+          # Generate Hash
+          $hash = (Get-FileHash $newPath -Algorithm SHA256).Hash
+          $hash | Out-File "$newPath.sha256" -Encoding utf8
+
+          Write-Host "✅ MSI Renamed to: $targetName"
+          "msi_name=$targetName" | Out-File $env:GITHUB_OUTPUT -Append
 
       - name: Upload MSI
         uses: actions/upload-artifact@v4
@@ -407,6 +423,14 @@ jobs:
             throw "Install failed with code $($proc.ExitCode)"
           }
 
+      - name: Create Runtime Directories
+        shell: pwsh
+        run: |
+          $installDir = "C:\Program Files\Fortuna Faucet Service"
+          New-Item -ItemType Directory -Path "$installDir\data" -Force
+          New-Item -ItemType Directory -Path "$installDir\json" -Force
+          New-Item -ItemType Directory -Path "$installDir\logs" -Force
+          Write-Host "✅ Ensured runtime directories exist in $installDir"
       - name: '⏳ Loop 1 - Service Registration'
         shell: pwsh
         run: |

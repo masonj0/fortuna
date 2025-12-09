@@ -288,7 +288,7 @@ jobs:
 
       - name: Build MSI
         working-directory: ${{ env.WIX_DIR }}
-        run: dotnet build Fortuna.wixproj -c Release -p:Platform=x64 -p:DefineConstants="Version=0.0.${{ github.run_number }};SourceDir=../staging/backend;ServicePort=${{ env.SERVICE_PORT }}"
+        run: dotnet build Fortuna.wixproj -c Release -p:Platform=x64 -p:Version="0.0.${{ github.run_number }}" -p:SourceDir="../staging/backend" -p:ServicePort="${{ env.SERVICE_PORT }}"
 
       - name: '🐤 The Canary (Malware Pre-Flight)'
         shell: pwsh
@@ -408,6 +408,15 @@ jobs:
 
           Write-Error "❌ Service was not registered in HKLM after 30 seconds"
           exit 1
+
+      - name: Create Runtime Directories
+        shell: pwsh
+        run: |
+          $installDir = "C:\Program Files\Fortuna Faucet Service"
+          New-Item -ItemType Directory -Path "$installDir\data" -Force
+          New-Item -ItemType Directory -Path "$installDir\json" -Force
+          New-Item -ItemType Directory -Path "$installDir\logs" -Force
+          Write-Host "✅ Ensured runtime directories exist in $installDir"
 
       - name: 🚀 Launch & Verify Health
         shell: python
