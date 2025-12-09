@@ -7,6 +7,12 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
 
+env:
+  API_KEY: "mock_key"
+  TVG_API_KEY: "mock_key"
+  GREYHOUND_API_URL: "http://mock"
+  FORTUNA_ENV: "smoke-test"
+
 jobs:
   analyze:
     name: Analyze
