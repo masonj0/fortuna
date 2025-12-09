@@ -370,12 +370,12 @@ jobs:
   smoke-test:
     name: '🔬 Smoke Test'
     runs-on: windows-latest
-    needs: [package-msi, path-finder]
+    needs: [package-msi]
     timeout-minutes: 30
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: msi-installer-${{ needs.path-finder.outputs.build_id }}
+          name: msi-installer-${{ github.run_id }}-${{ github.run_attempt }}
           path: installer
       - name: 🛡️ Firewall & Install
         shell: pwsh
