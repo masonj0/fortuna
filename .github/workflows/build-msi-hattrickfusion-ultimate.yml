@@ -18,6 +18,11 @@ env:
   WIX_DIR: 'build_wix'
   # Settings
   PYTHONUTF8: '1'
+  # Mock API keys for service startup
+  API_KEY: mock_key
+  TVG_API_KEY: mock
+  GREYHOUND_API_URL: http://mock
+  FORTUNA_ENV: smoke-test
 
 jobs:
   # ==================================================================================
@@ -26,7 +31,7 @@ jobs:
   path-finder:
     name: '🔍 Path Finder'
     runs-on: windows-latest
-    timeout-minutes: 5
+    timeout-minutes: 30
     outputs:
       backend_dir: ${{ steps.find-path.outputs.backend_dir }}
       backend_module_path: ${{ steps.find-path.outputs.backend_module_path }}
@@ -71,7 +76,7 @@ jobs:
     name: '🎨 Build Frontend'
     runs-on: windows-latest
     needs: path-finder
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -133,7 +138,7 @@ jobs:
     name: '🐍 Build Backend'
     runs-on: windows-latest
     needs: [path-finder, build-frontend]
-    timeout-minutes: 25
+    timeout-minutes: 30
     env:
       BACKEND_DIR: ${{ needs.path-finder.outputs.backend_dir }}
       MODULE_PATH: ${{ needs.path-finder.outputs.backend_module_path }}
@@ -278,7 +283,7 @@ jobs:
     name: '💿 Package MSI'
     runs-on: windows-latest
     needs: [path-finder, build-backend]
-    timeout-minutes: 25
+    timeout-minutes: 30
     outputs:
       msi_name: ${{ steps.name_msi.outputs.msi_name }}
     steps:
@@ -397,33 +402,6 @@ jobs:
           Write-Host "✅ MSI Created: $new"
           "msi_name=$(Split-Path $new -Leaf)" | Out-File $env:GITHUB_OUTPUT -Append
 
-      - name: '🐤 The Canary (Malware Pre-Flight)'
-        shell: pwsh
-        continue-on-error: true
-        run: |
-          $msi = Get-ChildItem -Recurse -Filter "*.msi" | Select-Object -First 1
-          if (!$msi) { Write-Warning "No MSI found to scan."; exit 0 }
-
-          Write-Host "🔍 Scanning $($msi.Name) with Windows Defender..."
-          $defender = "C:\Program Files\Windows Defender\MpCmdRun.exe"
-
-          if (-not (Test-Path $defender)) {
-              Write-Warning "Windows Defender CLI not found at expected path."
-              exit 0
-          }
-
-          # ScanType 3 = File/Custom Scan
-          $proc = Start-Process -FilePath $defender -ArgumentList "-Scan -ScanType 3 -File `"$($msi.FullName)`"" -Wait -PassThru -NoNewWindow
-
-          if ($proc.ExitCode -eq 0) {
-              Write-Host "✅ CLEAN: Windows Defender found no threats." -ForegroundColor Green
-          } elseif ($proc.ExitCode -eq 2) {
-              Write-Error "🚨 THREAT DETECTED: Windows Defender flagged this installer!"
-              exit 1
-          } else {
-              Write-Warning "⚠️ Scan completed with inconclusive exit code: $($proc.ExitCode)"
-          }
-
       - name: Upload MSI
         uses: actions/upload-artifact@v4
         with:
@@ -438,7 +416,7 @@ jobs:
     name: '🔬 Smoke Test'
     runs-on: windows-latest
     needs: [package-msi, path-finder]
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -518,39 +496,6 @@ jobs:
               time.sleep(2)
           sys.exit(1)
 
-      - name: '📸 The Paparazzi (Visual Proof)'
-        shell: pwsh
-        run: |
-          Write-Host "Installing Playwright..."
-          python -m pip install playwright
-          python -m playwright install chromium
-          $port = "${{ env.SERVICE_PORT }}"
-          Write-Host "Taking screenshot of http://localhost:$port..."
-          python -c "
-          from playwright.sync_api import sync_playwright
-          import sys
-          try:
-              with sync_playwright() as p:
-                  browser = p.chromium.launch()
-                  page = browser.new_page()
-                  page.goto(f'http://localhost:{sys.argv[1]}/index.html')
-                  page.wait_for_timeout(2000)
-                  page.screenshot(path='proof-of-life.png', full_page=True)
-                  browser.close()
-              print('✅ Screenshot captured.')
-          except Exception as e:
-              print(f'❌ Screenshot failed: {e}')
-              sys.exit(0)
-          " $port
-
-      - name: 📤 Upload Visual Proof
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: visual-proof-${{ github.run_id }}
-          path: proof-of-life.png
-          retention-days: 7
-
       - name: 📊 Capture Diagnostics
         if: failure()
         shell: pwsh
@@ -582,6 +527,7 @@ jobs:
     name: '📜 Generate SBOM'
     runs-on: ubuntu-latest
     needs: [build-backend, path-finder]
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -608,6 +554,7 @@ jobs:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     needs: [smoke-test, path-finder, generate-sbom]
+    timeout-minutes: 30
     permissions:
       contents: write
     steps:

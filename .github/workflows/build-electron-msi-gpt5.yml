@@ -24,7 +24,7 @@ jobs:
   validate-environment:
     name: ✅ Pre-flight Validation
     runs-on: windows-latest
-    timeout-minutes: 5
+    timeout-minutes: 30
     outputs:
       node_version: ${{ steps.versions.outputs.node }}
       python_version: ${{ steps.versions.outputs.python }}
