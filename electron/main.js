@@ -61,6 +61,7 @@ class FortunaDesktopApp {
       console.log('Backend start already in progress. Ignoring request.');
       return;
     }
+
     this.isBackendStarting = true;
     this.backendState = 'starting';
     this.backendLogs = ['Attempting to start backend...'];

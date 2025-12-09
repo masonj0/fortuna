@@ -100,6 +100,8 @@ jobs:
           Get-CimInstance -ClassName Win32_OperatingSystem | Select-Object Caption, Version, BuildNumber | Out-File "debug-artifacts/os-version.txt"
 
           # Disk space
+          $free = (Get-Volume | Where DriveLetter -eq 'C').SizeRemaining
+          if ($free -lt 10GB) { Write-Error "Insufficient disk space"; exit 1 }
           Get-Volume | Out-File "debug-artifacts/disk-space.txt"
 
           # File permissions - FIX: $. to $_.
@@ -842,44 +844,54 @@ jobs:
           Write-Host "✅ Found Executable: $($exe.FullName)"
           $exe.FullName | Out-File "installed_exe.txt" -Encoding utf8
 
-      - name: 🚀 Launch & Wait (Dual Process)
+      - name: 🚀 Launch, Wait & Verify Backend
         shell: pwsh
         run: |
-          # Dynamic Executable Finding (Robust)
           $root = 'C:\\Program Files\\Fortuna Faucet'
-          if (-not (Test-Path $root)) { throw "Install directory not found at $root" }
-
           $exe = Get-ChildItem $root -Filter "*.exe" -Recurse | Where { $_.Name -notmatch 'uninstall' } | Select -First 1
-          if (!$exe) { throw "Executable not found in $root" }
 
-          Write-Host "Launching: $($exe.FullName)"
-          # FIX: Add --no-sandbox to prevent Electron crash on headless CI
-          $proc = Start-Process -FilePath $exe.FullName -ArgumentList "--no-sandbox" -PassThru
+          if (!$exe) { throw "Executable not found" }
 
-          Write-Host "Waiting for Electron + Python processes to stabilize (up to 120s)..."
-          $deadline = (Get-Date).AddSeconds(120)
+          Write-Host "=== PRE-LAUNCH DIAGNOSTICS ==="
+          Write-Host "Electron executable: $($exe.FullName)"
+          Write-Host "File size: $('{0:N0}' -f $exe.Length) bytes"
+          Write-Host "Exists: $(Test-Path $exe.FullName)"
 
-          while ((Get-Date) -lt $deadline) {
-              $p = Get-Process | Where { $_.ProcessName -like "*Fortuna*" }
-              $e = $p | Where { $_.ProcessName -match "Fortuna Faucet" }
-              $b = $p | Where { $_.ProcessName -match "fortuna-backend" }
+          Write-Host "`n=== LAUNCHING ELECTRON ==="
+          $logDir = "C:\Temp\fortuna-logs-$(Get-Random)"
+          New-Item -ItemType Directory -Path $logDir -Force | Out-Null
 
-              if ($e) { Write-Host " - Electron is running (PID: $($e.Id))" }
-              if ($b) { Write-Host " - Backend is running (PID: $($b.Id))" }
+          $proc = Start-Process -FilePath $exe.FullName -PassThru -RedirectStandardOutput "$logDir\stdout.log" -RedirectStandardError "$logDir\stderr.log"
 
-              if ($e -and $b) {
-                  Write-Host "✅ SUCCESS: App and Backend are running."
-                  exit 0
-              }
+          Write-Host "Electron launched (PID: $($proc.Id))"
+          Write-Host "Waiting for backend to start listening on port 8000..."
+
+          # Wait for port to be ready
+          $portReady = $false
+          for ($i = 0; $i -lt 60; $i++) {
+            try {
+              $tcp = New-Object System.Net.Sockets.TcpClient
+              $tcp.Connect('127.0.0.1', 8000)
+              $tcp.Close()
+              Write-Host "✅ Port 8000 is OPEN!"
+              $portReady = $true
+              break
+            } catch {
+              Write-Host "  Attempt $($i+1)/60: Waiting..."
               Start-Sleep 2
+            }
           }
 
-          Write-Error "❌ TIMEOUT: Processes did not stabilize."
-          Write-Host "--- Process Dump (Fortuna) ---"
-          Get-Process | Where { $_.ProcessName -like "*Fortuna*" } | Format-Table
-          Write-Host "--- Full Process List (Top 20 Memory) ---"
-          Get-Process | Sort-Object PM -Descending | Select -First 20 | Format-Table
-          exit 1
+          if (!$portReady) {
+            Write-Error "❌ Backend never opened port 8000!"
+            Write-Host "`n=== ELECTRON STDOUT ==="
+            Get-Content "$logDir\stdout.log" -Tail 50
+            Write-Host "`n=== ELECTRON STDERR ==="
+            Get-Content "$logDir\stderr.log" -Tail 50
+            exit 1
+          }
+
+          Write-Host "✅ SUCCESS: Backend is ready and accepting connections!"
 
       - name: '📸 The Paparazzi (Visual Proof)'
         shell: pwsh
@@ -946,7 +958,6 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 15
     needs: build-python-service
-    continue-on-error: true
     steps:
       - name: 📥 Checkout Repository
         uses: actions/checkout@v4
@@ -963,9 +974,11 @@ jobs:
     name: '📦 Stage Release Artifacts'
     runs-on: windows-latest
     timeout-minutes: 5
+    if: success()
     needs:
       - build-electron-msi
       - validate-environment
+      - smoke-test
     steps:
       - name: 📥 Download Build Artifacts
         uses: actions/download-artifact@v4

@@ -35,6 +35,9 @@ env:
   SERVICE_PORT: '8102'
   HEALTH_ENDPOINT: '/health'
   API_KEY: ${{ secrets.TEST_API_KEY }}
+  TVG_API_KEY: "mock_key"
+  GREYHOUND_API_URL: "http://mock"
+  FORTUNA_ENV: "smoke-test"
   MSI_STAGING_DIR: 'build_wix/staging'
   MSI_OUTPUT_DIR: 'dist'
   WIX_VERSION: '4.0.5'
