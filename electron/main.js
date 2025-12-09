@@ -107,7 +107,7 @@ class FortunaDesktopApp {
       backendCwd = path.join(__dirname, '..', 'python_service');
     } else {
       console.log('[PROD MODE] Configuring backend to run from packaged executable...');
-      backendCommand = path.join(process.resourcesPath, 'fortuna-backend.exe');
+      backendCommand = path.join(process.resourcesPath, 'python_service-bin', 'fortuna-backend.exe');
     }
 
     if (!fs.existsSync(backendCommand)) {
