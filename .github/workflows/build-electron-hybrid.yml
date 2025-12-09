@@ -1,4 +1,4 @@
-name:  Yudit Build Electron MSI (Hybrid V12 Engine)
+name:  Build Electron MSI (Hybrid V12 Engine)
 
 on:
   push:
