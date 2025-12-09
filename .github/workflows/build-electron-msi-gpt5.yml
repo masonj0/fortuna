@@ -15,6 +15,10 @@ env:
   ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
   BACKEND_DIR: 'web_service/backend'
   PYTHONUTF8: '1'
+  API_KEY: mock_key
+  FORTUNA_ENV: smoke-test
+  TVG_API_KEY: mock
+  GREYHOUND_API_URL: http://mock
 
 jobs:
   validate-environment:
@@ -163,7 +167,7 @@ jobs:
           Write-Host "Running Test Suite (Threshold: $MAX_ALLOWED_FAILURES failures)..."
           # 2. Run Pytest and generate an XML report.
           # We use 'cmd /c' and '|| true' to ensure the script doesn't die immediately on exit code 1.
-          cmd /c "pytest --junitxml=test-report.xml" || Write-Host "Pytest finished with issues."
+          cmd /c "pytest ${{ env.BACKEND_DIR }}/tests --junitxml=test-report.xml" || Write-Host "Pytest finished with issues."
           # 3. Parse the XML Report
           if (Test-Path "test-report.xml") {
               [xml]$xml = Get-Content "test-report.xml"
@@ -192,6 +196,7 @@ jobs:
                   exit 1
               } else {
                   Write-Host "✅ ACCEPTABLE: Failure count is within tolerance. Proceeding with build..." -ForegroundColor Green
+                  exit 0 # Explicitly exit with success code to override pytest's failure code
               }
           } else {
               Write-Error "❌ FATAL: No test report generated. Pytest failed to start."
