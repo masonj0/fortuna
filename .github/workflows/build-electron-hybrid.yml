@@ -120,7 +120,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: backend-build-${{ github.run_id }}
-          path: ${{ env.ELECTRON_DIR }}/python_service-bin
+          path: python-service-bin
 
       - name: 📥 Download Frontend Artifact
         uses: actions/download-artifact@v4
