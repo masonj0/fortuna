@@ -5,6 +5,10 @@ on:
   push:
     branches: ["main"]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   NODE_VERSION: '20'
   PYTHON_VERSION: '3.12'
@@ -15,6 +19,7 @@ env:
   MSI_NAME: 'HatTrickFusion.msi'
   FIREWALL_RULE: 'HatTrickFusion-Port'
   UPGRADE_CODE: 'FA689549-366B-4C5C-A482-1132F9A34B10'
+  FORTUNA_PORT: '8102'
   # Mock API keys for service startup
   API_KEY: mock_key
   TVG_API_KEY: mock
