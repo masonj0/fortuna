@@ -7,7 +7,12 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
+  FORTUNA_PORT: '8102'
   API_KEY: "mock_key"
   TVG_API_KEY: "mock_key"
   GREYHOUND_API_URL: "http://mock"

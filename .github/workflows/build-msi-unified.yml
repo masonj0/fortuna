@@ -6,6 +6,10 @@ on:
     branches:
       - main
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   NODE_VERSION: '20'
   PYTHON_VERSION: '3.12'
@@ -13,7 +17,7 @@ env:
   WIX_VERSION: '4.0.5'
   FRONTEND_DIR: 'web_platform/frontend'
   WIX_DIR: 'build_wix'
-  SERVICE_PORT: '8102'
+  FORTUNA_PORT: '8102'
   UPGRADE_CODE: 'FA689549-366B-4C5C-A482-1132F9A34B10'
   # Mock API keys for service startup
   API_KEY: mock_key
@@ -61,9 +65,11 @@ jobs:
 
           python -m pytest web_service/backend
 
-          # Exit code 5 means no tests were found, which is not a failure in this context.
+          # Exit code 5 means no tests were found, which is not a failure in thi
+s context.
           if ($LASTEXITCODE -eq 5) {
-            Write-Host "✅ Pytest returned exit code 5 (No tests found), which is acceptable."
+            Write-Host "✅ Pytest returned exit code 5 (No tests found), which is
+ acceptable."
             exit 0
           } elseif ($LASTEXITCODE -ne 0) {
             Write-Error "❌ Pytest failed with exit code $LASTEXITCODE."
@@ -87,7 +93,8 @@ jobs:
 
       - name: Set Build ID
         id: vars
-        run: echo "build_id=${{ github.run_id }}-${{ github.run_attempt }}" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+        run: echo "build_id=${{ github.run_id }}-${{ github.run_attempt }}" | Ou
+t-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -110,23 +117,30 @@ jobs:
           Set-StrictMode -Version Latest
           $outDir = Resolve-Path "${{ env.FRONTEND_DIR }}/out"
           # Fallback for different env var names in different workflows
-          if (-not (Test-Path $outDir)) { $outDir = Resolve-Path "${{ env.FRONTEND_BUILD_DIR }}" }
+          if (-not (Test-Path $outDir)) { $outDir = Resolve-Path "${{ env.FRONTE
+ND_BUILD_DIR }}" }
 
-          if (-not (Test-Path $outDir)) { Write-Error "❌ Build failed: 'out' dir missing"; exit 1 }
+          if (-not (Test-Path $outDir)) { Write-Error "❌ Build failed: 'out' dir
+ missing"; exit 1 }
 
           $manifestPath = "frontend-manifest.tsv"
-          "RelativePath`tSizeBytes`tSHA256" | Out-File $manifestPath -Encoding utf8
+          "RelativePath`tSizeBytes`tSHA256" | Out-File $manifestPath -Encoding u
+tf8
 
           $files = Get-ChildItem -Path $outDir -Recurse -File
-          if ($files.Count -eq 0) { Write-Error "❌ Build failed: 'out' dir empty"; exit 1 }
+          if ($files.Count -eq 0) { Write-Error "❌ Build failed: 'out' dir empty
+"; exit 1 }
 
           Write-Host "✅ Frontend built: $($files.Count) files."
 
           foreach ($f in $files) {
-            # FIX: Changed TrimStart('\\\\', '/') to TrimStart('\\', '/') to prevent char conversion error
+            # FIX: Changed TrimStart('\\\\', '/') to TrimStart('\\', '/') to pre
+vent char conversion error
             $rel = $f.FullName.Substring($outDir.Path.Length).TrimStart('\','/')
-            $hash = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.Substring(0,16)
-            "$rel`t$($f.Length)`t$hash" | Out-File $manifestPath -Encoding utf8 -Append
+            $hash = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.Substring(
+0,16)
+            "$rel`t$($f.Length)`t$hash" | Out-File $manifestPath -Encoding utf8
+-Append
           }
 
       - name: Setup Python
@@ -161,7 +175,8 @@ jobs:
 
           spec = f"""
           # -- mode: python ; coding: utf-8 --
-          from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+          from PyInstaller.utils.hooks import collect_data_files, collect_submod
+ules
 
           block_cipher = None
 
@@ -169,8 +184,10 @@ jobs:
               ['{entry}'],
               pathex=[],
               binaries=[],
-              datas=collect_data_files('uvicorn') + collect_data_files('slowapi') + [('{frontend_out}', 'ui')],
-              hiddenimports=collect_submodules('{mod_path}') + ['win32timezone'],
+              datas=collect_data_files('uvicorn') + collect_data_files('slowapi'
+) + [('{frontend_out}', 'ui')],
+              hiddenimports=collect_submodules('{mod_path}') + ['win32timezone']
+,
               hookspath=[],
               runtime_hooks=[],
               excludes=['tests', 'pytest'],
@@ -182,7 +199,8 @@ jobs:
           pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
           exe = EXE(
               pyz, a.scripts, a.binaries, a.zipfiles, a.datas, [],
-              name='fortuna-backend', debug=False, bootloader_ignore_signals=False, strip=False, upx=True, console=False
+              name='fortuna-backend', debug=False, bootloader_ignore_signals=Fal
+se, strip=False, upx=True, console=False
           )
           """
           with open("unified.spec", "w") as f: f.write(spec)
@@ -224,7 +242,8 @@ jobs:
         shell: pwsh
         run: |
           if (Test-Path staging/backend/fortuna-backend.exe) {
-            Rename-Item -Path staging/backend/fortuna-backend.exe -NewName fortuna-webservice.exe -Force
+            Rename-Item -Path staging/backend/fortuna-backend.exe -NewName fortu
+na-webservice.exe -Force
             Write-Host "✅ Renamed executable to fortuna-webservice.exe"
           } else {
             Write-Error "❌ Executable not found in staging directory!"
@@ -242,7 +261,8 @@ jobs:
           echo Service Restarted.
           pause
           "@
-          Set-Content -Path "staging/backend/restart_service.bat" -Value $scriptContent -Encoding Ascii
+          Set-Content -Path "staging/backend/restart_service.bat" -Value $script
+Content -Encoding Ascii
           Write-Host "✅ Created restart_service.bat script."
 
       - name: Setup .NET SDK
@@ -253,11 +273,14 @@ jobs:
       - name: 📄 Ensure WiX License Exists
         shell: pwsh
         run: |
-          if (-not (Test-Path build_wix)) { New-Item -ItemType Directory -Path build_wix | Out-Null }
+          if (-not (Test-Path build_wix)) { New-Item -ItemType Directory -Path b
+uild_wix | Out-Null }
           $licensePath = 'build_wix/license.rtf'
           if (-not (Test-Path $licensePath)) {
             Write-Host '⚠️ License file missing. Generating placeholder...'
-            $rtfContent = '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\f0\fs24 END USER LICENSE AGREEMENT\par\par This is a placeholder license for Fortuna Faucet. Please replace with actual terms.}'
+            $rtfContent = '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\f0\fs24 END U
+SER LICENSE AGREEMENT\par\par This is a placeholder license for Fortuna Faucet.
+Please replace with actual terms.}'
             Set-Content -Path $licensePath -Value $rtfContent -Encoding Ascii
             Write-Host '✅ Placeholder license.rtf created.'
           } else {
@@ -267,7 +290,8 @@ jobs:
         shell: pwsh
         run: |
           # 1. Copy the template
-          Copy-Item "${{ env.WIX_DIR }}/Product_WithService.wxs" "${{ env.WIX_DIR }}/Product.wxs" -Force
+          Copy-Item "${{ env.WIX_DIR }}/Product_WithService.wxs" "${{ env.WIX_DI
+R }}/Product.wxs" -Force
 
           # 3. Generate Project with CAB embedding enabled
           $proj = @(
@@ -276,23 +300,30 @@ jobs:
             '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>',
             '    <OutputType>Package</OutputType>',
             '    <Platforms>x64</Platforms>',
-            '    <DefineConstants>Version=$(Version);SourceDir=$(SourceDir);ServicePort=$(ServicePort)</DefineConstants>',
+            '    <DefineConstants>Version=$(Version);SourceDir=$(SourceDir);Serv
+icePort=$(ServicePort)</DefineConstants>',
             '  </PropertyGroup>',
             '  <ItemGroup>',
-            '    <PackageReference Include="WixToolset.UI.wixext" Version="${{ env.WIX_VERSION }}" />',
-            '    <PackageReference Include="WixToolset.Firewall.wixext" Version="${{ env.WIX_VERSION }}" />',
-            '    <PackageReference Include="WixToolset.Util.wixext" Version="${{ env.WIX_VERSION }}" />',
+            '    <PackageReference Include="WixToolset.UI.wixext" Version="${{ e
+nv.WIX_VERSION }}" />',
+            '    <PackageReference Include="WixToolset.Firewall.wixext" Version=
+"${{ env.WIX_VERSION }}" />',
+            '    <PackageReference Include="WixToolset.Util.wixext" Version="${{
+ env.WIX_VERSION }}" />',
             '  </ItemGroup>',
             '  <ItemGroup>',
             '    <Compile Include="Product.wxs" />',
             '  </ItemGroup>',
             '</Project>'
           )
-          Set-Content "${{ env.WIX_DIR }}/Fortuna.wixproj" -Value ($proj -join "`r`n") -Encoding utf8
+          Set-Content "${{ env.WIX_DIR }}/Fortuna.wixproj" -Value ($proj -join "
+`r`n") -Encoding utf8
 
       - name: Build MSI
         working-directory: ${{ env.WIX_DIR }}
-        run: dotnet build Fortuna.wixproj -c Release -p:Platform=x64 -p:Version="0.0.${{ github.run_number }}" -p:SourceDir="../staging/backend" -p:ServicePort="${{ env.SERVICE_PORT }}"
+        run: dotnet build Fortuna.wixproj -c Release -p:Platform=x64 -p:Version=
+"0.0.${{ github.run_number }}" -p:SourceDir="../staging/backend" -p:ServicePort=
+"${{ env.FORTUNA_PORT }}"
 
       - name: '🐤 The Canary (Malware Pre-Flight)'
         shell: pwsh
@@ -310,15 +341,19 @@ jobs:
           }
 
           # ScanType 3 = File/Custom Scan
-          $proc = Start-Process -FilePath $defender -ArgumentList "-Scan -ScanType 3 -File `"$($msi.FullName)`"" -Wait -PassThru -NoNewWindow
+          $proc = Start-Process -FilePath $defender -ArgumentList "-Scan -ScanTy
+pe 3 -File `"$($msi.FullName)`"" -Wait -PassThru -NoNewWindow
 
           if ($proc.ExitCode -eq 0) {
-              Write-Host "✅ CLEAN: Windows Defender found no threats." -ForegroundColor Green
+              Write-Host "✅ CLEAN: Windows Defender found no threats." -Foregrou
+ndColor Green
           } elseif ($proc.ExitCode -eq 2) {
-              Write-Error "🚨 THREAT DETECTED: Windows Defender flagged this installer!"
+              Write-Error "🚨 THREAT DETECTED: Windows Defender flagged this inst
+aller!"
               exit 1
           } else {
-              Write-Warning "⚠️ Scan completed with inconclusive exit code: $($proc.ExitCode)"
+              Write-Warning "⚠️ Scan completed with inconclusive exit code: $($p
+roc.ExitCode)"
           }
 
       - name: Upload MSI Artifact
@@ -354,12 +389,14 @@ jobs:
       - name: 🤫 Install MSI (With Logging)
         shell: pwsh
         run: |
-          if (Get-Service -Name FortunaWebService -ErrorAction SilentlyContinue) {
+          if (Get-Service -Name FortunaWebService -ErrorAction SilentlyContinue)
+ {
             sc.exe stop FortunaWebService 2>&1 | Out-Null
             sc.exe delete FortunaWebService 2>&1 | Out-Null
           }
 
-          $msi = Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse | Select-Object -First 1
+          $msi = Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse |
+Select-Object -First 1
           if (-not $msi) {
             Write-Error "❌ FATAL: No MSI found in artifact"
             Get-ChildItem -Path "msi-installer" -Recurse
@@ -401,7 +438,8 @@ jobs:
           for ($i = 0; $i -lt 30; $i++) {
             if (Test-Path $regPath) {
               Write-Host "✅ Service registered (took $i seconds)"
-              $svc = Get-Service -Name "FortunaWebService" -ErrorAction SilentlyContinue
+              $svc = Get-Service -Name "FortunaWebService" -ErrorAction Silently
+Continue
               Write-Host "   DisplayName: $($svc.DisplayName)"
               Write-Host "   Status: $($svc.Status)"
               exit 0
@@ -425,11 +463,11 @@ jobs:
       - name: 🚀 Launch & Verify Health
         shell: python
         env:
-          SERVICE_PORT: '8102'
+          FORTUNA_PORT: '8102'
         run: |
           import os, sys, subprocess, socket, time, urllib.request, urllib.error
 
-          PORT = int(os.getenv("SERVICE_PORT", 8102))
+          PORT = int(os.getenv("FORTUNA_PORT", 8102))
 
           print("--- Starting Service via SC.EXE ---")
           result = subprocess.run(
@@ -458,7 +496,8 @@ jobs:
               time.sleep(2)
 
           if not socket_bound:
-            print(f"\n❌ FATAL: Service did not bind port 8102 within 60 seconds")
+            print(f"\n❌ FATAL: Service did not bind port 8102 within 60 seconds"
+)
             print("Dumping service status for debugging:")
             subprocess.run(["sc.exe", "query", "FortunaWebService"])
             sys.exit(1)
@@ -469,7 +508,8 @@ jobs:
           for attempt in range(5):
             try:
               req = urllib.request.Request(f"http://127.0.0.1:{PORT}/health")
-              req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)')
+              req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64;
+ x64)')
 
               with urllib.request.urlopen(req, timeout=5) as response:
                 if response.status == 200:
@@ -500,8 +540,8 @@ jobs:
           python -m pip install playwright
           python -m playwright install chromium
 
-          # Default to 8102 if SERVICE_PORT is not set
-          $port = "${{ env.SERVICE_PORT }}"
+          # Default to 8102 if FORTUNA_PORT is not set
+          $port = "${{ env.FORTUNA_PORT }}"
           if ([string]::IsNullOrWhiteSpace($port)) { $port = "8102" }
 
           Write-Host "Taking screenshot of http://localhost:$port..."
@@ -544,8 +584,10 @@ jobs:
           Remove-Item $diag -Recurse -Force -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Path $diag | Out-Null
           Copy-Item -Path msi-install.log -Destination $diag -Force
-          Copy-Item -Path "C:\ProgramData\Fortuna\logs\*.log" -Destination $diag -Force -ErrorAction SilentlyContinue
-          Copy-Item -Path "C:\Program Files\Fortuna Faucet\*" -Destination $diag -Recurse -Force -ErrorAction SilentlyContinue
+          Copy-Item -Path "C:\ProgramData\Fortuna\logs\*.log" -Destination $diag
+ -Force -ErrorAction SilentlyContinue
+          Copy-Item -Path "C:\Program Files\Fortuna Faucet\*" -Destination $diag
+ -Recurse -Force -ErrorAction SilentlyContinue
       - name: 📤 Upload Logs on Failure
         if: failure()
         uses: actions/upload-artifact@v4
@@ -560,5 +602,6 @@ jobs:
         run: |
           sc.exe stop FortunaWebService 2>&1 | Out-Null
           sc.exe delete FortunaWebService 2>&1 | Out-Null
-          Remove-NetFirewallRule -DisplayName "FortunaWebService" -ErrorAction SilentlyContinue
+          Remove-NetFirewallRule -DisplayName "FortunaWebService" -ErrorAction S
+ilentlyContinue
           Write-Host "✅ Cleanup complete"

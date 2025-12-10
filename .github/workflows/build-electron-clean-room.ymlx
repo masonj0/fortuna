@@ -5,12 +5,21 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   NODE_VERSION: '20'
   PYTHON_VERSION: '3.12'
   BACKEND_DIR: 'python_service'
   FRONTEND_DIR: 'web_platform/frontend'
   ELECTRON_DIR: 'electron'
+  FORTUNA_PORT: '8102'
+  API_KEY: "mock_key"
+  TVG_API_KEY: "mock"
+  GREYHOUND_API_URL: "http://mock"
+  FORTUNA_ENV: "smoke-test"
 
 jobs:
   build-and-package:
@@ -154,44 +163,53 @@ jobs:
             throw "Install failed with code $($proc.ExitCode)"
           }
 
-      - name: 🚀 Launch & Wait (Dual Process)
+      - name: 🚀 Launch & Wait (Port Detection)
         shell: pwsh
         run: |
-          # Dynamic Executable Finding (Robust)
           $root = 'C:\\Program Files\\Fortuna Faucet'
-          if (-not (Test-Path $root)) { throw "Install directory not found at $root" }
-
           $exe = Get-ChildItem $root -Filter "*.exe" -Recurse | Where { $_.Name -notmatch 'uninstall' } | Select -First 1
           if (!$exe) { throw "Executable not found in $root" }
 
-          Write-Host "Launching: $($exe.FullName)"
-          # FIX: Add --no-sandbox to prevent Electron crash on headless CI
-          $proc = Start-Process -FilePath $exe.FullName -ArgumentList "--no-sandbox" -PassThru
+          Write-Host "Target: $($exe.FullName)"
 
-          Write-Host "Waiting for Electron + Python processes to stabilize (up to 120s)..."
+          # Create Log Directory
+          $logDir = "C:\Temp\fortuna-logs"
+          New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+
+          # Launch Electron with Log Redirection
+          $proc = Start-Process -FilePath $exe.FullName -ArgumentList "--no-sandbox" -NoNewWindow -PassThru -RedirectStandardOutput "$logDir\stdout.log" -RedirectStandardError "$logDir\stderr.log"
+
+          Write-Host "Electron launched (PID: $($proc.Id)). Waiting for Port 8102..."
+
+          # Wait for Port 8102 (The Backend)
           $deadline = (Get-Date).AddSeconds(120)
+          $connected = $false
 
           while ((Get-Date) -lt $deadline) {
-              $p = Get-Process | Where { $_.ProcessName -like "*Fortuna*" }
-              $e = $p | Where { $_.ProcessName -match "Fortuna Faucet" }
-              $b = $p | Where { $_.ProcessName -match "fortuna-backend" }
-
-              if ($e) { Write-Host " - Electron is running (PID: $($e.Id))" }
-              if ($b) { Write-Host " - Backend is running (PID: $($b.Id))" }
-
-              if ($e -and $b) {
-                  Write-Host "✅ SUCCESS: App and Backend are running."
-                  exit 0
-              }
+            try {
+              $tcp = New-Object System.Net.Sockets.TcpClient
+              $tcp.Connect('127.0.0.1', 8102)
+              $tcp.Close()
+              Write-Host "✅ SUCCESS: Backend is listening on port 8102!" -ForegroundColor Green
+              $connected = $true
+              break
+            } catch {
+              Write-Host "  ...waiting for port..."
               Start-Sleep 2
+            }
           }
 
-          Write-Error "❌ TIMEOUT: Processes did not stabilize."
-          Write-Host "--- Process Dump (Fortuna) ---"
-          Get-Process | Where { $_.ProcessName -like "*Fortuna*" } | Format-Table
-          Write-Host "--- Full Process List (Top 20 Memory) ---"
-          Get-Process | Sort-Object PM -Descending | Select -First 20 | Format-Table
-          exit 1
+          if (-not $connected) {
+            Write-Error "❌ TIMEOUT: Backend did not bind port 8102."
+
+            Write-Host "--- ELECTRON STDOUT ---"
+            if (Test-Path "$logDir\stdout.log") { Get-Content "$logDir\stdout.log" -Tail 50 }
+
+            Write-Host "--- ELECTRON STDERR ---"
+            if (Test-Path "$logDir\stderr.log") { Get-Content "$logDir\stderr.log" -Tail 50 }
+
+            exit 1
+          }
 
       - name: '📸 The Paparazzi (Visual Proof)'
         shell: pwsh

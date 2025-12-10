@@ -6,8 +6,8 @@ on:
     branches: ["main"]
 
 concurrency:
-  group: build-electron-msi-${{ github.ref }}
-  cancel-in-progress: false
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   NODE_VERSION: '18'
@@ -15,6 +15,7 @@ env:
   ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
   BACKEND_DIR: 'web_service/backend'
   PYTHONUTF8: '1'
+  FORTUNA_PORT: '8102'
   API_KEY: mock_key
   FORTUNA_ENV: smoke-test
   TVG_API_KEY: mock
@@ -864,19 +865,19 @@ jobs:
           $logDir = "C:\Temp\fortuna-logs-$(Get-Random)"
           New-Item -ItemType Directory -Path $logDir -Force | Out-Null
 
-          $proc = Start-Process -FilePath $exe.FullName -PassThru -RedirectStandardOutput "$logDir\stdout.log" -RedirectStandardError "$logDir\stderr.log"
+          $proc = Start-Process -FilePath $exe.FullName -ArgumentList "--no-sandbox" -PassThru -RedirectStandardOutput "$logDir\stdout.log" -RedirectStandardError "$logDir\stderr.log"
 
           Write-Host "Electron launched (PID: $($proc.Id))"
-          Write-Host "Waiting for backend to start listening on port 8000..."
+          Write-Host "Waiting for backend to start listening on port 8102..."
 
           # Wait for port to be ready
           $portReady = $false
           for ($i = 0; $i -lt 60; $i++) {
             try {
               $tcp = New-Object System.Net.Sockets.TcpClient
-              $tcp.Connect('127.0.0.1', 8000)
+              $tcp.Connect('127.0.0.1', 8102)
               $tcp.Close()
-              Write-Host "✅ Port 8000 is OPEN!"
+              Write-Host "✅ Port 8102 is OPEN!"
               $portReady = $true
               break
             } catch {
@@ -886,7 +887,7 @@ jobs:
           }
 
           if (!$portReady) {
-            Write-Error "❌ Backend never opened port 8000!"
+            Write-Error "❌ Backend never opened port 8102!"
             Write-Host "`n=== ELECTRON STDOUT ==="
             Get-Content "$logDir\stdout.log" -Tail 50
             Write-Host "`n=== ELECTRON STDERR ==="

@@ -27,6 +27,11 @@ env:
   NODE_VERSION: '20'
   PYTHON_VERSION: '3.12'
   PYTHONUTF8: "1"
+  FORTUNA_PORT: '8102'
+  API_KEY: "mock_key"
+  TVG_API_KEY: "mock"
+  GREYHOUND_API_URL: "http://mock"
+  FORTUNA_ENV: "smoke-test"
 
 jobs:
   build:
@@ -85,6 +90,9 @@ jobs:
             cp fortuna-backend-electron.spec fortuna-webservice.spec
             (Get-Content fortuna-webservice.spec) -replace 'python_service/main.py', 'web_service/backend/main.py' | Set-Content fortuna-webservice.spec
             (Get-Content fortuna-webservice.spec) -replace 'fortuna-backend', 'fortuna-webservice' | Set-Content fortuna-webservice.spec
+            (Get-Content fortuna-webservice.spec) -replace "hiddenimports=['uvicorn.lifespan', 'uvicorn.loops', 'uvicorn.protocols']", "hiddenimports=['uvicorn.lifespan', 'uvicorn.loops', 'uvicorn.protocols', 'win32timezone']" | Set-Content fortuna-webservice.spec
+          } else {
+            (Get-Content fortuna-backend-electron.spec) -replace "hiddenimports=['uvicorn.lifespan', 'uvicorn.loops', 'uvicorn.protocols']", "hiddenimports=['uvicorn.lifespan', 'uvicorn.loops', 'uvicorn.protocols', 'win32timezone']" | Set-Content fortuna-backend-electron.spec
           }
           ${{ steps.setup-python.outputs.python-path }} -m pyinstaller $specFile --clean --log-level WARN --noconfirm
 
@@ -110,6 +118,10 @@ jobs:
             Write-Host "Staging artifacts for Web Service build..."
             New-Item -ItemType Directory -Path "build_wix/staging" -Force
             Move-Item -Path "dist/fortuna-webservice.exe" -Destination "build_wix/staging/fortuna-webservice.exe"
+
+            Write-Host "Creating restart_service.bat..."
+            $scriptContent = "@echo off`r`necho Restarting...`r`nnet stop FortunaWebService`r`nnet start FortunaWebService"
+            Set-Content -Path "build_wix/staging/restart_service.bat" -Value $scriptContent
 
             Write-Host "Packaging Web Service MSI..."
             cd build_wix

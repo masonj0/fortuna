@@ -5,12 +5,16 @@ on:
     tags: ["v*"]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   NODE_VERSION: '20'
   PYTHON_VERSION: '3.12'
   DOTNET_VERSION: '8.0.x'
   WIX_VERSION: '4.0.5'
-  SERVICE_PORT: '8102'
+  FORTUNA_PORT: '8102'
   FRONTEND_PORT: '3000'
   FIREWALL_RULE: 'HatTrickFusion-Port'
   # Paths
@@ -345,7 +349,7 @@ jobs:
       - name: Build MSI
         working-directory: ${{ env.WIX_DIR }}
         # FIX: Pass variables via DefineConstants
-        run: dotnet build Fortuna.wixproj -c Release -p:Platform=x64 -p:Version="0.0.${{ github.run_number }}" -p:SourceDir="../staging/backend" -p:ServicePort="${{ env.SERVICE_PORT }}"
+        run: dotnet build Fortuna.wixproj -c Release -p:Platform=x64 -p:Version="0.0.${{ github.run_number }}" -p:SourceDir="../staging/backend" -p:ServicePort="${{ env.FORTUNA_PORT }}"
 
       - name: '🐤 The Canary (Malware Pre-Flight)'
         shell: pwsh
@@ -413,7 +417,7 @@ jobs:
       - name: 🛡️ Firewall & Install
         shell: pwsh
         run: |
-          New-NetFirewallRule -DisplayName "${{ env.FIREWALL_RULE }}" -Direction Inbound -LocalPort ${{ env.SERVICE_PORT }} -Protocol TCP -Action Allow
+          New-NetFirewallRule -DisplayName "${{ env.FIREWALL_RULE }}" -Direction Inbound -LocalPort ${{ env.FORTUNA_PORT }} -Protocol TCP -Action Allow
           if (Get-Service -Name FortunaWebService -ErrorAction SilentlyContinue) {
             sc.exe stop FortunaWebService 2>&1 | Out-Null
             sc.exe delete FortunaWebService 2>&1 | Out-Null
@@ -450,7 +454,7 @@ jobs:
       - name: '🚀 Loop 2 - Launch & Port Bind'
         shell: python
         env:
-          PORT: ${{ env.SERVICE_PORT }}
+          PORT: ${{ env.FORTUNA_PORT }}
         run: |
           import os, socket, time, urllib.request, urllib.error, subprocess, sys
           port = int(os.environ["PORT"])
@@ -472,7 +476,7 @@ jobs:
       - name: '🏥 Loop 3 - Health Check'
         shell: python
         env:
-          PORT: ${{ env.SERVICE_PORT }}
+          PORT: ${{ env.FORTUNA_PORT }}
         run: |
           import urllib.request, urllib.error, time, sys, os
           port = int(os.environ["PORT"])
