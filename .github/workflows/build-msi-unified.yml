@@ -399,6 +399,15 @@ jobs:
           Write-Error "❌ Service was not registered in HKLM after 30 seconds"
           exit 1
 
+      - name: Create Runtime Directories
+        shell: pwsh
+        run: |
+          $installDir = "C:\Program Files\Fortuna Faucet Service"
+          New-Item -ItemType Directory -Path "$installDir\data" -Force
+          New-Item -ItemType Directory -Path "$installDir\json" -Force
+          New-Item -ItemType Directory -Path "$installDir\logs" -Force
+          Write-Host "✅ Ensured runtime directories exist in $installDir"
+
       - name: 🚀 Launch & Verify Health
         shell: python
         env:
