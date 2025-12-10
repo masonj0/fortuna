@@ -76,7 +76,7 @@ jobs:
           Write-Host "✅ Frontend built: $($files.Count) files."
 
           foreach ($f in $files) {
-            # FIX: Changed TrimStart('\\\\', '/') to TrimStart('\\', '/') to prevent char conversion error
+            # FIX: Use TrimStart('\','/') to prevent char conversion error.
             $rel = $f.FullName.Substring($outDir.Path.Length).TrimStart('\','/')
             $hash = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.Substring(0,16)
             "$rel`t$($f.Length)`t$hash" | Out-File $manifestPath -Encoding utf8 -Append

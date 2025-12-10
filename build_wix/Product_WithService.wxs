@@ -20,9 +20,7 @@
       <ComponentGroupRef Id="ShortcutComponents" />
     </Feature>
 
-    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER">
-        <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="LaunchBrowser" Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 AND NOT Installed" />
-    </ui:WixUI>
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
     <WixVariable Id="WixUILicenseRtf" Value="license.rtf" />
 
     <!-- Properties for the auto-launch checkbox on the exit dialog -->
@@ -30,7 +28,7 @@
     <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
     <Property Id="WixShellExecTarget" Value="http://localhost:$(var.ServicePort)" />
 
-    <CustomAction Id="LaunchBrowser" BinaryKey="WixCA" DllEntry="WixShellExec" Impersonate="yes" />
+    <CustomAction Id="LaunchBrowser" BinaryRef="Wix4UtilCA_$(sys.BUILDARCH)" DllEntry="WixShellExec" Impersonate="yes" />
 
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLFOLDER" Name="Fortuna Faucet Service">
@@ -81,8 +79,8 @@
         <Component Id="StartMenuShortcuts" Guid="*" Directory="ApplicationProgramsFolder">
             <util:InternetShortcut Id="DashboardShortcut" Name="Fortuna Dashboard" Target="http://localhost:$(var.ServicePort)" />
             <Shortcut Id="RestartShortcut" Name="Restart Service" Description="Restarts the background service (Run as Admin)" Target="[INSTALLFOLDER]restart_service.bat" />
-            <Shortcut Id="LogsShortcut" Name="View Logs" Description="Opens the log file directory" Target="[Dir_Logs]" />
-            <util:InternetShortcut Id="HelpShortcut" Name="Help & Documentation" Description="View API documentation and help" Target="http://localhost:$(var.ServicePort)/docs" />
+            <Shortcut Id="LogsShortcut" Name="View Logs" Description="Opens the log file directory" Target="[System64Folder]explorer.exe" Arguments="[Dir_Logs]" />
+            <util:InternetShortcut Id="HelpShortcut" Name="Help &amp; Documentation" Target="http://localhost:$(var.ServicePort)/docs" />
             <Shortcut Id="UninstallShortcut" Name="Uninstall Fortuna Faucet" Description="Removes the application" Target="[System64Folder]msiexec.exe" Arguments="/x [ProductCode]" />
             <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall" />
             <RegistryValue Root="HKCU" Key="Software\Fortuna Faucet" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />

@@ -824,78 +824,76 @@ jobs:
 
           Write-Host "✅ MSI installation succeeded"
 
-      - name: 🕵️ Find Installed Executable
+      - name: '🔬 Complete Smoke Test (3-Layer Defense)'
         shell: pwsh
         run: |
-          # EXOTIC INGREDIENT #3: Don't assume the path. Find it dynamically.
-          # Searches for the main executable, skipping uninstallers
-
-          $root = "C:\\Program Files\\Fortuna Faucet"
-          if (-not (Test-Path $root)) {
-            Write-Error "❌ Install directory not found: $root"
-            Get-ChildItem "C:\\Program Files" | Write-Host
-            exit 1
-          }
-
-          $exe = Get-ChildItem -Path $root -Filter "*.exe" -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch 'uninstall' } | Select-Object -First 1
-
-          if (-not $exe) {
-            Write-Error "❌ No main executable found in $root"
-            Get-ChildItem -Path $root -Recurse | Write-Host
-            exit 1
-          }
-
-          Write-Host "✅ Found Executable: $($exe.FullName)"
-          $exe.FullName | Out-File "installed_exe.txt" -Encoding utf8
-
-      - name: 🚀 Launch, Wait & Verify Backend
-        shell: pwsh
-        run: |
-          $root = 'C:\\Program Files\\Fortuna Faucet'
-          $exe = Get-ChildItem $root -Filter "*.exe" -Recurse | Where { $_.Name -notmatch 'uninstall' } | Select -First 1
-
-          if (!$exe) { throw "Executable not found" }
-
-          Write-Host "=== PRE-LAUNCH DIAGNOSTICS ==="
-          Write-Host "Electron executable: $($exe.FullName)"
-          Write-Host "File size: $('{0:N0}' -f $exe.Length) bytes"
-          Write-Host "Exists: $(Test-Path $exe.FullName)"
-
-          Write-Host "`n=== LAUNCHING ELECTRON ==="
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "Stop"
           $logDir = "C:\Temp\fortuna-logs-$(Get-Random)"
           New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+          Write-Host "Logging to $logDir"
 
-          $proc = Start-Process -FilePath $exe.FullName -ArgumentList "--no-sandbox" -PassThru -RedirectStandardOutput "$logDir\stdout.log" -RedirectStandardError "$logDir\stderr.log"
+          # --- LAYER 1: INSTALLATION & FILE VERIFICATION ---
+          Write-Host "`n--- DEFENSE LAYER 1: VERIFYING INSTALLATION ---"
+          $installRoot = "C:\Program Files\Fortuna Faucet"
+          if (-not (Test-Path $installRoot)) {
+            Write-Error "❌ LAYER 1 FAILED: Install directory not found: $installRoot"
+            exit 1
+          }
+          $mainExe = Get-ChildItem -Path $installRoot -Filter "*.exe" -Recurse | Where-Object { $_.Name -notmatch 'uninstall' } | Select -First 1
+          $backendExe = Get-ChildItem -Path $installRoot -Filter "fortuna-backend.exe" -Recurse | Select -First 1
 
-          Write-Host "Electron launched (PID: $($proc.Id))"
-          Write-Host "Waiting for backend to start listening on port 8102..."
+          if (-not $mainExe) { Write-Error "❌ LAYER 1 FAILED: Main 'Fortuna Faucet.exe' not found."; exit 1 }
+          if (-not $backendExe) { Write-Error "❌ LAYER 1 FAILED: Backend 'fortuna-backend.exe' not found."; exit 1 }
+          Write-Host "✅ Layer 1 Passed: Found main executable ($($mainExe.Name)) and backend ($($backendExe.Name))."
 
-          # Wait for port to be ready
-          $portReady = $false
-          for ($i = 0; $i -lt 60; $i++) {
+          # --- LAYER 2: PROCESS VERIFICATION ---
+          Write-Host "`n--- DEFENSE LAYER 2: VERIFYING PROCESS STARTUP ---"
+          # Set the environment variable for the process being started
+          $env:FORTUNA_PORT = "${{ env.FORTUNA_PORT }}"
+
+          $proc = Start-Process -FilePath $mainExe.FullName -ArgumentList "--no-sandbox" -PassThru -RedirectStandardOutput "$logDir\electron-stdout.log" -RedirectStandardError "$logDir\electron-stderr.log"
+          Write-Host "🚀 Electron Main Process launched (PID: $($proc.Id)) with FORTUNA_PORT=$($env:FORTUNA_PORT)"
+          Write-Host "Waiting for child processes to spawn..."
+          Start-Sleep -Seconds 10 # Give Electron time to spawn the backend
+
+          $parentProcess = Get-Process -Name "Fortuna Faucet" -ErrorAction SilentlyContinue
+          $childProcess = Get-Process -Name "fortuna-backend" -ErrorAction SilentlyContinue
+
+          if (-not $parentProcess) { Write-Error "❌ LAYER 2 FAILED: Main 'Fortuna Faucet' process is not running."; exit 1 }
+          if (-not $childProcess) { Write-Error "❌ LAYER 2 FAILED: Child 'fortuna-backend' process is not running."; exit 1 }
+          Write-Host "✅ Layer 2 Passed: 'Fortuna Faucet' (PID: $($parentProcess.Id)) and 'fortuna-backend' (PID: $($childProcess.Id)) are running."
+
+          # --- LAYER 3: NETWORK VERIFICATION ---
+          Write-Host "`n--- DEFENSE LAYER 3: VERIFYING NETWORK ENDPOINT ---"
+          $healthUrl = "http://127.0.0.1:${{ env.FORTUNA_PORT }}/health"
+          $maxAttempts = 15
+          $delaySeconds = 4
+          $success = $false
+
+          for ($i = 1; $i -le $maxAttempts; $i++) {
+            Write-Host "Attempt $i/$maxAttempts: Pinging $healthUrl..."
             try {
-              $tcp = New-Object System.Net.Sockets.TcpClient
-              $tcp.Connect('127.0.0.1', 8102)
-              $tcp.Close()
-              Write-Host "✅ Port 8102 is OPEN!"
-              $portReady = $true
-              break
+              $response = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 5
+              if ($response.StatusCode -eq 200) {
+                Write-Host "✅ Layer 3 Passed: Received HTTP 200 OK from health endpoint." -ForegroundColor Green
+                $success = $true
+                break
+              } else {
+                Write-Warning "Received unexpected status code: $($response.StatusCode)"
+              }
             } catch {
-              Write-Host "  Attempt $($i+1)/60: Waiting..."
-              Start-Sleep 2
+              Write-Host "  ... endpoint not ready. Retrying in $delaySeconds seconds."
             }
+            Start-Sleep -Seconds $delaySeconds
           }
 
-          if (!$portReady) {
-            Write-Error "❌ Backend never opened port 8102!"
-            Write-Host "`n=== ELECTRON STDOUT ==="
-            Get-Content "$logDir\stdout.log" -Tail 50
-            Write-Host "`n=== ELECTRON STDERR ==="
-            Get-Content "$logDir\stderr.log" -Tail 50
+          if (-not $success) {
+            Write-Error "❌ LAYER 3 FAILED: Health endpoint '$healthUrl' never became available."
             exit 1
           }
 
-          Write-Host "✅ SUCCESS: Backend is ready and accepting connections!"
+          Write-Host "`n✅✅✅ SMOKE TEST PASSED ALL 3 DEFENSE LAYERS ✅✅✅"
 
       - name: '📸 The Paparazzi (Visual Proof)'
         shell: pwsh
@@ -904,9 +902,8 @@ jobs:
           python -m pip install playwright
           python -m playwright install chromium
 
-          # Default to 8102 if SERVICE_PORT is not set
-          $port = "${{ env.SERVICE_PORT }}"
-          if ([string]::IsNullOrWhiteSpace($port)) { $port = "8102" }
+          # The port is now guaranteed to be set by the previous step's env var
+          $port = "${{ env.FORTUNA_PORT }}"
 
           Write-Host "Taking screenshot of http://localhost:$port..."
           python -c "
@@ -917,18 +914,17 @@ jobs:
               with sync_playwright() as p:
                   browser = p.chromium.launch()
                   page = browser.new_page()
-                  # Try index.html, fall back to root if needed
-                  url = f'http://localhost:{sys.argv[1]}/index.html'
+                  # The UI is served from the root, not index.html, by the backend
+                  url = f'http://localhost:{sys.argv[1]}/'
                   print(f'Navigating to {url}...')
                   page.goto(url)
-                  # Wait a moment for React/Next.js hydration if needed
-                  page.wait_for_timeout(2000)
+                  page.wait_for_timeout(3000) # Wait for hydration
                   page.screenshot(path='proof-of-life.png', full_page=True)
                   browser.close()
               print('✅ Screenshot captured.')
           except Exception as e:
               print(f'❌ Screenshot failed: {e}')
-              # We do not fail the build for this; it is a bonus artifact.
+              # Do not fail the build for this bonus artifact
               sys.exit(0)
           " $port
 
@@ -940,14 +936,50 @@ jobs:
           path: proof-of-life.png
           retention-days: 7
 
-      - name: 📤 Upload Logs on Failure
+      - name: '🚨 Emergency Diagnostics (On Failure)'
+        if: failure()
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "Continue"
+          $logDir = "C:\Temp" # This is a broad search path now
+          $diagDir = ".\emergency-diagnostics"
+          New-Item -ItemType Directory -Path $diagDir -Force | Out-Null
+
+          Write-Host "--- CAPTURING FAILURE STATE ---"
+
+          # 1. MSI Install Log (if it exists)
+          Copy-Item -Path "msi-install.log" -Destination $diagDir -ErrorAction SilentlyContinue
+
+          # 2. Electron Logs (from known temp location)
+          $electronLogs = Get-ChildItem -Path $logDir -Filter "fortuna-logs-*" -Recurse | Select-Object -Last 1
+          if ($electronLogs) {
+              Copy-Item -Path $electronLogs.FullName -Destination $diagDir -Recurse -ErrorAction SilentlyContinue
+          }
+
+          # 3. Process List
+          Get-Process | Select-Object Name, Id, Path | ConvertTo-Csv -NoTypeInformation | Set-Content "$diagDir\process-list.csv"
+
+          # 4. Network State
+          Get-NetTCPConnection | Select-Object LocalAddress, LocalPort, RemoteAddress, RemotePort, State | ConvertTo-Csv -NoTypeInformation | Set-Content "$diagDir\netstat.csv"
+
+          # 5. Event Viewer Logs (Application Errors)
+          Get-WinEvent -FilterHashtable @{LogName='Application'; Level=1,2,3} -MaxEvents 100 |
+            Format-Table TimeCreated, ProviderName, Message -Wrap -AutoSize |
+            Out-File "$diagDir\event-viewer-app-errors.log"
+
+          Write-Host "✅ Diagnostics captured to '$diagDir'."
+
+      - name: 📤 Upload Diagnostics Artifact
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: electron-smoke-test-logs-${{ github.run_id }}
+          name: smoke-test-failure-diagnostics-${{ github.run_id }}
           path: |
             msi-install.log
-          retention-days: 7
+            emergency-diagnostics/
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: 🧹 Cleanup
         if: always()
