@@ -65,11 +65,9 @@ jobs:
 
           python -m pytest web_service/backend
 
-          # Exit code 5 means no tests were found, which is not a failure in thi
-s context.
+          # Exit code 5 means no tests were found, which is not a failure.
           if ($LASTEXITCODE -eq 5) {
-            Write-Host "✅ Pytest returned exit code 5 (No tests found), which is
- acceptable."
+            Write-Host "✅ Pytest returned exit code 5 (No tests found), which is acceptable."
             exit 0
           } elseif ($LASTEXITCODE -ne 0) {
             Write-Error "❌ Pytest failed with exit code $LASTEXITCODE."
