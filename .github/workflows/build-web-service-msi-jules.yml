@@ -983,11 +983,6 @@ jobs:
           Set-StrictMode -Version Latest
           Copy-Item "${{ env.WIX_DIR }}/Product_WithService.wxs" "${{ env.WIX_DIR }}/Product.wxs" -Force
 
-          $wxsPath = "${{ env.WIX_DIR }}/Product.wxs"
-          $wxsContent = Get-Content $wxsPath -Raw
-          $wxsContent = $wxsContent -replace 'Start="install"', ''
-          Set-Content -Path $wxsPath -Value $wxsContent -Encoding UTF8 -Force
-
           $proj = @(
             '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">',
             '  <PropertyGroup>',

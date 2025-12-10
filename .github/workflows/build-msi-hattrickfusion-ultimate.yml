@@ -205,7 +205,6 @@ jobs:
               pathex=[],
               binaries=[],
               datas=collect_data_files('uvicorn') + collect_data_files('slowapi') + [('{frontend_out}', 'ui')],
-              # CHANGE: Add win32timezone to hidden imports (critical for pywin32)
               hiddenimports=collect_submodules('{mod_path}') + ['win32timezone'],
               hookspath=[],
               runtime_hooks=[],
@@ -302,14 +301,6 @@ jobs:
 
           # Copy template and apply fix
           Copy-Item build_wix/Product_WithService.wxs build_wix/Product.wxs -Force
-          $wxsPath = "build_wix/Product.wxs"
-          [xml]$wxsContent = Get-Content $wxsPath
-          $serviceControl = $wxsContent.SelectSingleNode("//*[local-name()='ServiceControl']")
-          if ($serviceControl -and $serviceControl.HasAttribute("Start")) {
-              $serviceControl.RemoveAttribute("Start")
-              $wxsContent.Save($wxsPath)
-              Write-Host "✅ Dynamically removed 'Start=install' attribute from WiX template."
-          }
 
           # Stage Executable
           if (Test-Path staging/backend/fortuna-backend.exe) {

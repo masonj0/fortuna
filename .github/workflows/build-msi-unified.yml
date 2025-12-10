@@ -255,16 +255,6 @@ jobs:
           # 1. Copy the template
           Copy-Item "${{ env.WIX_DIR }}/Product_WithService.wxs" "${{ env.WIX_DIR }}/Product.wxs" -Force
 
-          # 2. Dynamically remove the problematic Start="install" attribute to prevent timeouts
-          $wxsPath = "${{ env.WIX_DIR }}/Product.wxs"
-          [xml]$wxsContent = Get-Content $wxsPath
-          $serviceControl = $wxsContent.SelectSingleNode("//*[local-name()='ServiceControl']")
-          if ($serviceControl -and $serviceControl.HasAttribute("Start")) {
-              $serviceControl.RemoveAttribute("Start")
-              $wxsContent.Save($wxsPath)
-              Write-Host "✅ Dynamically removed 'Start=install' attribute from WiX template."
-          }
-
           # 3. Generate Project with CAB embedding enabled
           $proj = @(
             '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">',

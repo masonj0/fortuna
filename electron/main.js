@@ -111,38 +111,6 @@ class FortunaDesktopApp {
       backendCommand = path.join(process.resourcesPath, 'python-service-bin', 'fortuna-backend.exe');
     }
 
-    if (isDev) {
-        // Development-specific logic to create dirs in the project root
-        const devDirs = [
-            path.join(__dirname, '..', 'python_service', 'data'),
-            path.join(__dirname, '..', 'python_service', 'json'),
-            path.join(__dirname, '..', 'python_service', 'logs')
-        ];
-        devDirs.forEach(dir => {
-            if (!fs.existsSync(dir)) {
-                fs.mkdirSync(dir, { recursive: true });
-                console.log(`[DEV] Created missing directory: ${dir}`);
-            }
-        });
-    } else {
-        // Production-specific logic to create dirs next to the executable
-        const resourcesPath = process.resourcesPath;
-        const prodDirs = [
-            path.join(resourcesPath, 'data'),
-            path.join(resourcesPath, 'json'),
-            path.join(resourcesPath, 'logs')
-        ];
-        prodDirs.forEach(dir => {
-            if (!fs.existsSync(dir)) {
-                fs.mkdirSync(dir, { recursive: true });
-                console.log(`[PROD] Created missing directory: ${dir}`);
-            }
-        });
-        // In production, the backend's working directory should be the resources path
-        // so it can find these newly created directories.
-        backendCwd = resourcesPath;
-    }
-
     if (!fs.existsSync(backendCommand)) {
       const errorMsg = `FATAL: Backend executable not found at ${backendCommand}`;
       console.error(errorMsg);
