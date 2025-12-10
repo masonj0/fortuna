@@ -429,6 +429,14 @@ jobs:
             throw "Install failed with code $($proc.ExitCode)"
           }
 
+      - name: Create Runtime Directories
+        shell: pwsh
+        run: |
+          $installDir = "C:\Program Files\Fortuna Faucet Service"
+          New-Item -ItemType Directory -Path "$installDir\data" -Force
+          New-Item -ItemType Directory -Path "$installDir\json" -Force
+          New-Item -ItemType Directory -Path "$installDir\logs" -Force
+          Write-Host "✅ Ensured runtime directories exist in $installDir"
       - name: '⏳ Loop 1 - Service Registration'
         shell: pwsh
         run: |
