@@ -192,7 +192,7 @@ jobs:
 
           # Dynamically remove the problematic Start="install" attribute
           $wxsPath = 'build_wix/Product.wxs'
-          $wxsContent = [xml](Get-Content $wxsPath)
+          $wxsContent = [xml](Get-Content $wxsPath -Raw)
           $serviceControl = $wxsContent.SelectSingleNode("//*[local-name()='ServiceControl']")
           if ($serviceControl -and $serviceControl.HasAttribute("Start")) {
               $serviceControl.RemoveAttribute("Start")
