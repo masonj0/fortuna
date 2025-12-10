@@ -20,7 +20,10 @@
       <ComponentGroupRef Id="ShortcutComponents" />
     </Feature>
 
-    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER">
+      <ui:DialogRef Id="ExitDialog" />
+      <ui:Custom Error="This action requires administrative privileges." Action="WixShellExec" On="Finish" />
+    </ui:WixUI>
     <WixVariable Id="WixUILicenseRtf" Value="license.rtf" />
 
     <!-- Properties for the auto-launch checkbox on the exit dialog -->
@@ -28,7 +31,7 @@
     <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
     <Property Id="WixShellExecTarget" Value="http://localhost:$(var.ServicePort)" />
 
-    <CustomAction Id="LaunchBrowser" BinaryRef="Wix4UtilCA_$(sys.BUILDARCH)" DllEntry="WixShellExec" Impersonate="yes" />
+    <CustomAction Id="LaunchBrowser" BinaryRef="Wix4UtilCA" DllEntry="WixShellExec" Impersonate="yes" />
 
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLFOLDER" Name="Fortuna Faucet Service">
