@@ -81,7 +81,7 @@
         <Component Id="StartMenuShortcuts" Guid="*" Directory="ApplicationProgramsFolder">
             <util:InternetShortcut Id="DashboardShortcut" Name="Fortuna Dashboard" Target="http://localhost:$(var.ServicePort)" />
             <Shortcut Id="RestartShortcut" Name="Restart Service" Description="Restarts the background service (Run as Admin)" Target="[INSTALLFOLDER]restart_service.bat" />
-            <Shortcut Id="LogsShortcut" Name="View Logs" Description="Opens the log file directory" Target="[Dir_Logs]" />
+            <Shortcut Id="LogsShortcut" Name="View Logs" Description="Opens the log file directory" Target="[System64Folder]explorer.exe" Arguments="[Dir_Logs]" />
             <util:InternetShortcut Id="HelpShortcut" Name="Help & Documentation" Description="View API documentation and help" Target="http://localhost:$(var.ServicePort)/docs" />
             <Shortcut Id="UninstallShortcut" Name="Uninstall Fortuna Faucet" Description="Removes the application" Target="[System64Folder]msiexec.exe" Arguments="/x [ProductCode]" />
             <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall" />
