@@ -108,7 +108,6 @@ jobs:
               pathex=[],
               binaries=[],
               datas=collect_data_files('uvicorn') + collect_data_files('slowapi') + [('{frontend_out}', 'ui')],
-              # CHANGE: Add win32timezone to hidden imports (critical for pywin32)
               hiddenimports=collect_submodules('{mod_path}') + ['win32timezone'],
               hookspath=[],
               runtime_hooks=[],
@@ -144,6 +143,20 @@ jobs:
         with:
           name: backend-dist
           path: staging/backend
+
+      - name: Create Restart Service Batch Script
+        shell: pwsh
+        run: |
+          $scriptContent = @"
+          @echo off
+          echo Requesting Admin privileges to restart FortunaWebService...
+          net stop FortunaWebService
+          net start FortunaWebService
+          echo Service Restarted.
+          pause
+          "@
+          Set-Content -Path "staging/backend/restart_service.bat" -Value $scriptContent -Encoding Ascii
+          Write-Host "✅ Created restart_service.bat script."
 
       - uses: actions/setup-dotnet@v4
         with:
@@ -184,6 +197,7 @@ jobs:
             '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>',
             '    <OutputType>Package</OutputType>',
             '    <Platforms>x64</Platforms>',
+            '    <DefineConstants>Version=$(Version);SourceDir=$(SourceDir);ServicePort=$(ServicePort)</DefineConstants>',
             '  </PropertyGroup>',
             '  <ItemGroup>',
             '    <PackageReference Include="WixToolset.UI.wixext" Version="${{ env.WIX_VERSION }}" />',
@@ -199,7 +213,7 @@ jobs:
 
       - name: Build MSI
         working-directory: build_wix
-        run: dotnet build Fortuna.wixproj -c Release -p:Platform=x64 -p:DefineConstants="Version=${{ needs.build-backend.outputs.semver }};SourceDir=../staging/backend;ServicePort=${{ env.SERVICE_PORT }}"
+        run: dotnet build Fortuna.wixproj -c Release -p:Platform=x64 -p:Version="${{ needs.build-backend.outputs.semver }}" -p:SourceDir="../staging/backend" -p:ServicePort="${{ env.SERVICE_PORT }}"
 
       - name: '🐤 The Canary (Malware Pre-Flight)'
         shell: pwsh

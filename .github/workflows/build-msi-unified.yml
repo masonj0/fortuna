@@ -231,6 +231,20 @@ jobs:
             exit 1
           }
 
+      - name: Create Restart Service Batch Script
+        shell: pwsh
+        run: |
+          $scriptContent = @"
+          @echo off
+          echo Requesting Admin privileges to restart FortunaWebService...
+          net stop FortunaWebService
+          net start FortunaWebService
+          echo Service Restarted.
+          pause
+          "@
+          Set-Content -Path "staging/backend/restart_service.bat" -Value $scriptContent -Encoding Ascii
+          Write-Host "✅ Created restart_service.bat script."
+
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:
@@ -255,16 +269,6 @@ jobs:
           # 1. Copy the template
           Copy-Item "${{ env.WIX_DIR }}/Product_WithService.wxs" "${{ env.WIX_DIR }}/Product.wxs" -Force
 
-          # 2. Dynamically remove the problematic Start="install" attribute to prevent timeouts
-          $wxsPath = "${{ env.WIX_DIR }}/Product.wxs"
-          [xml]$wxsContent = Get-Content $wxsPath
-          $serviceControl = $wxsContent.SelectSingleNode("//*[local-name()='ServiceControl']")
-          if ($serviceControl -and $serviceControl.HasAttribute("Start")) {
-              $serviceControl.RemoveAttribute("Start")
-              $wxsContent.Save($wxsPath)
-              Write-Host "✅ Dynamically removed 'Start=install' attribute from WiX template."
-          }
-
           # 3. Generate Project with CAB embedding enabled
           $proj = @(
             '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">',
@@ -288,7 +292,7 @@ jobs:
 
       - name: Build MSI
         working-directory: ${{ env.WIX_DIR }}
-        run: dotnet build Fortuna.wixproj -c Release -p:Platform=x64 -p:DefineConstants="Version=0.0.${{ github.run_number }};SourceDir=../staging/backend;ServicePort=${{ env.SERVICE_PORT }}"
+        run: dotnet build Fortuna.wixproj -c Release -p:Platform=x64 -p:Version="0.0.${{ github.run_number }}" -p:SourceDir="../staging/backend" -p:ServicePort="${{ env.SERVICE_PORT }}"
 
       - name: '🐤 The Canary (Malware Pre-Flight)'
         shell: pwsh

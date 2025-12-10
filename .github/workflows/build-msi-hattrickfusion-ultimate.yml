@@ -205,7 +205,6 @@ jobs:
               pathex=[],
               binaries=[],
               datas=collect_data_files('uvicorn') + collect_data_files('slowapi') + [('{frontend_out}', 'ui')],
-              # CHANGE: Add win32timezone to hidden imports (critical for pywin32)
               hiddenimports=collect_submodules('{mod_path}') + ['win32timezone'],
               hookspath=[],
               runtime_hooks=[],
@@ -257,6 +256,21 @@ jobs:
         with:
           name: backend-dist-${{ github.run_id }}-${{ github.run_attempt }}
           path: staging/backend
+
+      - name: Create Restart Service Batch Script
+        shell: pwsh
+        run: |
+          $scriptContent = @"
+          @echo off
+          echo Requesting Admin privileges to restart FortunaWebService...
+          net stop FortunaWebService
+          net start FortunaWebService
+          echo Service Restarted.
+          pause
+          "@
+          Set-Content -Path "staging/backend/restart_service.bat" -Value $scriptContent -Encoding Ascii
+          Write-Host "✅ Created restart_service.bat script."
+
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
@@ -302,14 +316,6 @@ jobs:
 
           # Copy template and apply fix
           Copy-Item build_wix/Product_WithService.wxs build_wix/Product.wxs -Force
-          $wxsPath = "build_wix/Product.wxs"
-          [xml]$wxsContent = Get-Content $wxsPath
-          $serviceControl = $wxsContent.SelectSingleNode("//*[local-name()='ServiceControl']")
-          if ($serviceControl -and $serviceControl.HasAttribute("Start")) {
-              $serviceControl.RemoveAttribute("Start")
-              $wxsContent.Save($wxsPath)
-              Write-Host "✅ Dynamically removed 'Start=install' attribute from WiX template."
-          }
 
           # Stage Executable
           if (Test-Path staging/backend/fortuna-backend.exe) {
@@ -339,7 +345,7 @@ jobs:
       - name: Build MSI
         working-directory: ${{ env.WIX_DIR }}
         # FIX: Pass variables via DefineConstants
-        run: dotnet build Fortuna.wixproj -c Release -p:Platform=x64 -p:DefineConstants="Version=0.0.${{ github.run_number }};SourceDir=../staging/backend;ServicePort=${{ env.SERVICE_PORT }}"
+        run: dotnet build Fortuna.wixproj -c Release -p:Platform=x64 -p:Version="0.0.${{ github.run_number }}" -p:SourceDir="../staging/backend" -p:ServicePort="${{ env.SERVICE_PORT }}"
 
       - name: '🐤 The Canary (Malware Pre-Flight)'
         shell: pwsh
@@ -360,13 +366,29 @@ jobs:
         run: |
           $ver = "${{ needs.build-backend.outputs.semver }}"
           $sha = "${{ needs.build-backend.outputs.short_sha }}"
-          $old = "${{ env.WIX_DIR }}/bin/x64/Release/HatTrickFusion.msi"
-          $new = "${{ env.WIX_DIR }}/bin/x64/Release/HatTrickFusion-${ver}-${sha}.msi"
-          Move-Item $old $new
-          $hash = (Get-FileHash $new -Algorithm SHA256).Hash
-          $hash | Out-File "$new.sha256" -Encoding utf8
-          Write-Host "✅ MSI Created: $new"
-          "msi_name=$(Split-Path $new -Leaf)" | Out-File $env:GITHUB_OUTPUT -Append
+
+          # FIX: Don't assume the name. Find whatever MSI was built.
+          $releaseDir = "${{ env.WIX_DIR }}/bin/x64/Release"
+          $msiFound = Get-ChildItem -Path $releaseDir -Filter "*.msi" | Select-Object -First 1
+
+          if (-not $msiFound) {
+            Write-Error "❌ FATAL: No MSI file found in $releaseDir. Build may have failed silently."
+            exit 1
+          }
+
+          Write-Host "Found built MSI: $($msiFound.Name)"
+
+          $targetName = "HatTrickFusion-${ver}-${sha}.msi"
+          $newPath = Join-Path $releaseDir $targetName
+
+          Move-Item -Path $msiFound.FullName -Destination $newPath -Force
+
+          # Generate Hash
+          $hash = (Get-FileHash $newPath -Algorithm SHA256).Hash
+          $hash | Out-File "$newPath.sha256" -Encoding utf8
+
+          Write-Host "✅ MSI Renamed to: $targetName"
+          "msi_name=$targetName" | Out-File $env:GITHUB_OUTPUT -Append
 
       - name: Upload MSI
         uses: actions/upload-artifact@v4
