@@ -5,6 +5,10 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   NODE_VERSION: '20'
   PYTHON_VERSION: '3.12'
@@ -12,6 +16,7 @@ env:
   BACKEND_DIR: 'python_service'
   FRONTEND_DIR: 'web_platform/frontend'
   ELECTRON_DIR: 'electron'
+  FORTUNA_PORT: '8102'
   # Mock API keys for service startup
   API_KEY: mock_key
   TVG_API_KEY: mock
@@ -243,7 +248,7 @@ jobs:
 
           # Launch Electron with Log Redirection
           # We use Start-Process to detach, but redirect streams
-          $proc = Start-Process -FilePath $exe.FullName -NoNewWindow -PassThru -RedirectStandardOutput "$logDir\stdout.log" -RedirectStandardError "$logDir\stderr.log"
+          $proc = Start-Process -FilePath $exe.FullName -ArgumentList "--no-sandbox" -NoNewWindow -PassThru -RedirectStandardOutput "$logDir\stdout.log" -RedirectStandardError "$logDir\stderr.log"
 
           Write-Host "Electron launched (PID: $($proc.Id)). Waiting for Port 8102..."
 
