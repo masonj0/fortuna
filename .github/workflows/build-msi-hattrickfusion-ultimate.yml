@@ -256,6 +256,21 @@ jobs:
         with:
           name: backend-dist-${{ github.run_id }}-${{ github.run_attempt }}
           path: staging/backend
+
+      - name: Create Restart Service Batch Script
+        shell: pwsh
+        run: |
+          $scriptContent = @"
+          @echo off
+          echo Requesting Admin privileges to restart FortunaWebService...
+          net stop FortunaWebService
+          net start FortunaWebService
+          echo Service Restarted.
+          pause
+          "@
+          Set-Content -Path "staging/backend/restart_service.bat" -Value $scriptContent -Encoding Ascii
+          Write-Host "✅ Created restart_service.bat script."
+
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}

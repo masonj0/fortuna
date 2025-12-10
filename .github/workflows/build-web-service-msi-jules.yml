@@ -539,7 +539,6 @@ jobs:
         env:
           BACKEND_DIR: ${{ needs.path-finder.outputs.backend_dir }}
           BACKEND_MODULE_PATH: ${{ needs.path-finder.outputs.backend_module_path }}
-          BACKEND_SPEC_FILE: ${{ needs.path-finder.outputs.spec_file }}
           FRONTEND_OUT: ${{ env.FRONTEND_DIR }}/out
         run: |
           import os
@@ -549,7 +548,7 @@ jobs:
           bk_dir = os.environ['BACKEND_DIR'].replace('\\', '/')
           mod_path = os.environ['BACKEND_MODULE_PATH']
           frontend_out = os.environ['FRONTEND_OUT'].replace('\\', '/')
-          spec_file = os.environ['BACKEND_SPEC_FILE']
+          spec_file = "jules.spec" # Hardcode the correct spec file name
 
           entry = f"{bk_dir}/main.py"
 
@@ -954,6 +953,20 @@ jobs:
           $msiName = "Fortuna-WebService-${{ env.BUILD_VERSION }}-${{ env.SHORT_SHA }}.msi".Replace('/', '-')
           "msi_name=$msiName" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
           Write-Host "✅ Staged for MSI: $msiName"
+
+      - name: Create Restart Service Batch Script
+        shell: pwsh
+        run: |
+          $scriptContent = @"
+          @echo off
+          echo Requesting Admin privileges to restart FortunaWebService...
+          net stop FortunaWebService
+          net start FortunaWebService
+          echo Service Restarted.
+          pause
+          "@
+          Set-Content -Path "${{ env.MSI_STAGING_DIR }}/restart_service.bat" -Value $scriptContent -Encoding Ascii
+          Write-Host "✅ Created restart_service.bat script."
 
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
