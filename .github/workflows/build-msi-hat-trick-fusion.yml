@@ -130,7 +130,7 @@ jobs:
           )
           """
           with open("hat-trick.spec", "w") as f: f.write(spec)
-          os.system("pyinstaller hat-trick.spec --clean --noconfirm")
+          os.system("pyinstaller hat-trick.spec --clean --noconfirm --hidden-import=win32timezone")
 
       - name: Upload Backend
         uses: actions/upload-artifact@v4
@@ -355,15 +355,15 @@ jobs:
               Write-Host "Attempt $i/${maxAttempts}: Pinging $healthUrl..."
               $response = Invoke-WebRequest -Uri $healthUrl -Method Get -UseBasicParsing -ErrorAction Stop
               if ($response.StatusCode -eq 200) {
-                Write-Host "✅ Service is Healthy on Port 8102"
+            Write-Host "[SUCCESS] Service is Healthy on Port 8102"
                 exit 0
               }
             } catch {
-              Write-Host "⏳ Waiting for service..."
+          Write-Host "[INFO] Waiting for service..."
               Start-Sleep -Seconds 5
             }
           }
-          Write-Error "❌ Service Failed Health Check after $maxAttempts attempts"
+      Write-Error "[FAILED] Service Failed Health Check after $maxAttempts attempts"
           exit 1
 
       - name: Verify UI is Served from Backend
