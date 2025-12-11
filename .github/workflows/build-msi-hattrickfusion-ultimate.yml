@@ -208,7 +208,7 @@ jobs:
               pathex=[],
               binaries=[],
               datas=collect_data_files('uvicorn') + collect_data_files('slowapi') + [('{frontend_out}', 'ui')],
-              hiddenimports=collect_submodules('{mod_path}') + ['win32timezone'],
+              hiddenimports=collect_submodules('{mod_path}') + ['win32timezone', 'win32serviceutil', 'win32service', 'win32event'],
               hookspath=[],
               runtime_hooks=[],
               excludes=['tests', 'pytest'],
@@ -485,12 +485,12 @@ jobs:
           for _ in range(60):
             try:
               with socket.create_connection(("127.0.0.1", port), timeout=1):
-                print("✅ Socket bound.")
+                print("[SUCCESS] Socket bound.")
                 sys.exit(0)
             except:
               time.sleep(1)
 
-          print("[X] Port bind timeout")
+          print("[FAILED] Port bind timeout")
           subprocess.run(["sc.exe", "query", "FortunaWebService"])
           sys.exit(1)
 
@@ -533,7 +533,7 @@ jobs:
           name: smoke-test-failure-${{ needs.path-finder.outputs.build_id }}
           path: diagnostics/
           retention-days: 30
-      - name: 💀 CSI: Windows (Post-Mortem Diagnostics)
+      - name: "💀 CSI: Windows (Post-Mortem Diagnostics)"
         if: failure()
         shell: pwsh
         run: |
