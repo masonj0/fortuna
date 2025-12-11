@@ -875,7 +875,7 @@ jobs:
       - name: "🔍 Debug Backend Launch (With Timeout)"
         shell: pwsh
         run: |
-          $exe = "C:\Program Files\Fortuna Faucet\resources\resources\python-service-bin\fortuna-backend.exe"
+          $exe = "C:\\Program Files\\Fortuna Faucet\\resources\\python-service-bin\\fortuna-backend.exe"
           if (Test-Path $exe) {
             Write-Host "Starting backend for 10s health check..."
             $proc = Start-Process -FilePath $exe -PassThru
@@ -950,35 +950,31 @@ jobs:
       - name: '📸 The Paparazzi (Visual Proof)'
         shell: pwsh
         run: |
-          Write-Host "Installing Playwright for visual verification..."
-          python -m pip install playwright
-          python -m playwright install chromium
+          Write-Host "Installing Playwright (Node.js)..."
+          npm install playwright
+          npx playwright install chromium --with-deps
 
-          # The port is now guaranteed to be set by the previous step's env var
           $port = "${{ env.FORTUNA_PORT }}"
+          $url = "http://127.0.0.1:$port/health"
 
-          Write-Host "Taking screenshot of http://localhost:$port..."
-          python -c "
-          from playwright.sync_api import sync_playwright
-          import sys
-
-          try:
-              with sync_playwright() as p:
-                  browser = p.chromium.launch()
-                  page = browser.new_page()
-                  # The UI is served from the root, not index.html, by the backend
-                  url = f'http://localhost:{sys.argv[1]}/'
-                  print(f'Navigating to {url}...')
-                  page.goto(url)
-                  page.wait_for_timeout(3000) # Wait for hydration
-                  page.screenshot(path='proof-of-life.png', full_page=True)
-                  browser.close()
-              print('✅ Screenshot captured.')
-          except Exception as e:
-              print(f'❌ Screenshot failed: {e}')
-              # Do not fail the build for this bonus artifact
-              sys.exit(0)
-          " $port
+          Write-Host "Capturing screenshot of $url..."
+          node -e "
+            const { chromium } = require('playwright');
+            (async () => {
+              try {
+                const browser = await chromium.launch();
+                const page = await browser.newPage();
+                console.log('Navigating to $url...');
+                await page.goto('$url', { timeout: 15000 });
+                await page.screenshot({ path: 'proof-of-life.png', fullPage: true });
+                console.log('✅ Screenshot captured: proof-of-life.png');
+                await browser.close();
+              } catch (e) {
+                console.error('❌ Paparazzi Failed:', e);
+                process.exit(1); // Force Red X on failure
+              }
+            })();
+          "
 
       - name: 📤 Upload Visual Proof
         if: always()
