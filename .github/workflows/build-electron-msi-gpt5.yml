@@ -658,13 +658,25 @@ jobs:
       - name: Verify MSI Creation
         shell: pwsh
         run: |
-          $wixOutput = "build_wix/bin/x64/Release/Fortuna.msi"
-          $expected = "build_wix/Fortuna.msi"
-          if (Test-Path $wixOutput) {
-              Move-Item -Path $wixOutput -Destination $expected -Force
-              Write-Host "✅ MSI moved to staging root."
-          } elseif (-not (Test-Path $expected)) {
-              throw "❌ MSI not found at $wixOutput OR $expected"
+          # Electron Builder outputs to electron/dist with a dynamic name
+          $distDir = "electron/dist"
+          $foundMsi = Get-ChildItem -Path "$distDir/*.msi" | Select-Object -First 1
+
+          if ($foundMsi) {
+              Write-Host "✅ MSI Build Successful: $($foundMsi.Name)"
+
+              # Standardize path for artifacts/release steps
+              $targetDir = "build_wix"
+              if (-not (Test-Path $targetDir)) { New-Item -ItemType Directory -Path $targetDir -Force }
+
+              $targetFile = "$targetDir/Fortuna.msi"
+              Copy-Item -Path $foundMsi.FullName -Destination $targetFile -Force
+              Write-Host "✅ Copied to staging: $targetFile"
+          } else {
+              Write-Error "❌ MSI not found in $distDir"
+              Write-Host "Listing directory contents for debugging:"
+              Get-ChildItem "electron" -Recurse | Select-Object FullName
+              exit 1
           }
 
       - name: 🔍 Verify MSI Output
