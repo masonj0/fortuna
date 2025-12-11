@@ -124,8 +124,10 @@ jobs:
           cache: 'pip'
       - name: Install Dependencies
         run: |
+          python -m pip install --upgrade pip
           pip install -r ${{ env.BACKEND_DIR }}/requirements.txt
           pip install pyinstaller==6.6.0 pytest pytest-asyncio httpx asgi-lifespan fakeredis
+          pip install pywin32
           pip freeze > backend-freeze.txt
 
       - name: 🧪 Run Unit Tests (Quality Gate)
@@ -208,7 +210,7 @@ jobs:
               pathex=[],
               binaries=[],
               datas=collect_data_files('uvicorn') + collect_data_files('slowapi') + [('{frontend_out}', 'ui')],
-              hiddenimports=collect_submodules('{mod_path}') + ['win32timezone'],
+              hiddenimports=collect_submodules('{mod_path}') + ['win32timezone', 'win32serviceutil', 'win32service', 'win32event'],
               hookspath=[],
               runtime_hooks=[],
               excludes=['tests', 'pytest'],
@@ -447,20 +449,24 @@ jobs:
           New-Item -ItemType Directory -Path "$installDir\json" -Force
           New-Item -ItemType Directory -Path "$installDir\logs" -Force
           Write-Host "✅ Ensured runtime directories exist in $installDir"
-      - name: 🔍 Debug Backend Launch (Direct Execution)
+      - name: "🔍 Debug Backend Launch (With Timeout)"
         shell: pwsh
         run: |
-          # Service install path differs from Electron and does not have a 'backend' subdirectory.
           $exe = "C:\Program Files\Fortuna Faucet Service\fortuna-webservice.exe"
-
           if (Test-Path $exe) {
-            Write-Host "Found Service Backend at: $exe"
-            Write-Host "Checking for missing DLLs or ImportErrors..."
-            & $exe --help 2>&1 | Tee-Object -FilePath "service_debug.log"
-            Get-Content "service_debug.log"
+            Write-Host "Starting backend for 10s health check..."
+            $proc = Start-Process -FilePath $exe -PassThru
+            Start-Sleep -Seconds 10
+
+            if (!$proc.HasExited) {
+              Write-Host "✅ Backend is running (Alive for 10s). Killing it now."
+              Stop-Process -Id $proc.Id -Force
+            } else {
+              Write-Error "❌ Backend crashed immediately! Check logs."
+              exit 1
+            }
           } else {
-            Write-Warning "Service executable not found at expected path. Searching..."
-            Get-ChildItem "C:\Program Files\Fortuna Faucet Service" -Recurse
+            Write-Warning "Backend not found at expected path."
           }
       - name: '⏳ Loop 1 - Service Registration'
         shell: pwsh
@@ -485,12 +491,12 @@ jobs:
           for _ in range(60):
             try:
               with socket.create_connection(("127.0.0.1", port), timeout=1):
-                print("✅ Socket bound.")
+                print("[SUCCESS] Socket bound.")
                 sys.exit(0)
             except:
               time.sleep(1)
 
-          print("[X] Port bind timeout")
+          print("[FAILED] Port bind timeout")
           subprocess.run(["sc.exe", "query", "FortunaWebService"])
           sys.exit(1)
 
@@ -533,7 +539,7 @@ jobs:
           name: smoke-test-failure-${{ needs.path-finder.outputs.build_id }}
           path: diagnostics/
           retention-days: 30
-      - name: 💀 CSI: Windows (Post-Mortem Diagnostics)
+      - name: "💀 CSI: Windows (Post-Mortem Diagnostics)"
         if: failure()
         shell: pwsh
         run: |
@@ -554,6 +560,10 @@ jobs:
           sc.exe stop FortunaWebService
           sc.exe delete FortunaWebService
           Remove-NetFirewallRule -DisplayName "${{ env.FIREWALL_RULE }}" -ErrorAction SilentlyContinue
+      - name: "🛑 Stop Fortuna Service"
+        if: always()
+        shell: cmd
+        run: net stop FortunaWebService || echo Service was not running
 
   # ==================================================================================
   # JOB 6: GENERATE SBOM
