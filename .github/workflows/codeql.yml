@@ -44,7 +44,7 @@ jobs:
 
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
-      uses: github/codeql-action/init@v4
+      uses: github/codeql-action/init@v3
       with:
         languages: ${{ matrix.language }}
         # If you wish to specify custom queries, you can do so here or in a config file.
@@ -69,13 +69,13 @@ jobs:
         done
 
     - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v4
+      uses: github/codeql-action/analyze@v3
       with:
         category: "/language:${{matrix.language}}"
+        output: sarif-results
 
-    - name: Upload SARIF results
+    - name: Upload SARIF to GitHub Security
       uses: github/codeql-action/upload-sarif@v3
       with:
-        # The SARIF file is created by the `analyze` step.
-        # The filename is conventional: ../results/sarif/<language>.sarif
-        sarif_file: ../results/sarif/${{ matrix.language }}.sarif
+        sarif_file: sarif-results
+        category: "/language:${{matrix.language}}"

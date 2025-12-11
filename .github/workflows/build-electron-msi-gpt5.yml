@@ -636,7 +636,7 @@ jobs:
           Write-Host "=== RESOURCES FOLDER DUMP ==="
           Get-ChildItem -Path "electron/dist/win-unpacked/resources" -Recurse | Format-Table FullName, Length
           Write-Host "=== CHECKING FOR BACKEND EXECUTABLE ==="
-          if (Test-Path "electron/dist/win-unpacked/resources/fortuna-backend.exe") { Write-Host "✅ fortuna-backend.exe exists" } else { Write-Error "❌ fortuna-backend.exe MISSING" }
+          if (Test-Path "electron/dist/win-unpacked/resources/python-service-bin/fortuna-backend.exe") { Write-Host "✅ fortuna-backend.exe exists" } else { Write-Error "❌ fortuna-backend.exe MISSING" }
       - name: 🏗️ Build MSI with electron-builder
         shell: pwsh
         working-directory: electron
@@ -654,6 +654,30 @@ jobs:
           }
 
           Write-Host "✓ MSI build completed"
+
+      - name: Verify MSI Creation
+        shell: pwsh
+        run: |
+          # Electron Builder outputs to electron/dist with a dynamic name
+          $distDir = "electron/dist"
+          $foundMsi = Get-ChildItem -Path "$distDir/*.msi" | Select-Object -First 1
+
+          if ($foundMsi) {
+              Write-Host "✅ MSI Build Successful: $($foundMsi.Name)"
+
+              # Standardize path for artifacts/release steps
+              $targetDir = "build_wix"
+              if (-not (Test-Path $targetDir)) { New-Item -ItemType Directory -Path $targetDir -Force }
+
+              $targetFile = "$targetDir/Fortuna.msi"
+              Copy-Item -Path $foundMsi.FullName -Destination $targetFile -Force
+              Write-Host "✅ Copied to staging: $targetFile"
+          } else {
+              Write-Error "❌ MSI not found in $distDir"
+              Write-Host "Listing directory contents for debugging:"
+              Get-ChildItem "electron" -Recurse | Select-Object FullName
+              exit 1
+          }
 
       - name: 🔍 Verify MSI Output
         shell: pwsh
@@ -848,28 +872,16 @@ jobs:
           New-Item -Path "$installRoot\logs" -ItemType Directory -Force | Out-Null
           Write-Host "✅ Created data, json, and logs directories in $installRoot"
 
-      - name: 🔍 Debug Backend Launch (Direct Execution)
+      - name: "🔍 Debug Backend Launch (With Timeout)"
         shell: pwsh
         run: |
-          # Check common install paths for the backend binary
-          $paths = @(
-            "C:\Program Files\Fortuna Faucet\resources\resources\python-service-bin\fortuna-backend.exe",
-            "C:\Program Files\Fortuna Faucet\resources\python-service-bin\fortuna-backend.exe"
-          )
-          $exe = $paths | Where-Object { Test-Path $_ } | Select-Object -First 1
-
-          if ($exe) {
-            Write-Host "Found backend at: $exe"
-            Write-Host "Attempting dry-run to capture startup errors..."
-            try {
-              & $exe --help 2>&1 | Tee-Object -FilePath "backend_debug.log"
-              Get-Content "backend_debug.log"
-            } catch {
-              Write-Error "Backend crashed on launch: $_"
-            }
-          } else {
-            Write-Warning "Could not locate fortuna-backend.exe. Listing install directory:"
-            Get-ChildItem "C:\Program Files\Fortuna Faucet" -Recurse
+          $exe = "C:\Program Files\Fortuna Faucet\resources\resources\python-service-bin\fortuna-backend.exe"
+          if (Test-Path $exe) {
+            Write-Host "Starting backend for 10s health check..."
+            $proc = Start-Process -FilePath $exe -PassThru
+            Start-Sleep -Seconds 10
+            if (!$proc.HasExited) { Stop-Process -Id $proc.Id -Force; Write-Host "✅ Backend Alive" }
+            else { Write-Error "❌ Backend crashed"; exit 1 }
           }
 
       - name: '🔬 Complete Smoke Test (3-Layer Defense)'
@@ -1021,7 +1033,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-      - name: 💀 CSI: Windows (Post-Mortem Diagnostics)
+      - name: "💀 CSI: Windows (Post-Mortem Diagnostics)"
         if: failure()
         shell: pwsh
         run: |

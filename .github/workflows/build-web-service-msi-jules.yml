@@ -903,7 +903,7 @@ jobs:
           path: installer-diag
           retention-days: 30
 
-      - name: 💀 CSI: Windows (Post-Mortem Diagnostics)
+      - name: "💀 CSI: Windows (Post-Mortem Diagnostics)"
         if: failure()
         shell: pwsh
         run: |
