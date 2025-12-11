@@ -828,6 +828,19 @@ jobs:
 
           Write-Host "✅ MSI installation succeeded"
 
+      - name: '✅ Create Required Runtime Directories Post-Install'
+        shell: pwsh
+        run: |
+          $installRoot = "C:\Program Files\Fortuna Faucet"
+          if (-not (Test-Path $installRoot)) {
+            Write-Error "Installation directory not found at $installRoot. Cannot create runtime directories."
+            exit 1
+          }
+          New-Item -Path "$installRoot\data" -ItemType Directory -Force | Out-Null
+          New-Item -Path "$installRoot\json" -ItemType Directory -Force | Out-Null
+          New-Item -Path "$installRoot\logs" -ItemType Directory -Force | Out-Null
+          Write-Host "✅ Created data, json, and logs directories in $installRoot"
+
       - name: '🔬 Complete Smoke Test (3-Layer Defense)'
         shell: pwsh
         run: |
