@@ -227,6 +227,19 @@ jobs:
           )
           Set-Content build_wix/Fortuna.wixproj ($proj -join "`r`n") -Encoding utf8
 
+      - name: 🔬 Forensic Packaging Analysis
+        shell: pwsh
+        run: |
+          Write-Host "=== STAGING DIRECTORY MANIFEST ==="
+          Get-ChildItem -Path staging -Recurse | Sort-Object Length | Format-Table FullName, Length, LastWriteTime -AutoSize
+
+          Write-Host "=== CRITICAL FILE CHECK ==="
+          $critical = @("fortuna-webservice.exe", "restart_service.bat")
+          foreach ($file in $critical) {
+            $found = Get-ChildItem -Path staging -Recurse -Filter $file
+            if ($found) { Write-Host "✅ FOUND: $file" -ForegroundColor Green }
+            else { Write-Host "❌ MISSING: $file" -ForegroundColor Red }
+          }
       - name: Build MSI
         working-directory: build_wix
         run: dotnet build Fortuna.wixproj -c Release -p:Platform=x64 -p:Version="${{ needs.build-backend.outputs.semver }}" -p:SourceDir="../staging/backend" -p:ServicePort="${{ env.SERVICE_PORT }}"
@@ -431,3 +444,13 @@ jobs:
         with:
           name: hat-trick-fusion-logs-${{ github.run_id }}
           path: installer-diag
+      - name: 💀 CSI: Windows (Post-Mortem Diagnostics)
+        if: failure()
+        shell: pwsh
+        run: |
+          Write-Host "=== SERVICE STATUS ==="
+          Get-Service "FortunaWebService" | Select-Object Status, StartType, DisplayName
+          Write-Host "=== EVENT LOGS (Timeout/Crash Detection) ==="
+          Get-EventLog -LogName System -EntryType Error -Newest 20 | Where-Object { $_.Message -like "*Fortuna*" }
+          Write-Host "=== DIRECTORY PERMISSIONS ==="
+          Get-Acl "C:\Program Files\Fortuna Faucet Service" | Format-List

@@ -903,6 +903,21 @@ jobs:
           path: installer-diag
           retention-days: 30
 
+      - name: 💀 CSI: Windows (Post-Mortem Diagnostics)
+        if: failure()
+        shell: pwsh
+        run: |
+          Write-Host "=== 1. PROCESS STATE ==="
+          Get-Process | Where-Object { $_.ProcessName -match "fortuna|python" } | Format-Table -AutoSize
+
+          Write-Host "=== 2. NETWORK PORTS (${{ env.SERVICE_PORT }}) ==="
+          netstat -anb | Select-String "${{ env.SERVICE_PORT }}" -Context 2,2
+
+          Write-Host "=== 3. WINDOWS EVENT LOGS (Last 50 Errors) ==="
+          Get-EventLog -LogName Application -EntryType Error,Warning -Newest 50 | Format-Table TimeGenerated, Source, Message -AutoSize -Wrap
+
+          Write-Host "=== 4. MSI INSTALL LOG (Last 200 lines) ==="
+          if (Test-Path "msi-install.log") { Get-Content "msi-install.log" -Tail 200 }
       - name: 🧹 Cleanup
         if: always()
         shell: pwsh
@@ -1011,6 +1026,19 @@ jobs:
           )
           Set-Content "${{ env.WIX_DIR }}/Fortuna.wixproj" -Value ($proj -join "`r`n") -Encoding utf8
 
+      - name: 🔬 Forensic Packaging Analysis
+        shell: pwsh
+        run: |
+          Write-Host "=== STAGING DIRECTORY MANIFEST ==="
+          Get-ChildItem -Path "${{ env.MSI_STAGING_DIR }}" -Recurse | Sort-Object Length | Format-Table FullName, Length, LastWriteTime -AutoSize
+
+          Write-Host "=== CRITICAL FILE CHECK ==="
+          $critical = @("fortuna-webservice.exe", "restart_service.bat")
+          foreach ($file in $critical) {
+            $found = Get-ChildItem -Path "${{ env.MSI_STAGING_DIR }}" -Recurse -Filter $file
+            if ($found) { Write-Host "✅ FOUND: $file" -ForegroundColor Green }
+            else { Write-Host "❌ MISSING: $file" -ForegroundColor Red }
+          }
       - name: Build MSI
         working-directory: ${{ env.WIX_DIR }}
         run: |

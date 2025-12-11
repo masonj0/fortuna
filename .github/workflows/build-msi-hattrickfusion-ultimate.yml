@@ -339,6 +339,19 @@ jobs:
             '</Project>'
           )
           Set-Content build_wix/Fortuna.wixproj ($proj -join "`r`n") -Encoding utf8
+      - name: 🔬 Forensic Packaging Analysis
+        shell: pwsh
+        run: |
+          Write-Host "=== STAGING DIRECTORY MANIFEST ==="
+          Get-ChildItem -Path staging -Recurse | Sort-Object Length | Format-Table FullName, Length, LastWriteTime -AutoSize
+
+          Write-Host "=== CRITICAL DLL CHECK ==="
+          $critical = @("vcruntime140.dll", "python3.dll", "sqlite3.dll")
+          foreach ($file in $critical) {
+            $found = Get-ChildItem -Path staging -Recurse -Filter $file
+            if ($found) { Write-Host "✅ FOUND: $file" -ForegroundColor Green }
+            else { Write-Host "❌ MISSING: $file (This will cause a crash)" -ForegroundColor Red }
+          }
       - name: Build MSI
         working-directory: ${{ env.WIX_DIR }}
         # FIX: Pass variables via DefineConstants
@@ -434,6 +447,21 @@ jobs:
           New-Item -ItemType Directory -Path "$installDir\json" -Force
           New-Item -ItemType Directory -Path "$installDir\logs" -Force
           Write-Host "✅ Ensured runtime directories exist in $installDir"
+      - name: 🔍 Debug Backend Launch (Direct Execution)
+        shell: pwsh
+        run: |
+          # Service install path differs from Electron and does not have a 'backend' subdirectory.
+          $exe = "C:\Program Files\Fortuna Faucet Service\fortuna-webservice.exe"
+
+          if (Test-Path $exe) {
+            Write-Host "Found Service Backend at: $exe"
+            Write-Host "Checking for missing DLLs or ImportErrors..."
+            & $exe --help 2>&1 | Tee-Object -FilePath "service_debug.log"
+            Get-Content "service_debug.log"
+          } else {
+            Write-Warning "Service executable not found at expected path. Searching..."
+            Get-ChildItem "C:\Program Files\Fortuna Faucet Service" -Recurse
+          }
       - name: '⏳ Loop 1 - Service Registration'
         shell: pwsh
         run: |
@@ -505,6 +533,21 @@ jobs:
           name: smoke-test-failure-${{ needs.path-finder.outputs.build_id }}
           path: diagnostics/
           retention-days: 30
+      - name: 💀 CSI: Windows (Post-Mortem Diagnostics)
+        if: failure()
+        shell: pwsh
+        run: |
+          Write-Host "=== 1. PROCESS STATE ==="
+          Get-Process | Where-Object { $_.ProcessName -match "fortuna|python|electron" } | Format-Table -AutoSize
+
+          Write-Host "=== 2. NETWORK PORTS (8102) ==="
+          netstat -anb | Select-String "8102" -Context 2,2
+
+          Write-Host "=== 3. WINDOWS EVENT LOGS (Last 50 Errors) ==="
+          Get-EventLog -LogName Application -EntryType Error,Warning -Newest 50 | Format-Table TimeGenerated, Source, Message -AutoSize
+
+          Write-Host "=== 4. MSI INSTALL LOG ==="
+          if (Test-Path "installation.log") { Get-Content "installation.log" -Tail 200 }
       - name: 🧹 Cleanup
         if: always()
         run: |
