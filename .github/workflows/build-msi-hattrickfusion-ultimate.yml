@@ -22,11 +22,10 @@ env:
   WIX_DIR: 'build_wix'
   # Settings
   PYTHONUTF8: '1'
-  # Mock API keys for service startup
-  API_KEY: mock_key
-  TVG_API_KEY: mock
-  GREYHOUND_API_URL: http://mock
-  FORTUNA_ENV: smoke-test
+  # CRITICAL FIX: Mock Keys to prevent backend crash
+  API_KEY: 'mock_key_for_build'
+  TVG_API_KEY: 'mock_tvg_key'
+  FORTUNA_ENV: 'build_mode'
 
 jobs:
   # ==================================================================================
@@ -262,18 +261,12 @@ jobs:
           path: staging/backend
 
       - name: Create Restart Service Batch Script
-        shell: pwsh
+        shell: cmd
         run: |
-          $scriptContent = @"
-          @echo off
-          echo Requesting Admin privileges to restart FortunaWebService...
-          net stop FortunaWebService
-          net start FortunaWebService
-          echo Service Restarted.
-          pause
-          "@
-          Set-Content -Path "staging/backend/restart_service.bat" -Value $scriptContent -Encoding Ascii
-          Write-Host "✅ Created restart_service.bat script."
+          echo @echo off > staging\\backend\\restart_service.bat
+          echo net stop FortunaService >> staging\\backend\\restart_service.bat
+          echo net start FortunaService >> staging\\backend\\restart_service.bat
+          echo Created restart_service.bat for installer inclusion.
 
       - uses: actions/setup-dotnet@v4
         with:
@@ -473,28 +466,17 @@ jobs:
           subprocess.run(["sc.exe", "query", "FortunaWebService"])
           sys.exit(1)
 
-      - name: '🏥 Loop 3 - Health Check'
-        shell: python
-        env:
-          PORT: ${{ env.FORTUNA_PORT }}
+      - name: Test Service Health (Smoke Test)
+        shell: pwsh
         run: |
-          import urllib.request, urllib.error, time, sys, os
-          port = int(os.environ["PORT"])
-          for _ in range(6):
-            try:
-              req = urllib.request.Request(f"http://127.0.0.1:{port}/health")
-              req.add_header("User-Agent", "HatTrickFusion/1.0")
-              with urllib.request.urlopen(req, timeout=5) as resp:
-                if resp.status == 200:
-                  print("✅ Health Check Passed")
-                  sys.exit(0)
-            except urllib.error.HTTPError as err:
-              if err.code in (401, 403):
-                print("✅ Service Up (Auth Required)")
-                sys.exit(0)
-            except:
-              time.sleep(2)
-          sys.exit(1)
+          Start-Sleep -Seconds 10
+          $response = Invoke-WebRequest -Uri http://localhost:8102/health -Method Get -UseBasicParsing
+          if ($response.StatusCode -eq 200) {
+            Write-Host '✅ Service is Healthy on Port 8102'
+          } else {
+            Write-Error '❌ Service Failed Health Check'
+            exit 1
+          }
 
       - name: 📊 Capture Diagnostics
         if: failure()
