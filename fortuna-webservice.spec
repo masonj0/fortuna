@@ -42,18 +42,15 @@ hidden_imports.update([
 ])
 
 a = Analysis(
-    ['python_service/main.py'],  # Corrected Entry Point for the legacy workflow
-    pathex=[str(project_root)],
+    ['web_service/backend/service_entry.py'],
+    pathex=[],
     binaries=[],
-    datas=datas,
-    hiddenimports=sorted(hidden_imports),
+    datas=[('web_service/backend', 'backend')],
+    hiddenimports=['win32timezone', 'win32serviceutil', 'win32service', 'win32event'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=['matplotlib', 'pandas', 'numpy', 'torch', 'tensorflow', 'web_service'],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
-    cipher=block_cipher,
+    excludes=[],
     noarchive=False,
 )
 
