@@ -447,20 +447,24 @@ jobs:
           New-Item -ItemType Directory -Path "$installDir\json" -Force
           New-Item -ItemType Directory -Path "$installDir\logs" -Force
           Write-Host "✅ Ensured runtime directories exist in $installDir"
-      - name: 🔍 Debug Backend Launch (Direct Execution)
+      - name: "🔍 Debug Backend Launch (With Timeout)"
         shell: pwsh
         run: |
-          # Service install path differs from Electron and does not have a 'backend' subdirectory.
           $exe = "C:\Program Files\Fortuna Faucet Service\fortuna-webservice.exe"
-
           if (Test-Path $exe) {
-            Write-Host "Found Service Backend at: $exe"
-            Write-Host "Checking for missing DLLs or ImportErrors..."
-            & $exe --help 2>&1 | Tee-Object -FilePath "service_debug.log"
-            Get-Content "service_debug.log"
+            Write-Host "Starting backend for 10s health check..."
+            $proc = Start-Process -FilePath $exe -PassThru
+            Start-Sleep -Seconds 10
+
+            if (!$proc.HasExited) {
+              Write-Host "✅ Backend is running (Alive for 10s). Killing it now."
+              Stop-Process -Id $proc.Id -Force
+            } else {
+              Write-Error "❌ Backend crashed immediately! Check logs."
+              exit 1
+            }
           } else {
-            Write-Warning "Service executable not found at expected path. Searching..."
-            Get-ChildItem "C:\Program Files\Fortuna Faucet Service" -Recurse
+            Write-Warning "Backend not found at expected path."
           }
       - name: '⏳ Loop 1 - Service Registration'
         shell: pwsh
@@ -554,6 +558,10 @@ jobs:
           sc.exe stop FortunaWebService
           sc.exe delete FortunaWebService
           Remove-NetFirewallRule -DisplayName "${{ env.FIREWALL_RULE }}" -ErrorAction SilentlyContinue
+      - name: "🛑 Stop Fortuna Service"
+        if: always()
+        shell: cmd
+        run: net stop FortunaWebService || echo Service was not running
 
   # ==================================================================================
   # JOB 6: GENERATE SBOM

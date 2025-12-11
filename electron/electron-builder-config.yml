@@ -11,7 +11,7 @@ files:
 
 extraResources:
   - from: "../python-service-bin"
-    to: "resources/python-service-bin"
+    to: "python-service-bin"
     filter:
       - "**/*"
   - from: "../web_platform/frontend/out"
