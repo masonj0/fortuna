@@ -636,7 +636,7 @@ jobs:
           Write-Host "=== RESOURCES FOLDER DUMP ==="
           Get-ChildItem -Path "electron/dist/win-unpacked/resources" -Recurse | Format-Table FullName, Length
           Write-Host "=== CHECKING FOR BACKEND EXECUTABLE ==="
-          if (Test-Path "electron/dist/win-unpacked/resources/fortuna-backend.exe") { Write-Host "✅ fortuna-backend.exe exists" } else { Write-Error "❌ fortuna-backend.exe MISSING" }
+          if (Test-Path "electron/dist/win-unpacked/resources/python-service-bin/fortuna-backend.exe") { Write-Host "✅ fortuna-backend.exe exists" } else { Write-Error "❌ fortuna-backend.exe MISSING" }
       - name: 🏗️ Build MSI with electron-builder
         shell: pwsh
         working-directory: electron
@@ -853,7 +853,6 @@ jobs:
         run: |
           # Check common install paths for the backend binary
           $paths = @(
-            "C:\Program Files\Fortuna Faucet\resources\resources\python-service-bin\fortuna-backend.exe",
             "C:\Program Files\Fortuna Faucet\resources\python-service-bin\fortuna-backend.exe"
           )
           $exe = $paths | Where-Object { Test-Path $_ } | Select-Object -First 1
@@ -1021,7 +1020,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-      - name: 💀 CSI: Windows (Post-Mortem Diagnostics)
+      - name: "💀 CSI: Windows (Post-Mortem Diagnostics)"
         if: failure()
         shell: pwsh
         run: |

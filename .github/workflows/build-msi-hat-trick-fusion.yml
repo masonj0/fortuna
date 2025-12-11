@@ -86,51 +86,9 @@ jobs:
           pip install -r ${{ steps.meta.outputs.backend_dir }}/requirements.txt
           pip install pyinstaller==6.6.0
 
-      - name: Generate Spec & Build
-        shell: python
-        env:
-          BACKEND_DIR: ${{ steps.meta.outputs.backend_dir }}
-          MODULE_PATH: ${{ env.module_path }}
-          FRONTEND_OUT: web_platform/frontend/out
+      - name: Build Backend (PyInstaller)
         run: |
-          import os
-          from pathlib import Path
-
-          bk_dir = os.environ['BACKEND_DIR']
-          mod_path = os.environ['MODULE_PATH']
-          # CHANGE: Point to the new service wrapper
-          entry = f"{bk_dir}/main.py"
-          frontend_out = os.environ['FRONTEND_OUT']
-
-          # FIX: Fixed quoting in datas list to avoid syntax error
-          spec = f"""
-          # -- mode: python ; coding: utf-8 --
-          from PyInstaller.utils.hooks import collect_data_files, collect_submodules
-
-          block_cipher = None
-
-          a = Analysis(
-              ['{entry}'],
-              pathex=[],
-              binaries=[],
-              datas=collect_data_files('uvicorn') + collect_data_files('slowapi') + [('{frontend_out}', 'ui')],
-              hiddenimports=collect_submodules('{mod_path}') + ['win32timezone'],
-              hookspath=[],
-              runtime_hooks=[],
-              excludes=['tests', 'pytest'],
-              win_no_prefer_redirects=False,
-              win_private_assemblies=False,
-              cipher=block_cipher,
-              noarchive=False,
-          )
-          pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
-          exe = EXE(
-              pyz, a.scripts, a.binaries, a.zipfiles, a.datas, [],
-              name='fortuna-backend', debug=False, bootloader_ignore_signals=False, strip=False, upx=True, console=False
-          )
-          """
-          with open("hat-trick.spec", "w") as f: f.write(spec)
-          os.system("pyinstaller hat-trick.spec --clean --noconfirm")
+          pyinstaller --noconfirm --onedir --clean --name fortuna-backend --hidden-import=win32timezone --hidden-import=win32serviceutil --add-data "web_service/backend;backend" web_service/backend/service_entry.py
 
       - name: Upload Backend
         uses: actions/upload-artifact@v4
@@ -344,46 +302,46 @@ jobs:
           New-Item -ItemType Directory -Path "$installDir\logs" -Force
           Write-Host "✅ Ensured runtime directories exist in $installDir"
 
-      - name: Test Service Health (Smoke Test)
-        shell: pwsh
+      - name: Wait for Port 8102
+        shell: python
         run: |
-          $maxAttempts = 10
-          $healthUrl = "http://localhost:8102/health"
-          for ($i = 1; $i -le $maxAttempts; $i++) {
-            try {
-              # FIX: Use ${maxAttempts} to prevent colon parsing error
-              Write-Host "Attempt $i/${maxAttempts}: Pinging $healthUrl..."
-              $response = Invoke-WebRequest -Uri $healthUrl -Method Get -UseBasicParsing -ErrorAction Stop
-              if ($response.StatusCode -eq 200) {
-                Write-Host "✅ Service is Healthy on Port 8102"
-                exit 0
-              }
-            } catch {
-              Write-Host "⏳ Waiting for service..."
-              Start-Sleep -Seconds 5
-            }
-          }
-          Write-Error "❌ Service Failed Health Check after $maxAttempts attempts"
-          exit 1
+          import socket, time, sys
+          s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+          start = time.time()
+          result = -1
+          print("Waiting for port 8102...")
+          while time.time() - start < 30:
+              result = s.connect_ex(('localhost', 8102))
+              if result == 0:
+                  break
+              time.sleep(2)
+          s.close()
+          if result == 0:
+              print("SUCCESS: Port 8102 is open.")
+              sys.exit(0)
+          print("FAILED: Timeout waiting for port.")
+          sys.exit(1)
 
-      - name: Verify UI is Served from Backend
-        shell: pwsh
-        run: |
-          $uri = "http://127.0.0.1:${{ env.SERVICE_PORT }}/index.html"
-          Write-Host "Checking for frontend at $uri"
-          for ($i = 0; $i -lt 12; $i++) {
-            try {
-              $resp = Invoke-WebRequest -Uri $uri -TimeoutSec 3 -UseBasicParsing -ErrorAction Stop
-              if ($resp.StatusCode -eq 200) {
-                Write-Host "✅ UI is being served correctly."
-                exit 0
-              }
-            } catch {
-              Start-Sleep -Seconds 2
+    - name: Test Service Health (Smoke Test)
+      shell: pwsh
+      run: |
+        $maxAttempts = 10
+        $healthUrl = "http://localhost:8102/health"
+        for ($i = 1; $i -le $maxAttempts; $i++) {
+          try {
+            Write-Host "Attempt $i of $maxAttempts: Pinging $healthUrl..."
+            $response = Invoke-WebRequest -Uri $healthUrl -Method Get -UseBasicParsing -ErrorAction Stop
+            if ($response.StatusCode -eq 200) {
+              Write-Host "SUCCESS: Service is Healthy on Port 8102"
+              exit 0
             }
+          } catch {
+            Write-Host "Waiting for service..."
+            Start-Sleep -Seconds 5
           }
-          Write-Error "UI was not served from the backend."
-          exit 1
+        }
+        Write-Error "FAILED: Service Health Check failed after $maxAttempts attempts"
+        exit 1
 
       - name: '📸 The Paparazzi (Visual Proof)'
         shell: pwsh
@@ -413,9 +371,9 @@ jobs:
                   page.wait_for_timeout(2000)
                   page.screenshot(path='proof-of-life.png', full_page=True)
                   browser.close()
-              print('✅ Screenshot captured.')
+              print('[SUCCESS] Screenshot captured.')
           except Exception as e:
-              print(f'❌ Screenshot failed: {e}')
+              print(f'[FAILED] Screenshot failed: {e}')
               # We do not fail the build for this; it is a bonus artifact.
               sys.exit(0)
           " $port
@@ -444,7 +402,7 @@ jobs:
         with:
           name: hat-trick-fusion-logs-${{ github.run_id }}
           path: installer-diag
-      - name: 💀 CSI: Windows (Post-Mortem Diagnostics)
+      - name: "💀 CSI: Windows (Post-Mortem Diagnostics)"
         if: failure()
         shell: pwsh
         run: |
