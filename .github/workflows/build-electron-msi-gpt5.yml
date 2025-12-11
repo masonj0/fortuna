@@ -4,6 +4,10 @@ name: 🔨 Build Electron MSI Installer (Production)
 on:
   push:
     branches: ["main"]
+  pull_request:
+    branches: [ "main" ]
+  schedule:
+    - cron: '0 2 * * *'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -824,6 +828,19 @@ jobs:
 
           Write-Host "✅ MSI installation succeeded"
 
+      - name: '✅ Create Required Runtime Directories Post-Install'
+        shell: pwsh
+        run: |
+          $installRoot = "C:\Program Files\Fortuna Faucet"
+          if (-not (Test-Path $installRoot)) {
+            Write-Error "Installation directory not found at $installRoot. Cannot create runtime directories."
+            exit 1
+          }
+          New-Item -Path "$installRoot\data" -ItemType Directory -Force | Out-Null
+          New-Item -Path "$installRoot\json" -ItemType Directory -Force | Out-Null
+          New-Item -Path "$installRoot\logs" -ItemType Directory -Force | Out-Null
+          Write-Host "✅ Created data, json, and logs directories in $installRoot"
+
       - name: '🔬 Complete Smoke Test (3-Layer Defense)'
         shell: pwsh
         run: |
@@ -866,32 +883,24 @@ jobs:
 
           # --- LAYER 3: NETWORK VERIFICATION ---
           Write-Host "`n--- DEFENSE LAYER 3: VERIFYING NETWORK ENDPOINT ---"
-          $healthUrl = "http://127.0.0.1:${{ env.FORTUNA_PORT }}/health"
-          $maxAttempts = 15
-          $delaySeconds = 4
-          $success = $false
-
+          $maxAttempts = 10
+          $healthUrl = "http://localhost:8102/health"
           for ($i = 1; $i -le $maxAttempts; $i++) {
-            Write-Host "Attempt $i/$maxAttempts: Pinging $healthUrl..."
             try {
-              $response = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 5
+              # FIX: Use ${maxAttempts} to prevent colon parsing error
+              Write-Host "Attempt $i/${maxAttempts}: Pinging $healthUrl..."
+              $response = Invoke-WebRequest -Uri $healthUrl -Method Get -UseBasicParsing -ErrorAction Stop
               if ($response.StatusCode -eq 200) {
-                Write-Host "✅ Layer 3 Passed: Received HTTP 200 OK from health endpoint." -ForegroundColor Green
-                $success = $true
-                break
-              } else {
-                Write-Warning "Received unexpected status code: $($response.StatusCode)"
+                Write-Host "✅ Service is Healthy on Port 8102"
+                exit 0
               }
             } catch {
-              Write-Host "  ... endpoint not ready. Retrying in $delaySeconds seconds."
+              Write-Host "⏳ Waiting for service..."
+              Start-Sleep -Seconds 5
             }
-            Start-Sleep -Seconds $delaySeconds
           }
-
-          if (-not $success) {
-            Write-Error "❌ LAYER 3 FAILED: Health endpoint '$healthUrl' never became available."
-            exit 1
-          }
+          Write-Error "❌ Service Failed Health Check after $maxAttempts attempts"
+          exit 1
 
           Write-Host "`n✅✅✅ SMOKE TEST PASSED ALL 3 DEFENSE LAYERS ✅✅✅"
 
