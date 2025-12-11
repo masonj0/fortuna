@@ -164,6 +164,12 @@ jobs:
           $ver = "${{ needs.build-core.outputs.semver }}"
           npm run dist -- --win msi --config electron-builder-config.yml --publish never --config.artifactName="Fortuna-Electron-${ver}.msi"
 
+      - name: 🔬 Forensic Packaging Analysis
+        shell: pwsh
+        run: |
+          Write-Host "=== HYBRID STAGING LAYOUT ==="
+          Get-ChildItem -Path "${{ env.ELECTRON_DIR }}/dist/win-unpacked" -Recurse | Select-Object FullName, Length
+
       - name: '🐤 The Canary (Malware Pre-Flight)'
         shell: pwsh
         continue-on-error: true
@@ -233,6 +239,38 @@ jobs:
             throw "Install failed with code $($proc.ExitCode)"
           }
 
+      - name: '✅ Create Required Runtime Directories Post-Install'
+        shell: pwsh
+        run: |
+          $installRoot = "C:\Program Files\Fortuna Faucet"
+          if (-not (Test-Path $installRoot)) {
+            Write-Error "Installation directory not found at $installRoot. Cannot create runtime directories."
+            exit 1
+          }
+          New-Item -Path "$installRoot\data" -ItemType Directory -Force | Out-Null
+          New-Item -Path "$installRoot\json" -ItemType Directory -Force | Out-Null
+          New-Item -Path "$installRoot\logs" -ItemType Directory -Force | Out-Null
+          Write-Host "✅ Created data, json, and logs directories in $installRoot"
+
+      - name: 🔍 Debug Backend Launch (Direct Execution)
+        shell: pwsh
+        run: |
+          $paths = @(
+            "C:\Program Files\Fortuna Faucet\resources\resources\python-service-bin\fortuna-backend.exe",
+            "C:\Program Files\Fortuna Faucet\resources\python-service-bin\fortuna-backend.exe"
+          )
+          $exe = $paths | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+          if ($exe) {
+            Write-Host "Found backend at: $exe"
+            Write-Host "Running diagnostic..."
+            & $exe --help 2>&1 | Tee-Object -FilePath "backend_debug.log"
+            Get-Content "backend_debug.log"
+          } else {
+            Write-Warning "Backend binary not found. Dumping file structure:"
+            Get-ChildItem "C:\Program Files\Fortuna Faucet" -Recurse | Select-Object FullName
+          }
+
       - name: 🚀 Launch & Wait (Port Detection)
         shell: pwsh
         run: |
@@ -282,48 +320,16 @@ jobs:
             exit 1
           }
 
-      - name: '📸 The Paparazzi (Visual Proof)'
+      - name: 💀 CSI: Windows (Post-Mortem Diagnostics)
+        if: failure()
         shell: pwsh
         run: |
-          Write-Host "Installing Playwright for visual verification..."
-          python -m pip install playwright
-          python -m playwright install chromium
-
-          # Default to 8102 if SERVICE_PORT is not set
-          $port = "${{ env.SERVICE_PORT }}"
-          if ([string]::IsNullOrWhiteSpace($port)) { $port = "8102" }
-
-          Write-Host "Taking screenshot of http://localhost:$port..."
-          python -c "
-          from playwright.sync_api import sync_playwright
-          import sys
-
-          try:
-              with sync_playwright() as p:
-                  browser = p.chromium.launch()
-                  page = browser.new_page()
-                  # Try index.html, fall back to root if needed
-                  url = f'http://localhost:{sys.argv[1]}/index.html'
-                  print(f'Navigating to {url}...')
-                  page.goto(url)
-                  # Wait a moment for React/Next.js hydration if needed
-                  page.wait_for_timeout(2000)
-                  page.screenshot(path='proof-of-life.png', full_page=True)
-                  browser.close()
-              print('✅ Screenshot captured.')
-          except Exception as e:
-              print(f'❌ Screenshot failed: {e}')
-              # We do not fail the build for this; it is a bonus artifact.
-              sys.exit(0)
-          " $port
-
-      - name: 📤 Upload Visual Proof
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: visual-proof-${{ github.run_id }}
-          path: proof-of-life.png
-          retention-days: 7
+          Write-Host "=== BACKEND LOGS (If Available) ==="
+          if (Test-Path "C:\ProgramData\Fortuna\logs\backend.log") { Get-Content "C:\ProgramData\Fortuna\logs\backend.log" -Tail 100 }
+          Write-Host "=== PORT 8102 LISTENER ==="
+          netstat -an | findstr "8102"
+          Write-Host "=== RUNNING PROCESSES ==="
+          tasklist /FI "IMAGENAME eq fortuna*"
 
       - name: '📸 The Paparazzi (Visual Proof)'
         shell: pwsh

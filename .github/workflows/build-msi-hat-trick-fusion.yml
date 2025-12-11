@@ -37,7 +37,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
+          cache: 'npm'
+          cache-dependency-path: '**/package-lock.json'
       - name: Install and Build
         run: |
           cd web_platform/frontend
@@ -78,7 +79,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
+          cache: 'pip'
 
       - name: Install Dependencies
         run: |
@@ -226,6 +227,19 @@ jobs:
           )
           Set-Content build_wix/Fortuna.wixproj ($proj -join "`r`n") -Encoding utf8
 
+      - name: 🔬 Forensic Packaging Analysis
+        shell: pwsh
+        run: |
+          Write-Host "=== STAGING DIRECTORY MANIFEST ==="
+          Get-ChildItem -Path staging -Recurse | Sort-Object Length | Format-Table FullName, Length, LastWriteTime -AutoSize
+
+          Write-Host "=== CRITICAL FILE CHECK ==="
+          $critical = @("fortuna-webservice.exe", "restart_service.bat")
+          foreach ($file in $critical) {
+            $found = Get-ChildItem -Path staging -Recurse -Filter $file
+            if ($found) { Write-Host "✅ FOUND: $file" -ForegroundColor Green }
+            else { Write-Host "❌ MISSING: $file" -ForegroundColor Red }
+          }
       - name: Build MSI
         working-directory: build_wix
         run: dotnet build Fortuna.wixproj -c Release -p:Platform=x64 -p:Version="${{ needs.build-backend.outputs.semver }}" -p:SourceDir="../staging/backend" -p:ServicePort="${{ env.SERVICE_PORT }}"
@@ -330,45 +344,27 @@ jobs:
           New-Item -ItemType Directory -Path "$installDir\logs" -Force
           Write-Host "✅ Ensured runtime directories exist in $installDir"
 
-      - name: Health and Process Validation
-        shell: python
-        env:
-          PORT: ${{ env.SERVICE_PORT }}
+      - name: Test Service Health (Smoke Test)
+        shell: pwsh
         run: |
-          import os, socket, time, urllib.request, urllib.error, subprocess, sys
-          port = int(os.environ["PORT"])
-
-          # Start Service
-          subprocess.run(["sc.exe", "start", "FortunaWebService"], check=False)
-
-          # Wait for Port
-          for _ in range(30):
-            try:
-              with socket.create_connection(("127.0.0.1", port), timeout=1):
-                break
-            except Exception:
-              time.sleep(1)
-          else:
-            print("❌ Port bind timeout")
-            subprocess.run(["sc.exe", "query", "FortunaWebService"])
-            sys.exit(1)
-
-          # Health Check
-          for _ in range(6):
-            try:
-              req = urllib.request.Request(f"http://127.0.0.1:{port}/health")
-              req.add_header("User-Agent", "HatTrickFusion/1.0")
-              with urllib.request.urlopen(req, timeout=5) as resp:
-                if resp.status == 200:
-                  print("✅ Health Check Passed")
-                  sys.exit(0)
-            except urllib.error.HTTPError as err:
-              if err.code in (401, 403):
-                print("✅ Service Up (Auth Required")
-                sys.exit(0)
-            except Exception:
-              time.sleep(2)
-          sys.exit(1)
+          $maxAttempts = 10
+          $healthUrl = "http://localhost:8102/health"
+          for ($i = 1; $i -le $maxAttempts; $i++) {
+            try {
+              # FIX: Use ${maxAttempts} to prevent colon parsing error
+              Write-Host "Attempt $i/${maxAttempts}: Pinging $healthUrl..."
+              $response = Invoke-WebRequest -Uri $healthUrl -Method Get -UseBasicParsing -ErrorAction Stop
+              if ($response.StatusCode -eq 200) {
+                Write-Host "✅ Service is Healthy on Port 8102"
+                exit 0
+              }
+            } catch {
+              Write-Host "⏳ Waiting for service..."
+              Start-Sleep -Seconds 5
+            }
+          }
+          Write-Error "❌ Service Failed Health Check after $maxAttempts attempts"
+          exit 1
 
       - name: Verify UI is Served from Backend
         shell: pwsh
@@ -448,3 +444,13 @@ jobs:
         with:
           name: hat-trick-fusion-logs-${{ github.run_id }}
           path: installer-diag
+      - name: 💀 CSI: Windows (Post-Mortem Diagnostics)
+        if: failure()
+        shell: pwsh
+        run: |
+          Write-Host "=== SERVICE STATUS ==="
+          Get-Service "FortunaWebService" | Select-Object Status, StartType, DisplayName
+          Write-Host "=== EVENT LOGS (Timeout/Crash Detection) ==="
+          Get-EventLog -LogName System -EntryType Error -Newest 20 | Where-Object { $_.Message -like "*Fortuna*" }
+          Write-Host "=== DIRECTORY PERMISSIONS ==="
+          Get-Acl "C:\Program Files\Fortuna Faucet Service" | Format-List

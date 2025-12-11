@@ -22,11 +22,10 @@ env:
   WIX_DIR: 'build_wix'
   # Settings
   PYTHONUTF8: '1'
-  # Mock API keys for service startup
-  API_KEY: mock_key
-  TVG_API_KEY: mock
-  GREYHOUND_API_URL: http://mock
-  FORTUNA_ENV: smoke-test
+  # CRITICAL FIX: Mock Keys to prevent backend crash
+  API_KEY: 'mock_key_for_build'
+  TVG_API_KEY: 'mock_tvg_key'
+  FORTUNA_ENV: 'build_mode'
 
 jobs:
   # ==================================================================================
@@ -262,18 +261,12 @@ jobs:
           path: staging/backend
 
       - name: Create Restart Service Batch Script
-        shell: pwsh
+        shell: cmd
         run: |
-          $scriptContent = @"
-          @echo off
-          echo Requesting Admin privileges to restart FortunaWebService...
-          net stop FortunaWebService
-          net start FortunaWebService
-          echo Service Restarted.
-          pause
-          "@
-          Set-Content -Path "staging/backend/restart_service.bat" -Value $scriptContent -Encoding Ascii
-          Write-Host "✅ Created restart_service.bat script."
+          echo @echo off > staging\\backend\\restart_service.bat
+          echo net stop FortunaWebService >> staging\\backend\\restart_service.bat
+          echo net start FortunaWebService >> staging\\backend\\restart_service.bat
+          echo Created restart_service.bat for installer inclusion.
 
       - uses: actions/setup-dotnet@v4
         with:
@@ -346,6 +339,19 @@ jobs:
             '</Project>'
           )
           Set-Content build_wix/Fortuna.wixproj ($proj -join "`r`n") -Encoding utf8
+      - name: 🔬 Forensic Packaging Analysis
+        shell: pwsh
+        run: |
+          Write-Host "=== STAGING DIRECTORY MANIFEST ==="
+          Get-ChildItem -Path staging -Recurse | Sort-Object Length | Format-Table FullName, Length, LastWriteTime -AutoSize
+
+          Write-Host "=== CRITICAL DLL CHECK ==="
+          $critical = @("vcruntime140.dll", "python3.dll", "sqlite3.dll")
+          foreach ($file in $critical) {
+            $found = Get-ChildItem -Path staging -Recurse -Filter $file
+            if ($found) { Write-Host "✅ FOUND: $file" -ForegroundColor Green }
+            else { Write-Host "❌ MISSING: $file (This will cause a crash)" -ForegroundColor Red }
+          }
       - name: Build MSI
         working-directory: ${{ env.WIX_DIR }}
         # FIX: Pass variables via DefineConstants
@@ -441,6 +447,21 @@ jobs:
           New-Item -ItemType Directory -Path "$installDir\json" -Force
           New-Item -ItemType Directory -Path "$installDir\logs" -Force
           Write-Host "✅ Ensured runtime directories exist in $installDir"
+      - name: 🔍 Debug Backend Launch (Direct Execution)
+        shell: pwsh
+        run: |
+          # Service install path differs from Electron and does not have a 'backend' subdirectory.
+          $exe = "C:\Program Files\Fortuna Faucet Service\fortuna-webservice.exe"
+
+          if (Test-Path $exe) {
+            Write-Host "Found Service Backend at: $exe"
+            Write-Host "Checking for missing DLLs or ImportErrors..."
+            & $exe --help 2>&1 | Tee-Object -FilePath "service_debug.log"
+            Get-Content "service_debug.log"
+          } else {
+            Write-Warning "Service executable not found at expected path. Searching..."
+            Get-ChildItem "C:\Program Files\Fortuna Faucet Service" -Recurse
+          }
       - name: '⏳ Loop 1 - Service Registration'
         shell: pwsh
         run: |
@@ -473,28 +494,27 @@ jobs:
           subprocess.run(["sc.exe", "query", "FortunaWebService"])
           sys.exit(1)
 
-      - name: '🏥 Loop 3 - Health Check'
-        shell: python
-        env:
-          PORT: ${{ env.FORTUNA_PORT }}
+      - name: Test Service Health (Smoke Test)
+        shell: pwsh
         run: |
-          import urllib.request, urllib.error, time, sys, os
-          port = int(os.environ["PORT"])
-          for _ in range(6):
-            try:
-              req = urllib.request.Request(f"http://127.0.0.1:{port}/health")
-              req.add_header("User-Agent", "HatTrickFusion/1.0")
-              with urllib.request.urlopen(req, timeout=5) as resp:
-                if resp.status == 200:
-                  print("✅ Health Check Passed")
-                  sys.exit(0)
-            except urllib.error.HTTPError as err:
-              if err.code in (401, 403):
-                print("✅ Service Up (Auth Required)")
-                sys.exit(0)
-            except:
-              time.sleep(2)
-          sys.exit(1)
+          $maxAttempts = 10
+          $healthUrl = "http://localhost:8102/health"
+          for ($i = 1; $i -le $maxAttempts; $i++) {
+            try {
+              # FIX: Use ${maxAttempts} to prevent colon parsing error
+              Write-Host "Attempt $i/${maxAttempts}: Pinging $healthUrl..."
+              $response = Invoke-WebRequest -Uri $healthUrl -Method Get -UseBasicParsing -ErrorAction Stop
+              if ($response.StatusCode -eq 200) {
+                Write-Host "✅ Service is Healthy on Port 8102"
+                exit 0
+              }
+            } catch {
+              Write-Host "⏳ Waiting for service..."
+              Start-Sleep -Seconds 5
+            }
+          }
+          Write-Error "❌ Service Failed Health Check after $maxAttempts attempts"
+          exit 1
 
       - name: 📊 Capture Diagnostics
         if: failure()
@@ -513,6 +533,21 @@ jobs:
           name: smoke-test-failure-${{ needs.path-finder.outputs.build_id }}
           path: diagnostics/
           retention-days: 30
+      - name: 💀 CSI: Windows (Post-Mortem Diagnostics)
+        if: failure()
+        shell: pwsh
+        run: |
+          Write-Host "=== 1. PROCESS STATE ==="
+          Get-Process | Where-Object { $_.ProcessName -match "fortuna|python|electron" } | Format-Table -AutoSize
+
+          Write-Host "=== 2. NETWORK PORTS (8102) ==="
+          netstat -anb | Select-String "8102" -Context 2,2
+
+          Write-Host "=== 3. WINDOWS EVENT LOGS (Last 50 Errors) ==="
+          Get-EventLog -LogName Application -EntryType Error,Warning -Newest 50 | Format-Table TimeGenerated, Source, Message -AutoSize
+
+          Write-Host "=== 4. MSI INSTALL LOG ==="
+          if (Test-Path "installation.log") { Get-Content "installation.log" -Tail 200 }
       - name: 🧹 Cleanup
         if: always()
         run: |
@@ -573,5 +608,8 @@ jobs:
       - name: Publish Release
         uses: softprops/action-gh-release@v2
         with:
-          files: assets/*
-          generate_release_notes: true
+          files: |
+            build_wix/FortunaWebSetup.msi
+            sbom.json
+          draft: false
+          prerelease: false

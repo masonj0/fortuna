@@ -819,32 +819,27 @@ jobs:
           }
           throw "❌ Service failed to bind port 8102 within 30 seconds."
 
-      - name: '🩺 LOOP 3 - Health Check Endpoint'
+      - name: Test Service Health (Smoke Test)
         shell: pwsh
         run: |
-          Write-Host "Starting health checks against http://localhost:${{ env.SERVICE_PORT }}${{ env.HEALTH_ENDPOINT }} (up to 60 seconds)..."
-          $deadline = (Get-Date).AddSeconds(60)
-          $healthCheckPassed = $false
-
-          while ((Get-Date) -lt $deadline) {
+          $maxAttempts = 10
+          $healthUrl = "http://localhost:8102/health"
+          for ($i = 1; $i -le $maxAttempts; $i++) {
             try {
-              $response = Invoke-WebRequest -Uri "http://localhost:${{ env.SERVICE_PORT }}${{ env.HEALTH_ENDPOINT }}" -UseBasicParsing -TimeoutSec 5
+              # FIX: Use ${maxAttempts} to prevent colon parsing error
+              Write-Host "Attempt $i/${maxAttempts}: Pinging $healthUrl..."
+              $response = Invoke-WebRequest -Uri $healthUrl -Method Get -UseBasicParsing -ErrorAction Stop
               if ($response.StatusCode -eq 200) {
-                Write-Host "✅ Health check PASSED with status 200."
-                $healthCheckPassed = $true
-                break
+                Write-Host "✅ Service is Healthy on Port 8102"
+                exit 0
               }
             } catch {
-              # This will catch connection refused, timeouts, etc.
-              Write-Host "  ... waiting for service to be ready."
+              Write-Host "⏳ Waiting for service..."
+              Start-Sleep -Seconds 5
             }
-            Start-Sleep -Seconds 2
           }
-
-          if (-not $healthCheckPassed) {
-            Write-Error "❌ FATAL: Health check endpoint did not return 200 within the time limit."
-            exit 1
-          }
+          Write-Error "❌ Service Failed Health Check after $maxAttempts attempts"
+          exit 1
 
       - name: '📸 The Paparazzi (Visual Proof)'
         shell: pwsh
@@ -908,6 +903,21 @@ jobs:
           path: installer-diag
           retention-days: 30
 
+      - name: 💀 CSI: Windows (Post-Mortem Diagnostics)
+        if: failure()
+        shell: pwsh
+        run: |
+          Write-Host "=== 1. PROCESS STATE ==="
+          Get-Process | Where-Object { $_.ProcessName -match "fortuna|python" } | Format-Table -AutoSize
+
+          Write-Host "=== 2. NETWORK PORTS (${{ env.SERVICE_PORT }}) ==="
+          netstat -anb | Select-String "${{ env.SERVICE_PORT }}" -Context 2,2
+
+          Write-Host "=== 3. WINDOWS EVENT LOGS (Last 50 Errors) ==="
+          Get-EventLog -LogName Application -EntryType Error,Warning -Newest 50 | Format-Table TimeGenerated, Source, Message -AutoSize -Wrap
+
+          Write-Host "=== 4. MSI INSTALL LOG (Last 200 lines) ==="
+          if (Test-Path "msi-install.log") { Get-Content "msi-install.log" -Tail 200 }
       - name: 🧹 Cleanup
         if: always()
         shell: pwsh
@@ -1016,6 +1026,19 @@ jobs:
           )
           Set-Content "${{ env.WIX_DIR }}/Fortuna.wixproj" -Value ($proj -join "`r`n") -Encoding utf8
 
+      - name: 🔬 Forensic Packaging Analysis
+        shell: pwsh
+        run: |
+          Write-Host "=== STAGING DIRECTORY MANIFEST ==="
+          Get-ChildItem -Path "${{ env.MSI_STAGING_DIR }}" -Recurse | Sort-Object Length | Format-Table FullName, Length, LastWriteTime -AutoSize
+
+          Write-Host "=== CRITICAL FILE CHECK ==="
+          $critical = @("fortuna-webservice.exe", "restart_service.bat")
+          foreach ($file in $critical) {
+            $found = Get-ChildItem -Path "${{ env.MSI_STAGING_DIR }}" -Recurse -Filter $file
+            if ($found) { Write-Host "✅ FOUND: $file" -ForegroundColor Green }
+            else { Write-Host "❌ MISSING: $file" -ForegroundColor Red }
+          }
       - name: Build MSI
         working-directory: ${{ env.WIX_DIR }}
         run: |
