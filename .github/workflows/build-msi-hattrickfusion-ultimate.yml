@@ -606,7 +606,7 @@ jobs:
           cd assets
           sha256sum * > SHASUMS256.txt
       - name: Publish Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v1
         with:
           files: |
             build_wix/FortunaWebSetup.msi
