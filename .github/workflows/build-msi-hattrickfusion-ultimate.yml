@@ -469,14 +469,24 @@ jobs:
       - name: Test Service Health (Smoke Test)
         shell: pwsh
         run: |
-          Start-Sleep -Seconds 10
-          $response = Invoke-WebRequest -Uri http://localhost:8102/health -Method Get -UseBasicParsing
-          if ($response.StatusCode -eq 200) {
-            Write-Host '✅ Service is Healthy on Port 8102'
-          } else {
-            Write-Error '❌ Service Failed Health Check'
-            exit 1
+          $maxAttempts = 10
+          $healthUrl = "http://localhost:8102/health"
+          for ($i = 1; $i -le $maxAttempts; $i++) {
+            try {
+              # FIX: Use ${maxAttempts} to prevent colon parsing error
+              Write-Host "Attempt $i/${maxAttempts}: Pinging $healthUrl..."
+              $response = Invoke-WebRequest -Uri $healthUrl -Method Get -UseBasicParsing -ErrorAction Stop
+              if ($response.StatusCode -eq 200) {
+                Write-Host "✅ Service is Healthy on Port 8102"
+                exit 0
+              }
+            } catch {
+              Write-Host "⏳ Waiting for service..."
+              Start-Sleep -Seconds 5
+            }
           }
+          Write-Error "❌ Service Failed Health Check after $maxAttempts attempts"
+          exit 1
 
       - name: 📊 Capture Diagnostics
         if: failure()
