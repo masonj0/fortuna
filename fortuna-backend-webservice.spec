@@ -107,6 +107,7 @@ hiddenimports.update(
         "selectolax",
         "pydantic_core",
         "pydantic_settings.sources",
+        "win32timezone",
     ]
 )
 

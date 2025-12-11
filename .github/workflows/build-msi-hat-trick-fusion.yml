@@ -413,9 +413,9 @@ jobs:
                   page.wait_for_timeout(2000)
                   page.screenshot(path='proof-of-life.png', full_page=True)
                   browser.close()
-              print('✅ Screenshot captured.')
+              print('[SUCCESS] Screenshot captured.')
           except Exception as e:
-              print(f'❌ Screenshot failed: {e}')
+              print(f'[FAILED] Screenshot failed: {e}')
               # We do not fail the build for this; it is a bonus artifact.
               sys.exit(0)
           " $port
@@ -444,7 +444,7 @@ jobs:
         with:
           name: hat-trick-fusion-logs-${{ github.run_id }}
           path: installer-diag
-      - name: 💀 CSI: Windows (Post-Mortem Diagnostics)
+      - name: "💀 CSI: Windows (Post-Mortem Diagnostics)"
         if: failure()
         shell: pwsh
         run: |
