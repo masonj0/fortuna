@@ -264,8 +264,8 @@ jobs:
         shell: cmd
         run: |
           echo @echo off > staging\\backend\\restart_service.bat
-          echo net stop FortunaService >> staging\\backend\\restart_service.bat
-          echo net start FortunaService >> staging\\backend\\restart_service.bat
+          echo net stop FortunaWebService >> staging\\backend\\restart_service.bat
+          echo net start FortunaWebService >> staging\\backend\\restart_service.bat
           echo Created restart_service.bat for installer inclusion.
 
       - uses: actions/setup-dotnet@v4
@@ -553,7 +553,10 @@ jobs:
           cd assets
           sha256sum * > SHASUMS256.txt
       - name: Publish Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v1
         with:
-          files: assets/*
-          generate_release_notes: true
+          files: |
+            build_wix/FortunaWebSetup.msi
+            sbom.json
+          draft: false
+          prerelease: false
