@@ -1021,7 +1021,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-      - name: 💀 CSI: Windows (Post-Mortem Diagnostics)
+      - name: "💀 CSI: Windows (Post-Mortem Diagnostics)"
         if: failure()
         shell: pwsh
         run: |
