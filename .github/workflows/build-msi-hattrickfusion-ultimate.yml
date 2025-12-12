@@ -537,9 +537,11 @@ jobs:
               try {
                 const browser = await chromium.launch();
                 const page = await browser.newPage();
+                console.log('Navigating to $url...');
                 await page.goto('$url', { timeout: 15000 });
                 await page.waitForSelector('.swagger-ui', { timeout: 5000 }).catch(() => console.log('UI not fully loaded, snapping anyway...'));
                 await page.screenshot({ path: 'proof-of-life.png', fullPage: true });
+                console.log('✅ Screenshot captured: proof-of-life.png');
                 await browser.close();
               } catch (e) {
                 console.error(e); process.exit(1);
