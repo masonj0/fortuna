@@ -65,12 +65,38 @@ jobs:
           cache: 'npm'
           cache-dependency-path: '${{ env.FRONTEND_DIR }}/package-lock.json'
 
+      - name: Cache Build Output
+        id: cache-frontend
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.FRONTEND_DIR }}/out
+          key: ${{ runner.os }}-frontend-${{ hashFiles('**/package-lock.json', '${{ env.FRONTEND_DIR }}/**/*.js', '${{ env.FRONTEND_DIR }}/**/*.ts', '${{ env.FRONTEND_DIR }}/**/*.tsx', '${{ env.FRONTEND_DIR }}/**/*.css') }}
+          restore-keys: |
+            ${{ runner.os }}-frontend-
+
       - name: 🎨 Build Frontend
+        if: steps.cache-frontend.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
           cd ${{ env.FRONTEND_DIR }}
           npm ci --prefer-offline
           npm run build
+
+      - name: 📋 Generate Artifact Manifest
+        shell: pwsh
+        working-directory: ${{ env.FRONTEND_DIR }}
+        run: |
+          Set-StrictMode -Version Latest
+          $outDir = Resolve-Path "out"
+          $manifestPath = "frontend-manifest.tsv"
+          "RelativePath`tSizeBytes`tSHA256" | Out-File $manifestPath -Encoding utf8
+          $files = Get-ChildItem -Path $outDir -Recurse -File
+          foreach ($f in $files) {
+            $rel = $f.FullName.Substring($outDir.Path.Length).TrimStart('\','/')
+            $hash = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.Substring(0,16)
+            "$rel`t$($f.Length)`t$hash" | Out-File $manifestPath -Encoding utf8 -Append
+          }
+          Write-Host "✅ Generated frontend artifact manifest."
 
       # --- BACKEND (The "HatTrick" Upgrade) ---
       - uses: actions/setup-python@v5
@@ -101,7 +127,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: frontend-build-${{ github.run_id }}
-          path: ${{ env.FRONTEND_DIR }}/out/
+          path: |
+            ${{ env.FRONTEND_DIR }}/out/
+            ${{ env.FRONTEND_DIR }}/frontend-manifest.tsv
           retention-days: 1
 
   # ==================================================================================
@@ -149,7 +177,46 @@ jobs:
           # No staging needed, artifacts are downloaded to the correct locations
           Write-Host "Backend and Frontend artifacts downloaded to their respective directories."
 
+      - name: '⚖️ The Dietician (Size Analysis)'
+        shell: pwsh
+        run: |
+          $target = "." # Analyze entire workspace staged for build
+          $limitMB = 300
+          Write-Host "--- 📊 Size Breakdown ---"
+          $files = Get-ChildItem -Path $target -Recurse -File -ErrorAction SilentlyContinue
+          if (!$files) { Write-Warning "No files found to weigh."; exit 0 }
+          $totalBytes = ($files | Measure-Object -Property Length -Sum).Sum
+          $totalMB = [math]::Round($totalBytes / 1MB, 2)
+          Write-Host "Total Payload Size: $totalMB MB"
+          if ($totalMB -gt $limitMB) {
+              Write-Warning "⚠️ BLOAT ALERT: Build exceeds $limitMB MB limit! Check the heaviest files below."
+          } else {
+              Write-Host "✅ Size within limits (< $limitMB MB)." -ForegroundColor Green
+          }
+          Write-Host "`n--- 🐘 Top 10 Heaviest Files ---"
+          $files | Sort-Object Length -Descending | Select-Object -First 10 @{N='File';E={$_.FullName.Replace($pwd,'')}}, @{N='Size(MB)';E={"{0:N2}" -f ($_.Length/1MB)}} | Format-Table -AutoSize
 
+      - name: '🧐 Forensically Guarantee Icon Paths'
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "Stop"
+          Install-Module -Name powershell-yaml -Force -Scope CurrentUser -ErrorAction Stop
+          Import-Module powershell-yaml
+          $configPath = '${{ env.ELECTRON_DIR }}/electron-builder-config.yml'
+          $iconPath = "${{ env.ELECTRON_DIR }}/assets/icon.ico"
+          if (-not (Test-Path -LiteralPath $iconPath)) {
+            Write-Error "CRITICAL: The primary icon file is missing at '$iconPath'."
+            exit 1
+          }
+          $absoluteIconPath = (Resolve-Path -LiteralPath $iconPath).Path
+          $config = Get-Content $configPath | ConvertFrom-Yaml
+          $config.win.icon = $absoluteIconPath.Replace('\\', '/')
+          try { $config.msi.PSObject.Properties.Remove('installerIcon') } catch {}
+          try { $config.msi.PSObject.Properties.Remove('uninstallerIcon') } catch {}
+          $tempConfigPath = '${{ env.ELECTRON_DIR }}/temp-builder-config.yml'
+          $config | ConvertTo-Yaml | Set-Content -Path $tempConfigPath
+          Write-Host "✅ Successfully created temporary config '$tempConfigPath' with corrected icon paths."
       - name: 📄 Ensure WiX License Exists for electron-builder
         shell: pwsh
         run: |
@@ -172,7 +239,7 @@ jobs:
         run: |
           npm ci --prefer-offline
           $ver = "${{ needs.build-core.outputs.semver }}"
-          npm run dist -- --win msi --config electron-builder-config.yml --publish never --config.artifactName="Fortuna-Electron-${ver}.msi"
+          npm run dist -- --win msi --config temp-builder-config.yml --publish never --config.artifactName="Fortuna-Electron-${ver}.msi"
 
       - name: 🔬 Forensic Packaging Analysis
         shell: pwsh
@@ -207,6 +274,28 @@ jobs:
               Write-Warning "⚠️ Scan completed with inconclusive exit code: $($proc.ExitCode)"
           }
 
+      - name: Rename & Hash MSI
+        id: name_msi
+        shell: pwsh
+        run: |
+          $ver = "${{ needs.build-core.outputs.semver }}"
+          $sha = "${{ needs.build-core.outputs.short_sha }}"
+          $releaseDir = "${{ env.ELECTRON_DIR }}/dist"
+          $msiFound = Get-ChildItem -Path $releaseDir -Filter "*.msi" | Select-Object -First 1
+
+          if (-not $msiFound) {
+            Write-Error "❌ FATAL: No MSI file found in $releaseDir."
+            exit 1
+          }
+
+          $targetName = "Fortuna-Electron-Hybrid-${ver}-${sha}.msi"
+          $newPath = Join-Path $releaseDir $targetName
+          Move-Item -Path $msiFound.FullName -Destination $newPath -Force
+          $hash = (Get-FileHash $newPath -Algorithm SHA256).Hash
+          $hash | Out-File "$newPath.sha256" -Encoding utf8
+          Write-Host "✅ MSI Renamed and Hashed: $targetName"
+          "msi_name=$targetName" | Out-File $env:GITHUB_OUTPUT -Append
+
       - name: 📤 Upload MSI
         uses: actions/upload-artifact@v4
         with:
@@ -229,21 +318,12 @@ jobs:
           name: electron-msi-${{ github.run_id }}
           path: installer
 
-      - name: Configure Firewall
-        shell: pwsh
-        run: |
-          New-NetFirewallRule -DisplayName "FortunaTest" -Direction Inbound -LocalPort 8102 -Protocol TCP -Action Allow
-
-      - name: 🤫 Install & Verify
+      - name: 🤫 Install MSI & Verify
         shell: pwsh
         run: |
           $msi = Get-ChildItem "installer" -Filter "*.msi" -Recurse | Select -First 1
           if (!$msi) { throw "No MSI found" }
-
-          Write-Host "Installing $($msi.Name)..."
-          # EXOTIC INGREDIENT: PassThru for accurate exit codes
           $proc = Start-Process msiexec.exe -ArgumentList "/i `"$($msi.FullName)`" /qn /L*v install.log" -Wait -PassThru
-
           if ($proc.ExitCode -ne 0) {
             Get-Content install.log -Tail 50
             throw "Install failed with code $($proc.ExitCode)"
@@ -253,129 +333,73 @@ jobs:
         shell: pwsh
         run: |
           $installRoot = "C:\Program Files\Fortuna Faucet"
-          if (-not (Test-Path $installRoot)) {
-            Write-Error "Installation directory not found at $installRoot. Cannot create runtime directories."
+          if (! (Test-Path $installRoot)) {
+            Write-Error "Installation directory not found at $installRoot."
             exit 1
           }
           New-Item -Path "$installRoot\data" -ItemType Directory -Force | Out-Null
           New-Item -Path "$installRoot\json" -ItemType Directory -Force | Out-Null
           New-Item -Path "$installRoot\logs" -ItemType Directory -Force | Out-Null
-          Write-Host "✅ Created data, json, and logs directories in $installRoot"
 
-      - name: 🔍 Debug Backend Launch (Direct Execution)
+      - name: '🔬 Complete Smoke Test (3-Layer Defense)'
         shell: pwsh
         run: |
-          $paths = @(
-            "C:\Program Files\Fortuna Faucet\resources\resources\python-service-bin\fortuna-backend.exe",
-            "C:\Program Files\Fortuna Faucet\resources\python-service-bin\fortuna-backend.exe"
-          )
-          $exe = $paths | Where-Object { Test-Path $_ } | Select-Object -First 1
-
-          if ($exe) {
-            Write-Host "Found backend at: $exe"
-            Write-Host "Running diagnostic..."
-            & $exe --help 2>&1 | Tee-Object -FilePath "backend_debug.log"
-            Get-Content "backend_debug.log"
-          } else {
-            Write-Warning "Backend binary not found. Dumping file structure:"
-            Get-ChildItem "C:\Program Files\Fortuna Faucet" -Recurse | Select-Object FullName
-          }
-
-      - name: 🚀 Launch & Wait (Port Detection)
-        shell: pwsh
-        run: |
-          $root = 'C:\Program Files\Fortuna Faucet'
-          $exe = Get-ChildItem $root -Filter "*.exe" -Recurse | Where { $_.Name -notmatch 'uninstall' } | Select -First 1
-          if (!$exe) { throw "Executable not found in $root" }
-
-          Write-Host "Target: $($exe.FullName)"
-
-          # Create Log Directory
-          $logDir = "C:\Temp\fortuna-logs"
-          New-Item -ItemType Directory -Path $logDir -Force | Out-Null
-
-          # Launch Electron with Log Redirection
-          # We use Start-Process to detach, but redirect streams
-          $proc = Start-Process -FilePath $exe.FullName -ArgumentList "--no-sandbox" -NoNewWindow -PassThru -RedirectStandardOutput "$logDir\stdout.log" -RedirectStandardError "$logDir\stderr.log"
-
-          Write-Host "Electron launched (PID: $($proc.Id)). Waiting for Port 8102..."
-
-          # Wait for Port 8102 (The Backend)
-          $deadline = (Get-Date).AddSeconds(60)
-          $connected = $false
-
-          while ((Get-Date) -lt $deadline) {
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "Stop"
+          $installRoot = "C:\Program Files\Fortuna Faucet"
+          # --- LAYER 1: FILE VERIFICATION ---
+          $mainExe = Get-ChildItem -Path $installRoot -Filter "*.exe" -Recurse | Where-Object { $_.Name -notmatch 'uninstall' } | Select -First 1
+          $backendExe = Get-ChildItem -Path $installRoot -Filter "fortuna-backend.exe" -Recurse | Select -First 1
+          if (-not $mainExe) { Write-Error "❌ LAYER 1 FAILED: Main 'Fortuna Faucet.exe' not found."; exit 1 }
+          if (-not $backendExe) { Write-Error "❌ LAYER 1 FAILED: Backend 'fortuna-backend.exe' not found."; exit 1 }
+          # --- LAYER 2: PROCESS VERIFICATION ---
+          $proc = Start-Process -FilePath $mainExe.FullName -ArgumentList "--no-sandbox" -PassThru
+          Start-Sleep -Seconds 10
+          $parentProcess = Get-Process -Name "Fortuna Faucet" -ErrorAction SilentlyContinue
+          $childProcess = Get-Process -Name "fortuna-backend" -ErrorAction SilentlyContinue
+          if (-not $parentProcess) { Write-Error "❌ LAYER 2 FAILED: Main 'Fortuna Faucet' process is not running."; exit 1 }
+          if (-not $childProcess) { Write-Error "❌ LAYER 2 FAILED: Child 'fortuna-backend' process is not running."; exit 1 }
+          # --- LAYER 3: NETWORK VERIFICATION ---
+          $maxAttempts = 10
+          $healthUrl = "http://localhost:${{ env.FORTUNA_PORT }}/health"
+          for ($i = 1; $i -le $maxAttempts; $i++) {
             try {
-              $tcp = New-Object System.Net.Sockets.TcpClient
-              $tcp.Connect('127.0.0.1', 8102)
-              $tcp.Close()
-              Write-Host "✅ SUCCESS: Backend is listening on port 8102!" -ForegroundColor Green
-              $connected = $true
-              break
-            } catch {
-              Write-Host "  ...waiting for port..."
-              Start-Sleep 2
-            }
+              $response = Invoke-WebRequest -Uri $healthUrl -Method Get -UseBasicParsing -ErrorAction Stop
+              if ($response.StatusCode -eq 200) {
+                Write-Host "✅✅✅ SMOKE TEST PASSED ✅✅✅"
+                exit 0
+              }
+            } catch { Start-Sleep -Seconds 5 }
           }
-
-          if (-not $connected) {
-            Write-Error "❌ TIMEOUT: Backend did not bind port 8102."
-
-            Write-Host "--- ELECTRON STDOUT ---"
-            if (Test-Path "$logDir\stdout.log") { Get-Content "$logDir\stdout.log" -Tail 50 }
-
-            Write-Host "--- ELECTRON STDERR ---"
-            if (Test-Path "$logDir\stderr.log") { Get-Content "$logDir\stderr.log" -Tail 50 }
-
-            exit 1
-          }
-
-      - name: "💀 CSI: Windows (Post-Mortem Diagnostics)"
-        if: failure()
-        shell: pwsh
-        run: |
-          Write-Host "=== BACKEND LOGS (If Available) ==="
-          if (Test-Path "C:\ProgramData\Fortuna\logs\backend.log") { Get-Content "C:\ProgramData\Fortuna\logs\backend.log" -Tail 100 }
-          Write-Host "=== PORT 8102 LISTENER ==="
-          netstat -an | findstr "8102"
-          Write-Host "=== RUNNING PROCESSES ==="
-          tasklist /FI "IMAGENAME eq fortuna*"
+          Write-Error "❌ LAYER 3 FAILED: Service Failed Health Check"
+          exit 1
 
       - name: '📸 The Paparazzi (Visual Proof)'
         shell: pwsh
         run: |
-          Write-Host "Installing Playwright..."
           npm install playwright
           npx playwright install chromium --with-deps
-
-          $port = "${{ env.FORTUNA_PORT }}"
-          $url = "http://127.0.0.1:$port/docs"
-
           node -e "
             const { chromium } = require('playwright');
             (async () => {
               try {
                 const browser = await chromium.launch();
                 const page = await browser.newPage();
-                await page.goto('$url', { timeout: 15000 });
-                await page.waitForSelector('.swagger-ui', { timeout: 5000 }).catch(() => console.log('UI not fully loaded, snapping anyway...'));
-                await page.screenshot({ path: 'proof-of-life.png', fullPage: true });
+                await page.goto('http://127.0.0.1:${{ env.FORTUNA_PORT }}/docs', { timeout: 15000 });
+                await page.waitForSelector('.swagger-ui', { timeout: 5000 });
+                await page.screenshot({ path: 'proof.png', fullPage: true });
                 await browser.close();
-              } catch (e) {
-                console.error(e); process.exit(1);
-              }
+              } catch (e) { console.error(e); process.exit(1); }
             })();
           "
-
-      - name: 📤 Upload Visual Proof
+      - name: Upload Proof
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: visual-proof-${{ github.run_id }}
-          path: proof-of-life.png
-          retention-days: 7
+          path: proof.png
 
-      - name: 🧹 Cleanup
+      - name: Cleanup
         if: always()
         run: Stop-Process -Name "Fortuna Faucet", "fortuna-backend" -Force -ErrorAction SilentlyContinue
 
