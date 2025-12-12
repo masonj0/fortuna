@@ -236,6 +236,7 @@ jobs:
           path: build_wix/bin/x64/Release/
 
   smoke-test:
+    name: '🔬 Smoke Test'
     needs: package-msi
     runs-on: windows-latest
     steps:
@@ -281,11 +282,13 @@ jobs:
       - name: '📸 The Paparazzi (Visual Proof)'
         shell: pwsh
         run: |
-          Write-Host "Installing Playwright (Node.js)..."
+          Write-Host "Installing Playwright..."
           npm install playwright
           npx playwright install chromium --with-deps
 
-          $url = "http://127.0.0.1:8102/health"
+          $port = "${{ env.FORTUNA_PORT }}"
+          $url = "http://127.0.0.1:$port/docs"
+
           node -e "
             const { chromium } = require('playwright');
             (async () => {
@@ -293,9 +296,12 @@ jobs:
                 const browser = await chromium.launch();
                 const page = await browser.newPage();
                 await page.goto('$url', { timeout: 15000 });
+                await page.waitForSelector('.swagger-ui', { timeout: 5000 }).catch(() => console.log('UI not fully loaded, snapping anyway...'));
                 await page.screenshot({ path: 'proof-of-life.png', fullPage: true });
                 await browser.close();
-              } catch (e) { process.exit(1); }
+              } catch (e) {
+                console.error(e); process.exit(1);
+              }
             })();
           "
 
@@ -310,9 +316,14 @@ jobs:
         if: failure()
         shell: pwsh
         run: |
-          Write-Host "=== SERVICE STATUS ==="
-          Get-Service "FortunaService" | Select-Object Status, StartType, DisplayName
-          Write-Host "=== EVENT LOGS (Last 20 Errors) ==="
-          Get-EventLog -LogName System -EntryType Error -Newest 20 | Where-Object { $_.Message -like "*Fortuna*" }
-          Write-Host "=== PORT 8102 CHECK ==="
-          netstat -an | findstr "8102"
+          Write-Host "=== 1. PROCESS STATE ==="
+          Get-Process | Where-Object { $_.ProcessName -match "fortuna|python|electron" } | Format-Table -AutoSize
+
+          Write-Host "=== 2. NETWORK PORTS (8102) ==="
+          netstat -anb | Select-String "8102" -Context 2,2
+
+          Write-Host "=== 3. WINDOWS EVENT LOGS (Last 50 Errors) ==="
+          Get-EventLog -LogName Application -EntryType Error,Warning -Newest 50 | Format-Table TimeGenerated, Source, Message -AutoSize
+
+          Write-Host "=== 4. MSI INSTALL LOG ==="
+          if (Test-Path "installation.log") { Get-Content "installation.log" -Tail 200 }
