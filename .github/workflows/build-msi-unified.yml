@@ -89,7 +89,17 @@ jobs:
           cache: 'npm'
           cache-dependency-path: '${{ env.FRONTEND_DIR }}/package-lock.json'
 
+      - name: Cache Frontend Build
+        id: cache-frontend
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.FRONTEND_DIR }}/out
+          key: ${{ runner.os }}-frontend-${{ hashFiles('**/package-lock.json', '${{ env.FRONTEND_DIR }}/**/*.js', '${{ env.FRONTEND_DIR }}/**/*.ts', '${{ env.FRONTEND_DIR }}/**/*.tsx', '${{ env.FRONTEND_DIR }}/**/*.css') }}
+          restore-keys: |
+            ${{ runner.os }}-frontend-
+
       - name: Build Frontend
+        if: steps.cache-frontend.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
           cd "${{ env.FRONTEND_DIR }}"
@@ -121,7 +131,7 @@ jobs:
           bk_dir = os.environ['BACKEND_DIR'].replace('\\', '/')
           mod_path = os.environ['MODULE_PATH']
           frontend_out = os.environ['FRONTEND_OUT'].replace('\\', '/')
-          entry = f"{bk_dir}/main.py"
+          entry = f"{bk_dir}/service_entry.py"
 
           spec = f"""
           # -- mode: python ; coding: utf-8 --
@@ -151,11 +161,28 @@ jobs:
           with open("unified.spec", "w") as f: f.write(spec)
           os.system("pyinstaller unified.spec --clean --noconfirm")
 
-      - name: Upload Backend Artifact
+      - name: Generate Artifact Manifest
+        shell: pwsh
+        working-directory: ${{ env.FRONTEND_DIR }}
+        run: |
+          Set-StrictMode -Version Latest
+          $outDir = Resolve-Path "out"
+          $manifestPath = "frontend-manifest.tsv"
+          "RelativePath`tSizeBytes`tSHA256" | Out-File $manifestPath -Encoding utf8
+          $files = Get-ChildItem -Path $outDir -Recurse -File
+          foreach ($f in $files) {
+            $rel = $f.FullName.Substring($outDir.Path.Length).TrimStart('\','/')
+            $hash = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.Substring(0,16)
+            "$rel`t$($f.Length)`t$hash" | Out-File $manifestPath -Encoding utf8 -Append
+          }
+
+      - name: Upload Backend and Frontend Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: backend-dist-${{ steps.vars.outputs.build_id }}
-          path: dist/fortuna-backend.exe
+          name: build-artifacts-${{ steps.vars.outputs.build_id }}
+          path: |
+            dist/fortuna-backend.exe
+            ${{ env.FRONTEND_DIR }}/frontend-manifest.tsv
           retention-days: 1
 
   package-msi:
@@ -169,21 +196,40 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Download Backend Artifact
+      - name: Download Build Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: backend-dist-${{ needs.build-executable.outputs.build_id }}
-          path: staging/backend
+          name: build-artifacts-${{ needs.build-executable.outputs.build_id }}
+          path: staging
+
+      - name: '⚖️ The Dietician (Size Analysis)'
+        shell: pwsh
+        run: |
+          $target = "staging"
+          $limitMB = 300
+          Write-Host "--- 📊 Size Breakdown ---"
+          $files = Get-ChildItem -Path $target -Recurse -File -ErrorAction SilentlyContinue
+          if (!$files) { Write-Warning "No files found to weigh."; exit 0 }
+          $totalBytes = ($files | Measure-Object -Property Length -Sum).Sum
+          $totalMB = [math]::Round($totalBytes / 1MB, 2)
+          Write-Host "Total Payload Size: $totalMB MB"
+          if ($totalMB -gt $limitMB) {
+              Write-Warning "⚠️ BLOAT ALERT: Build exceeds $limitMB MB limit! Check the heaviest files below."
+          } else {
+              Write-Host "✅ Size within limits (< $limitMB MB)." -ForegroundColor Green
+          }
+          Write-Host "`n--- 🐘 Top 10 Heaviest Files ---"
+          $files | Sort-Object Length -Descending | Select-Object -First 10 @{N='File';E={$_.FullName.Replace($pwd,'')}}, @{N='Size(MB)';E={"{0:N2}" -f ($_.Length/1MB)}} | Format-Table -AutoSize
 
       - name: Prepare Staging
         shell: pwsh
         run: |
           # Rename EXE for WiX
-          Rename-Item -Path staging/backend/fortuna-backend.exe -NewName fortuna-webservice.exe -Force
+          Rename-Item -Path staging/fortuna-backend.exe -NewName fortuna-webservice.exe -Force
 
           # Create Restart Script (Required by WiX)
           $scriptContent = "@echo off`r`necho Requesting Admin privileges...`r`nnet stop FortunaWebService`r`nnet start FortunaWebService`r`necho Service Restarted.`r`npause"
-          Set-Content -Path "staging/backend/restart_service.bat" -Value $scriptContent -Encoding Ascii
+          Set-Content -Path "staging/restart_service.bat" -Value $scriptContent -Encoding Ascii
           Write-Host "✅ Created restart_service.bat"
 
       - name: Setup .NET SDK
@@ -227,7 +273,26 @@ jobs:
 
       - name: Build MSI
         working-directory: ${{ env.WIX_DIR }}
-        run: dotnet build Fortuna.wixproj -c Release -p:Platform=x64 -p:Version="0.0.${{ github.run_number }}" -p:SourceDir="../staging/backend" -p:ServicePort="${{ env.SERVICE_PORT }}"
+        run: dotnet build Fortuna.wixproj -c Release -p:Platform=x64 -p:Version="0.0.${{ github.run_number }}" -p:SourceDir="../staging" -p:ServicePort="${{ env.SERVICE_PORT }}"
+
+      - name: Rename & Hash MSI
+        id: name_msi
+        shell: pwsh
+        run: |
+          $ver = "0.0.${{ github.run_number }}"
+          $sha = "${{ github.sha }}".Substring(0,7)
+          $releaseDir = "${{ env.WIX_DIR }}/bin/x64/Release"
+          $msiFound = Get-ChildItem -Path $releaseDir -Filter "*.msi" | Select-Object -First 1
+          if (-not $msiFound) {
+            Write-Error "❌ FATAL: No MSI file found in $releaseDir."
+            exit 1
+          }
+          $targetName = "Fortuna-Unified-${ver}-${sha}.msi"
+          $newPath = Join-Path $releaseDir $targetName
+          Move-Item -Path $msiFound.FullName -Destination $newPath -Force
+          $hash = (Get-FileHash $newPath -Algorithm SHA256).Hash
+          $hash | Out-File "$newPath.sha256" -Encoding utf8
+          "msi_name=$targetName" | Out-File $env:GITHUB_OUTPUT -Append
 
       - name: Upload MSI Artifact
         uses: actions/upload-artifact@v4
@@ -253,52 +318,53 @@ jobs:
         run: |
           $msi = Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse | Select-Object -First 1
           if (-not $msi) { throw "No MSI found" }
-          Write-Host "Installing $($msi.Name)..."
           $proc = Start-Process msiexec.exe -ArgumentList "/i `"$($msi.FullName)`" /qn /L*v msi-install.log" -Wait -PassThru
           if ($proc.ExitCode -ne 0) { throw "Install failed: $($proc.ExitCode)" }
 
-      - name: Wait for Service & Port
-        shell: python
-        env:
-          PORT: ${{ env.SERVICE_PORT }}
+      - name: '🔬 Complete Smoke Test (3-Layer Defense)'
+        shell: pwsh
         run: |
-          import socket, time, subprocess, sys, os
-          port = int(os.environ["PORT"])
-          print(f"Waiting for port {port}...")
-
-          # Force start if needed
-          subprocess.run(["sc.exe", "start", "FortunaWebService"], check=False)
-
-          for i in range(60):
-            try:
-              with socket.create_connection(("127.0.0.1", port), timeout=1):
-                print("✅ Socket bound!")
-                sys.exit(0)
-            except:
-              time.sleep(1)
-
-          print("❌ Timeout waiting for port.")
-          subprocess.run(["sc.exe", "query", "FortunaWebService"])
-          sys.exit(1)
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "Stop"
+          $installRoot = "C:\Program Files\Fortuna Faucet Service"
+          # --- LAYER 1: FILE VERIFICATION ---
+          if (-not (Test-Path $installRoot)) { Write-Error "❌ LAYER 1 FAILED: Install directory not found."; exit 1 }
+          New-Item -Path "$installRoot\data", "$installRoot\json", "$installRoot\logs" -ItemType Directory -Force | Out-Null
+          # --- LAYER 2: PROCESS VERIFICATION ---
+          Start-Service "FortunaWebService"
+          Start-Sleep -Seconds 10
+          $svc = Get-Service "FortunaWebService"
+          if ($svc.Status -ne 'Running') {
+            Write-Error "❌ LAYER 2 FAILED: Service failed to start. Status: $($svc.Status)"
+            exit 1
+          }
+          # --- LAYER 3: NETWORK VERIFICATION ---
+          $maxAttempts = 10
+          for ($i = 1; $i -le $maxAttempts; $i++) {
+            try {
+              $response = Invoke-WebRequest -Uri "http://localhost:${{ env.SERVICE_PORT }}/health" -Method Get -UseBasicParsing -ErrorAction Stop
+              if ($response.StatusCode -eq 200) { Write-Host "✅✅✅ SMOKE TEST PASSED ✅✅✅"; exit 0 }
+            } catch { Start-Sleep -Seconds 5 }
+          }
+          Write-Error "❌ LAYER 3 FAILED: Service Failed Health Check"
+          exit 1
 
       - name: '📸 The Paparazzi (Visual Proof)'
         shell: pwsh
         run: |
-          Write-Host "Installing Playwright (Node.js)..."
           npm install playwright
           npx playwright install chromium --with-deps
-
-          $url = "http://127.0.0.1:${{ env.SERVICE_PORT }}/health"
           node -e "
             const { chromium } = require('playwright');
             (async () => {
               try {
                 const browser = await chromium.launch();
                 const page = await browser.newPage();
-                await page.goto('$url', { timeout: 15000 });
+                await page.goto('http://127.0.0.1:${{ env.SERVICE_PORT }}/docs', { timeout: 15000 });
+                await page.waitForSelector('.swagger-ui', { timeout: 5000 });
                 await page.screenshot({ path: 'proof.png', fullPage: true });
                 await browser.close();
-              } catch (e) { process.exit(1); }
+              } catch (e) { console.error(e); process.exit(1); }
             })();
           "
       - name: Upload Proof
