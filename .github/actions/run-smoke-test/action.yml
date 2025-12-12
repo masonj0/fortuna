@@ -111,7 +111,7 @@ runs:
         $healthUrl = "http://localhost:${{ inputs.port }}/health"
         for ($i = 1; $i -le $maxAttempts; $i++) {
           try {
-            Write-Host "Attempt $i/$maxAttempts: Pinging $healthUrl..."
+            Write-Host "Attempt $i/${maxAttempts}: Pinging $healthUrl..."
             $response = Invoke-WebRequest -Uri $healthUrl -Method Get -UseBasicParsing -ErrorAction Stop
             if ($response.StatusCode -eq 200) {
               Write-Host "✅✅✅ SMOKE TEST PASSED ALL 3 DEFENSE LAYERS ✅✅✅"

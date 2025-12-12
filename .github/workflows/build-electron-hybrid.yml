@@ -374,6 +374,35 @@ jobs:
           Write-Error "❌ LAYER 3 FAILED: Service Failed Health Check"
           exit 1
 
+      - name: '📸 The Paparazzi (Visual Proof)'
+        shell: pwsh
+        run: |
+          npm install playwright
+          npx playwright install chromium --with-deps
+          node -e "
+            const { chromium } = require('playwright');
+            (async () => {
+              try {
+                const browser = await chromium.launch();
+                const page = await browser.newPage();
+                await page.goto('http://127.0.0.1:${{ env.FORTUNA_PORT }}/docs', { timeout: 15000 });
+                await page.waitForSelector('.swagger-ui', { timeout: 5000 });
+                await page.screenshot({ path: 'proof.png', fullPage: true });
+                await browser.close();
+              } catch (e) { console.error(e); process.exit(1); }
+            })();
+          "
+      - name: Upload Proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-proof-${{ github.run_id }}
+          path: proof.png
+
+      - name: Cleanup
+        if: always()
+        run: Stop-Process -Name "Fortuna Faucet", "fortuna-backend" -Force -ErrorAction SilentlyContinue
+
   # ==================================================================================
   # JOB 4: RELEASE (The "Triple-Tap" Staging)
   # ==================================================================================
