@@ -194,8 +194,8 @@ jobs:
 
           bk_dir = os.environ['BACKEND_DIR']
           mod_path = os.environ['MODULE_PATH']
-          # CHANGE: Point to the new service wrapper
-          entry = f"{bk_dir}/main.py"
+          # FIX: Point to service_entry.py (Required for Windows Service SCM handling)
+          entry = f"{bk_dir}/service_entry.py"
           frontend_out = os.environ['FRONTEND_OUT']
 
           # FIX: Fixed quoting in datas list to avoid syntax error
