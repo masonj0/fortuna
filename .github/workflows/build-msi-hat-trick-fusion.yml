@@ -315,8 +315,8 @@ jobs:
           name: visual-proof-${{ github.run_id }}
           path: proof-of-life.png
 
-      - name: "💀 CSI: Windows (Post-Mortem Diagnostics)"
-        if: failure()
+      - name: Collect Diagnostics
+        if: always()
         shell: pwsh
         run: |
           Write-Host "=== 1. PROCESS STATE ==="
