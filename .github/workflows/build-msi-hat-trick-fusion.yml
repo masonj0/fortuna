@@ -236,6 +236,7 @@ jobs:
           path: build_wix/bin/x64/Release/
 
   smoke-test:
+    name: '🔬 Smoke Test'
     needs: package-msi
     runs-on: windows-latest
     steps:
@@ -285,17 +286,25 @@ jobs:
           npm install playwright
           npx playwright install chromium --with-deps
 
-          $url = "http://127.0.0.1:8102/health"
+          $port = "${{ env.FORTuna_PORT }}"
+          $url = "http://127.0.0.1:$port/health"
+
+          Write-Host "Capturing screenshot of $url..."
           node -e "
             const { chromium } = require('playwright');
             (async () => {
               try {
                 const browser = await chromium.launch();
                 const page = await browser.newPage();
+                console.log('Navigating to $url...');
                 await page.goto('$url', { timeout: 15000 });
                 await page.screenshot({ path: 'proof-of-life.png', fullPage: true });
+                console.log('✅ Screenshot captured: proof-of-life.png');
                 await browser.close();
-              } catch (e) { process.exit(1); }
+              } catch (e) {
+                console.error('❌ Paparazzi Failed:', e);
+                process.exit(1); // Force Red X on failure
+              }
             })();
           "
 
