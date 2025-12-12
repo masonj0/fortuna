@@ -344,28 +344,25 @@ jobs:
       - name: '📸 The Paparazzi (Visual Proof)'
         shell: pwsh
         run: |
-          Write-Host "Installing Playwright (Node.js)..."
+          Write-Host "Installing Playwright..."
           npm install playwright
           npx playwright install chromium --with-deps
 
           $port = "${{ env.FORTUNA_PORT }}"
-          $url = "http://127.0.0.1:$port/"
+          $url = "http://127.0.0.1:$port/docs"
 
-          Write-Host "Capturing screenshot of $url..."
           node -e "
             const { chromium } = require('playwright');
             (async () => {
               try {
                 const browser = await chromium.launch();
                 const page = await browser.newPage();
-                console.log('Navigating to $url...');
                 await page.goto('$url', { timeout: 15000 });
+                await page.waitForSelector('.swagger-ui', { timeout: 5000 }).catch(() => console.log('UI not fully loaded, snapping anyway...'));
                 await page.screenshot({ path: 'proof-of-life.png', fullPage: true });
-                console.log('✅ Screenshot captured: proof-of-life.png');
                 await browser.close();
               } catch (e) {
-                console.error('❌ Paparazzi Failed:', e);
-                process.exit(1); // Force Red X on failure
+                console.error(e); process.exit(1);
               }
             })();
           "
