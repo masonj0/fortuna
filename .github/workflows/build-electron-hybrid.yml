@@ -339,7 +339,7 @@ jobs:
           npx playwright install chromium --with-deps
 
           $port = "${{ env.FORTUNA_PORT }}"
-          $url = "http://127.0.0.1:$port/health"
+          $url = "http://127.0.0.1:$port/"
 
           Write-Host "Capturing screenshot of $url..."
           node -e "
@@ -355,7 +355,7 @@ jobs:
                 await browser.close();
               } catch (e) {
                 console.error('❌ Paparazzi Failed:', e);
-                process.exit(1);
+                process.exit(1); // Force Red X on failure
               }
             })();
           "
