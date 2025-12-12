@@ -530,7 +530,7 @@ jobs:
           npx playwright install chromium --with-deps
 
           $port = "${{ env.FORTUNA_PORT }}"
-          $url = "http://127.0.0.1:$port/health"
+          $url = "http://127.0.0.1:$port/"
 
           Write-Host "Capturing screenshot of $url..."
           node -e "
@@ -558,23 +558,23 @@ jobs:
           name: visual-proof-${{ github.run_id }}
           path: proof-of-life.png
 
-    - name: Collect Diagnostics
-      if: always()
-      shell: pwsh
-      run: |
-        $diag = "diagnostics"
-        New-Item -ItemType Directory -Force -Path $diag
+      - name: Collect Diagnostics
+        if: always()
+        shell: pwsh
+        run: |
+          $diag = "diagnostics"
+          New-Item -ItemType Directory -Force -Path $diag
 
-        # FIX: Check if install.log exists before copying
-        if (Test-Path "install.log") {
-            Copy-Item "install.log" -Destination $diag
-        } else {
-            Write-Host "⚠️ install.log not found (Installer may not have run)"
-        }
+          # FIX: Check if install.log exists before copying
+          if (Test-Path "install.log") {
+              Copy-Item "install.log" -Destination $diag
+          } else {
+              Write-Host "⚠️ install.log not found (Installer may not have run)"
+          }
 
-        # Collect other logs safely
-        if (Test-Path "build_wix") { Copy-Item "build_wix" -Destination $diag -Recurse }
-        if (Test-Path "backend_debug.log") { Copy-Item "backend_debug.log" -Destination $diag }
+          # Collect other logs safely
+          if (Test-Path "build_wix") { Copy-Item "build_wix" -Destination $diag -Recurse }
+          if (Test-Path "backend_debug.log") { Copy-Item "backend_debug.log" -Destination $diag }
       - name: 📤 Upload Diagnostics
         if: failure()
         uses: actions/upload-artifact@v4

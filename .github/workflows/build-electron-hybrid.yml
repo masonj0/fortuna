@@ -339,7 +339,7 @@ jobs:
           npx playwright install chromium --with-deps
 
           $port = "${{ env.FORTUNA_PORT }}"
-          $url = "http://127.0.0.1:$port/health"
+          $url = "http://127.0.0.1:$port/"
 
           Write-Host "Capturing screenshot of $url..."
           node -e "

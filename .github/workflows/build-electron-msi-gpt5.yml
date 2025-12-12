@@ -4,10 +4,6 @@ name: 🔨 Build Electron MSI Installer (Production)
 on:
   push:
     branches: ["main"]
-  pull_request:
-    branches: [ "main" ]
-  schedule:
-    - cron: '0 2 * * *'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -930,7 +926,7 @@ jobs:
           npx playwright install chromium --with-deps
 
           $port = "${{ env.FORTUNA_PORT }}"
-          $url = "http://127.0.0.1:$port/health"
+          $url = "http://127.0.0.1:$port/"
 
           Write-Host "Capturing screenshot of $url..."
           node -e "
