@@ -5,8 +5,7 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[('web_service/backend', 'backend')],
-    # CRITICAL FIX: Added win32timezone to prevent Error 1053
-    hiddenimports=['win32timezone', 'win32serviceutil', 'win32service', 'win32event', 'win32process', 'win32file', 'win32pipe'],
+    hiddenimports=['win32timezone', 'win32serviceutil', 'win32service', 'win32event'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

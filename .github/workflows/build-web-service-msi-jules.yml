@@ -1034,8 +1034,12 @@ jobs:
             -p:SourceDir="../${{ env.MSI_STAGING_DIR }}" `
             -p:Version="${{ env.BUILD_VERSION }}" `
             -p:ServicePort="${{ env.SERVICE_PORT }}"
-          $msiFile = "bin/x64/Release/${{ steps.stage.outputs.msi_name }}"
-          if (-not (Test-Path $msiFile)) { throw "MSI not created" }
+          $msiFile = Resolve-Path "bin/x64/Release/${{ steps.stage.outputs.msi_name }}"
+          if (-not (Test-Path $msiFile)) {
+            Write-Host "Listing bin/x64/Release/ to debug:"
+            Get-ChildItem "bin/x64/Release/" | Select-Object FullName
+            throw "MSI not found at expected path: $msiFile"
+          }
           $hash = (Get-FileHash $msiFile -Algorithm SHA256).Hash
           $hash | Out-File "$msiFile.sha256" -Encoding utf8
           Write-Host "✅ MSI Built: $hash"
