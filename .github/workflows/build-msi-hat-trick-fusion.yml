@@ -278,6 +278,34 @@ jobs:
           Write-Error "❌ Service Failed Health Check after ${maxAttempts} attempts"
           exit 1
 
+      - name: '📸 The Paparazzi (Visual Proof)'
+        shell: pwsh
+        run: |
+          Write-Host "Installing Playwright (Node.js)..."
+          npm install playwright
+          npx playwright install chromium --with-deps
+
+          $url = "http://127.0.0.1:8102/health"
+          node -e "
+            const { chromium } = require('playwright');
+            (async () => {
+              try {
+                const browser = await chromium.launch();
+                const page = await browser.newPage();
+                await page.goto('$url', { timeout: 15000 });
+                await page.screenshot({ path: 'proof-of-life.png', fullPage: true });
+                await browser.close();
+              } catch (e) { process.exit(1); }
+            })();
+          "
+
+      - name: Upload Visual Proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-proof-${{ github.run_id }}
+          path: proof-of-life.png
+
       - name: "💀 CSI: Windows (Post-Mortem Diagnostics)"
         if: failure()
         shell: pwsh
