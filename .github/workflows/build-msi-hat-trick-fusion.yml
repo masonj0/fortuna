@@ -89,7 +89,7 @@ jobs:
       - name: Build Backend (PyInstaller)
         run: |
           # FIX: Target service_entry.py and include win32timezone
-          pyinstaller --noconfirm --onedir --clean --name fortuna-webservice --hidden-import=win32timezone --hidden-import=win32serviceutil --add-data "web_service/backend;backend" web_service/backend/service_entry.py
+          pyinstaller --noconfirm --onedir --clean --name fortuna-backend --hidden-import=win32timezone --hidden-import=win32serviceutil --add-data "web_service/backend;backend" web_service/backend/service_entry.py
 
       - name: Upload Backend
         uses: actions/upload-artifact@v4
