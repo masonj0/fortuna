@@ -281,13 +281,26 @@ jobs:
           subprocess.run(["sc.exe", "query", "FortunaWebService"])
           sys.exit(1)
 
-      - name: Visual Proof
+      - name: '📸 The Paparazzi (Visual Proof)'
         shell: pwsh
         run: |
-          python -m pip install playwright
-          python -m playwright install chromium
-          python -c "from playwright.sync_api import sync_playwright; p=sync_playwright().start(); b=p.chromium.launch(); page=b.new_page(); page.goto('http://localhost:${{ env.SERVICE_PORT }}/index.html'); page.screenshot(path='proof.png'); b.close()"
+          Write-Host "Installing Playwright (Node.js)..."
+          npm install playwright
+          npx playwright install chromium --with-deps
 
+          $url = "http://127.0.0.1:${{ env.SERVICE_PORT }}/health"
+          node -e "
+            const { chromium } = require('playwright');
+            (async () => {
+              try {
+                const browser = await chromium.launch();
+                const page = await browser.newPage();
+                await page.goto('$url', { timeout: 15000 });
+                await page.screenshot({ path: 'proof.png', fullPage: true });
+                await browser.close();
+              } catch (e) { process.exit(1); }
+            })();
+          "
       - name: Upload Proof
         if: always()
         uses: actions/upload-artifact@v4
