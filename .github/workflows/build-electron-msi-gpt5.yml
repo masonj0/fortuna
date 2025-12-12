@@ -37,6 +37,13 @@ jobs:
       semver: ${{ steps.meta.outputs.semver }}
       short_sha: ${{ steps.meta.outputs.short_sha }}
     steps:
+      - name: 🧹 Clean Previous Build Artifacts
+        shell: pwsh
+        run: |
+          Remove-Item -Path "electron/dist" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "build_wix" -Recurse -Force -ErrorAction SilentlyContinue
+          Write-Host "✅ Cleaned up previous build directories."
+
       - name: 📥 Checkout Repository
         uses: actions/checkout@v4
         with:
@@ -655,7 +662,7 @@ jobs:
 
           Write-Host "✓ MSI build completed"
 
-      - name: Verify MSI Creation
+      - name: Verify MSI Creation and Stage Artifact
         shell: pwsh
         run: |
           # Electron Builder outputs to electron/dist with a dynamic name
@@ -665,13 +672,13 @@ jobs:
           if ($foundMsi) {
               Write-Host "✅ MSI Build Successful: $($foundMsi.Name)"
 
-              # Standardize path for artifacts/release steps
-              $targetDir = "build_wix"
-              if (-not (Test-Path $targetDir)) { New-Item -ItemType Directory -Path $targetDir -Force }
+              # Create the final artifact directory and move the MSI there directly
+              $targetDir = "release-artifacts"
+              New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
 
-              $targetFile = "$targetDir/Fortuna.msi"
-              Copy-Item -Path $foundMsi.FullName -Destination $targetFile -Force
-              Write-Host "✅ Copied to staging: $targetFile"
+              $targetFile = Join-Path $targetDir $foundMsi.Name
+              Move-Item -Path $foundMsi.FullName -Destination $targetFile -Force
+              Write-Host "✅ Moved to final staging directory: $targetFile"
           } else {
               Write-Error "❌ MSI not found in $distDir"
               Write-Host "Listing directory contents for debugging:"
@@ -755,38 +762,6 @@ jobs:
           $report | ConvertTo-Json | Out-File -FilePath "build-report.json"
           Get-Content "build-report.json" | Out-Host
 
-      - name: 📦 Stage Artifacts (Self-Discovery)
-        shell: pwsh
-        run: |
-          Set-StrictMode -Version Latest
-          $destDir = "release-artifacts"
-          New-Item -ItemType Directory -Path $destDir -Force | Out-Null
-          $destAbsolutePath = (Resolve-Path $destDir).Path
-
-          Write-Host "Staging Destination: $destAbsolutePath"
-
-          # Find all MSIs, excluding any inside the destination folder.
-          $msiFiles = Get-ChildItem -Path "." -Recurse -Filter "*.msi" |
-            Where-Object { $_.FullName -notlike "$destAbsolutePath" }
-
-          if ($msiFiles.Count -eq 0) {
-            Write-Error "No MSI files found to stage!"
-            exit 1
-          }
-
-          foreach ($msi in $msiFiles) {
-            Write-Host "Moving: $($msi.FullName)"
-            Move-Item $msi.FullName $destAbsolutePath -Force
-
-            # Handle the checksum file if it exists
-            $shaPath = "$($msi.FullName).sha256"
-            if (Test-Path $shaPath) {
-              Move-Item -LiteralPath $shaPath -Destination $destAbsolutePath -Force
-            }
-          }
-
-          Write-Host "✅ Staging complete. Contents of $($destDir):"
-          Get-ChildItem $destAbsolutePath | Select-Object Name, Length
 
       - name: 📤 Upload Release Artifacts
         if: success()
