@@ -4,10 +4,6 @@ name: 🔨 Build Electron MSI Installer (Production)
 on:
   push:
     branches: ["main"]
-  pull_request:
-    branches: [ "main" ]
-  schedule:
-    - cron: '0 2 * * *'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -494,6 +490,16 @@ jobs:
           cache: 'npm'
           cache-dependency-path: 'electron/package.json'
 
+      - name: CACHE - Cache Electron and electron-builder
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+          key: ${{ runner.os }}-electron-${{ hashFiles('**/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-
+
       - name: 📥 Download Python Service
         uses: actions/download-artifact@v4
         with:
@@ -930,7 +936,7 @@ jobs:
           npx playwright install chromium --with-deps
 
           $port = "${{ env.FORTUNA_PORT }}"
-          $url = "http://127.0.0.1:$port/health"
+          $url = "http://127.0.0.1:$port/"
 
           Write-Host "Capturing screenshot of $url..."
           node -e "
