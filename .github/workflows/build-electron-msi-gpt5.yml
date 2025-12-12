@@ -144,10 +144,13 @@ jobs:
           retention-days: 14
 
   build-python-service:
-    name: 🐍 Build Python Service Bundle
+    name: '🐍 Build Python Service (${{ matrix.arch }})'
     runs-on: windows-latest
     timeout-minutes: 20
     needs: validate-environment
+    strategy:
+      matrix:
+        arch: [x64, x86]
     steps:
       - name: 📥 Checkout Repository
         uses: actions/checkout@v4
@@ -158,16 +161,21 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+          architecture: ${{ matrix.arch }} # 🚀 Installs 32-bit Python if needed
           cache: 'pip'
 
       - name: 📦 Install Python Dependencies
         shell: pwsh
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          pip install -r ${{ env.BACKEND_DIR }}/requirements-dev.txt
+          pip install -r ${{ env.BACKEND_DIR }}/requirements.txt
+          if ('${{ matrix.arch }}' -eq 'x64') {
+            pip install -r ${{ env.BACKEND_DIR }}/requirements-dev.txt
+          }
           Write-Host "✓ Python dependencies installed"
 
       - name: 🧪 Run Unit Tests (Quality Gate)
+        if: matrix.arch == 'x64'
         shell: pwsh
         run: |
           Write-Host "Installing Test Dependencies..."
@@ -348,7 +356,8 @@ jobs:
       - name: 📤 Upload Service Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: python-service-${{ needs.validate-environment.outputs.build_id }}
+          # 🚀 Unique name per architecture
+          name: python-service-${{ matrix.arch }}-${{ needs.validate-environment.outputs.build_id }}
           path: dist/service/
           retention-days: 1
 
@@ -380,6 +389,15 @@ jobs:
           cache: 'npm'
           cache-dependency-path: 'web_platform/frontend/package.json'
 
+      - name: Cache Build Output
+        id: cache-frontend
+        uses: actions/cache@v4
+        with:
+          path: web_platform/frontend/out
+          key: ${{ runner.os }}-frontend-${{ hashFiles('**/package-lock.json', 'web_platform/frontend/**/*.js', 'web_platform/frontend/**/*.ts', 'web_platform/frontend/**/*.tsx', 'web_platform/frontend/**/*.css') }}
+          restore-keys: |
+            ${{ runner.os }}-frontend-
+
       - name: 📥 Install Frontend Dependencies
         shell: pwsh
         working-directory: web_platform/frontend
@@ -392,6 +410,7 @@ jobs:
           npm list --depth=0
 
       - name: 🔨 Build Frontend
+        if: steps.cache-frontend.outputs.cache-hit != 'true'
         shell: pwsh
         working-directory: web_platform/frontend
         run: |
@@ -411,11 +430,29 @@ jobs:
           $fileCount = (Get-ChildItem -Recurse -Path "out" | Measure-Object).Count
           Write-Host "✓ Frontend built: $fileCount files"
 
+      - name: 📋 Generate Artifact Manifest
+        shell: pwsh
+        working-directory: web_platform/frontend
+        run: |
+          Set-StrictMode -Version Latest
+          $outDir = Resolve-Path "out"
+          $manifestPath = "frontend-manifest.tsv"
+          "RelativePath`tSizeBytes`tSHA256" | Out-File $manifestPath -Encoding utf8
+          $files = Get-ChildItem -Path $outDir -Recurse -File
+          foreach ($f in $files) {
+            $rel = $f.FullName.Substring($outDir.Path.Length).TrimStart('\','/')
+            $hash = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.Substring(0,16)
+            "$rel`t$($f.Length)`t$hash" | Out-File $manifestPath -Encoding utf8 -Append
+          }
+          Write-Host "✅ Generated frontend artifact manifest."
+
       - name: 📤 Upload Frontend Artifact
         uses: actions/upload-artifact@v4
         with:
           name: frontend-dist-${{ needs.validate-environment.outputs.build_id }}
-          path: web_platform/frontend/out/
+          path: |
+            web_platform/frontend/out/
+            web_platform/frontend/frontend-manifest.tsv
           retention-days: 1
 
       - name: 🚨 Upload Failure Diagnostics
@@ -473,10 +510,13 @@ jobs:
 
           Write-Host "\\n✅ All critical assets verified." -ForegroundColor Green
   build-electron-msi:
-    name: 🚀 Build Electron MSI Package
+    name: '🚀 Build Electron MSI (${{ matrix.arch }})'
     runs-on: windows-latest
     timeout-minutes: 30
     needs: [validate-environment, build-python-service, build-frontend, verify-assets]
+    strategy:
+      matrix:
+        arch: [x64, x86]
     steps:
       - name: 📥 Checkout Repository
         uses: actions/checkout@v4
@@ -503,7 +543,8 @@ jobs:
       - name: 📥 Download Python Service
         uses: actions/download-artifact@v4
         with:
-          name: python-service-${{ needs.validate-environment.outputs.build_id }}
+          # 🚀 Download the MATCHING architecture
+          name: python-service-${{ matrix.arch }}-${{ needs.validate-environment.outputs.build_id }}
           path: python-service-bin
 
       - name: 📥 Download Frontend Dist
@@ -523,6 +564,25 @@ jobs:
           Write-Host "✅ Backend staged to root '$dest' directory."
           Write-Host "Contents:"
           Get-ChildItem -Path $dest -Recurse | ForEach-Object { Write-Host " - $($_.Name)" }
+
+      - name: '⚖️ The Dietician (Size Analysis)'
+        shell: pwsh
+        run: |
+          $target = "." # Analyze entire workspace staged for build
+          $limitMB = 300
+          Write-Host "--- 📊 Size Breakdown ---"
+          $files = Get-ChildItem -Path $target -Recurse -File -ErrorAction SilentlyContinue
+          if (!$files) { Write-Warning "No files found to weigh."; exit 0 }
+          $totalBytes = ($files | Measure-Object -Property Length -Sum).Sum
+          $totalMB = [math]::Round($totalBytes / 1MB, 2)
+          Write-Host "Total Payload Size: $totalMB MB"
+          if ($totalMB -gt $limitMB) {
+              Write-Warning "⚠️ BLOAT ALERT: Build exceeds $limitMB MB limit! Check the heaviest files below."
+          } else {
+              Write-Host "✅ Size within limits (< $limitMB MB)." -ForegroundColor Green
+          }
+          Write-Host "`n--- 🐘 Top 10 Heaviest Files ---"
+          $files | Sort-Object Length -Descending | Select-Object -First 10 @{N='File';E={$_.FullName.Replace($pwd,'')}}, @{N='Size(MB)';E={"{0:N2}" -f ($_.Length/1MB)}} | Format-Table -AutoSize
 
       - name: 📥 Install Electron Dependencies
         shell: pwsh
@@ -655,11 +715,19 @@ jobs:
         working-directory: electron
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          ARCH: ${{ matrix.arch }}
         run: |
           $semver = "${{ needs.validate-environment.outputs.semver }}"
           $shortSha = "${{ needs.validate-environment.outputs.short_sha }}"
-          $artifactName = "Fortuna-Electron-${semver}-${shortSha}.msi"
-          npm run dist -- --win msi --config temp-builder-config.yml --publish never --config.artifactName=$artifactName 2>&1
+          # 🚀 Determine Flag: x64 -> --x64, x86 -> --ia32
+          $archFlag = if ($env:ARCH -eq 'x86') { '--ia32' } else { '--x64' }
+
+          # This artifactName is now passed to electron-builder
+          $artifactName = "Fortuna-Electron-${{ matrix.arch }}-${semver}-${shortSha}.msi"
+
+          Write-Host "Building for Architecture: $env:ARCH ($archFlag) with artifact name $artifactName"
+
+          npm run dist -- --win msi $archFlag --config temp-builder-config.yml --publish never --config.artifactName=$artifactName 2>&1
 
           if ($LASTEXITCODE -ne 0) {
             Write-Error "electron-builder MSI creation failed"
@@ -668,55 +736,27 @@ jobs:
 
           Write-Host "✓ MSI build completed"
 
-      - name: Verify MSI Creation and Stage Artifact
+      - name: Rename & Hash MSI
+        id: name_msi
         shell: pwsh
         run: |
-          # Electron Builder outputs to electron/dist with a dynamic name
-          $distDir = "electron/dist"
-          $foundMsi = Get-ChildItem -Path "$distDir/*.msi" | Select-Object -First 1
+          $ver = "${{ needs.validate-environment.outputs.semver }}"
+          $sha = "${{ needs.validate-environment.outputs.short_sha }}"
+          $releaseDir = "electron/dist"
+          $targetName = "Fortuna-Electron-${{ matrix.arch }}-${ver}-${sha}.msi"
+          $msiFound = Get-ChildItem -Path $releaseDir -Filter "*.msi" | Select-Object -First 1
 
-          if ($foundMsi) {
-              Write-Host "✅ MSI Build Successful: $($foundMsi.Name)"
-
-              # Create the final artifact directory and move the MSI there directly
-              $targetDir = "release-artifacts"
-              New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
-
-              $targetFile = Join-Path $targetDir $foundMsi.Name
-              Move-Item -Path $foundMsi.FullName -Destination $targetFile -Force
-              Write-Host "✅ Moved to final staging directory: $targetFile"
-          } else {
-              Write-Error "❌ MSI not found in $distDir"
-              Write-Host "Listing directory contents for debugging:"
-              Get-ChildItem "electron" -Recurse | Select-Object FullName
-              exit 1
-          }
-
-      - name: 🔍 Verify MSI Output
-        shell: pwsh
-        run: |
-          $msiFiles = Get-ChildItem -Recurse -Filter "*.msi" -ErrorAction SilentlyContinue
-
-          if ($msiFiles.Count -eq 0) {
-            Write-Error "No MSI files generated"
+          if (-not $msiFound) {
+            Write-Error "❌ FATAL: No MSI file found in $releaseDir."
             exit 1
           }
 
-          foreach ($msi in $msiFiles) {
-            $sizeGB = $msi.Length / 1GB
-            $sizeMB = $msi.Length / 1MB
-
-            if ($msi.Length -lt 10MB) {
-              Write-Warning "MSI suspiciously small: $($msi.Name) ($('{0:N1}' -f $sizeMB) MB)"
-            }
-
-            Write-Host "✓ MSI: $($msi.FullName) ($('{0:N1}' -f $sizeMB) MB)"
-
-            # Generate checksum
-            $hash = (Get-FileHash -LiteralPath $msi.FullName -Algorithm SHA256).Hash
-            Write-Host " SHA256: $hash"
-            $hash | Out-File -FilePath "$($msi.FullName).sha256"
-          }
+          $newPath = Join-Path $releaseDir $targetName
+          Move-Item -Path $msiFound.FullName -Destination $newPath -Force
+          $hash = (Get-FileHash $newPath -Algorithm SHA256).Hash
+          $hash | Out-File "$newPath.sha256" -Encoding utf8
+          Write-Host "✅ MSI Renamed and Hashed: $targetName"
+          "msi_name=$targetName" | Out-File $env:GITHUB_OUTPUT -Append
 
       - name: '🐤 The Canary (Malware Pre-Flight)'
         shell: pwsh
@@ -773,7 +813,8 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: fortuna-electron-msi-${{ needs.validate-environment.outputs.build_id }}
+          # 🚀 Unique name per architecture
+          name: fortuna-electron-msi-${{ matrix.arch }}-${{ needs.validate-environment.outputs.build_id }}
           path: |
             release-artifacts/
             build-report.json
@@ -792,17 +833,21 @@ jobs:
           retention-days: 30
 
   smoke-test:
-    name: '🔬 Smoke Test (Robust)'
+    name: '🔬 Smoke Test (${{ matrix.arch }})'
     runs-on: windows-latest
     timeout-minutes: 15
     needs: [validate-environment, build-electron-msi]
+    strategy:
+      matrix:
+        arch: [x64, x86]
     env:
       FORTUNA_ENV: 'smoke-test'
     steps:
       - name: 📥 Download MSI Installer
         uses: actions/download-artifact@v4
         with:
-          name: fortuna-electron-msi-${{ needs.validate-environment.outputs.build_id }}
+          # 🚀 Download the specific architecture to test
+          name: fortuna-electron-msi-${{ matrix.arch }}-${{ needs.validate-environment.outputs.build_id }}
           path: msi-installer
 
       - name: 📋 Inspect Artifact
@@ -905,13 +950,22 @@ jobs:
           if (-not $childProcess) { Write-Error "❌ LAYER 2 FAILED: Child 'fortuna-backend' process is not running."; exit 1 }
           Write-Host "✅ Layer 2 Passed: 'Fortuna Faucet' (PID: $($parentProcess.Id)) and 'fortuna-backend' (PID: $($childProcess.Id)) are running."
 
+          # Inserted Backend Alive Check
+          Write-Host "--- Verifying backend process stability (10s alive check) ---"
+          Start-Sleep -Seconds 10
+          $childProcessCheck = Get-Process -Name "fortuna-backend" -ErrorAction SilentlyContinue
+          if (-not $childProcessCheck) {
+            Write-Error "❌ Backend process crashed within 10 seconds of starting."
+            exit 1
+          }
+          Write-Host "✅ Backend process is still alive."
+
           # --- LAYER 3: NETWORK VERIFICATION ---
           Write-Host "`n--- DEFENSE LAYER 3: VERIFYING NETWORK ENDPOINT ---"
           $maxAttempts = 10
           $healthUrl = "http://localhost:8102/health"
           for ($i = 1; $i -le $maxAttempts; $i++) {
             try {
-              # FIX: Use ${maxAttempts} to prevent colon parsing error
               Write-Host "Attempt $i/${maxAttempts}: Pinging $healthUrl..."
               $response = Invoke-WebRequest -Uri $healthUrl -Method Get -UseBasicParsing -ErrorAction Stop
               if ($response.StatusCode -eq 200) {
