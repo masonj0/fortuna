@@ -319,15 +319,14 @@ jobs:
         if: always()
         shell: pwsh
         run: |
-          $diag = "diagnostics"
-          New-Item -ItemType Directory -Force -Path $diag
+          Write-Host "=== 1. PROCESS STATE ==="
+          Get-Process | Where-Object { $_.ProcessName -match "fortuna|python|electron" } | Format-Table -AutoSize
 
-          # FIX: Safe copy for install.log
-          if (Test-Path "install.log") {
-              Copy-Item "install.log" -Destination $diag
-          } else {
-              Write-Host "⚠️ install.log not found"
-          }
+          Write-Host "=== 2. NETWORK PORTS (8102) ==="
+          netstat -anb | Select-String "8102" -Context 2,2
 
-          # Safe copy for other logs
-          Get-ChildItem -Filter "*.log" | Copy-Item -Destination $diag
+          Write-Host "=== 3. WINDOWS EVENT LOGS (Last 50 Errors) ==="
+          Get-EventLog -LogName Application -EntryType Error,Warning -Newest 50 | Format-Table TimeGenerated, Source, Message -AutoSize
+
+          Write-Host "=== 4. MSI INSTALL LOG ==="
+          if (Test-Path "installation.log") { Get-Content "installation.log" -Tail 200 }

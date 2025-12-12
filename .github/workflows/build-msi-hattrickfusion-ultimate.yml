@@ -445,7 +445,7 @@ jobs:
       - name: "🔍 Diag 1: Verify Install Directory"
         shell: pwsh
         run: |
-          $expected = "C:\Program Files\FortunaWeb\backend\fortuna-backend.exe"
+          $expected = "C:\Program Files\Fortuna Faucet Service\fortuna-webservice.exe"
           if (Test-Path $expected) {
             Write-Host "✅ Binary FOUND at: $expected"
           } else {
@@ -459,18 +459,18 @@ jobs:
       - name: "🔍 Diag 2: Check Windows Service Status"
         shell: pwsh
         run: |
-          $svc = Get-Service "FortunaService" -ErrorAction SilentlyContinue
+          $svc = Get-Service "FortunaWebService" -ErrorAction SilentlyContinue
           if (!$svc) {
-            Write-Error "❌ Service 'FortunaService' is NOT registered! MSI Install failed to register service."
+            Write-Error "❌ Service 'FortunaWebService' is NOT registered! MSI Install failed to register service."
             exit 1
           }
           Write-Host "Service Status: $($svc.Status)"
 
           if ($svc.Status -ne 'Running') {
             Write-Host "⚠️ Service is not running. Attempting to start..."
-            Start-Service "FortunaService"
+            Start-Service "FortunaWebService"
             Start-Sleep -Seconds 5
-            $svc = Get-Service "FortunaService"
+            $svc = Get-Service "FortunaWebService"
           }
 
           if ($svc.Status -eq 'Running') {
