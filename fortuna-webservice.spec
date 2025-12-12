@@ -42,10 +42,12 @@ hidden_imports.update([
 ])
 
 a = Analysis(
+    # FIX: Target service_entry.py instead of main.py
     ['web_service/backend/service_entry.py'],
     pathex=[],
     binaries=[],
     datas=[('web_service/backend', 'backend')],
+    # FIX: Ensure critical service modules are hidden-imported
     hiddenimports=['win32timezone', 'win32serviceutil', 'win32service', 'win32event'],
     hookspath=[],
     hooksconfig={},

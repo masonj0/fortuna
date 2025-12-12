@@ -88,7 +88,8 @@ jobs:
 
       - name: Build Backend (PyInstaller)
         run: |
-          pyinstaller --noconfirm --onedir --clean --name fortuna-backend --hidden-import=win32timezone --hidden-import=win32serviceutil --add-data "web_service/backend;backend" web_service/backend/service_entry.py
+          # FIX: Target service_entry.py and include win32timezone
+          pyinstaller --noconfirm --onedir --clean --name fortuna-webservice --hidden-import=win32timezone --hidden-import=win32serviceutil --add-data "web_service/backend;backend" web_service/backend/service_entry.py
 
       - name: Upload Backend
         uses: actions/upload-artifact@v4
@@ -236,83 +237,15 @@ jobs:
           path: build_wix/bin/x64/Release/
 
   smoke-test:
+    name: '🔬 Smoke Test'
     needs: package-msi
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Download MSI Artifact
-        uses: actions/download-artifact@v4
+      - uses: actions/checkout@v4 # Action needs access to itself
+      - uses: ./.github/actions/run-smoke-test
         with:
-          name: msi-installer
-          path: build_wix
-
-      - name: Install MSI for Testing
-        shell: pwsh
-        run: |
-          $msiPath = "build_wix\FortunaWebSetup.msi"
-          if (-not (Test-Path $msiPath)) { throw "MSI not found at $msiPath" }
-          Write-Host "Installing $msiPath..."
-          Start-Process msiexec.exe -ArgumentList "/i $msiPath /quiet /norestart" -Wait
-          Start-Sleep -Seconds 10
-
-      - name: Test Service Health (Smoke Test)
-        shell: pwsh
-        run: |
-          $maxAttempts = 10
-          $healthUrl = "http://localhost:8102/health"
-          for ($i = 1; $i -le $maxAttempts; $i++) {
-            try {
-              # FIX: Use ${maxAttempts} to prevent parser error
-              Write-Host "Attempt $i of ${maxAttempts}: Pinging $healthUrl..."
-              $response = Invoke-WebRequest -Uri $healthUrl -Method Get -UseBasicParsing -ErrorAction Stop
-              if ($response.StatusCode -eq 200) {
-                Write-Host "✅ Service is Healthy on Port 8102"
-                exit 0
-              }
-            } catch {
-              Write-Host "⏳ Waiting for service..."
-              Start-Sleep -Seconds 5
-            }
-          }
-          Write-Error "❌ Service Failed Health Check after ${maxAttempts} attempts"
-          exit 1
-
-      - name: '📸 The Paparazzi (Visual Proof)'
-        shell: pwsh
-        run: |
-          Write-Host "Installing Playwright (Node.js)..."
-          npm install playwright
-          npx playwright install chromium --with-deps
-
-          $url = "http://127.0.0.1:8102/health"
-          node -e "
-            const { chromium } = require('playwright');
-            (async () => {
-              try {
-                const browser = await chromium.launch();
-                const page = await browser.newPage();
-                await page.goto('$url', { timeout: 15000 });
-                await page.screenshot({ path: 'proof-of-life.png', fullPage: true });
-                await browser.close();
-              } catch (e) { process.exit(1); }
-            })();
-          "
-
-      - name: Upload Visual Proof
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: visual-proof-${{ github.run_id }}
-          path: proof-of-life.png
-
-      - name: "💀 CSI: Windows (Post-Mortem Diagnostics)"
-        if: failure()
-        shell: pwsh
-        run: |
-          Write-Host "=== SERVICE STATUS ==="
-          Get-Service "FortunaService" | Select-Object Status, StartType, DisplayName
-          Write-Host "=== EVENT LOGS (Last 20 Errors) ==="
-          Get-EventLog -LogName System -EntryType Error -Newest 20 | Where-Object { $_.Message -like "*Fortuna*" }
-          Write-Host "=== PORT 8102 CHECK ==="
-          netstat -an | findstr "8102"
+          msi-artifact-name: 'hat-trick-msi'
+          service-name: 'FortunaWebService'
+          executable-path: 'C:\Program Files\Fortuna Faucet Service\fortuna-webservice.exe'
+          port: ${{ env.FORTUNA_PORT }}
+          firewall-rule-name: ${{ env.FIREWALL_RULE }}

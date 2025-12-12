@@ -194,8 +194,8 @@ jobs:
 
           bk_dir = os.environ['BACKEND_DIR']
           mod_path = os.environ['MODULE_PATH']
-          # CHANGE: Point to the new service wrapper
-          entry = f"{bk_dir}/main.py"
+          # FIX: Point to service_entry.py (Required for Windows Service SCM handling)
+          entry = f"{bk_dir}/service_entry.py"
           frontend_out = os.environ['FRONTEND_OUT']
 
           # FIX: Fixed quoting in datas list to avoid syntax error
@@ -410,7 +410,7 @@ jobs:
           retention-days: 7
 
   # ==================================================================================
-  # JOB 5: SMOKE TEST (Triple-Loop + Paparazzi)
+  # JOB 5: SMOKE TEST (Using Reusable Composite Action)
   # ==================================================================================
   smoke-test:
     name: '🔬 Smoke Test'
@@ -418,180 +418,14 @@ jobs:
     needs: [package-msi]
     timeout-minutes: 30
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v4 # Action needs access to itself
+      - uses: ./.github/actions/run-smoke-test
         with:
-          name: msi-installer-${{ github.run_id }}-${{ github.run_attempt }}
-          path: installer
-      - name: 🛡️ Firewall & Install
-        shell: pwsh
-        run: |
-          New-NetFirewallRule -DisplayName "${{ env.FIREWALL_RULE }}" -Direction Inbound -LocalPort ${{ env.FORTUNA_PORT }} -Protocol TCP -Action Allow
-          if (Get-Service -Name FortunaWebService -ErrorAction SilentlyContinue) {
-            sc.exe stop FortunaWebService 2>&1 | Out-Null
-            sc.exe delete FortunaWebService 2>&1 | Out-Null
-          }
-          $msi = Get-ChildItem installer -Filter "*.msi" -Recurse | Select -First 1
-          if (!$msi) { throw "No MSI found" }
-          Write-Host "Installing $($msi.Name)..."
-          $msiPath = $msi.FullName
-          $args = "/i `"$msiPath`" /qn /L*v installation.log"
-          $proc = Start-Process msiexec.exe -ArgumentList $args -Wait -NoNewWindow -PassThru
-          if ($proc.ExitCode -ne 0) {
-            Get-Content install.log -Tail 50
-            throw "Install failed with code $($proc.ExitCode)"
-          }
-
-      - name: Create Runtime Directories
-        shell: pwsh
-        run: |
-          $installDir = "C:\Program Files\Fortuna Faucet Service"
-          New-Item -ItemType Directory -Path "$installDir\data" -Force
-          New-Item -ItemType Directory -Path "$installDir\json" -Force
-          New-Item -ItemType Directory -Path "$installDir\logs" -Force
-          Write-Host "✅ Ensured runtime directories exist in $installDir"
-      - name: "🔍 Debug Backend Launch (With Timeout)"
-        shell: pwsh
-        run: |
-          $exe = "C:\Program Files\Fortuna Faucet Service\fortuna-webservice.exe"
-          if (Test-Path $exe) {
-            Write-Host "Starting backend for 10s health check..."
-            $proc = Start-Process -FilePath $exe -PassThru
-            Start-Sleep -Seconds 10
-
-            if (!$proc.HasExited) {
-              Write-Host "✅ Backend is running (Alive for 10s). Killing it now."
-              Stop-Process -Id $proc.Id -Force
-            } else {
-              Write-Error "❌ Backend crashed immediately! Check logs."
-              exit 1
-            }
-          } else {
-            Write-Warning "Backend not found at expected path."
-          }
-      - name: '⏳ Loop 1 - Service Registration'
-        shell: pwsh
-        run: |
-          $reg = "HKLM:\SYSTEM\CurrentControlSet\Services\FortunaWebService"
-          for ($i=0; $i -lt 30; $i++) {
-            if (Test-Path $reg) { Write-Host "✅ Service Registered"; exit 0 }
-            Start-Sleep 1
-          }
-          throw "Service failed to register in Registry"
-
-      - name: '🚀 Loop 2 - Launch & Port Bind'
-        shell: python
-        env:
-          PORT: ${{ env.FORTUNA_PORT }}
-        run: |
-          import os, socket, time, urllib.request, urllib.error, subprocess, sys
-          port = int(os.environ["PORT"])
-          print("--- Starting Service ---")
-          subprocess.run(["sc.exe", "start", "FortunaWebService"], check=False)
-          print(f"--- Waiting for Port {port} (60s) ---")
-          for _ in range(60):
-            try:
-              with socket.create_connection(("127.0.0.1", port), timeout=1):
-                print("[SUCCESS] Socket bound.")
-                sys.exit(0)
-            except:
-              time.sleep(1)
-
-          print("[FAILED] Port bind timeout")
-          subprocess.run(["sc.exe", "query", "FortunaWebService"])
-          sys.exit(1)
-
-      - name: Test Service Health (Smoke Test)
-        shell: pwsh
-        run: |
-          $maxAttempts = 10
-          $healthUrl = "http://localhost:8102/health"
-          for ($i = 1; $i -le $maxAttempts; $i++) {
-            try {
-              # FIX: Use ${maxAttempts} to prevent colon parsing error
-              Write-Host "Attempt $i/${maxAttempts}: Pinging $healthUrl..."
-              $response = Invoke-WebRequest -Uri $healthUrl -Method Get -UseBasicParsing -ErrorAction Stop
-              if ($response.StatusCode -eq 200) {
-                Write-Host "✅ Service is Healthy on Port 8102"
-                exit 0
-              }
-            } catch {
-              Write-Host "⏳ Waiting for service..."
-              Start-Sleep -Seconds 5
-            }
-          }
-          Write-Error "❌ Service Failed Health Check after $maxAttempts attempts"
-          exit 1
-
-      - name: '📸 The Paparazzi (Visual Proof)'
-        shell: pwsh
-        run: |
-          Write-Host "Installing Playwright (Node.js)..."
-          npm install playwright
-          npx playwright install chromium --with-deps
-
-          $url = "http://127.0.0.1:8102/health"
-          node -e "
-            const { chromium } = require('playwright');
-            (async () => {
-              try {
-                const browser = await chromium.launch();
-                const page = await browser.newPage();
-                await page.goto('$url', { timeout: 15000 });
-                await page.screenshot({ path: 'proof-of-life.png', fullPage: true });
-                await browser.close();
-              } catch (e) { process.exit(1); }
-            })();
-          "
-
-      - name: Upload Visual Proof
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: visual-proof-${{ github.run_id }}
-          path: proof-of-life.png
-
-      - name: 📊 Capture Diagnostics
-        if: failure()
-        shell: pwsh
-        run: |
-          $diag = "diagnostics"
-          New-Item -ItemType Directory -Path $diag -Force
-          Copy-Item install.log $diag
-          Get-EventLog -LogName Application -Source "FortunaWebService" -Newest 50 | Out-File "$diag/events.txt"
-          Get-Service FortunaWebService | Out-File "$diag/service_state.txt"
-          netstat -anob > "$diag/netstat.txt"
-      - name: 📤 Upload Diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: smoke-test-failure-${{ needs.path-finder.outputs.build_id }}
-          path: diagnostics/
-          retention-days: 30
-      - name: "💀 CSI: Windows (Post-Mortem Diagnostics)"
-        if: failure()
-        shell: pwsh
-        run: |
-          Write-Host "=== 1. PROCESS STATE ==="
-          Get-Process | Where-Object { $_.ProcessName -match "fortuna|python|electron" } | Format-Table -AutoSize
-
-          Write-Host "=== 2. NETWORK PORTS (8102) ==="
-          netstat -anb | Select-String "8102" -Context 2,2
-
-          Write-Host "=== 3. WINDOWS EVENT LOGS (Last 50 Errors) ==="
-          Get-EventLog -LogName Application -EntryType Error,Warning -Newest 50 | Format-Table TimeGenerated, Source, Message -AutoSize
-
-          Write-Host "=== 4. MSI INSTALL LOG ==="
-          if (Test-Path "installation.log") { Get-Content "installation.log" -Tail 200 }
-      - name: 🧹 Cleanup
-        if: always()
-        run: |
-          sc.exe stop FortunaWebService
-          sc.exe delete FortunaWebService
-          Remove-NetFirewallRule -DisplayName "${{ env.FIREWALL_RULE }}" -ErrorAction SilentlyContinue
-      - name: "🛑 Stop Fortuna Service"
-        if: always()
-        shell: cmd
-        run: net stop FortunaWebService || echo Service was not running
+          msi-artifact-name: 'msi-installer-${{ github.run_id }}-${{ github.run_attempt }}'
+          service-name: 'FortunaWebService'
+          executable-path: 'C:\Program Files\Fortuna Faucet Service\fortuna-webservice.exe'
+          port: ${{ env.FORTUNA_PORT }}
+          firewall-rule-name: ${{ env.FIREWALL_RULE }}
 
   # ==================================================================================
   # JOB 6: GENERATE SBOM

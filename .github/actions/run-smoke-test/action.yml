@@ -1,132 +1,162 @@
-name: 'Run Smoke Test (Socket Handover)'
-description: 'Launches an executable, waits for a socket to be bound, and performs a health check.'
+name: 'Run 4-Step Diagnostic Smoke Test'
+description: 'Installs an MSI, then runs a 4-step diagnostic to verify file installation, service status, port binding, and API health, finishing with a Paparazzi screenshot.'
+
 inputs:
-  exe-path:
-    description: 'Path to the executable to launch'
+  msi-artifact-name:
+    description: 'The name of the MSI artifact to download.'
     required: true
-  service-port:
-    description: 'Port to wait for on localhost'
+  service-name:
+    description: 'The name of the Windows Service to verify (e.g., FortunaWebService).'
     required: true
-  health-endpoint:
-    description: 'Health endpoint to check (e.g., /health)'
-    required: false
-    default: '/health'
-  api-key:
-    description: 'API key for the service'
-    required: false
+  executable-path:
+    description: 'The full, absolute path to the installed service executable to verify.'
+    required: true
+  port:
+    description: 'The port to check for a listener.'
+    required: true
+  firewall-rule-name:
+    description: 'The name of the firewall rule to create.'
+    required: true
+
 runs:
-  using: 'composite'
+  using: "composite"
   steps:
-    - name: Run Python Smoke Test
-      shell: python
+    - name: 📥 Download MSI Artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: ${{ inputs.msi-artifact-name }}
+        path: installer
+
+    - name: 🛡️ Firewall & Install
+      shell: pwsh
       run: |
-        import os, sys, subprocess, socket, time, threading
-        from contextlib import closing
+        New-NetFirewallRule -DisplayName "${{ inputs.firewall-rule-name }}" -Direction Inbound -LocalPort ${{ inputs.port }} -Protocol TCP -Action Allow
+        if (Get-Service -Name "${{ inputs.service-name }}" -ErrorAction SilentlyContinue) {
+          sc.exe stop "${{ inputs.service-name }}" 2>&1 | Out-Null
+          sc.exe delete "${{ inputs.service-name }}" 2>&1 | Out-Null
+        }
+        $msi = Get-ChildItem installer -Filter "*.msi" -Recurse | Select-Object -First 1
+        if (!$msi) { throw "No MSI found" }
+        Write-Host "Installing $($msi.Name)..."
+        $msiPath = $msi.FullName
+        $args = "/i `"$msiPath`" /qn /L*v installation.log"
+        $proc = Start-Process msiexec.exe -ArgumentList $args -Wait -NoNewWindow -PassThru
+        if ($proc.ExitCode -ne 0) {
+          Get-Content installation.log -Tail 50
+          throw "Install failed with code $($proc.ExitCode)"
+        }
 
-        # --- CONFIGURATION ---
-        EXE_PATH = os.environ.get("INPUT_EXE-PATH")
-        HOST = "127.0.0.1"
-        PORT = int(os.environ.get("INPUT_SERVICE-PORT"))
-        HEALTH_ENDPOINT = os.environ.get("INPUT_HEALTH-ENDPOINT", "/health")
-        API_KEY = os.environ.get("INPUT_API-KEY", "default-key")
-        STARTUP_TIMEOUT = 90  # seconds
-        POLL_INTERVAL = 0.5   # seconds
-        STDOUT_LOG = "service-logs/stdout.txt"
-        STDERR_LOG = "service-logs/stderr.txt"
-        PID_FILE = "service.pid"
+    - name: "🔍 Diag 1: Verify Install Directory"
+      shell: pwsh
+      run: |
+        $expected = "${{ inputs.executable-path }}"
+        if (Test-Path $expected) {
+          Write-Host "✅ Binary FOUND at: $expected"
+        } else {
+          Write-Error "❌ Binary MISSING at: $expected"
+          Write-Host "Listing C:\Program Files to see what happened:"
+          Get-ChildItem "C:\Program Files" -Recurse -Depth 2 | Select-Object FullName
+          exit 1
+        }
 
-        # --- UTILITY FUNCTIONS ---
-        def print_banner(message):
-            print(f"\\n{'='*25} {message} {'='*25}")
+    - name: "🔍 Diag 2: Check Windows Service Status"
+      shell: pwsh
+      run: |
+        $svc = Get-Service "${{ inputs.service-name }}" -ErrorAction SilentlyContinue
+        if (!$svc) {
+          Write-Error "❌ Service '${{ inputs.service-name }}' is NOT registered! MSI Install failed to register service."
+          exit 1
+        }
+        Write-Host "Service Status: $($svc.Status)"
 
-        def check_socket(host, port):
-            with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as sock:
-                return sock.connect_ex((host, port)) == 0
+        if ($svc.Status -ne 'Running') {
+          Write-Host "⚠️ Service is not running. Attempting to start..."
+          Start-Service "${{ inputs.service-name }}"
+          Start-Sleep -Seconds 5
+          $svc = Get-Service "${{ inputs.service-name }}"
+        }
 
-        def tail_file(filename, lines=10):
-            try:
-                with open(filename, "r") as f:
-                    content = f.readlines()
-                return "".join(content[-lines:])
-            except FileNotFoundError:
-                return "Log file not found."
-            except Exception as e:
-                return f"Error reading log: {e}"
+        if ($svc.Status -eq 'Running') {
+          Write-Host "✅ Service is RUNNING"
+        } else {
+          Write-Error "❌ Service failed to start. Status: $($svc.Status)"
+          Write-Host "Dumping Event Logs for Service Failure:"
+          Get-EventLog -LogName System -Source "Service Control Manager" -Newest 20 | Format-Table -AutoSize
+          exit 1
+        }
 
-        # --- MAIN LOGIC ---
-        def main():
-            print_banner("SOCKET HANDOVER PROTOCOL INITIATED")
+    - name: "🔍 Diag 3: Port Listener Check"
+      shell: pwsh
+      run: |
+        Write-Host "Starting Port Hunt on ${{ inputs.port }}..."
+        $max = 30
+        for ($i=1; $i -le $max; $i++) {
+          $conn = Get-NetTCPConnection -LocalPort ${{ inputs.port }} -ErrorAction SilentlyContinue
+          if ($conn) {
+            Write-Host "✅ Port ${{ inputs.port }} is OPEN (State: $($conn.State))"
+            exit 0
+          }
+          Write-Host "⏳ Attempt $i of $max: Port not open yet..."
+          Start-Sleep -Seconds 2
+        }
+        Write-Error "❌ Timeout: Nothing is listening on Port ${{ inputs.port }} after 60 seconds."
+        Write-Host "Checking for ANY relevant processes:"
+        Get-Process | Where-Object { $_.ProcessName -match "fortuna|python" } | Format-Table Id, ProcessName, Responding
+        exit 1
 
-            # 1. Pre-flight check: Find a free port
-            print(f"Checking if port {PORT} is available...")
-            if check_socket(HOST, PORT):
-                print(f"❌ FATAL: Port {PORT} is already in use before starting the service.")
-                sys.exit(1)
-            print(f"✅ Port {PORT} is free.")
+    - name: "🔍 Diag 4: HTTP Health Probe"
+      shell: pwsh
+      run: |
+        try {
+          $response = Invoke-WebRequest -Uri "http://localhost:${{ inputs.port }}/health" -UseBasicParsing
+          if ($response.StatusCode -eq 200) {
+            Write-Host "✅ HTTP 200 OK received. System is GREEN."
+            Write-Host $response.Content
+          } else {
+            Write-Error "❌ HTTP Error: $($response.StatusCode)"
+            exit 1
+          }
+        } catch {
+          Write-Error "❌ HTTP Request Failed: $_"
+          exit 1
+        }
 
-            # 2. Launch the service executable
-            print_banner(f"LAUNCHING {os.path.basename(EXE_PATH)}")
-            launch_env = os.environ.copy()
-            launch_env["FORTUNA_PORT"] = str(PORT)
-            launch_env["API_KEY"] = API_KEY
-            launch_env["FORTUNA_ENV"] = "smoke-test"
-            launch_env["PYTHONUNBUFFERED"] = "1"
+    - name: '📸 The Paparazzi (Visual Proof)'
+      shell: pwsh
+      run: |
+        Write-Host "Installing Playwright..."
+        npm install playwright
+        npx playwright install chromium --with-deps
 
-            if not os.path.exists(EXE_PATH):
-                print(f"❌ FATAL: Executable not found at {EXE_PATH}")
-                sys.exit(1)
+        $url = "http://127.0.0.1:${{ inputs.port }}/docs"
 
-            with open(STDOUT_LOG, "wb") as out_log, open(STDERR_LOG, "wb") as err_log:
-                process = subprocess.Popen([EXE_PATH], env=launch_env, stdout=out_log, stderr=err_log)
+        node -e "
+          const { chromium } = require('playwright');
+          (async () => {
+            try {
+              const browser = await chromium.launch();
+              const page = await browser.newPage();
+              await page.goto('$url', { timeout: 15000 });
+              await page.waitForSelector('.swagger-ui', { timeout: 5000 }).catch(() => console.log('UI not fully loaded, snapping anyway...'));
+              await page.screenshot({ path: 'proof-of-life.png', fullPage: true });
+              await browser.close();
+            } catch (e) {
+              console.error(e); process.exit(1);
+            }
+          })();
+        "
 
-            with open(PID_FILE, "w") as f:
-                f.write(str(process.pid))
-            print(f"🚀 Service process started with PID: {process.pid}")
-            print(f"   - stdout -> {STDOUT_LOG}")
-            print(f"   - stderr -> {STDERR_LOG}")
+    - name: Upload Visual Proof
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: visual-proof-${{ github.run_id }}
+        path: proof-of-life.png
 
-            # 3. Wait for the socket to be bound
-            print_banner(f"WAITING FOR SOCKET BIND ON {HOST}:{PORT}")
-            start_time = time.time()
-            bound = False
-            while time.time() - start_time < STARTUP_TIMEOUT:
-                if process.poll() is not None:
-                    print(f"❌ FATAL: Process terminated unexpectedly with exit code {process.poll()}.")
-                    break
-                if check_socket(HOST, PORT):
-                    print(f"✅ Socket is now bound! (Took {time.time() - start_time:.2f}s)")
-                    bound = True
-                    break
-                time.sleep(POLL_INTERVAL)
-                print(f"   ... waiting ({time.time() - start_time:.1f}s)", end="\\r")
-
-            if not bound:
-                print(f"❌ FATAL: Timed out after {STARTUP_TIMEOUT}s waiting for port {PORT} to be bound.")
-
-            # 4. Final Verification and Diagnostics
-            print_banner("FINAL DIAGNOSTICS")
-            print(f"STDOUT (Last 10 lines):\\n{tail_file(STDOUT_LOG)}")
-            print(f"STDERR (Last 10 lines):\\n{tail_file(STDERR_LOG)}")
-
-            if process.poll() is not None:
-                print("❌ Final state: PROCESS IS DEAD.")
-                sys.exit(1)
-            else:
-                print("✅ Final state: PROCESS IS ALIVE.")
-
-            if not bound:
-                print("❌ Final state: SOCKET NOT BOUND.")
-                sys.exit(1)
-            else:
-                print("✅ Final state: SOCKET IS BOUND.")
-
-            print_banner("SOCKET HANDOVER SUCCESSFUL")
-            sys.exit(0)
-
-        if __name__ == "__main__":
-            main()
-      env:
-        INPUT_EXE-PATH: ${{ inputs.exe-path }}
-        INPUT_SERVICE-PORT: ${{ inputs.service-port }}
-        INPUT_HEALTH-ENDPOINT: ${{ inputs.health-endpoint }}
-        INPUT_API-KEY: ${{ inputs.api-key }}
+    - name: 🧹 Cleanup
+      if: always()
+      shell: pwsh
+      run: |
+        sc.exe stop ${{ inputs.service-name }}
+        sc.exe delete ${{ inputs.service-name }}
+        Remove-NetFirewallRule -DisplayName "${{ inputs.firewall-rule-name }}" -ErrorAction SilentlyContinue
