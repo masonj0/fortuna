@@ -39,16 +39,42 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
           cache-dependency-path: '**/package-lock.json'
+      - name: Cache Build Output
+        id: cache-frontend
+        uses: actions/cache@v4
+        with:
+          path: web_platform/frontend/out
+          key: ${{ runner.os }}-frontend-${{ hashFiles('**/package-lock.json', 'web_platform/frontend/**/*.js', 'web_platform/frontend/**/*.ts', 'web_platform/frontend/**/*.tsx', 'web_platform/frontend/**/*.css') }}
+          restore-keys: |
+            ${{ runner.os }}-frontend-
       - name: Install and Build
+        if: steps.cache-frontend.outputs.cache-hit != 'true'
         run: |
           cd web_platform/frontend
           npm ci --prefer-offline --no-audit --no-fund
           npm run build
+      - name: Generate Artifact Manifest
+        shell: pwsh
+        working-directory: web_platform/frontend
+        run: |
+          Set-StrictMode -Version Latest
+          $outDir = Resolve-Path "out"
+          $manifestPath = "frontend-manifest.tsv"
+          "RelativePath`tSizeBytes`tSHA256" | Out-File $manifestPath -Encoding utf8
+          $files = Get-ChildItem -Path $outDir -Recurse -File
+          foreach ($f in $files) {
+            $rel = $f.FullName.Substring($outDir.Path.Length).TrimStart('\','/')
+            $hash = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.Substring(0,16)
+            "$rel`t$($f.Length)`t$hash" | Out-File $manifestPath -Encoding utf8 -Append
+          }
+          Write-Host "✅ Generated frontend artifact manifest."
       - name: Upload Frontend
         uses: actions/upload-artifact@v4
         with:
           name: frontend-build
-          path: web_platform/frontend/out
+          path: |
+            web_platform/frontend/out
+            web_platform/frontend/frontend-manifest.tsv
 
   # 2. Build Backend (Downloads Frontend to bundle it)
   build-backend:
@@ -108,6 +134,25 @@ jobs:
         with:
           name: backend-dist
           path: staging/backend
+
+      - name: '⚖️ The Dietician (Size Analysis)'
+        shell: pwsh
+        run: |
+          $target = "staging"
+          $limitMB = 300
+          Write-Host "--- 📊 Size Breakdown ---"
+          $files = Get-ChildItem -Path $target -Recurse -File -ErrorAction SilentlyContinue
+          if (!$files) { Write-Warning "No files found to weigh."; exit 0 }
+          $totalBytes = ($files | Measure-Object -Property Length -Sum).Sum
+          $totalMB = [math]::Round($totalBytes / 1MB, 2)
+          Write-Host "Total Payload Size: $totalMB MB"
+          if ($totalMB -gt $limitMB) {
+              Write-Warning "⚠️ BLOAT ALERT: Build exceeds $limitMB MB limit! Check the heaviest files below."
+          } else {
+              Write-Host "✅ Size within limits (< $limitMB MB)." -ForegroundColor Green
+          }
+          Write-Host "`n--- 🐘 Top 10 Heaviest Files ---"
+          $files | Sort-Object Length -Descending | Select-Object -First 10 @{N='File';E={$_.FullName.Replace($pwd,'')}}, @{N='Size(MB)';E={"{0:N2}" -f ($_.Length/1MB)}} | Format-Table -AutoSize
 
       - name: Create Restart Service Batch Script
         shell: pwsh
@@ -230,11 +275,33 @@ jobs:
               Write-Warning "⚠️ Scan completed with inconclusive exit code: $($proc.ExitCode)"
           }
 
+      - name: Rename & Hash MSI
+        id: name_msi
+        shell: pwsh
+        run: |
+          $ver = "${{ needs.build-backend.outputs.semver }}"
+          $sha = "${{ needs.build-backend.outputs.short_sha }}"
+          $releaseDir = "build_wix/bin/x64/Release"
+          $msiFound = Get-ChildItem -Path $releaseDir -Filter "*.msi" | Select-Object -First 1
+
+          if (-not $msiFound) {
+            Write-Error "❌ FATAL: No MSI file found in $releaseDir."
+            exit 1
+          }
+
+          $targetName = "HatTrickFusion-${ver}-${sha}.msi"
+          $newPath = Join-Path $releaseDir $targetName
+          Move-Item -Path $msiFound.FullName -Destination $newPath -Force
+          $hash = (Get-FileHash $newPath -Algorithm SHA256).Hash
+          $hash | Out-File "$newPath.sha256" -Encoding utf8
+          Write-Host "✅ MSI Renamed and Hashed: $targetName"
+          "msi_name=$targetName" | Out-File $env:GITHUB_OUTPUT -Append
+
       - name: Upload MSI
         uses: actions/upload-artifact@v4
         with:
           name: hat-trick-msi
-          path: build_wix/bin/x64/Release/
+          path: build_wix/bin/x64/Release/*
 
   smoke-test:
     name: '🔬 Smoke Test'
