@@ -550,16 +550,23 @@ jobs:
           name: visual-proof-${{ github.run_id }}
           path: proof-of-life.png
 
-      - name: 📊 Capture Diagnostics
-        if: failure()
-        shell: pwsh
-        run: |
-          $diag = "diagnostics"
-          New-Item -ItemType Directory -Path $diag -Force
-          Copy-Item install.log $diag
-          Get-EventLog -LogName Application -Source "FortunaWebService" -Newest 50 | Out-File "$diag/events.txt"
-          Get-Service FortunaWebService | Out-File "$diag/service_state.txt"
-          netstat -anob > "$diag/netstat.txt"
+    - name: Collect Diagnostics
+      if: always()
+      shell: pwsh
+      run: |
+        $diag = "diagnostics"
+        New-Item -ItemType Directory -Force -Path $diag
+
+        # FIX: Check if install.log exists before copying
+        if (Test-Path "install.log") {
+            Copy-Item "install.log" -Destination $diag
+        } else {
+            Write-Host "⚠️ install.log not found (Installer may not have run)"
+        }
+
+        # Collect other logs safely
+        if (Test-Path "build_wix") { Copy-Item "build_wix" -Destination $diag -Recurse }
+        if (Test-Path "backend_debug.log") { Copy-Item "backend_debug.log" -Destination $diag }
       - name: 📤 Upload Diagnostics
         if: failure()
         uses: actions/upload-artifact@v4

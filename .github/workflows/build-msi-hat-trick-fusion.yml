@@ -306,13 +306,19 @@ jobs:
           name: visual-proof-${{ github.run_id }}
           path: proof-of-life.png
 
-      - name: "💀 CSI: Windows (Post-Mortem Diagnostics)"
-        if: failure()
-        shell: pwsh
-        run: |
-          Write-Host "=== SERVICE STATUS ==="
-          Get-Service "FortunaService" | Select-Object Status, StartType, DisplayName
-          Write-Host "=== EVENT LOGS (Last 20 Errors) ==="
-          Get-EventLog -LogName System -EntryType Error -Newest 20 | Where-Object { $_.Message -like "*Fortuna*" }
-          Write-Host "=== PORT 8102 CHECK ==="
-          netstat -an | findstr "8102"
+    - name: Collect Diagnostics
+      if: always()
+      shell: pwsh
+      run: |
+        $diag = "diagnostics"
+        New-Item -ItemType Directory -Force -Path $diag
+
+        # FIX: Safe copy for install.log
+        if (Test-Path "install.log") {
+            Copy-Item "install.log" -Destination $diag
+        } else {
+            Write-Host "⚠️ install.log not found"
+        }
+
+        # Safe copy for other logs
+        Get-ChildItem -Filter "*.log" | Copy-Item -Destination $diag
