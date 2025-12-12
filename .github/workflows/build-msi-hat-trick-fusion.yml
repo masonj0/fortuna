@@ -88,7 +88,8 @@ jobs:
 
       - name: Build Backend (PyInstaller)
         run: |
-          pyinstaller --noconfirm --onedir --clean --name fortuna-backend --hidden-import=win32timezone --hidden-import=win32serviceutil --add-data "web_service/backend;backend" web_service/backend/service_entry.py
+          # FIX: Target service_entry.py and include win32timezone
+          pyinstaller --noconfirm --onedir --clean --name fortuna-webservice --hidden-import=win32timezone --hidden-import=win32serviceutil --add-data "web_service/backend;backend" web_service/backend/service_entry.py
 
       - name: Upload Backend
         uses: actions/upload-artifact@v4
@@ -236,56 +237,122 @@ jobs:
           path: build_wix/bin/x64/Release/
 
   smoke-test:
+    name: '🔬 Smoke Test'
     needs: package-msi
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Download MSI Artifact
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
-          name: msi-installer
-          path: build_wix
-
-      - name: Install MSI for Testing
+          name: msi-installer-${{ github.run_id }}-${{ github.run_attempt }}
+          path: installer
+      - name: 🛡️ Firewall & Install
         shell: pwsh
         run: |
-          $msiPath = "build_wix\FortunaWebSetup.msi"
-          if (-not (Test-Path $msiPath)) { throw "MSI not found at $msiPath" }
-          Write-Host "Installing $msiPath..."
-          Start-Process msiexec.exe -ArgumentList "/i $msiPath /quiet /norestart" -Wait
-          Start-Sleep -Seconds 10
-
-      - name: Test Service Health (Smoke Test)
-        shell: pwsh
-        run: |
-          $maxAttempts = 10
-          $healthUrl = "http://localhost:8102/health"
-          for ($i = 1; $i -le $maxAttempts; $i++) {
-            try {
-              # FIX: Use ${maxAttempts} to prevent parser error
-              Write-Host "Attempt $i of ${maxAttempts}: Pinging $healthUrl..."
-              $response = Invoke-WebRequest -Uri $healthUrl -Method Get -UseBasicParsing -ErrorAction Stop
-              if ($response.StatusCode -eq 200) {
-                Write-Host "✅ Service is Healthy on Port 8102"
-                exit 0
-              }
-            } catch {
-              Write-Host "⏳ Waiting for service..."
-              Start-Sleep -Seconds 5
-            }
+          New-NetFirewallRule -DisplayName "${{ env.FIREWALL_RULE }}" -Direction Inbound -LocalPort ${{ env.FORTUNA_PORT }} -Protocol TCP -Action Allow
+          if (Get-Service -Name FortunaWebService -ErrorAction SilentlyContinue) {
+            sc.exe stop FortunaWebService 2>&1 | Out-Null
+            sc.exe delete FortunaWebService 2>&1 | Out-Null
           }
-          Write-Error "❌ Service Failed Health Check after ${maxAttempts} attempts"
+          $msi = Get-ChildItem installer -Filter "*.msi" -Recurse | Select -First 1
+          if (!$msi) { throw "No MSI found" }
+          Write-Host "Installing $($msi.Name)..."
+          $msiPath = $msi.FullName
+          $args = "/i `"$msiPath`" /qn /L*v installation.log"
+          $proc = Start-Process msiexec.exe -ArgumentList $args -Wait -NoNewWindow -PassThru
+          if ($proc.ExitCode -ne 0) {
+            Get-Content install.log -Tail 50
+            throw "Install failed with code $($proc.ExitCode)"
+          }
+
+      # 🔍 STEP 1: VERIFY FILES EXIST
+      - name: "🔍 Diag 1: Verify Install Directory"
+        shell: pwsh
+        run: |
+          $expected = "C:\Program Files\Fortuna Faucet Service\fortuna-webservice.exe"
+          if (Test-Path $expected) {
+            Write-Host "✅ Binary FOUND at: $expected"
+          } else {
+            Write-Error "❌ Binary MISSING at: $expected"
+            Write-Host "Listing C:\Program Files to see what happened:"
+            Get-ChildItem "C:\Program Files" -Recurse -Depth 2 | Select-Object FullName
+            exit 1
+          }
+
+      # 🔍 STEP 2: VERIFY SERVICE STATE
+      - name: "🔍 Diag 2: Check Windows Service Status"
+        shell: pwsh
+        run: |
+          $svc = Get-Service "FortunaWebService" -ErrorAction SilentlyContinue
+          if (!$svc) {
+            Write-Error "❌ Service 'FortunaWebService' is NOT registered! MSI Install failed to register service."
+            exit 1
+          }
+          Write-Host "Service Status: $($svc.Status)"
+
+          if ($svc.Status -ne 'Running') {
+            Write-Host "⚠️ Service is not running. Attempting to start..."
+            Start-Service "FortunaWebService"
+            Start-Sleep -Seconds 5
+            $svc = Get-Service "FortunaWebService"
+          }
+
+          if ($svc.Status -eq 'Running') {
+            Write-Host "✅ Service is RUNNING"
+          } else {
+            Write-Error "❌ Service failed to start. Status: $($svc.Status)"
+            Write-Host "Dumping Event Logs for Service Failure:"
+            Get-EventLog -LogName System -Source "Service Control Manager" -Newest 20 | Format-Table -AutoSize
+            exit 1
+          }
+
+      # 🔍 STEP 3: THE PORT LOOP (Replaces 'Loop 2')
+      - name: "🔍 Diag 3: Port 8102 Listener Check"
+        shell: pwsh
+        run: |
+          Write-Host "Starting Port Hunt on 8102..."
+          $max = 30
+          for ($i=1; $i -le $max; $i++) {
+            $conn = Get-NetTCPConnection -LocalPort 8102 -ErrorAction SilentlyContinue
+            if ($conn) {
+              Write-Host "✅ Port 8102 is OPEN (State: $($conn.State))"
+              exit 0
+            }
+            Write-Host "⏳ Attempt $i of $max: Port not open yet..."
+            Start-Sleep -Seconds 2
+          }
+          Write-Error "❌ Timeout: Nothing is listening on Port 8102 after 60 seconds."
+          Write-Host "Checking for ANY python/fortuna processes:"
+          Get-Process | Where-Object { $_.ProcessName -match "fortuna|python" } | Format-Table Id, ProcessName, Responding
           exit 1
+
+      # 🔍 STEP 4: FINAL API PROBE
+      - name: "🔍 Diag 4: HTTP Health Probe"
+        shell: pwsh
+        run: |
+          try {
+            $response = Invoke-WebRequest -Uri "http://localhost:8102/health" -UseBasicParsing
+            if ($response.StatusCode -eq 200) {
+              Write-Host "✅ HTTP 200 OK received. System is GREEN."
+              Write-Host $response.Content
+            } else {
+              Write-Error "❌ HTTP Error: $($response.StatusCode)"
+              exit 1
+            }
+          } catch {
+            Write-Error "❌ HTTP Request Failed: $_"
+            exit 1
+          }
 
       - name: '📸 The Paparazzi (Visual Proof)'
         shell: pwsh
         run: |
-          Write-Host "Installing Playwright (Node.js)..."
+          Write-Host "Installing Playwright..."
           npm install playwright
           npx playwright install chromium --with-deps
 
-          $url = "http://127.0.0.1:8102/health"
+          $port = "${{ env.FORTUNA_PORT }}"
+          $url = "http://127.0.0.1:$port/docs"
+
           node -e "
             const { chromium } = require('playwright');
             (async () => {
@@ -293,9 +360,12 @@ jobs:
                 const browser = await chromium.launch();
                 const page = await browser.newPage();
                 await page.goto('$url', { timeout: 15000 });
+                await page.waitForSelector('.swagger-ui', { timeout: 5000 }).catch(() => console.log('UI not fully loaded, snapping anyway...'));
                 await page.screenshot({ path: 'proof-of-life.png', fullPage: true });
                 await browser.close();
-              } catch (e) { process.exit(1); }
+              } catch (e) {
+                console.error(e); process.exit(1);
+              }
             })();
           "
 
@@ -306,13 +376,9 @@ jobs:
           name: visual-proof-${{ github.run_id }}
           path: proof-of-life.png
 
-      - name: "💀 CSI: Windows (Post-Mortem Diagnostics)"
-        if: failure()
-        shell: pwsh
+      - name: 🧹 Cleanup
+        if: always()
         run: |
-          Write-Host "=== SERVICE STATUS ==="
-          Get-Service "FortunaService" | Select-Object Status, StartType, DisplayName
-          Write-Host "=== EVENT LOGS (Last 20 Errors) ==="
-          Get-EventLog -LogName System -EntryType Error -Newest 20 | Where-Object { $_.Message -like "*Fortuna*" }
-          Write-Host "=== PORT 8102 CHECK ==="
-          netstat -an | findstr "8102"
+          sc.exe stop FortunaWebService
+          sc.exe delete FortunaWebService
+          Remove-NetFirewallRule -DisplayName "${{ env.FIREWALL_RULE }}" -ErrorAction SilentlyContinue
