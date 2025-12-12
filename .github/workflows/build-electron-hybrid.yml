@@ -320,7 +320,7 @@ jobs:
             exit 1
           }
 
-      - name: 💀 CSI: Windows (Post-Mortem Diagnostics)
+      - name: "💀 CSI: Windows (Post-Mortem Diagnostics)"
         if: failure()
         shell: pwsh
         run: |
@@ -334,37 +334,31 @@ jobs:
       - name: '📸 The Paparazzi (Visual Proof)'
         shell: pwsh
         run: |
-          Write-Host "Installing Playwright for visual verification..."
-          python -m pip install playwright
-          python -m playwright install chromium
+          Write-Host "Installing Playwright (Node.js)..."
+          npm install playwright
+          npx playwright install chromium --with-deps
 
-          # Default to 8102 if SERVICE_PORT is not set
-          $port = "${{ env.SERVICE_PORT }}"
-          if ([string]::IsNullOrWhiteSpace($port)) { $port = "8102" }
+          $port = "${{ env.FORTUNA_PORT }}"
+          $url = "http://127.0.0.1:$port/health"
 
-          Write-Host "Taking screenshot of http://localhost:$port..."
-          python -c "
-          from playwright.sync_api import sync_playwright
-          import sys
-
-          try:
-              with sync_playwright() as p:
-                  browser = p.chromium.launch()
-                  page = browser.new_page()
-                  # Try index.html, fall back to root if needed
-                  url = f'http://localhost:{sys.argv[1]}/index.html'
-                  print(f'Navigating to {url}...')
-                  page.goto(url)
-                  # Wait a moment for React/Next.js hydration if needed
-                  page.wait_for_timeout(2000)
-                  page.screenshot(path='proof-of-life.png', full_page=True)
-                  browser.close()
-              print('✅ Screenshot captured.')
-          except Exception as e:
-              print(f'❌ Screenshot failed: {e}')
-              # We do not fail the build for this; it is a bonus artifact.
-              sys.exit(0)
-          " $port
+          Write-Host "Capturing screenshot of $url..."
+          node -e "
+            const { chromium } = require('playwright');
+            (async () => {
+              try {
+                const browser = await chromium.launch();
+                const page = await browser.newPage();
+                console.log('Navigating to $url...');
+                await page.goto('$url', { timeout: 15000 });
+                await page.screenshot({ path: 'proof-of-life.png', fullPage: true });
+                console.log('✅ Screenshot captured: proof-of-life.png');
+                await browser.close();
+              } catch (e) {
+                console.error('❌ Paparazzi Failed:', e);
+                process.exit(1);
+              }
+            })();
+          "
 
       - name: 📤 Upload Visual Proof
         if: always()
