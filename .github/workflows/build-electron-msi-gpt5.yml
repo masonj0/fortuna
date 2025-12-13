@@ -168,7 +168,16 @@ jobs:
         shell: pwsh
         run: |
           python -m pip install --upgrade pip setuptools wheel
+
+          # 🚀 FIX: Handle 32-bit (x86) limitations for Data Science libraries
+          # Pandas 2.2+ and Numpy 2.0+ dropped 32-bit Windows wheels.
+          if ('${{ matrix.arch }}' -eq 'x86') {
+            Write-Host "⚠️ x86 Architecture detected: Pinning legacy versions for Pandas/Numpy..."
+            pip install "pandas<2.2.0" "numpy<2.0.0"
+          }
+
           pip install -r ${{ env.BACKEND_DIR }}/requirements.txt
+
           # Dev dependencies are only for x64 to avoid build issues on x86
           if ('${{ matrix.arch }}' -eq 'x64') {
             pip install -r ${{ env.BACKEND_DIR }}/requirements-dev.txt
@@ -967,7 +976,7 @@ jobs:
           $healthUrl = "http://localhost:8102/health"
           for ($i = 1; $i -le $maxAttempts; $i++) {
             try {
-              Write-Host "Attempt $i/$maxAttempts: Pinging $healthUrl..."
+              Write-Host "Attempt $i/${maxAttempts}: Pinging $healthUrl..."
               $response = Invoke-WebRequest -Uri $healthUrl -Method Get -UseBasicParsing -ErrorAction Stop
               if ($response.StatusCode -eq 200) {
                 Write-Host "✅ Service is Healthy on Port 8102"
