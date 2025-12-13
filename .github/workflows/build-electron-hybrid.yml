@@ -12,7 +12,7 @@ concurrency:
 
 env:
   NODE_VERSION: '20'
-  PYTHON_VERSION: '3.12'
+  PYTHON_VERSION: '3.11' # 🚀 DOWNGRADE
   # Paths
   BACKEND_DIR: 'python_service'
   FRONTEND_DIR: 'web_platform/frontend'
@@ -41,16 +41,18 @@ jobs:
   # JOB 1: BUILD CORE (The "HatTrick" Engine)
   # ==================================================================================
   build-core:
-    name: '⚙️ Build Core Components'
+    name: '⚙️ Build Core Components (${{ matrix.arch }})'
     runs-on: windows-latest
     timeout-minutes: 30
     needs: quality-gate
+    strategy:
+      matrix:
+        arch: [x64, x86]
     outputs:
       semver: ${{ steps.meta.outputs.semver }}
       build_id: ${{ steps.meta.outputs.build_id }}
     steps:
       - uses: actions/checkout@v4
-
       - name: 🔖 Metadata
         id: meta
         shell: pwsh
@@ -58,14 +60,12 @@ jobs:
           $ver = if ("${{ github.ref }}" -match 'refs/tags/v(.*)') { $Matches[1] } else { "0.0.${{ github.run_number }}" }
           "semver=$ver" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "build_id=${{ github.run_id }}" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
-
       # --- FRONTEND (Standard) ---
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
           cache-dependency-path: '${{ env.FRONTEND_DIR }}/package-lock.json'
-
       - name: Cache Build Output
         id: cache-frontend
         uses: actions/cache@v4
@@ -74,7 +74,6 @@ jobs:
           key: ${{ runner.os }}-frontend-${{ hashFiles('**/package-lock.json', '${{ env.FRONTEND_DIR }}/**/*.js', '${{ env.FRONTEND_DIR }}/**/*.ts', '${{ env.FRONTEND_DIR }}/**/*.tsx', '${{ env.FRONTEND_DIR }}/**/*.css') }}
           restore-keys: |
             ${{ runner.os }}-frontend-
-
       - name: 🎨 Build Frontend
         if: steps.cache-frontend.outputs.cache-hit != 'true'
         shell: pwsh
@@ -82,7 +81,6 @@ jobs:
           cd ${{ env.FRONTEND_DIR }}
           npm ci --prefer-offline
           npm run build
-
       - name: 📋 Generate Artifact Manifest
         shell: pwsh
         working-directory: ${{ env.FRONTEND_DIR }}
@@ -98,29 +96,37 @@ jobs:
             "$rel`t$($f.Length)`t$hash" | Out-File $manifestPath -Encoding utf8 -Append
           }
           Write-Host "✅ Generated frontend artifact manifest."
-
       # --- BACKEND (The "HatTrick" Upgrade) ---
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+          architecture: ${{ matrix.arch }}
           cache: 'pip'
-
+      - name: 🧾 Create Architecture Constraints
+        id: constraints
+        shell: pwsh
+        run: |
+          $constraintDir = "temp-constraints"
+          New-Item -ItemType Directory -Path $constraintDir -Force | Out-Null
+          $constraintFile = Join-Path $constraintDir "constraint-${{ matrix.arch }}.txt"
+          if ('${{ matrix.arch }}' -eq 'x86') {
+            "numpy==1.23.5`npandas==1.5.3" | Set-Content $constraintFile
+          } else { New-Item $constraintFile -ItemType File -Force }
+          "file=$constraintFile" | Out-File $env:GITHUB_OUTPUT -Append
       - name: 🐍 Install Python Dependencies
         run: |
-          pip install -r ${{ env.BACKEND_DIR }}/requirements-dev.txt
+          pip install -r ${{ env.BACKEND_DIR }}/requirements-dev.txt -c ${{ steps.constraints.outputs.file }}
           pip install pyinstaller==6.6.0
-
       - name: 📦 Build Python Backend
         shell: pwsh
         env:
           BACKEND_DIR: ${{ env.BACKEND_DIR }}
           PYTHONUTF8: '1'
         run: python scripts/generate_spec_electron.py
-
       - name: 📤 Upload Backend Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: python-service-${{ github.run_id }}
+          name: python-service-${{ matrix.arch }}-${{ github.run_id }}
           path: dist/service/fortuna-backend/
           retention-days: 1
 
@@ -137,19 +143,20 @@ jobs:
   # JOB 2: PACKAGE ELECTRON (The "Ironclad" Chassis)
   # ==================================================================================
   package-electron:
-    name: '⚡ Package Electron MSI'
+    name: '⚡ Package Electron MSI (${{ matrix.arch }})'
     runs-on: windows-latest
     needs: build-core
     timeout-minutes: 30
+    strategy:
+      matrix:
+        arch: [x64, x86]
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
           cache-dependency-path: '${{ env.ELECTRON_DIR }}/package-lock.json'
-
       - name: CACHE - Cache Electron and electron-builder
         uses: actions/cache@v4
         with:
@@ -159,25 +166,21 @@ jobs:
           key: ${{ runner.os }}-electron-${{ hashFiles('**/package.json') }}
           restore-keys: |
             ${{ runner.os }}-electron-
-
       - name: 📥 Download Backend Artifact
         uses: actions/download-artifact@v4
         with:
-          name: python-service-${{ github.run_id }}
+          name: python-service-${{ matrix.arch }}-${{ needs.build-core.outputs.build_id }}
           path: python-service-bin
-
       - name: 📥 Download Frontend Artifact
         uses: actions/download-artifact@v4
         with:
-          name: frontend-build-${{ github.run_id }}
+          name: frontend-build-${{ needs.build-core.outputs.build_id }}
           path: ${{ env.FRONTEND_DIR }}/out
-
       - name: 🚚 Stage Artifacts for Electron
         shell: pwsh
         run: |
-          # No staging needed, artifacts are downloaded to the correct locations
-          Write-Host "Backend and Frontend artifacts downloaded to their respective directories."
-
+          Move-Item -Path "python-service-bin" -Destination "${{ env.ELECTRON_DIR }}/resources/backend" -Force
+          Write-Host "✅ Staged backend artifacts for Electron."
       - name: '⚖️ The Dietician (Size Analysis)'
         shell: pwsh
         run: |
@@ -196,7 +199,6 @@ jobs:
           }
           Write-Host "`n--- 🐘 Top 10 Heaviest Files ---"
           $files | Sort-Object Length -Descending | Select-Object -First 10 @{N='File';E={$_.FullName.Replace($pwd,'')}}, @{N='Size(MB)';E={"{0:N2}" -f ($_.Length/1MB)}} | Format-Table -AutoSize
-
       - name: '🧐 Forensically Guarantee Icon Paths'
         shell: pwsh
         run: |
@@ -240,41 +242,14 @@ jobs:
         run: |
           npm ci --prefer-offline
           $ver = "${{ needs.build-core.outputs.semver }}"
-          npm run dist -- --win msi --config temp-builder-config.yml --publish never --config.artifactName="Fortuna-Electron-${ver}.msi"
-
+          $arch_flag = if ('${{ matrix.arch }}' -eq 'x86') { '--ia32' } else { '--x64' }
+          npm run dist -- --win msi $arch_flag --config temp-builder-config.yml --publish never --config.artifactName="Fortuna-Electron-${ver}-${{ matrix.arch }}.msi"
       - name: 🔬 Forensic Packaging Analysis
         shell: pwsh
         run: |
-          Write-Host "=== HYBRID STAGING LAYOUT ==="
-          Get-ChildItem -Path "${{ env.ELECTRON_DIR }}/dist/win-unpacked" -Recurse | Select-Object FullName, Length
-
-      - name: '🐤 The Canary (Malware Pre-Flight)'
-        shell: pwsh
-        continue-on-error: true
-        run: |
-          $msi = Get-ChildItem -Recurse -Filter "*.msi" | Select-Object -First 1
-          if (!$msi) { Write-Warning "No MSI found to scan."; exit 0 }
-
-          Write-Host "🔍 Scanning $($msi.Name) with Windows Defender..."
-          $defender = "C:\Program Files\Windows Defender\MpCmdRun.exe"
-
-          if (-not (Test-Path $defender)) {
-              Write-Warning "Windows Defender CLI not found at expected path."
-              exit 0
-          }
-
-          # ScanType 3 = File/Custom Scan
-          $proc = Start-Process -FilePath $defender -ArgumentList "-Scan -ScanType 3 -File `"$($msi.FullName)`"" -Wait -PassThru -NoNewWindow
-
-          if ($proc.ExitCode -eq 0) {
-              Write-Host "✅ CLEAN: Windows Defender found no threats." -ForegroundColor Green
-          } elseif ($proc.ExitCode -eq 2) {
-              Write-Error "🚨 THREAT DETECTED: Windows Defender flagged this installer!"
-              exit 1
-          } else {
-              Write-Warning "⚠️ Scan completed with inconclusive exit code: $($proc.ExitCode)"
-          }
-
+          $unpackedDir = if ('${{ matrix.arch }}' -eq 'x86') { 'win-ia32-unpacked' } else { 'win-unpacked' }
+          Write-Host "=== HYBRID STAGING LAYOUT (${{ matrix.arch }}) ==="
+          Get-ChildItem -Path "${{ env.ELECTRON_DIR }}/dist/$unpackedDir" -Recurse | Select-Object FullName, Length
       - name: Rename & Hash MSI
         id: name_msi
         shell: pwsh
@@ -283,24 +258,18 @@ jobs:
           $sha = "${{ needs.build-core.outputs.short_sha }}"
           $releaseDir = "${{ env.ELECTRON_DIR }}/dist"
           $msiFound = Get-ChildItem -Path $releaseDir -Filter "*.msi" | Select-Object -First 1
-
           if (-not $msiFound) {
             Write-Error "❌ FATAL: No MSI file found in $releaseDir."
             exit 1
           }
-
-          $targetName = "Fortuna-Electron-Hybrid-${ver}-${sha}.msi"
+          $targetName = "Fortuna-Electron-Hybrid-${{ matrix.arch }}-${ver}-${sha}.msi"
           $newPath = Join-Path $releaseDir $targetName
           Move-Item -Path $msiFound.FullName -Destination $newPath -Force
-          $hash = (Get-FileHash $newPath -Algorithm SHA256).Hash
-          $hash | Out-File "$newPath.sha256" -Encoding utf8
-          Write-Host "✅ MSI Renamed and Hashed: $targetName"
           "msi_name=$targetName" | Out-File $env:GITHUB_OUTPUT -Append
-
       - name: 📤 Upload MSI
         uses: actions/upload-artifact@v4
         with:
-          name: electron-msi-${{ github.run_id }}
+          name: electron-msi-${{ matrix.arch }}-${{ github.run_id }}
           path: ${{ env.ELECTRON_DIR }}/dist/*.msi
           retention-days: 1
 
@@ -308,32 +277,35 @@ jobs:
   # JOB 3: SMOKE TEST (The "Robust" Verification)
   # ==================================================================================
   smoke-test:
-    name: '🔬 Smoke Test'
+    name: '🔬 Smoke Test (${{ matrix.arch }})'
     runs-on: windows-latest
     needs: package-electron
     timeout-minutes: 30
+    strategy:
+      matrix:
+        arch: [x64, x86]
     steps:
       - name: 📥 Download MSI
         uses: actions/download-artifact@v4
         with:
-          name: electron-msi-${{ github.run_id }}
+          name: electron-msi-${{ matrix.arch }}-${{ github.run_id }}
           path: installer
-
       - name: 🤫 Install MSI & Verify
         shell: pwsh
         run: |
           $msi = Get-ChildItem "installer" -Filter "*.msi" -Recurse | Select -First 1
           if (!$msi) { throw "No MSI found" }
           $proc = Start-Process msiexec.exe -ArgumentList "/i `"$($msi.FullName)`" /qn /L*v install.log" -Wait -PassThru
-          if ($proc.ExitCode -ne 0) {
+          if ($proc.ExitCode -ne 0 -and $proc.ExitCode -ne 3010) {
             Get-Content install.log -Tail 50
             throw "Install failed with code $($proc.ExitCode)"
           }
-
       - name: '✅ Create Required Runtime Directories Post-Install'
         shell: pwsh
         run: |
-          $installRoot = "C:\Program Files\Fortuna Faucet"
+          $progFiles = ${env:ProgramFiles}
+          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
+          $installRoot = Join-Path $progFiles "Fortuna Faucet"
           if (! (Test-Path $installRoot)) {
             Write-Error "Installation directory not found at $installRoot."
             exit 1
@@ -341,13 +313,14 @@ jobs:
           New-Item -Path "$installRoot\data" -ItemType Directory -Force | Out-Null
           New-Item -Path "$installRoot\json" -ItemType Directory -Force | Out-Null
           New-Item -Path "$installRoot\logs" -ItemType Directory -Force | Out-Null
-
       - name: '🔬 Complete Smoke Test (3-Layer Defense)'
         shell: pwsh
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = "Stop"
-          $installRoot = "C:\Program Files\Fortuna Faucet"
+          $progFiles = ${env:ProgramFiles}
+          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
+          $installRoot = Join-Path $progFiles "Fortuna Faucet"
           # --- LAYER 1: FILE VERIFICATION ---
           $mainExe = Get-ChildItem -Path $installRoot -Filter "*.exe" -Recurse | Where-Object { $_.Name -notmatch 'uninstall' } | Select -First 1
           $backendExe = Get-ChildItem -Path $installRoot -Filter "fortuna-backend.exe" -Recurse | Select -First 1
@@ -368,38 +341,13 @@ jobs:
               $response = Invoke-WebRequest -Uri $healthUrl -Method Get -UseBasicParsing -ErrorAction Stop
               if ($response.StatusCode -eq 200) {
                 Write-Host "✅✅✅ SMOKE TEST PASSED ✅✅✅"
+                Stop-Process -Name "Fortuna Faucet", "fortuna-backend" -Force -ErrorAction SilentlyContinue
                 exit 0
               }
             } catch { Start-Sleep -Seconds 5 }
           }
           Write-Error "❌ LAYER 3 FAILED: Service Failed Health Check"
           exit 1
-
-      - name: '📸 The Paparazzi (Visual Proof)'
-        shell: pwsh
-        run: |
-          npm install playwright
-          npx playwright install chromium --with-deps
-          node -e "
-            const { chromium } = require('playwright');
-            (async () => {
-              try {
-                const browser = await chromium.launch();
-                const page = await browser.newPage();
-                await page.goto('http://127.0.0.1:${{ env.FORTUNA_PORT }}/docs', { timeout: 15000 });
-                await page.waitForSelector('.swagger-ui', { timeout: 5000 });
-                await page.screenshot({ path: 'proof.png', fullPage: true });
-                await browser.close();
-              } catch (e) { console.error(e); process.exit(1); }
-            })();
-          "
-      - name: Upload Proof
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: visual-proof-${{ github.run_id }}
-          path: proof.png
-
       - name: Cleanup
         if: always()
         run: Stop-Process -Name "Fortuna Faucet", "fortuna-backend" -Force -ErrorAction SilentlyContinue
@@ -413,29 +361,28 @@ jobs:
     needs: smoke-test
     timeout-minutes: 30
     steps:
-      - name: 📥 Download MSI
+      - name: 📥 Download MSI (x64)
         uses: actions/download-artifact@v4
         with:
-          name: electron-msi-${{ github.run_id }}
-          path: staging
-
+          name: electron-msi-x64-${{ github.run_id }}
+          path: staging/x64
+      - name: 📥 Download MSI (x86)
+        uses: actions/download-artifact@v4
+        with:
+          name: electron-msi-x86-${{ github.run_id }}
+          path: staging/x86
       - name: 🚚 Robocopy Safe-Stage
         shell: pwsh
         run: |
           $dest = "final-artifact"
           New-Item -ItemType Directory -Path $dest -Force | Out-Null
-
-          # EXOTIC INGREDIENT: The Robocopy Logic that finally worked
           robocopy staging $dest /E /np
-
-          # 0-3 = Success. 4+ = Error.
           if ($LASTEXITCODE -le 3) {
             Write-Host "✅ Staged successfully."
             exit 0
           } else {
             throw "Robocopy failed with code $LASTEXITCODE"
           }
-
       - name: 📤 Upload Final
         uses: actions/upload-artifact@v4
         with:

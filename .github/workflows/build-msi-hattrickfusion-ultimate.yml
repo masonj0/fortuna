@@ -77,10 +77,30 @@ jobs:
             web_platform/frontend/frontend-manifest.tsv
 
   # 2. Build Backend (Downloads Frontend to bundle it)
+  backend-quality:
+    name: '🧯 Backend Quality Gates'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: build-frontend
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: web_service/backend/requirements-dev.txt
+      - name: Install Dependencies
+        run: |
+          pip install -r web_service/backend/requirements-dev.txt
+      - name: Run Pytest
+        run: |
+          pytest web_service/backend/tests
   build-backend:
     name: '🐍 Build Backend (${{ matrix.arch }})'
     runs-on: windows-latest
-    needs: build-frontend
+    needs: [build-frontend, backend-quality]
     timeout-minutes: 30
     strategy:
       matrix:
@@ -117,7 +137,7 @@ jobs:
           $constraintFile = Join-Path $constraintDir "constraint-${{ matrix.arch }}.txt"
           if ('${{ matrix.arch }}' -eq 'x86') {
             # 🚀 GPT-5 SAFE MODE
-            "numpy==1.23.5`npandas==1.5.3" | Set-Content $constraintFile
+            "numpy==1.23.5`r`npandas==1.5.3" | Set-Content $constraintFile
           } else { New-Item $constraintFile -ItemType File -Force }
           "file=$constraintFile" | Out-File $env:GITHUB_OUTPUT -Append
       - name: Install Dependencies
@@ -170,14 +190,7 @@ jobs:
       - name: Create Restart Service Batch Script
         shell: pwsh
         run: |
-          $scriptContent = @"
-          @echo off
-          echo Requesting Admin privileges to restart FortunaWebService...
-          net stop FortunaWebService
-          net start FortunaWebService
-          echo Service Restarted.
-          pause
-          "@
+          $scriptContent = "@echo off`r`necho Requesting Admin privileges to restart FortunaWebService...`r`nnet stop FortunaWebService`r`nnet start FortunaWebService`r`necho Service Restarted.`r`npause"
           Set-Content -Path "staging/backend/restart_service.bat" -Value $scriptContent -Encoding Ascii
           Write-Host "✅ Created restart_service.bat script."
       - uses: actions/setup-dotnet@v4
@@ -254,18 +267,67 @@ jobs:
           path: build_wix/bin/${{ matrix.arch }}/Release/*
 
   smoke-test:
-    name: '🔬 Smoke Test'
-    needs: package-msi
+    name: '🔬 Smoke Test (${{ matrix.arch }})'
     runs-on: windows-latest
+    needs: package-msi
+    strategy:
+      matrix:
+        arch: [x64, x86]
     steps:
-      - uses: actions/checkout@v4 # Action needs access to itself
-      - uses: ./.github/actions/run-smoke-test
+      - uses: actions/download-artifact@v4
         with:
-          msi-artifact-name: 'hat-trick-msi'
-          service-name: 'FortunaWebService'
-          executable-path: 'C:\Program Files\Fortuna Faucet Service\fortuna-webservice.exe'
-          port: ${{ env.FORTUNA_PORT }}
-          firewall-rule-name: ${{ env.FIREWALL_RULE }}
+          name: hat-trick-msi-${{ matrix.arch }}-${{ github.run_id }}
+          path: msi-installer
+      - name: 🔥 Smoke Test
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "Stop"
+          $msiPath = (Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse | Select-Object -First 1).FullName
+          if (-not $msiPath) { throw "MSI not found!" }
+          Write-Host "Found MSI at $msiPath"
+          # 1. PRE-INSTALL CLEANUP
+          Write-Host "Attempting pre-emptive service removal..."
+          $service = Get-Service -Name "FortunaWebService" -ErrorAction SilentlyContinue
+          if ($service) {
+            sc.exe delete "FortunaWebService"
+            Start-Sleep -Seconds 5
+          }
+          # 2. INSTALL
+          $logFile = "msi-install.log"
+          $msiArgs = "/i `"$msiPath`" /qn /L*v `"$logFile`""
+          Write-Host "Running: msiexec.exe $msiArgs"
+          $proc = Start-Process msiexec.exe -ArgumentList $msiArgs -Wait -PassThru
+          if ($proc.ExitCode -ne 0 -and $proc.ExitCode -ne 3010) {
+            Get-Content $logFile -Tail 50
+            throw "MSI installation failed with exit code $($proc.ExitCode)."
+          }
+          Write-Host "✅ MSI Installation successful."
+          # 3. VERIFY & RUN
+          $progFiles = ${env:ProgramFiles}
+          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
+          $installDir = Join-Path $progFiles "Fortuna Faucet Service"
+          if (-not (Test-Path $installDir)) { throw "Installation directory not found!" }
+          New-Item -ItemType Directory -Path (Join-Path $installDir "data") -Force | Out-Null
+          New-Item -ItemType Directory -Path (Join-Path $installDir "json") -Force | Out-Null
+          New-Item -ItemType Directory -Path (Join-Path $installDir "logs") -Force | Out-Null
+          Start-Service -Name "FortunaWebService"
+          Start-Sleep -Seconds 10
+          # 4. HEALTH CHECK
+          $maxRetries = 5
+          $delay = 5
+          For ($i=0; $i -lt $maxRetries; $i++) {
+            try {
+              $response = Invoke-WebRequest -Uri "http://localhost:${{ env.SERVICE_PORT }}/health" -UseBasicParsing
+              if ($response.StatusCode -eq 200) {
+                Write-Host "✅ Health check PASSED."
+                Stop-Service -Name "FortunaWebService"
+                exit 0
+              }
+            } catch { Write-Host "Attempt $($i+1) failed. Retrying in $delay seconds..." }
+            Start-Sleep -Seconds $delay
+          }
+          throw "Health check failed after $maxRetries attempts."
 
   generate-sbom:
     name: '📜 Generate SBOM'

@@ -168,11 +168,9 @@ jobs:
           $constraintFile = Join-Path $constraintDir "constraint-${{ matrix.arch }}.txt"
 
           if ('${{ matrix.arch }}' -eq 'x86') {
-            # 🚀 GPT-5 SAFE MODE: Use versions known to have stable win32 wheels
-            @'
-numpy==1.23.5
-pandas==1.5.3
-'@ | Set-Content -LiteralPath $constraintFile -Encoding utf8
+            # 🚀 GPT-5 SAFE MODE
+            # FIX: Use simple string with newlines (`r`n) to avoid YAML indentation crashes
+            "numpy==1.23.5`r`npandas==1.5.3" | Set-Content -LiteralPath $constraintFile -Encoding utf8
             Write-Host "✅ Created x86 constraints (Safe Mode)"
           } else {
             New-Item $constraintFile -ItemType File -Force
