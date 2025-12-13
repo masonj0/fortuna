@@ -78,40 +78,46 @@ jobs:
 
   # 2. Build Backend (Downloads Frontend to bundle it)
   build-backend:
-    name: Build Backend Binary
+    name: '🐍 Build Backend (${{ matrix.arch }})'
     runs-on: windows-latest
     needs: build-frontend
     timeout-minutes: 30
+    strategy:
+      matrix:
+        arch: [x64, x86]
     outputs:
       semver: ${{ steps.meta.outputs.semver }}
-      backend-dir: ${{ steps.meta.outputs.backend_dir }}
+      short_sha: ${{ steps.meta.outputs.short_sha }}
     steps:
       - uses: actions/checkout@v4
-
-      # Download Frontend for bundling
       - uses: actions/download-artifact@v4
         with:
           name: frontend-build
           path: web_platform/frontend/out
-
       - id: meta
         shell: pwsh
         run: |
           $ver = if ("${{ github.ref }}" -match 'refs/tags/v(.*)') { $Matches[1] } else { "0.0.${{ github.run_number }}" }
           "semver=$ver" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          $shortSha = "${{ github.sha }}".Substring(0,7)
+          "short_sha=$shortSha" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "backend_dir=web_service/backend" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "module_path=web_service.backend" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          python-version: '3.11'
+          architecture: ${{ matrix.arch }}
           cache: 'pip'
 
       - name: Install Dependencies
         run: |
-          pip install -r ${{ steps.meta.outputs.backend_dir }}/requirements.txt
-          pip install pyinstaller==6.6.0
-          pip install pytest pytest-asyncio httpx asgi-lifespan fakeredis
+          python -m pip install --upgrade pip
+          if ('${{ matrix.arch }}' -eq 'x86') {
+            Write-Host "⚠️ x86 Detected: Pinning Pandas < 2.1.0"
+            pip install "pandas<2.1.0" "numpy<2.0.0"
+          }
+          pip install -r web_service/backend/requirements.txt
+          pip install pyinstaller==6.6.0 pytest pytest-asyncio httpx asgi-lifespan fakeredis pywin32
 
       - name: 🧪 Run Unit Tests (Quality Gate)
         shell: pwsh
@@ -165,19 +171,25 @@ jobs:
       - name: Upload Backend
         uses: actions/upload-artifact@v4
         with:
-          name: backend-dist
+          # 🚀 Dynamic Name
+          name: backend-dist-${{ matrix.arch }}-${{ github.run_id }}
           path: dist/fortuna-backend.exe
 
   package-msi:
-    name: Package MSI
+    name: '💿 Package MSI (${{ matrix.arch }})'
     runs-on: windows-latest
     needs: build-backend
     timeout-minutes: 30
+    strategy:
+      matrix:
+        arch: [x64, x86]
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
-          name: backend-dist
+          # 🚀 Download the MATCHING architecture artifact
+          name: backend-dist-${{ matrix.arch }}-${{ github.run_id }}
           path: staging/backend
 
       - name: '⚖️ The Dietician (Size Analysis)'
@@ -291,7 +303,9 @@ jobs:
           }
       - name: Build MSI
         working-directory: build_wix
-        run: dotnet build Fortuna.wixproj -c Release -p:Platform=x64 -p:Version="${{ needs.build-backend.outputs.semver }}" -p:SourceDir="../staging/backend" -p:ServicePort="${{ env.SERVICE_PORT }}"
+        run: |
+          # 🚀 Pass Matrix Arch to WiX
+          dotnet build Fortuna.wixproj -c Release -p:Platform=${{ matrix.arch }} -p:Version="${{ needs.build-backend.outputs.semver }}" -p:SourceDir="../staging/backend" -p:ServicePort="${{ env.SERVICE_PORT }}"
 
       - name: '🐤 The Canary (Malware Pre-Flight)'
         shell: pwsh
@@ -319,34 +333,27 @@ jobs:
           } else {
               Write-Warning "⚠️ Scan completed with inconclusive exit code: $($proc.ExitCode)"
           }
-
       - name: Rename & Hash MSI
-        id: name_msi
-        shell: pwsh
         run: |
           $ver = "${{ needs.build-backend.outputs.semver }}"
           $sha = "${{ needs.build-backend.outputs.short_sha }}"
-          $releaseDir = "build_wix/bin/x64/Release"
+          # 🚀 Look in the correct output folder (x64 or x86)
+          $releaseDir = "build_wix/bin/${{ matrix.arch }}/Release"
           $msiFound = Get-ChildItem -Path $releaseDir -Filter "*.msi" | Select-Object -First 1
 
-          if (-not $msiFound) {
-            Write-Error "❌ FATAL: No MSI file found in $releaseDir."
-            exit 1
-          }
+          if (-not $msiFound) { throw "MSI not found in $releaseDir" }
 
-          $targetName = "HatTrickFusion-${ver}-${sha}.msi"
+          $targetName = "HatTrickFusion-${{ matrix.arch }}-${ver}-${sha}.msi"
           $newPath = Join-Path $releaseDir $targetName
           Move-Item -Path $msiFound.FullName -Destination $newPath -Force
-          $hash = (Get-FileHash $newPath -Algorithm SHA256).Hash
-          $hash | Out-File "$newPath.sha256" -Encoding utf8
-          Write-Host "✅ MSI Renamed and Hashed: $targetName"
-          "msi_name=$targetName" | Out-File $env:GITHUB_OUTPUT -Append
+
+          Write-Host "✅ MSI Ready: $targetName"
 
       - name: Upload MSI
         uses: actions/upload-artifact@v4
         with:
-          name: hat-trick-msi
-          path: build_wix/bin/x64/Release/*
+          name: hat-trick-msi-${{ matrix.arch }}
+          path: build_wix/bin/${{ matrix.arch }}/Release/*
 
   smoke-test:
     name: '🔬 Smoke Test'
