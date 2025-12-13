@@ -1,4 +1,4 @@
-# System Timestamp: 2025-12-07 14:00:00
+# System Timestamp: 2024-05-21 12:00:00
 name: HatTrick Fusion (Ultimate)
 on:
   workflow_dispatch:
@@ -11,7 +11,7 @@ concurrency:
 
 env:
   NODE_VERSION: '20'
-  PYTHON_VERSION: '3.12'
+  PYTHON_VERSION: '3.11' # 🚀 DOWNGRADED from 3.12 for x86 Compatibility
   DOTNET_VERSION: '8.0.x'
   WIX_VERSION: '4.0.5'
   SERVICE_PORT: '8102'
