@@ -714,11 +714,28 @@ jobs:
 
       - name: 🔬 Forensic Packaging Analysis
         shell: pwsh
+        env:
+          ARCH: ${{ matrix.arch }}
         run: |
-          Write-Host "=== RESOURCES FOLDER DUMP ==="
-          Get-ChildItem -Path "electron/dist/win-unpacked/resources" -Recurse | Format-Table FullName, Length
-          Write-Host "=== CHECKING FOR BACKEND EXECUTABLE ==="
-          if (Test-Path "electron/dist/win-unpacked/resources/python-service-bin/fortuna-backend.exe") { Write-Host "✅ fortuna-backend.exe exists" } else { Write-Error "❌ fortuna-backend.exe MISSING" }
+          # FIX: Dynamic path selection for x86 vs x64
+          $unpackedDir = if ($env:ARCH -eq 'x86') { "win-ia32-unpacked" } else { "win-unpacked" }
+          $resourcesPath = "electron/dist/$unpackedDir/resources"
+
+          Write-Host "=== RESOURCES FOLDER DUMP ($unpackedDir) ==="
+          if (Test-Path $resourcesPath) {
+            Get-ChildItem -Path $resourcesPath -Recurse | Format-Table FullName, Length
+
+            Write-Host "=== CHECKING FOR BACKEND EXECUTABLE ==="
+            if (Test-Path "$resourcesPath/python-service-bin/fortuna-backend.exe") {
+                Write-Host "✅ fortuna-backend.exe exists"
+            } else {
+                Write-Error "❌ fortuna-backend.exe MISSING in $resourcesPath"
+                exit 1
+            }
+          } else {
+            Write-Error "❌ Unpacked directory not found: $resourcesPath"
+            exit 1
+          }
       - name: 🏗️ Build MSI with electron-builder
         shell: pwsh
         working-directory: electron
@@ -909,18 +926,27 @@ jobs:
 
       - name: "🔍 Debug Backend Launch (With Timeout)"
         shell: pwsh
+        env:
+          ARCH: ${{ matrix.arch }}
         run: |
-          $exe = "C:\\Program Files\\Fortuna Faucet\\resources\\python-service-bin\\fortuna-backend.exe"
+          # FIX: Handle 32-bit install path
+          $progFiles = if ($env:ARCH -eq 'x86') { ${env:ProgramFiles(x86)} } else { $env:ProgramFiles }
+          $exe = "$progFiles\Fortuna Faucet\resources\python-service-bin\fortuna-backend.exe"
+
           if (Test-Path $exe) {
             Write-Host "Starting backend for 10s health check..."
             $proc = Start-Process -FilePath $exe -PassThru
             Start-Sleep -Seconds 10
             if (!$proc.HasExited) { Stop-Process -Id $proc.Id -Force; Write-Host "✅ Backend Alive" }
             else { Write-Error "❌ Backend crashed"; exit 1 }
+          } else {
+             Write-Warning "Backend not found at $exe"
           }
 
       - name: '🔬 Complete Smoke Test (3-Layer Defense)'
         shell: pwsh
+        env:
+          ARCH: ${{ matrix.arch }}
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = "Stop"
@@ -930,7 +956,11 @@ jobs:
 
           # --- LAYER 1: INSTALLATION & FILE VERIFICATION ---
           Write-Host "`n--- DEFENSE LAYER 1: VERIFYING INSTALLATION ---"
-          $installRoot = "C:\Program Files\Fortuna Faucet"
+
+          # FIX: Handle 32-bit install path on 64-bit Windows
+          $progFiles = if ($env:ARCH -eq 'x86') { ${env:ProgramFiles(x86)} } else { $env:ProgramFiles }
+          $installRoot = "$progFiles\Fortuna Faucet"
+
           if (-not (Test-Path $installRoot)) {
             Write-Error "❌ LAYER 1 FAILED: Install directory not found: $installRoot"
             exit 1
