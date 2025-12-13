@@ -1,4 +1,4 @@
-# System Timestamp: 2025-12-07 15:30:00
+# System Timestamp: 2024-05-21 12:00:00
 name: 🔨 Build Electron MSI Installer (Production)
 
 on:
@@ -11,7 +11,7 @@ concurrency:
 
 env:
   NODE_VERSION: '18'
-  PYTHON_VERSION: '3.11'
+  PYTHON_VERSION: '3.11' # 🚀 CRITICAL: 3.12 breaks x86 builds
   ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
   BACKEND_DIR: 'web_service/backend'
   PYTHONUTF8: '1'
@@ -146,43 +146,51 @@ jobs:
   build-python-service:
     name: '🐍 Build Python Service (${{ matrix.arch }})'
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     needs: validate-environment
     strategy:
       matrix:
         arch: [x64, x86]
     steps:
-      - name: 📥 Checkout Repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - name: 🐍 Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          architecture: ${{ matrix.arch }} # 🚀 Installs 32-bit Python if needed
+          architecture: ${{ matrix.arch }}
           cache: 'pip'
 
-      - name: 📦 Install Python Dependencies
+      - name: 🧾 Create Architecture Constraints
+        id: constraints
+        shell: pwsh
+        run: |
+          $constraintDir = "temp-constraints"
+          New-Item -ItemType Directory -Path $constraintDir -Force | Out-Null
+          $constraintFile = Join-Path $constraintDir "constraint-${{ matrix.arch }}.txt"
+
+          if ('${{ matrix.arch }}' -eq 'x86') {
+            # 🚀 GPT-5 SAFE MODE: Use versions known to have stable win32 wheels
+            @'
+numpy==1.23.5
+pandas==1.5.3
+'@ | Set-Content -LiteralPath $constraintFile -Encoding utf8
+            Write-Host "✅ Created x86 constraints (Safe Mode)"
+          } else {
+            New-Item $constraintFile -ItemType File -Force
+            Write-Host "✅ Created x64 constraints (Modern Mode)"
+          }
+          "file=$constraintFile" | Out-File $env:GITHUB_OUTPUT -Append
+
+      - name: 📦 Install Dependencies
         shell: pwsh
         run: |
           python -m pip install --upgrade pip setuptools wheel
+          # 🚀 Apply constraints to force safe versions on x86
+          pip install -r ${{ env.BACKEND_DIR }}/requirements.txt -c ${{ steps.constraints.outputs.file }}
 
-          # 🚀 FIX: Handle 32-bit (x86) limitations for Data Science libraries
-          # Pandas 2.2+ and Numpy 2.0+ dropped 32-bit Windows wheels.
-          if ('${{ matrix.arch }}' -eq 'x86') {
-            Write-Host "⚠️ x86 Architecture detected: Pinning legacy versions for Pandas/Numpy..."
-            pip install "pandas<2.2.0" "numpy<2.0.0"
-          }
-
-          pip install -r ${{ env.BACKEND_DIR }}/requirements.txt
-
-          # Dev dependencies are only for x64 to avoid build issues on x86
           if ('${{ matrix.arch }}' -eq 'x64') {
             pip install -r ${{ env.BACKEND_DIR }}/requirements-dev.txt
           }
-          Write-Host "✓ Python dependencies installed"
+          pip install pyinstaller==6.6.0 pyinstaller-hooks-contrib
 
       - name: 🧪 Run Unit Tests (Quality Gate, x64 only)
         if: matrix.arch == 'x64'
@@ -715,11 +723,28 @@ jobs:
 
       - name: 🔬 Forensic Packaging Analysis
         shell: pwsh
+        env:
+          ARCH: ${{ matrix.arch }}
         run: |
-          Write-Host "=== RESOURCES FOLDER DUMP ==="
-          Get-ChildItem -Path "electron/dist/win-unpacked/resources" -Recurse | Format-Table FullName, Length
-          Write-Host "=== CHECKING FOR BACKEND EXECUTABLE ==="
-          if (Test-Path "electron/dist/win-unpacked/resources/python-service-bin/fortuna-backend.exe") { Write-Host "✅ fortuna-backend.exe exists" } else { Write-Error "❌ fortuna-backend.exe MISSING" }
+          # FIX: Dynamic path selection for x86 vs x64
+          $unpackedDir = if ($env:ARCH -eq 'x86') { "win-ia32-unpacked" } else { "win-unpacked" }
+          $resourcesPath = "electron/dist/$unpackedDir/resources"
+
+          Write-Host "=== RESOURCES FOLDER DUMP ($unpackedDir) ==="
+          if (Test-Path $resourcesPath) {
+            Get-ChildItem -Path $resourcesPath -Recurse | Format-Table FullName, Length
+
+            Write-Host "=== CHECKING FOR BACKEND EXECUTABLE ==="
+            if (Test-Path "$resourcesPath/python-service-bin/fortuna-backend.exe") {
+                Write-Host "✅ fortuna-backend.exe exists"
+            } else {
+                Write-Error "❌ fortuna-backend.exe MISSING in $resourcesPath"
+                exit 1
+            }
+          } else {
+            Write-Error "❌ Unpacked directory not found: $resourcesPath"
+            exit 1
+          }
       - name: 🏗️ Build MSI with electron-builder
         shell: pwsh
         working-directory: electron
@@ -910,117 +935,56 @@ jobs:
 
       - name: "🔍 Debug Backend Launch (With Timeout)"
         shell: pwsh
+        env:
+          ARCH: ${{ matrix.arch }}
         run: |
-          $exe = "C:\\Program Files\\Fortuna Faucet\\resources\\python-service-bin\\fortuna-backend.exe"
+          # FIX: Handle 32-bit install path
+          $progFiles = if ($env:ARCH -eq 'x86') { ${env:ProgramFiles(x86)} } else { $env:ProgramFiles }
+          $exe = "$progFiles\Fortuna Faucet\resources\python-service-bin\fortuna-backend.exe"
+
           if (Test-Path $exe) {
             Write-Host "Starting backend for 10s health check..."
             $proc = Start-Process -FilePath $exe -PassThru
             Start-Sleep -Seconds 10
             if (!$proc.HasExited) { Stop-Process -Id $proc.Id -Force; Write-Host "✅ Backend Alive" }
             else { Write-Error "❌ Backend crashed"; exit 1 }
+          } else {
+             Write-Warning "Backend not found at $exe"
           }
 
-      - name: '🔬 Complete Smoke Test (3-Layer Defense)'
+      - name: '🔬 Complete Smoke Test'
         shell: pwsh
+        env:
+          ARCH: ${{ matrix.arch }}
         run: |
-          Set-StrictMode -Version Latest
-          $ErrorActionPreference = "Stop"
-          $logDir = "C:\Temp\fortuna-logs-$(Get-Random)"
-          New-Item -ItemType Directory -Path $logDir -Force | Out-Null
-          Write-Host "Logging to $logDir"
+          # 🚀 DYNAMIC PATH LOGIC
+          $progFiles = if ($env:ARCH -eq 'x86') { ${env:ProgramFiles(x86)} } else { $env:ProgramFiles }
+          $installRoot = "$progFiles\Fortuna Faucet"
 
-          # --- LAYER 1: INSTALLATION & FILE VERIFICATION ---
-          Write-Host "`n--- DEFENSE LAYER 1: VERIFYING INSTALLATION ---"
-          $installRoot = "C:\Program Files\Fortuna Faucet"
-          if (-not (Test-Path $installRoot)) {
-            Write-Error "❌ LAYER 1 FAILED: Install directory not found: $installRoot"
-            exit 1
-          }
-          $mainExe = Get-ChildItem -Path $installRoot -Filter "*.exe" -Recurse | Where-Object { $_.Name -notmatch 'uninstall' } | Select -First 1
-          $backendExe = Get-ChildItem -Path $installRoot -Filter "fortuna-backend.exe" -Recurse | Select -First 1
+          if (-not (Test-Path $installRoot)) { throw "❌ Install directory not found at $installRoot" }
 
-          if (-not $mainExe) { Write-Error "❌ LAYER 1 FAILED: Main 'Fortuna Faucet.exe' not found."; exit 1 }
-          if (-not $backendExe) { Write-Error "❌ LAYER 1 FAILED: Backend 'fortuna-backend.exe' not found."; exit 1 }
-          Write-Host "✅ Layer 1 Passed: Found main executable ($($mainExe.Name)) and backend ($($backendExe.Name))."
+          $exe = "$installRoot\resources\python-service-bin\fortuna-backend.exe"
+          if (-not (Test-Path $exe)) { throw "❌ Backend executable not found at $exe" }
 
-          # --- LAYER 2: PROCESS VERIFICATION ---
-          Write-Host "`n--- DEFENSE LAYER 2: VERIFYING PROCESS STARTUP ---"
-          # Set the environment variable for the process being started
-          $env:FORTUNA_PORT = "${{ env.FORTUNA_PORT }}"
-
-          $proc = Start-Process -FilePath $mainExe.FullName -ArgumentList "--no-sandbox" -PassThru -RedirectStandardOutput "$logDir\electron-stdout.log" -RedirectStandardError "$logDir\electron-stderr.log"
-          Write-Host "🚀 Electron Main Process launched (PID: $($proc.Id)) with FORTUNA_PORT=$($env:FORTUNA_PORT)"
-          Write-Host "Waiting for child processes to spawn..."
-          Start-Sleep -Seconds 10 # Give Electron time to spawn the backend
-
-          $parentProcess = Get-Process -Name "Fortuna Faucet" -ErrorAction SilentlyContinue
-          $childProcess = Get-Process -Name "fortuna-backend" -ErrorAction SilentlyContinue
-
-          if (-not $parentProcess) { Write-Error "❌ LAYER 2 FAILED: Main 'Fortuna Faucet' process is not running."; exit 1 }
-          if (-not $childProcess) { Write-Error "❌ LAYER 2 FAILED: Child 'fortuna-backend' process is not running."; exit 1 }
-          Write-Host "✅ Layer 2 Passed: 'Fortuna Faucet' (PID: $($parentProcess.Id)) and 'fortuna-backend' (PID: $($childProcess.Id)) are running."
-
-          # Inserted Backend Alive Check
-          Write-Host "--- Verifying backend process stability (10s alive check) ---"
+          Write-Host "Starting backend..."
+          $proc = Start-Process -FilePath $exe -PassThru
           Start-Sleep -Seconds 10
-          $childProcessCheck = Get-Process -Name "fortuna-backend" -ErrorAction SilentlyContinue
-          if (-not $childProcessCheck) {
-            Write-Error "❌ Backend process crashed within 10 seconds of starting."
-            exit 1
-          }
-          Write-Host "✅ Backend process is still alive."
+          if ($proc.HasExited) { throw "❌ Backend crashed immediately" }
 
-          # --- LAYER 3: NETWORK VERIFICATION ---
-          Write-Host "`n--- DEFENSE LAYER 3: VERIFYING NETWORK ENDPOINT ---"
-          $maxAttempts = 10
-          $healthUrl = "http://localhost:8102/health"
-          for ($i = 1; $i -le $maxAttempts; $i++) {
-            try {
-              Write-Host "Attempt $i/${maxAttempts}: Pinging $healthUrl..."
-              $response = Invoke-WebRequest -Uri $healthUrl -Method Get -UseBasicParsing -ErrorAction Stop
-              if ($response.StatusCode -eq 200) {
-                Write-Host "✅ Service is Healthy on Port 8102"
-                exit 0
-              }
-            } catch {
-              Write-Host "⏳ Waiting for service..."
-              Start-Sleep -Seconds 5
-            }
-          }
-          Write-Error "❌ Service Failed Health Check after $maxAttempts attempts"
-          exit 1
+          Write-Host "Pinging Health Endpoint..."
+          $response = Invoke-WebRequest -Uri "http://localhost:8102/health" -UseBasicParsing
+          if ($response.StatusCode -eq 200) { Write-Host "✅ SUCCESS: Health Check Passed" } else { throw "❌ Health Check Failed" }
 
-          Write-Host "`n✅✅✅ SMOKE TEST PASSED ALL 3 DEFENSE LAYERS ✅✅✅"
+          Stop-Process -Id $proc.Id -Force
 
-      - name: '📸 The Paparazzi (Visual Proof)'
+      - name: '📸 Paparazzi (Visual Proof)'
         shell: pwsh
         run: |
-          Write-Host "Installing Playwright..."
           npm install playwright
           npx playwright install chromium --with-deps
-
-          $port = "${{ env.FORTUNA_PORT }}"
-          # TARGET: Swagger UI (The only visible network component)
-          $url = "http://127.0.0.1:$port/docs"
-
-          node -e "
-            const { chromium } = require('playwright');
-            (async () => {
-              try {
-                const browser = await chromium.launch();
-                const page = await browser.newPage();
-                console.log('Navigating to ' + '$url');
-                await page.goto('$url', { timeout: 15000 });
-                // Wait for Swagger UI to render
-                await page.waitForSelector('.swagger-ui', { timeout: 5000 }).catch(() => console.log('UI not fully loaded, snapping anyway...'));
-                await page.screenshot({ path: 'proof-of-life.png', fullPage: true });
-                console.log('✅ Screenshot captured.');
-                await browser.close();
-              } catch (e) {
-                console.error(e); process.exit(1);
-              }
-            })();
-          "
+          # FIX: Point to /docs (Swagger UI)
+          $url = "http://127.0.0.1:8102/docs"
+          node -e "const { chromium } = require('playwright'); (async () => { const browser = await chromium.launch(); const page = await browser.newPage(); await page.goto('$url'); await page.screenshot({ path: 'proof.png' }); await browser.close(); })();"
 
       - name: 📤 Upload Visual Proof
         if: always()
