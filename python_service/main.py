@@ -49,13 +49,15 @@ def _configure_sys_path():
 
 
 def main():
-    _configure_sys_path()
     """
     Primary entry point for the Fortuna Faucet backend application.
     This function configures and runs the Uvicorn server.
     It's crucial to launch the app this way to ensure PyInstaller's bootloader
     can correctly resolve the package context.
     """
+    # CRITICAL: This must be called before any other application imports.
+    _configure_sys_path()
+
     # When packaged, we need to ensure multiprocessing works correctly.
     if getattr(sys, "frozen", False):
         # CRITICAL for multiprocessing support in frozen mode on Windows.

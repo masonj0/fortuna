@@ -502,3 +502,128 @@ WORKFLOW user_launches_application:
 
 ---
 *This concludes the revised and definitive blueprint for the Fortuna Faucet application.*
+
+---
+
+## 9. OPERATION: THE AUDITOR (REAL-TIME VERIFICATION)
+
+### 9.1 System Context
+*This module runs as a background thread within the Python Backend. It provides the "Source of Truth" by verifying predictions against official results (Equibase/GBGB) and calculating the "Favorite to Place" profitability in real-time.*
+
+### 9.2 Database Schema (SQLite)
+
+```pseudocode
+TABLE audit_log:
+  race_id: TEXT PRIMARY KEY (e.g., "GP-20251213-05")
+  track_code: TEXT
+  race_number: INT
+  predicted_horse: TEXT
+  timestamp: DATETIME
+  status: TEXT (Default: 'PENDING') // Options: 'PENDING', 'CASHED', 'BURNED'
+  official_payout: REAL (Default: 0.00)
+  net_profit: REAL (Default: 0.00)
+```
+
+### 9.3 Auditor Engine Logic (`auditor.py`)
+
+```pseudocode
+CLASS AuditorEngine:
+  INIT(db_connection):
+    self.db <- db_connection
+    self.http_client <- httpx.AsyncClient()
+    self.TOTE_UNIT <- 2.00
+
+  // --- Phase 1: The Snapshot ---
+  // Called by OddsEngine when a race qualifies as a bet
+  ASYNC FUNCTION snapshot_qualifier(race, predicted_horse):
+    race_id <- generate_id(race.venue, race.date, race.number)
+
+    TRY:
+      SQL_INSERT into audit_log (
+        race_id, track_code, race_number, predicted_horse, timestamp, status
+      ) VALUES (
+        race_id, race.venue_code, race.number, predicted_horse, NOW(), 'PENDING'
+      )
+      LOG "Snapshot saved for verification: " + race_id
+    CATCH IntegrityError:
+      LOG_WARN "Race already tracked: " + race_id
+
+  // --- Phase 2: The Fetcher (Background Loop) ---
+  // Runs continuously to check results for the last hour
+  ASYNC FUNCTION run_audit_loop():
+    WHILE True:
+      // 1. Find pending races from the last 60 minutes
+      cutoff_time <- NOW() - MINUTES(60)
+      pending_races <- SQL_SELECT * FROM audit_log
+                       WHERE status = 'PENDING' AND timestamp > cutoff_time
+
+      IF pending_races is EMPTY:
+        SLEEP 120 seconds
+        CONTINUE
+
+      // 2. Fetch Official Results (Batch by Track to be polite)
+      FOR race IN pending_races:
+        official_result <- AWAIT self._fetch_official_result(race.track_code, race.race_number)
+
+        IF official_result is NOT NULL:
+          self._determine_verdict(race, official_result)
+
+      SLEEP 120 seconds
+
+  // --- Phase 3: The Verdict & Economics ---
+  FUNCTION _determine_verdict(prediction, official_result):
+    did_place <- FALSE
+    payout <- 0.00
+
+    // Check if our horse is in the official "Place" payouts
+    // (Note: "Place" in US racing covers 1st and 2nd)
+    FOR finisher IN official_result.finishers:
+      IF finisher.name == prediction.predicted_horse AND finisher.place_payout > 0:
+        did_place <- TRUE
+        payout <- finisher.place_payout
+
+    // Calculate Net Profit based on $2.00 Unit
+    IF did_place:
+      new_status <- 'CASHED'
+      net_profit <- payout - self.TOTE_UNIT
+      LOG_SUCCESS `💰 CASHED: ${prediction.race_id} | Profit: $${net_profit}`
+    ELSE:
+      new_status <- 'BURNED'
+      net_profit <- -self.TOTE_UNIT // Lost the $2.00 stake
+      LOG_FAIL `🔥 BURNED: ${prediction.race_id} | Loss: -$2.00`
+
+    // Update the Source of Truth
+    SQL_UPDATE audit_log
+    SET status = new_status, official_payout = payout, net_profit = net_profit
+    WHERE race_id = prediction.race_id
+
+  // --- Helper: Scraper Logic ---
+  ASYNC FUNCTION _fetch_official_result(track_code, race_number):
+    // Logic to scrape Equibase Summary Results
+    html <- AWAIT self.http_client.GET("https://www.equibase.com/static/chart/summary/index.html")
+    parsed_data <- parse_html_table(html)
+
+    // Return structured object if result is posted, else NULL
+    RETURN find_race_in_summary(parsed_data, track_code, race_number)
+
+  // --- Phase 4: Dashboard Metrics ---
+  FUNCTION get_rolling_metrics():
+    // Returns stats for the UI "Last Hour" overlay
+    cutoff <- NOW() - MINUTES(60)
+
+    stats <- SQL_QUERY """
+      SELECT
+        COUNT(*) as total,
+        SUM(CASE WHEN status = 'CASHED' THEN 1 ELSE 0 END) as wins,
+        SUM(net_profit) as profit
+      FROM audit_log
+      WHERE timestamp > cutoff AND status != 'PENDING'
+    """
+
+    strike_rate <- (stats.wins / stats.total) * 100
+    RETURN {
+      "strike_rate": strike_rate,
+      "net_profit": stats.profit,
+      "volume": stats.total
+    }
+```
