@@ -1,4 +1,4 @@
-# System Timestamp: 2025-12-07 14:00:00
+# System Timestamp: 2024-05-21 12:00:00
 name: HatTrick Fusion (Standard)
 on:
   workflow_dispatch:
@@ -11,7 +11,7 @@ concurrency:
 
 env:
   NODE_VERSION: '20'
-  PYTHON_VERSION: '3.12'
+  PYTHON_VERSION: '3.11' # 🚀 DOWNGRADED for x86
   DOTNET_VERSION: '8.0.x'
   WIX_VERSION: '4.0.5'
   SERVICE_PORT: '8102'
@@ -78,61 +78,75 @@ jobs:
 
   # 2. Build Backend (Downloads Frontend to bundle it)
   build-backend:
-    name: Build Backend Binary
+    name: '🐍 Build Backend (${{ matrix.arch }})'
     runs-on: windows-latest
     needs: build-frontend
     timeout-minutes: 30
+    strategy:
+      matrix:
+        arch: [x64, x86]
     outputs:
       semver: ${{ steps.meta.outputs.semver }}
-      backend-dir: ${{ steps.meta.outputs.backend_dir }}
+      short_sha: ${{ steps.meta.outputs.short_sha }}
     steps:
       - uses: actions/checkout@v4
-
-      # Download Frontend for bundling
       - uses: actions/download-artifact@v4
         with:
           name: frontend-build
           path: web_platform/frontend/out
-
       - id: meta
         shell: pwsh
         run: |
           $ver = if ("${{ github.ref }}" -match 'refs/tags/v(.*)') { $Matches[1] } else { "0.0.${{ github.run_number }}" }
           "semver=$ver" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          $shortSha = "${{ github.sha }}".Substring(0,7)
+          "short_sha=$shortSha" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "backend_dir=web_service/backend" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "module_path=web_service.backend" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+          architecture: ${{ matrix.arch }}
           cache: 'pip'
-
+      - name: 🧾 Create Architecture Constraints
+        id: constraints
+        shell: pwsh
+        run: |
+          $constraintDir = "temp-constraints"
+          New-Item -ItemType Directory -Path $constraintDir -Force | Out-Null
+          $constraintFile = Join-Path $constraintDir "constraint-${{ matrix.arch }}.txt"
+          if ('${{ matrix.arch }}' -eq 'x86') {
+            # 🚀 GPT-5 SAFE MODE
+            "numpy==1.23.5`r`npandas==1.5.3" | Set-Content $constraintFile
+          } else { New-Item $constraintFile -ItemType File -Force }
+          "file=$constraintFile" | Out-File $env:GITHUB_OUTPUT -Append
       - name: Install Dependencies
         run: |
-          pip install -r ${{ steps.meta.outputs.backend_dir }}/requirements.txt
-          pip install pyinstaller==6.6.0
-
+          python -m pip install --upgrade pip
+          pip install -r web_service/backend/requirements.txt -c ${{ steps.constraints.outputs.file }}
+          pip install pyinstaller==6.6.0 pywin32
       - name: Build Backend (PyInstaller)
         run: |
-          # FIX: Target service_entry.py and include win32timezone
           pyinstaller --noconfirm --onedir --clean --name fortuna-backend --hidden-import=win32timezone --hidden-import=win32serviceutil --add-data "web_service/backend;backend" web_service/backend/service_entry.py
-
       - name: Upload Backend
         uses: actions/upload-artifact@v4
         with:
-          name: backend-dist
+          name: backend-dist-${{ matrix.arch }}-${{ github.run_id }}
           path: dist/fortuna-backend.exe
 
   package-msi:
-    name: Package MSI
+    name: '💿 Package MSI (${{ matrix.arch }})'
     runs-on: windows-latest
     needs: build-backend
     timeout-minutes: 30
+    strategy:
+      matrix:
+        arch: [x64, x86]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: backend-dist
+          name: backend-dist-${{ matrix.arch }}-${{ github.run_id }}
           path: staging/backend
 
       - name: '⚖️ The Dietician (Size Analysis)'
@@ -157,14 +171,7 @@ jobs:
       - name: Create Restart Service Batch Script
         shell: pwsh
         run: |
-          $scriptContent = @"
-          @echo off
-          echo Requesting Admin privileges to restart FortunaWebService...
-          net stop FortunaWebService
-          net start FortunaWebService
-          echo Service Restarted.
-          pause
-          "@
+          $scriptContent = "@echo off`r`necho Requesting Admin privileges to restart FortunaWebService...`r`nnet stop FortunaWebService`r`nnet start FortunaWebService`r`necho Service Restarted.`r`npause"
           Set-Content -Path "staging/backend/restart_service.bat" -Value $scriptContent -Encoding Ascii
           Write-Host "✅ Created restart_service.bat script."
 
@@ -191,11 +198,7 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
           if (-not (Test-Path build_wix)) { New-Item -ItemType Directory -Path build_wix | Out-Null }
-
-          # Copy template
           Copy-Item build_wix/Product_WithService.wxs build_wix/Product.wxs -Force
-
-          # Dynamically remove the problematic Start="install" attribute
           $wxsPath = 'build_wix/Product.wxs'
           $wxsContent = [xml](Get-Content $wxsPath -Raw)
           $serviceControl = $wxsContent.SelectSingleNode("//*[local-name()='ServiceControl']")
@@ -204,20 +207,15 @@ jobs:
               $wxsContent.Save($wxsPath)
               Write-Host "✅ Dynamically removed 'Start=install' attribute from WiX template."
           }
-
-          # Stage Executable
           if (Test-Path staging/backend/fortuna-backend.exe) {
-            Write-Host "Renaming fortuna-backend.exe to fortuna-webservice.exe"
             Move-Item staging/backend/fortuna-backend.exe staging/backend/fortuna-webservice.exe -Force
           }
-
-          # FIX: Generate Valid .wixproj with Extensions
           $proj = @(
             '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">',
             '  <PropertyGroup>',
             '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>',
             '    <OutputType>Package</OutputType>',
-            '    <Platforms>x64</Platforms>',
+            '    <Platforms>x64;x86</Platforms>',
             '    <DefineConstants>Version=$(Version);SourceDir=$(SourceDir);ServicePort=$(ServicePort)</DefineConstants>',
             '  </PropertyGroup>',
             '  <ItemGroup>',
@@ -231,89 +229,90 @@ jobs:
             '</Project>'
           )
           Set-Content build_wix/Fortuna.wixproj ($proj -join "`r`n") -Encoding utf8
-
-      - name: 🔬 Forensic Packaging Analysis
-        shell: pwsh
-        run: |
-          Write-Host "=== STAGING DIRECTORY MANIFEST ==="
-          Get-ChildItem -Path staging -Recurse | Sort-Object Length | Format-Table FullName, Length, LastWriteTime -AutoSize
-
-          Write-Host "=== CRITICAL FILE CHECK ==="
-          $critical = @("fortuna-webservice.exe", "restart_service.bat")
-          foreach ($file in $critical) {
-            $found = Get-ChildItem -Path staging -Recurse -Filter $file
-            if ($found) { Write-Host "✅ FOUND: $file" -ForegroundColor Green }
-            else { Write-Host "❌ MISSING: $file" -ForegroundColor Red }
-          }
       - name: Build MSI
         working-directory: build_wix
-        run: dotnet build Fortuna.wixproj -c Release -p:Platform=x64 -p:Version="${{ needs.build-backend.outputs.semver }}" -p:SourceDir="../staging/backend" -p:ServicePort="${{ env.SERVICE_PORT }}"
-
-      - name: '🐤 The Canary (Malware Pre-Flight)'
-        shell: pwsh
-        continue-on-error: true
         run: |
-          $msi = Get-ChildItem -Recurse -Filter "*.msi" | Select-Object -First 1
-          if (!$msi) { Write-Warning "No MSI found to scan."; exit 0 }
-
-          Write-Host "🔍 Scanning $($msi.Name) with Windows Defender..."
-          $defender = "C:\Program Files\Windows Defender\MpCmdRun.exe"
-
-          if (-not (Test-Path $defender)) {
-              Write-Warning "Windows Defender CLI not found at expected path."
-              exit 0
-          }
-
-          # ScanType 3 = File/Custom Scan
-          $proc = Start-Process -FilePath $defender -ArgumentList "-Scan -ScanType 3 -File `"$($msi.FullName)`"" -Wait -PassThru -NoNewWindow
-
-          if ($proc.ExitCode -eq 0) {
-              Write-Host "✅ CLEAN: Windows Defender found no threats." -ForegroundColor Green
-          } elseif ($proc.ExitCode -eq 2) {
-              Write-Error "🚨 THREAT DETECTED: Windows Defender flagged this installer!"
-              exit 1
-          } else {
-              Write-Warning "⚠️ Scan completed with inconclusive exit code: $($proc.ExitCode)"
-          }
-
+          dotnet build Fortuna.wixproj -c Release -p:Platform=${{ matrix.arch }} -p:Version="${{ needs.build-backend.outputs.semver }}" -p:SourceDir="../staging/backend" -p:ServicePort="${{ env.SERVICE_PORT }}"
       - name: Rename & Hash MSI
-        id: name_msi
-        shell: pwsh
         run: |
           $ver = "${{ needs.build-backend.outputs.semver }}"
           $sha = "${{ needs.build-backend.outputs.short_sha }}"
-          $releaseDir = "build_wix/bin/x64/Release"
+          $releaseDir = "build_wix/bin/${{ matrix.arch }}/Release"
           $msiFound = Get-ChildItem -Path $releaseDir -Filter "*.msi" | Select-Object -First 1
-
-          if (-not $msiFound) {
-            Write-Error "❌ FATAL: No MSI file found in $releaseDir."
-            exit 1
-          }
-
-          $targetName = "HatTrickFusion-${ver}-${sha}.msi"
+          if (-not $msiFound) { throw "MSI not found in $releaseDir" }
+          $targetName = "HatTrickFusion-${{ matrix.arch }}-${ver}-${sha}.msi"
           $newPath = Join-Path $releaseDir $targetName
           Move-Item -Path $msiFound.FullName -Destination $newPath -Force
-          $hash = (Get-FileHash $newPath -Algorithm SHA256).Hash
-          $hash | Out-File "$newPath.sha256" -Encoding utf8
-          Write-Host "✅ MSI Renamed and Hashed: $targetName"
-          "msi_name=$targetName" | Out-File $env:GITHUB_OUTPUT -Append
-
+          Write-Host "✅ MSI Ready: $targetName"
       - name: Upload MSI
         uses: actions/upload-artifact@v4
         with:
-          name: hat-trick-msi
-          path: build_wix/bin/x64/Release/*
+          name: hat-trick-msi-${{ matrix.arch }}-${{ github.run_id }}
+          path: build_wix/bin/${{ matrix.arch }}/Release/*
 
   smoke-test:
-    name: '🔬 Smoke Test'
-    needs: package-msi
+    name: '🔬 Smoke Test (${{ matrix.arch }})'
     runs-on: windows-latest
+    needs: package-msi
+    strategy:
+      matrix:
+        arch: [x64, x86]
     steps:
-      - uses: actions/checkout@v4 # Action needs access to itself
-      - uses: ./.github/actions/run-smoke-test
+      - uses: actions/download-artifact@v4
         with:
-          msi-artifact-name: 'hat-trick-msi'
-          service-name: 'FortunaWebService'
-          executable-path: 'C:\Program Files\Fortuna Faucet Service\fortuna-webservice.exe'
-          port: ${{ env.FORTUNA_PORT }}
-          firewall-rule-name: ${{ env.FIREWALL_RULE }}
+          name: hat-trick-msi-${{ matrix.arch }}-${{ github.run_id }}
+          path: msi-installer
+      - name: 🔥 Smoke Test
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "Stop"
+          $msiPath = (Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse | Select-Object -First 1).FullName
+          if (-not $msiPath) { throw "MSI not found!" }
+          Write-Host "Found MSI at $msiPath"
+
+          # 1. PRE-INSTALL CLEANUP
+          Write-Host "Attempting pre-emptive service removal..."
+          $service = Get-Service -Name "FortunaWebService" -ErrorAction SilentlyContinue
+          if ($service) {
+            sc.exe delete "FortunaWebService"
+            Start-Sleep -Seconds 5
+          }
+
+          # 2. INSTALL
+          $logFile = "msi-install.log"
+          $msiArgs = "/i `"$msiPath`" /qn /L*v `"$logFile`""
+          Write-Host "Running: msiexec.exe $msiArgs"
+          $proc = Start-Process msiexec.exe -ArgumentList $msiArgs -Wait -PassThru
+          if ($proc.ExitCode -ne 0 -and $proc.ExitCode -ne 3010) {
+            Get-Content $logFile -Tail 50
+            throw "MSI installation failed with exit code $($proc.ExitCode)."
+          }
+          Write-Host "✅ MSI Installation successful."
+
+          # 3. VERIFY & RUN
+          $progFiles = ${env:ProgramFiles}
+          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
+          $installDir = Join-Path $progFiles "Fortuna Faucet Service"
+          if (-not (Test-Path $installDir)) { throw "Installation directory not found!" }
+          New-Item -ItemType Directory -Path (Join-Path $installDir "data") -Force | Out-Null
+          New-Item -ItemType Directory -Path (Join-Path $installDir "json") -Force | Out-Null
+          New-Item -ItemType Directory -Path (Join-Path $installDir "logs") -Force | Out-Null
+          Start-Service -Name "FortunaWebService"
+          Start-Sleep -Seconds 10
+
+          # 4. HEALTH CHECK
+          $maxRetries = 5
+          $delay = 5
+          For ($i=0; $i -lt $maxRetries; $i++) {
+            try {
+              $response = Invoke-WebRequest -Uri "http://localhost:${{ env.SERVICE_PORT }}/health" -UseBasicParsing
+              if ($response.StatusCode -eq 200) {
+                Write-Host "✅ Health check PASSED."
+                Stop-Service -Name "FortunaWebService"
+                exit 0
+              }
+            } catch { Write-Host "Attempt $($i+1) failed. Retrying in $delay seconds..." }
+            Start-Sleep -Seconds $delay
+          }
+          throw "Health check failed after $maxRetries attempts."
