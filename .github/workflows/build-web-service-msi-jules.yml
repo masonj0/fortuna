@@ -546,11 +546,12 @@ jobs:
 
           # FIX: Normalize paths to forward slashes to avoid f-string backslash hell
           bk_dir = os.environ['BACKEND_DIR'].replace('\\', '/')
-          mod_path = os.environ['BACKEND_MODULE_PATH']
+          mod_path = os.environ['MODULE_PATH']
           frontend_out = os.environ['FRONTEND_OUT'].replace('\\', '/')
           spec_file = "jules.spec" # Hardcode the correct spec file name
 
-          entry = f"{bk_dir}/main.py"
+          # FIX 1: Service Entry Point
+          entry = f"{bk_dir}/service_entry.py"
 
           spec = f"""
           # -- mode: python ; coding: utf-8 --
@@ -1034,15 +1035,32 @@ jobs:
             -p:SourceDir="../${{ env.MSI_STAGING_DIR }}" `
             -p:Version="${{ env.BUILD_VERSION }}" `
             -p:ServicePort="${{ env.SERVICE_PORT }}"
-          $msiFile = Resolve-Path "bin/x64/Release/${{ steps.stage.outputs.msi_name }}"
-          if (-not (Test-Path $msiFile)) {
-            Write-Host "Listing bin/x64/Release/ to debug:"
-            Get-ChildItem "bin/x64/Release/" | Select-Object FullName
-            throw "MSI not found at expected path: $msiFile"
+
+          # FIX 2: Robust MSI Renaming
+          $defaultOutput = "bin/x64/Release/Fortuna.msi"
+          $targetName = "${{ steps.stage.outputs.msi_name }}"
+          $targetPath = "bin/x64/Release/$targetName"
+
+          if (Test-Path $defaultOutput) {
+            Move-Item -Path $defaultOutput -Destination $targetPath -Force
+            Write-Host "✅ Renamed MSI to $targetName"
+          } else {
+            throw "❌ Build failed: $defaultOutput not found"
           }
-          $hash = (Get-FileHash $msiFile -Algorithm SHA256).Hash
-          $hash | Out-File "$msiFile.sha256" -Encoding utf8
-          Write-Host "✅ MSI Built: $hash"
+
+      - name: Generate SHA256 Hash
+        working-directory: ${{ env.WIX_DIR }}
+        run: |
+          Set-StrictMode -Version Latest
+          $msi = Get-ChildItem -Path "bin/x64/Release" -Filter "*.msi" | Select-Object -First 1
+          if ($msi) {
+            $hash = (Get-FileHash -LiteralPath $msi.FullName -Algorithm SHA256).Hash
+            Set-Content -Path "$($msi.FullName).sha256" -Value $hash
+            Write-Host "✅ Generated SHA256 hash for $($msi.Name): $($hash.Substring(0,16))..."
+          } else {
+            Write-Error "❌ Could not find the built MSI to generate a hash."
+            exit 1
+          }
 
       - name: '🐤 The Canary (Malware Pre-Flight)'
         shell: pwsh
