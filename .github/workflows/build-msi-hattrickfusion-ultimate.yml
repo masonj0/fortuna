@@ -169,24 +169,24 @@ jobs:
         with:
           name: backend-dist-${{ matrix.arch }}-${{ github.run_id }}
           path: staging/backend
+      # ---------------------------------------------------------
+      # 💉 INJECT: THE DIETICIAN (Subroutine #3)
+      # ---------------------------------------------------------
       - name: '⚖️ The Dietician (Size Analysis)'
         shell: pwsh
         run: |
-          $target = "staging"
-          $limitMB = 300
-          Write-Host "--- 📊 Size Breakdown ---"
-          $files = Get-ChildItem -Path $target -Recurse -File -ErrorAction SilentlyContinue
-          if (!$files) { Write-Warning "No files found to weigh."; exit 0 }
-          $totalBytes = ($files | Measure-Object -Property Length -Sum).Sum
-          $totalMB = [math]::Round($totalBytes / 1MB, 2)
-          Write-Host "Total Payload Size: $totalMB MB"
-          if ($totalMB -gt $limitMB) {
-              Write-Warning "⚠️ BLOAT ALERT: Build exceeds $limitMB MB limit! Check the heaviest files below."
+          $stagingDir = "staging" # Adjust if your staging folder is named differently
+          if (Test-Path $stagingDir) {
+            $size = (Get-ChildItem $stagingDir -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB
+            $sizeRounded = [math]::Round($size, 2)
+            Write-Host "📊 Total Payload Size: $sizeRounded MB"
+
+            if ($size -gt 300) {
+              Write-Warning "⚠️ BLOAT ALERT: Payload exceeds 300MB!"
+            }
           } else {
-              Write-Host "✅ Size within limits (< $limitMB MB)." -ForegroundColor Green
+            Write-Warning "Staging directory not found, skipping diet check."
           }
-          Write-Host "`n--- 🐘 Top 10 Heaviest Files ---"
-          $files | Sort-Object Length -Descending | Select-Object -First 10 @{N='File';E={$_.FullName.Replace($pwd,'')}}, @{N='Size(MB)';E={"{0:N2}" -f ($_.Length/1MB)}} | Format-Table -AutoSize
       - name: Create Restart Service Batch Script
         shell: pwsh
         run: |
@@ -316,18 +316,48 @@ jobs:
           # 4. HEALTH CHECK
           $maxRetries = 5
           $delay = 5
+          $success = $false
           For ($i=0; $i -lt $maxRetries; $i++) {
             try {
               $response = Invoke-WebRequest -Uri "http://localhost:${{ env.SERVICE_PORT }}/health" -UseBasicParsing
               if ($response.StatusCode -eq 200) {
                 Write-Host "✅ Health check PASSED."
-                Stop-Service -Name "FortunaWebService"
-                exit 0
+                $success = $true
+                break
               }
             } catch { Write-Host "Attempt $($i+1) failed. Retrying in $delay seconds..." }
             Start-Sleep -Seconds $delay
           }
-          throw "Health check failed after $maxRetries attempts."
+          if (-not $success) {
+            throw "Health check failed after $maxRetries attempts."
+          }
+      # ---------------------------------------------------------
+      # 💉 INJECT: PAPARAZZI (Subroutine #4)
+      # ---------------------------------------------------------
+      - name: '📸 Paparazzi (Visual Proof)'
+        if: success()
+        shell: pwsh
+        run: |
+          npm install playwright
+          npx playwright install chromium
+
+          # Ensure we hit the local service
+          $url = "http://127.0.0.1:${{ env.SERVICE_PORT }}/docs"
+
+          $nodeScript = "const { chromium } = require('playwright'); (async () => { const browser = await chromium.launch(); const page = await browser.newPage(); try { await page.goto('$url', { timeout: 10000 }); await page.screenshot({ path: 'proof-of-life.png', fullPage: true }); console.log('✅ Screenshot captured!'); } catch (e) { console.error('❌ Failed to capture screenshot:', e); process.exit(1); } await browser.close(); })();"
+          node -e $nodeScript
+
+      - name: 📤 Upload Visual Proof
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: visual-proof-${{ matrix.arch || 'x64' }}
+          path: proof-of-life.png
+      - name: 🧹 Stop Service
+        if: always()
+        shell: pwsh
+        run: |
+          Stop-Service -Name "FortunaWebService" -ErrorAction SilentlyContinue
 
   generate-sbom:
     name: '📜 Generate SBOM'
