@@ -207,6 +207,7 @@ jobs:
 
           # Stage Executable
           if (Test-Path staging/backend/fortuna-backend.exe) {
+            Write-Host "Renaming fortuna-backend.exe to fortuna-webservice.exe"
             Move-Item staging/backend/fortuna-backend.exe staging/backend/fortuna-webservice.exe -Force
           }
 
