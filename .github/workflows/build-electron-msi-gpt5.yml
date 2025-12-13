@@ -159,24 +159,24 @@ jobs:
           architecture: ${{ matrix.arch }}
           cache: 'pip'
 
+      # ---------------------------------------------------------
+      # 💉 INJECT: ARCHITECTURE CONSTRAINTS (Subroutine #1)
+      # ---------------------------------------------------------
       - name: 🧾 Create Architecture Constraints
         id: constraints
         shell: pwsh
         run: |
-          $constraintDir = "temp-constraints"
-          New-Item -ItemType Directory -Path $constraintDir -Force | Out-Null
-          $constraintFile = Join-Path $constraintDir "constraint-${{ matrix.arch }}.txt"
-
+          $file = "constraints.txt"
+          # Check the matrix architecture
           if ('${{ matrix.arch }}' -eq 'x86') {
-            # 🚀 GPT-5 SAFE MODE
-            # FIX: Use simple string with newlines (`r`n) to avoid YAML indentation crashes
-            "numpy==1.23.5`r`npandas==1.5.3" | Set-Content -LiteralPath $constraintFile -Encoding utf8
-            Write-Host "✅ Created x86 constraints (Safe Mode)"
+            Write-Host "🛡️ ACTIVATING X86 SAFE MODE"
+            # Pin versions known to have 32-bit wheels on PyPI
+            "numpy==1.23.5`r`npandas==1.5.3" | Set-Content $file
           } else {
-            New-Item $constraintFile -ItemType File -Force
-            Write-Host "✅ Created x64 constraints (Modern Mode)"
+            Write-Host "🚀 ACTIVATING X64 MODERN MODE"
+            New-Item $file -ItemType File -Force
           }
-          "file=$constraintFile" | Out-File $env:GITHUB_OUTPUT -Append
+          "file=$file" | Out-File $env:GITHUB_OUTPUT -Append
 
       - name: 📦 Install Dependencies
         shell: pwsh
@@ -705,6 +705,7 @@ jobs:
           }
       - name: 🏗️ Build Electron App
         shell: pwsh
+        working-directory: electron
         run: |
           # Set code signing to false for CI
           $env:CSC_IDENTITY_AUTO_DISCOVERY = 'false'
@@ -933,10 +934,31 @@ jobs:
 
           Write-Host "✅ MSI installation succeeded"
 
+      # ---------------------------------------------------------
+      # 💉 INJECT: DYNAMIC PATH RESOLUTION (Subroutine #2)
+      # ---------------------------------------------------------
+      - name: 🔍 Verify Installation Path
+        shell: pwsh
+        run: |
+          $arch = "${{ matrix.arch }}"
+
+          # The Magic Logic
+          $progFiles = if ($arch -eq 'x86') { ${env:ProgramFiles(x86)} } else { $env:ProgramFiles }
+          $targetDir = "$progFiles\Fortuna Faucet" # Adjust 'Fortuna' to your actual install folder name
+
+          Write-Host "🎯 Looking for installation in: $targetDir"
+
+          if (-not (Test-Path $targetDir)) {
+            Write-Error "❌ FATAL: Installation directory not found at $targetDir"
+            exit 1
+          }
+          Write-Host "✅ Installation directory found."
+          "INSTALL_ROOT=$targetDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: '✅ Create Required Runtime Directories Post-Install'
         shell: pwsh
         run: |
-          $installRoot = "C:\Program Files\Fortuna Faucet"
+          $installRoot = "${{ env.INSTALL_ROOT }}"
           if (-not (Test-Path $installRoot)) {
             Write-Error "Installation directory not found at $installRoot. Cannot create runtime directories."
             exit 1
@@ -948,12 +970,8 @@ jobs:
 
       - name: "🔍 Debug Backend Launch (With Timeout)"
         shell: pwsh
-        env:
-          ARCH: ${{ matrix.arch }}
         run: |
-          # FIX: Handle 32-bit install path
-          $progFiles = if ($env:ARCH -eq 'x86') { ${env:ProgramFiles(x86)} } else { $env:ProgramFiles }
-          $exe = "$progFiles\Fortuna Faucet\resources\python-service-bin\fortuna-backend.exe"
+          $exe = "${{ env.INSTALL_ROOT }}\resources\python-service-bin\fortuna-backend.exe"
 
           if (Test-Path $exe) {
             Write-Host "Starting backend for 10s health check..."
@@ -967,13 +985,8 @@ jobs:
 
       - name: '🔬 Complete Smoke Test'
         shell: pwsh
-        env:
-          ARCH: ${{ matrix.arch }}
         run: |
-          # 🚀 DYNAMIC PATH LOGIC
-          $progFiles = if ($env:ARCH -eq 'x86') { ${env:ProgramFiles(x86)} } else { $env:ProgramFiles }
-          $installRoot = "$progFiles\Fortuna Faucet"
-
+          $installRoot = "${{ env.INSTALL_ROOT }}"
           if (-not (Test-Path $installRoot)) { throw "❌ Install directory not found at $installRoot" }
 
           $exe = "$installRoot\resources\python-service-bin\fortuna-backend.exe"

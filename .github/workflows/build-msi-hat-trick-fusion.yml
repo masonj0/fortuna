@@ -132,7 +132,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: backend-dist-${{ matrix.arch }}-${{ github.run_id }}
-          path: dist/fortuna-backend.exe
+          path: dist/fortuna-backend/
 
   package-msi:
     name: '💿 Package MSI (${{ matrix.arch }})'
