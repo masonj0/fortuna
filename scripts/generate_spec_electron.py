@@ -50,7 +50,13 @@ a = Analysis(
     pathex={pathex},
     binaries=[],
     datas=[],
-    hiddenimports=['uvicorn.lifespan', 'uvicorn.loops', 'uvicorn.protocols', 'win32timezone'],
+    hiddenimports=[
+        'uvicorn.lifespan', 'uvicorn.loops', 'uvicorn.protocols',
+        'win32timezone',
+        'win32serviceutil',
+        'win32service',
+        'win32event'
+    ],
     hookspath=[],
     runtime_hooks=[],
     excludes=['web_service'], # Explicitly exclude the other backend
