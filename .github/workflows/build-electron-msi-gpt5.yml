@@ -703,14 +703,20 @@ jobs:
           } else {
             Write-Host '✅ Existing license.rtf found.'
           }
-      - name: 🔨 Build Electron Application
+      - name: 🏗️ Build Electron App
         shell: pwsh
-        working-directory: electron
         run: |
-          # Set code signing to false for CI (unless you have signing certificates)
+          # Set code signing to false for CI
           $env:CSC_IDENTITY_AUTO_DISCOVERY = 'false'
 
-          npm run build -- --config temp-builder-config.yml --publish never 2>&1
+          # FIX: Map the matrix architecture to Electron Builder flags
+          # x86 must be passed as '--ia32', x64 as '--x64'
+          $archFlag = if ("${{ matrix.arch }}" -eq "x86") { "--ia32" } else { "--x64" }
+
+          Write-Host "🚀 Starting Build for architecture: ${{ matrix.arch }} (Flag: $archFlag)"
+
+          # Pass the flag to the build command
+          npm run build -- --config temp-builder-config.yml --publish never $archFlag 2>&1
 
           if ($LASTEXITCODE -ne 0) {
             Write-Error "Electron build failed"
@@ -775,17 +781,26 @@ jobs:
         run: |
           $ver = "${{ needs.validate-environment.outputs.semver }}"
           $sha = "${{ needs.validate-environment.outputs.short_sha }}"
-          $releaseDir = "electron/dist"
+
+          # FIX: Create the specific directory that the Upload step expects
+          $releaseDir = "release-artifacts"
+          New-Item -ItemType Directory -Path $releaseDir -Force | Out-Null
+
+          $distDir = "electron/dist"
           $targetName = "Fortuna-Electron-${{ matrix.arch }}-${ver}-${sha}.msi"
-          $msiFound = Get-ChildItem -Path $releaseDir -Filter "*.msi" | Select-Object -First 1
+
+          # Look in the electron output folder
+          $msiFound = Get-ChildItem -Path $distDir -Filter "*.msi" | Select-Object -First 1
 
           if (-not $msiFound) {
-            Write-Error "❌ FATAL: No MSI file found in $releaseDir."
+            Write-Error "❌ FATAL: No MSI file found in $distDir."
             exit 1
           }
 
+          # Move to the release-artifacts folder
           $newPath = Join-Path $releaseDir $targetName
           Move-Item -Path $msiFound.FullName -Destination $newPath -Force
+
           $hash = (Get-FileHash $newPath -Algorithm SHA256).Hash
           $hash | Out-File "$newPath.sha256" -Encoding utf8
           Write-Host "✅ MSI Renamed and Hashed: $targetName"
@@ -1073,29 +1088,34 @@ jobs:
           backend-module-path: 'python_service'
 
   generate-sbom:
-    name: '📜 Generate SBOM'
+    name: '📜 Generate SBOM (${{ matrix.arch }})'
     runs-on: ubuntu-latest
     needs: [build-electron-msi, validate-environment]
     timeout-minutes: 10
+    strategy:
+      matrix:
+        arch: [x64, x86]
     steps:
       - name: 📥 Download MSI Artifact
         uses: actions/download-artifact@v4
         with:
-          name: fortuna-electron-msi-${{ needs.validate-environment.outputs.build_id }}
+          # FIX: Download the specific architecture artifact
+          name: fortuna-electron-msi-${{ matrix.arch }}-${{ needs.validate-environment.outputs.build_id }}
           path: msi-artifact
 
       - name: 📜 Generate SBOM
         uses: anchore/sbom-action@v0
         with:
           path: msi-artifact/
-          output-file: "sbom.spdx.json"
+          output-file: "sbom-${{ matrix.arch }}.spdx.json"
           format: "spdx-json"
 
       - name: 📤 Upload SBOM Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: sbom-${{ needs.validate-environment.outputs.build_id }}
-          path: sbom.spdx.json
+          # FIX: Upload with unique name per architecture
+          name: sbom-${{ matrix.arch }}-${{ needs.validate-environment.outputs.build_id }}
+          path: sbom-${{ matrix.arch }}.spdx.json
           retention-days: 7
 
   stage-release-artifacts:
@@ -1109,16 +1129,20 @@ jobs:
       - smoke-test
       - generate-sbom
     steps:
-      - name: 📥 Download Build Artifacts
+      - name: 📥 Download All Build Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: fortuna-electron-msi-${{ needs.validate-environment.outputs.build_id }}
+          # FIX: Use pattern to catch both x64 and x86 MSIs
+          pattern: fortuna-electron-msi-*-${{ needs.validate-environment.outputs.build_id }}
+          merge-multiple: true
           path: staging-area
 
-      - name: 📥 Download SBOM
+      - name: 📥 Download All SBOMs
         uses: actions/download-artifact@v4
         with:
-          name: sbom-${{ needs.validate-environment.outputs.build_id }}
+          # FIX: Use pattern to catch both x64 and x86 SBOMs
+          pattern: sbom-*-${{ needs.validate-environment.outputs.build_id }}
+          merge-multiple: true
           path: staging-area
 
       - name: 🚚 Stage Final Artifact
@@ -1129,7 +1153,6 @@ jobs:
           $destDir = "final-release-artifact"
           New-Item -ItemType Directory -Path $destDir -Force | Out-Null
 
-          # FIX: $. to $_.
           Get-ChildItem -Path $sourceDir -Recurse | ForEach-Object {
             $destPath = Join-Path $destDir $_.Name
             Move-Item -Path $_.FullName -Destination $destPath -Force
