@@ -11,7 +11,7 @@ concurrency:
 
 env:
   NODE_VERSION: '20'
-  PYTHON_VERSION: '3.12'
+  PYTHON_VERSION: '3.11' # 🚀 DOWNGRADED for x86
   DOTNET_VERSION: '8.0.x'
   WIX_VERSION: '4.0.5'
   SERVICE_PORT: '8102'
@@ -109,6 +109,14 @@ jobs:
 
       - name: Install Dependencies
         run: |
+          python -m pip install --upgrade pip
+
+          # 🚀 FIX: Pin legacy versions for x86
+          if ('${{ matrix.arch }}' -eq 'x86') {
+            Write-Host "⚠️ x86 Detected: Pinning Pandas < 2.1.0"
+            pip install "pandas<2.1.0" "numpy<2.0.0"
+          }
+
           pip install -r ${{ steps.meta.outputs.backend_dir }}/requirements.txt
           pip install pyinstaller==6.6.0
 

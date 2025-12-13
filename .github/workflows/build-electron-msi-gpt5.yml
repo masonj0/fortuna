@@ -169,11 +169,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip setuptools wheel
 
-          # 🚀 FIX: Handle 32-bit (x86) limitations for Data Science libraries
-          # Pandas 2.1+ dropped 32-bit Windows wheels. We must go back to 2.0.x.
+          # 🚀 FIX: Handle 32-bit (x86) limitations
           if ('${{ matrix.arch }}' -eq 'x86') {
-            Write-Host "⚠️ x86 Architecture detected: Pinning legacy versions for Pandas/Numpy..."
-            # Stricter pinning: <2.1.0 ensures we get wheels (e.g., 2.0.3)
+            Write-Host "⚠️ x86 Architecture detected: Pinning legacy versions..."
             pip install "pandas<2.1.0" "numpy<2.0.0"
           }
 
