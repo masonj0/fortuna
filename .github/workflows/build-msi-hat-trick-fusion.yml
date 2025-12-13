@@ -78,69 +78,72 @@ jobs:
 
   # 2. Build Backend (Downloads Frontend to bundle it)
   build-backend:
-    name: Build Backend Binary
+    name: '🐍 Build Backend (${{ matrix.arch }})'
     runs-on: windows-latest
     needs: build-frontend
     timeout-minutes: 30
+    strategy:
+      matrix:
+        arch: [x64, x86]
     outputs:
       semver: ${{ steps.meta.outputs.semver }}
-      backend-dir: ${{ steps.meta.outputs.backend_dir }}
+      short_sha: ${{ steps.meta.outputs.short_sha }}
     steps:
       - uses: actions/checkout@v4
-
-      # Download Frontend for bundling
       - uses: actions/download-artifact@v4
         with:
           name: frontend-build
           path: web_platform/frontend/out
-
       - id: meta
         shell: pwsh
         run: |
           $ver = if ("${{ github.ref }}" -match 'refs/tags/v(.*)') { $Matches[1] } else { "0.0.${{ github.run_number }}" }
           "semver=$ver" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          $shortSha = "${{ github.sha }}".Substring(0,7)
+          "short_sha=$shortSha" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "backend_dir=web_service/backend" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "module_path=web_service.backend" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+          architecture: ${{ matrix.arch }}
           cache: 'pip'
-
+      - name: 🧾 Create Architecture Constraints
+        id: constraints
+        shell: pwsh
+        run: |
+          $file = "constraints.txt"
+          if ('${{ matrix.arch }}' -eq 'x86') {
+            "numpy==1.23.5`npandas==1.5.3" | Set-Content $file
+          } else { New-Item $file -ItemType File -Force }
+          "file=$file" | Out-File $env:GITHUB_OUTPUT -Append
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-
-          # 🚀 FIX: Pin legacy versions for x86
-          if ('${{ matrix.arch }}' -eq 'x86') {
-            Write-Host "⚠️ x86 Detected: Pinning Pandas < 2.1.0"
-            pip install "pandas<2.1.0" "numpy<2.0.0"
-          }
-
-          pip install -r ${{ steps.meta.outputs.backend_dir }}/requirements.txt
-          pip install pyinstaller==6.6.0
-
+          pip install -r web_service/backend/requirements.txt -c ${{ steps.constraints.outputs.file }}
+          pip install pyinstaller==6.6.0 pywin32
       - name: Build Backend (PyInstaller)
         run: |
-          # FIX: Target service_entry.py and include win32timezone
           pyinstaller --noconfirm --onedir --clean --name fortuna-backend --hidden-import=win32timezone --hidden-import=win32serviceutil --add-data "web_service/backend;backend" web_service/backend/service_entry.py
-
       - name: Upload Backend
         uses: actions/upload-artifact@v4
         with:
-          name: backend-dist
+          name: backend-dist-${{ matrix.arch }}-${{ github.run_id }}
           path: dist/fortuna-backend.exe
 
   package-msi:
-    name: Package MSI
+    name: '💿 Package MSI (${{ matrix.arch }})'
     runs-on: windows-latest
     needs: build-backend
     timeout-minutes: 30
+    strategy:
+      matrix:
+        arch: [x64, x86]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: backend-dist
+          name: backend-dist-${{ matrix.arch }}-${{ github.run_id }}
           path: staging/backend
 
       - name: '⚖️ The Dietician (Size Analysis)'
@@ -255,7 +258,8 @@ jobs:
           }
       - name: Build MSI
         working-directory: build_wix
-        run: dotnet build Fortuna.wixproj -c Release -p:Platform=x64 -p:Version="${{ needs.build-backend.outputs.semver }}" -p:SourceDir="../staging/backend" -p:ServicePort="${{ env.SERVICE_PORT }}"
+        run: |
+          dotnet build Fortuna.wixproj -c Release -p:Platform=${{ matrix.arch }} -p:Version="${{ needs.build-backend.outputs.semver }}" -p:SourceDir="../staging/backend" -p:ServicePort="${{ env.SERVICE_PORT }}"
 
       - name: '🐤 The Canary (Malware Pre-Flight)'
         shell: pwsh
@@ -290,7 +294,7 @@ jobs:
         run: |
           $ver = "${{ needs.build-backend.outputs.semver }}"
           $sha = "${{ needs.build-backend.outputs.short_sha }}"
-          $releaseDir = "build_wix/bin/x64/Release"
+          $releaseDir = "build_wix/bin/${{ matrix.arch }}/Release"
           $msiFound = Get-ChildItem -Path $releaseDir -Filter "*.msi" | Select-Object -First 1
 
           if (-not $msiFound) {
@@ -298,7 +302,7 @@ jobs:
             exit 1
           }
 
-          $targetName = "HatTrickFusion-${ver}-${sha}.msi"
+          $targetName = "HatTrickFusion-${{ matrix.arch }}-${ver}-${sha}.msi"
           $newPath = Join-Path $releaseDir $targetName
           Move-Item -Path $msiFound.FullName -Destination $newPath -Force
           $hash = (Get-FileHash $newPath -Algorithm SHA256).Hash
@@ -309,8 +313,8 @@ jobs:
       - name: Upload MSI
         uses: actions/upload-artifact@v4
         with:
-          name: hat-trick-msi
-          path: build_wix/bin/x64/Release/*
+          name: hat-trick-msi-${{ matrix.arch }}-${{ github.run_id }}
+          path: build_wix/bin/${{ matrix.arch }}/Release/*
 
   smoke-test:
     name: '🔬 Smoke Test'
