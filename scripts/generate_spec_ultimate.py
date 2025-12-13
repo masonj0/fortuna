@@ -78,7 +78,12 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=collect_data_files('uvicorn') + collect_data_files('slowapi') + [('{frontend_out}', 'ui')],
-    hiddenimports=collect_submodules('{mod_path}'),
+    hiddenimports=collect_submodules('{mod_path}') + [
+        'win32timezone',
+        'win32serviceutil',
+        'win32service',
+        'win32event'
+    ],
     hookspath=[],
     runtime_hooks=[],
     excludes=['tests', 'pytest'],

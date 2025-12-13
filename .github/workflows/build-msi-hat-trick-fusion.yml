@@ -1,5 +1,5 @@
 # System Timestamp: 2024-05-21 12:00:00
-name: HatTrick Fusion (Standard)
+name: 🎩 HatTrick Fusion (Standard)
 on:
   workflow_dispatch:
   push:
@@ -132,7 +132,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: backend-dist-${{ matrix.arch }}-${{ github.run_id }}
-          path: dist/fortuna-backend.exe
+          path: dist/fortuna-backend/
 
   package-msi:
     name: '💿 Package MSI (${{ matrix.arch }})'
