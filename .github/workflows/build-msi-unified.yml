@@ -66,9 +66,12 @@ jobs:
           }
 
   build-executable:
-    name: '🛠️ Build Executable'
+    name: '🛠️ Build Executable (${{ matrix.arch }})'
     runs-on: windows-latest
     needs: [quality-gate]
+    strategy:
+      matrix:
+        arch: [x64, x86]
     timeout-minutes: 20
     env:
       BACKEND_DIR: 'web_service/backend'
@@ -112,8 +115,21 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+          architecture: ${{ matrix.arch }}
           cache: 'pip'
           cache-dependency-path: '${{ env.BACKEND_DIR }}/requirements.txt'
+
+      - name: 🧾 Create Architecture Constraints
+        id: constraints
+        shell: pwsh
+        run: |
+          $file = "constraints.txt"
+          if ('${{ matrix.arch }}' -eq 'x86') {
+            "numpy==1.23.5`r`npandas==1.5.3" | Set-Content $file
+          } else {
+            New-Item $file -ItemType File -Force
+          }
+          "file=$file" | Out-File $env:GITHUB_OUTPUT -Append
 
       - name: Build Backend (PyInstaller)
         shell: python
@@ -121,13 +137,14 @@ jobs:
           BACKEND_DIR: ${{ env.BACKEND_DIR }}
           MODULE_PATH: ${{ env.BACKEND_MODULE_PATH }}
           FRONTEND_OUT: ${{ env.FRONTEND_DIR }}/out
+          CONSTRAINTS_FILE: ${{ steps.constraints.outputs.file }}
         run: |
           import os
           from pathlib import Path
 
-          # Install deps
-          os.system("pip install -r " + os.environ['BACKEND_DIR'] + "/requirements.txt")
-          os.system("pip install pyinstaller==6.6.0")
+          # Install deps with constraints
+          os.system("pip install -r " + os.environ['BACKEND_DIR'] + "/requirements.txt -c " + os.environ['CONSTRAINTS_FILE'])
+          os.system("pip install pyinstaller==6.6.0 pywin32")
 
           bk_dir = os.environ['BACKEND_DIR'].replace('\\', '/')
           mod_path = os.environ['MODULE_PATH']
@@ -155,8 +172,12 @@ jobs:
           )
           pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
           exe = EXE(
-              pyz, a.scripts, a.binaries, a.zipfiles, a.datas, [],
-              name='fortuna-backend', debug=False, bootloader_ignore_signals=False, strip=False, upx=True, console=False
+              pyz, a.scripts, [],
+              exclude_binaries=True, name='fortuna-backend', debug=False, bootloader_ignore_signals=False, strip=False, upx=True, console=False
+          )
+          coll = COLLECT(
+              exe, a.binaries, a.zipfiles, a.datas,
+              strip=False, upx=True, upx_exclude=[], name='fortuna-backend'
           )
           """
           with open("unified.spec", "w") as f: f.write(spec)
@@ -180,16 +201,19 @@ jobs:
       - name: Upload Backend and Frontend Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: build-artifacts-${{ steps.vars.outputs.build_id }}
+          name: build-artifacts-${{ matrix.arch }}-${{ steps.vars.outputs.build_id }}
           path: |
             dist/fortuna-backend/
             ${{ env.FRONTEND_DIR }}/frontend-manifest.tsv
           retention-days: 1
 
   package-msi:
-    name: '💿 Package MSI'
+    name: '💿 Package MSI (${{ matrix.arch }})'
     runs-on: windows-latest
     needs: [build-executable]
+    strategy:
+      matrix:
+        arch: [x64, x86]
     timeout-minutes: 20
     outputs:
       build_id: ${{ needs.build-executable.outputs.build_id }}
@@ -200,7 +224,7 @@ jobs:
       - name: Download Build Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: build-artifacts-${{ needs.build-executable.outputs.build_id }}
+          name: build-artifacts-${{ matrix.arch }}-${{ needs.build-executable.outputs.build_id }}
           path: staging
 
       - name: '⚖️ The Dietician (Size Analysis)'
@@ -257,8 +281,8 @@ jobs:
             '  <PropertyGroup>',
             '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>',
             '    <OutputType>Package</OutputType>',
-            '    <Platforms>x64</Platforms>',
-            '    <DefineConstants>Version=$(Version);SourceDir=$(SourceDir);ServicePort=$(ServicePort)</DefineConstants>',
+            '    <Platforms>x64;x86</Platforms>',
+            '    <DefineConstants>Version=$(Version);SourceDir=$(SourceDir);ServicePort=$(ServicePort);Platform=$(Platform)</DefineConstants>',
             '  </PropertyGroup>',
             '  <ItemGroup>',
             '    <PackageReference Include="WixToolset.UI.wixext" Version="${{ env.WIX_VERSION }}" />',
@@ -274,7 +298,7 @@ jobs:
 
       - name: Build MSI
         working-directory: ${{ env.WIX_DIR }}
-        run: dotnet build Fortuna.wixproj -c Release -p:Platform=x64 -p:Version="0.0.${{ github.run_number }}" -p:SourceDir="../staging" -p:ServicePort="${{ env.SERVICE_PORT }}"
+        run: dotnet build Fortuna.wixproj -c Release -p:Platform=${{ matrix.arch }} -p:Version="0.0.${{ github.run_number }}" -p:SourceDir="../staging" -p:ServicePort="${{ env.SERVICE_PORT }}"
 
       - name: Rename & Hash MSI
         id: name_msi
@@ -282,13 +306,13 @@ jobs:
         run: |
           $ver = "0.0.${{ github.run_number }}"
           $sha = "${{ github.sha }}".Substring(0,7)
-          $releaseDir = "${{ env.WIX_DIR }}/bin/x64/Release"
+          $releaseDir = "${{ env.WIX_DIR }}/bin/${{ matrix.arch }}/Release"
           $msiFound = Get-ChildItem -Path $releaseDir -Filter "*.msi" | Select-Object -First 1
           if (-not $msiFound) {
             Write-Error "❌ FATAL: No MSI file found in $releaseDir."
             exit 1
           }
-          $targetName = "Fortuna-Unified-${ver}-${sha}.msi"
+          $targetName = "Fortuna-Unified-${{ matrix.arch }}-${ver}-${sha}.msi"
           $newPath = Join-Path $releaseDir $targetName
           Move-Item -Path $msiFound.FullName -Destination $newPath -Force
           $hash = (Get-FileHash $newPath -Algorithm SHA256).Hash
@@ -298,20 +322,23 @@ jobs:
       - name: Upload MSI Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: msi-installer-${{ needs.build-executable.outputs.build_id }}
-          path: ${{ env.WIX_DIR }}/bin/x64/Release/*
+          name: msi-installer-${{ matrix.arch }}-${{ needs.build-executable.outputs.build_id }}
+          path: ${{ env.WIX_DIR }}/bin/${{ matrix.arch }}/Release/*
           retention-days: 1
 
   smoke-test:
-    name: '🔬 Smoke Test'
+    name: '🔬 Smoke Test (${{ matrix.arch }})'
     runs-on: windows-latest
     needs: package-msi
+    strategy:
+      matrix:
+        arch: [x64, x86]
     timeout-minutes: 20
     steps:
       - name: Download MSI
         uses: actions/download-artifact@v4
         with:
-          name: msi-installer-${{ needs.package-msi.outputs.build_id }}
+          name: msi-installer-${{ matrix.arch }}-${{ needs.package-msi.outputs.build_id }}
           path: msi-installer
 
       - name: Install MSI
@@ -327,7 +354,9 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = "Stop"
-          $installRoot = "C:\Program Files\Fortuna Faucet Service"
+          $progFiles = ${env:ProgramFiles}
+          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
+          $installRoot = Join-Path $progFiles "Fortuna Faucet Service"
           # --- LAYER 1: FILE VERIFICATION ---
           if (-not (Test-Path $installRoot)) { Write-Error "❌ LAYER 1 FAILED: Install directory not found."; exit 1 }
           New-Item -Path "$installRoot\data", "$installRoot\json", "$installRoot\logs" -ItemType Directory -Force | Out-Null

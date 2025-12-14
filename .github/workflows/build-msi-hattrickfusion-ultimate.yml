@@ -147,7 +147,7 @@ jobs:
           pip install pyinstaller==6.6.0 pywin32
       - name: Build Backend (PyInstaller)
         run: |
-          pyinstaller --noconfirm --onedir --clean --name fortuna-backend --hidden-import=win32timezone --hidden-import=win32serviceutil --add-data "web_service/backend;backend" web_service/backend/service_entry.py
+          pyinstaller --noconfirm --onedir --clean --name fortuna-backend --hidden-import=win32timezone --hidden-import=win32serviceutil --add-data "web_service/backend;backend" --add-data "web_platform/frontend/out;ui" web_service/backend/service_entry.py
       - name: Upload Backend
         uses: actions/upload-artifact@v4
         with:
@@ -232,7 +232,7 @@ jobs:
             '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>',
             '    <OutputType>Package</OutputType>',
             '    <Platforms>x64;x86</Platforms>',
-            '    <DefineConstants>Version=$(Version);SourceDir=$(SourceDir);ServicePort=$(ServicePort)</DefineConstants>',
+            '    <DefineConstants>Version=$(Version);SourceDir=$(SourceDir);ServicePort=$(ServicePort);Platform=$(Platform)</DefineConstants>',
             '  </PropertyGroup>',
             '  <ItemGroup>',
             '    <PackageReference Include="WixToolset.UI.wixext" Version="${{ env.WIX_VERSION }}" />',
@@ -360,27 +360,29 @@ jobs:
           Stop-Service -Name "FortunaWebService" -ErrorAction SilentlyContinue
 
   generate-sbom:
-    name: '📜 Generate SBOM'
+    name: '📜 Generate SBOM (${{ matrix.arch }})'
     runs-on: ubuntu-latest
     needs: [build-backend]
     timeout-minutes: 30
+    strategy:
+      matrix:
+        arch: [x64, x86]
     steps:
-      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: backend-dist
+          name: backend-dist-${{ matrix.arch }}
           path: backend
       - name: Create SBOM
         uses: anchore/sbom-action@v0
         with:
           path: backend
-          output-file: sbom.spdx.json
+          output-file: "sbom-${{ matrix.arch }}.spdx.json"
           format: spdx-json
       - name: Upload SBOM
         uses: actions/upload-artifact@v4
         with:
-          name: sbom
-          path: sbom.json
+          name: sbom-${{ matrix.arch }}
+          path: "sbom-${{ matrix.arch }}.spdx.json"
 
   release:
     name: '🚀 Create Release'
@@ -393,12 +395,14 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: hat-trick-msi
+          pattern: hat-trick-msi-*
           path: assets
+          merge-multiple: true
       - uses: actions/download-artifact@v4
         with:
-          name: sbom
+          pattern: sbom-*
           path: assets
+          merge-multiple: true
       - name: Generate Checksums
         run: |
           cd assets
