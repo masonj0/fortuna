@@ -314,22 +314,22 @@ jobs:
           Start-Service -Name "FortunaWebService"
           Start-Sleep -Seconds 10
           # 4. HEALTH CHECK
-          $maxRetries = 5
-          $delay = 5
-          $success = $false
-          For ($i=0; $i -lt $maxRetries; $i++) {
-            try {
-              $response = Invoke-WebRequest -Uri "http://localhost:${{ env.SERVICE_PORT }}/health" -UseBasicParsing
-              if ($response.StatusCode -eq 200) {
-                Write-Host "✅ Health check PASSED."
-                $success = $true
-                break
-              }
-            } catch { Write-Host "Attempt $($i+1) failed. Retrying in $delay seconds..." }
-            Start-Sleep -Seconds $delay
-          }
-          if (-not $success) {
-            throw "Health check failed after $maxRetries attempts."
+          try {
+            Start-Sleep 10
+            $success = $false
+            for ($i = 0; $i -lt 5; $i++) {
+              try {
+                if ((Invoke-RestMethod "http://127.0.0.1:${{ env.SERVICE_PORT }}/health").status -eq "ok") {
+                  $success = $true
+                  break
+                }
+              } catch {}
+              Start-Sleep 5
+            }
+            if (-not $success) { throw "❌ Service failed to respond" }
+          } finally {
+            Stop-Service -Name "FortunaWebService" -ErrorAction SilentlyContinue
+            sc.exe delete "FortunaWebService" *>$null
           }
       # ---------------------------------------------------------
       # 💉 INJECT: PAPARAZZI (Subroutine #4)
@@ -378,6 +378,7 @@ jobs:
           path: backend
           output-file: "sbom-${{ matrix.arch }}.spdx.json"
           format: spdx-json
+          upload-artifact: false
       - name: Upload SBOM
         uses: actions/upload-artifact@v4
         with:

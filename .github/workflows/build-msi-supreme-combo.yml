@@ -48,7 +48,8 @@ jobs:
         id: git_version
         shell: pwsh
         run: |
-          $tag = git describe --tags --abbrev=0 2>$null
+          git describe --tags --abbrev=0 > tag.txt 2>$null
+          $tag = Get-Content tag.txt -ErrorAction SilentlyContinue
           if (-not $tag) { $tag = "0.0.0" }
           $tag = $tag -replace "^v", ""
           $run = "${{ github.run_number }}"
@@ -206,17 +207,22 @@ jobs:
             -arch $arch `
             -o "Fortuna-${arch}.msi" `
             -d Version="${{ needs.preflight-check.outputs.semver }}" `
-            -d SourceDir="staging/backend" `
+            -d SourceDir="staging" `
             -d Platform=$arch
+
+      # GPT-5 FIX: Ensure WiX produced MSI
+      - name: 🧾 Ensure WiX produced MSI
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem -Path "$PWD" -Filter "Fortuna-${{ matrix.arch }}.msi"
+          if (-not $msi) { throw "❌ MSI missing after wix build (Fortuna-${{ matrix.arch }}.msi)" }
 
       - name: 🦜 The Canary (Malware Scan)
         shell: pwsh
         run: |
-          $msi = "Fortuna-${{ matrix.arch }}.msi"
           if (Test-Path "C:\\Program Files\\Windows Defender\\MpCmdRun.exe") {
-            Write-Host "🛡️ Scanning $msi with Windows Defender..."
-            & "C:\\Program Files\\Windows Defender\\MpCmdRun.exe" -Scan -ScanType 3 -File "$pwd\\$msi"
-            if ($LASTEXITCODE -ne 0) { throw "🦠 MALWARE DETECTED in MSI!" }
+            & "C:\\Program Files\\Windows Defender\\MpCmdRun.exe" -Scan -ScanType 3 -File "$pwd\\Fortuna-${{ matrix.arch }}.msi"
+            if ($LASTEXITCODE -ne 0) { throw "🦠 MALWARE DETECTED!" }
           }
 
       - name: 📤 Upload MSI
@@ -323,10 +329,12 @@ jobs:
           merge-multiple: true
           path: release_assets
 
+      # GPT-5 FIX: Fail fast if no MSIs
       - name: 🔏 Generate Checksums
+        shell: pwsh
         run: |
           cd release_assets
-          sha256sum *.msi > SHASUMS256.txt
+          if (Test-Path *.msi) { sha256sum *.msi > SHASUMS256.txt } else { echo "No MSI found, aborting"; exit 1; }
 
       - name: 📦 Create GitHub Release
         uses: softprops/action-gh-release@v1

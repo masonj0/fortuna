@@ -133,9 +133,40 @@ jobs:
           $size = (Get-ChildItem staging -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB
           Write-Host "Total Payload: $([math]::Round($size, 2)) MB"
 
+      - name: Prepare WiX
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          if (-not (Test-Path build_wix)) { New-Item -ItemType Directory -Path build_wix | Out-Null }
+          Copy-Item build_wix/Product_WithService.wxs build_wix/Product.wxs -Force
+          if (Test-Path staging/backend/fortuna-backend.exe) {
+            Move-Item staging/backend/fortuna-backend.exe staging/backend/fortuna-webservice.exe -Force
+          }
+          $proj = @(
+            '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">',
+            '  <PropertyGroup>',
+            '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>',
+            '    <OutputType>Package</OutputType>',
+            '    <Platforms>x64;x86</Platforms>',
+            '    <DefineConstants>Version=$(Version);SourceDir=$(SourceDir);ServicePort=$(ServicePort);Platform=$(Platform)</DefineConstants>',
+            '  </PropertyGroup>',
+            '  <ItemGroup>',
+            '    <PackageReference Include="WixToolset.UI.wixext" Version="${{ env.WIX_VERSION }}" />',
+            '    <PackageReference Include="WixToolset.Firewall.wixext" Version="${{ env.WIX_VERSION }}" />',
+            '    <PackageReference Include="WixToolset.Util.wixext" Version="${{ env.WIX_VERSION }}" />',
+            '  </ItemGroup>',
+            '  <ItemGroup>',
+            '    <Compile Include="Product.wxs" />',
+            '  </ItemGroup>',
+            '</Project>'
+          )
+          Set-Content build_wix/Fortuna.wixproj ($proj -join "`r`n") -Encoding utf8
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: 🔧 Setup WiX
+        run: dotnet tool install --global wix --version ${{ env.WIX_VERSION }}
 
       - name: Build MSI
         working-directory: ${{ env.WIX_DIR }}
