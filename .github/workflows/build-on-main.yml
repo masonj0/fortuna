@@ -1,0 +1,15 @@
+name:  continuous-integration
+'on':
+  push:
+    branches:
+      - main
+jobs:
+  call-reusable-workflow:
+    name: Call Reusable Workflow
+    uses: ./.github/workflows/build-core-universal.yml
+    with:
+      enable_forensics: true
+      enable_dietician: true
+      enable_canary: false
+      enable_paparazzi: false
+    secrets: inherit
