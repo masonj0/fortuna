@@ -241,6 +241,7 @@ jobs:
             Write-Host '✅ Existing license.rtf found.'
           }
       - name: 🏗️ Build Electron
+        working-directory: ${{ env.ELECTRON_DIR }}
         run: npm run electron:build
       - name: 🏗️ Build MSI
         working-directory: ${{ env.ELECTRON_DIR }}
