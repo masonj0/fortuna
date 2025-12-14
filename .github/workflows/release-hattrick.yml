@@ -14,12 +14,3 @@ jobs:
       enable_canary: false
       enable_paparazzi: false
     secrets: inherit
-
-  publish:
-    needs: call-core
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v4
-        with: { pattern: msi-*, merge-multiple: true, path: release }
-      - uses: softprops/action-gh-release@v1
-        with: { files: release/* }
