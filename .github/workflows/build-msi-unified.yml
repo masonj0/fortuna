@@ -1,5 +1,5 @@
 # System Timestamp: 2024-05-21 12:00:00
-name: Unified MSI Builder (Gold Standard)
+name: 🏆 Unified MSI Builder (Gold Standard)
 
 on:
   push:
@@ -182,7 +182,7 @@ jobs:
         with:
           name: build-artifacts-${{ steps.vars.outputs.build_id }}
           path: |
-            dist/
+            dist/fortuna-backend/
             ${{ env.FRONTEND_DIR }}/frontend-manifest.tsv
           retention-days: 1
 
