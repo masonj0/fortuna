@@ -98,7 +98,7 @@ jobs:
         run: |
           # CRITICAL: Target service_entry.py for Windows Service
           # CRITICAL: Add win32timezone to prevent Error 1053
-          pyinstaller --noconfirm --onedir --clean --name fortuna-backend --hidden-import=win32timezone --hidden-import=win32serviceutil --add-data "web_service/backend;backend" web_service/backend/service_entry.py
+          pyinstaller --noconfirm --onedir --clean --name fortuna-backend --hidden-import=win32timezone --hidden-import=win32serviceutil --add-data "web_service/backend;backend" --add-data "web_platform/frontend/out;ui" web_service/backend/service_entry.py
 
       - uses: actions/upload-artifact@v4
         with:

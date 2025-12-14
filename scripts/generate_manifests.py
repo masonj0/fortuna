@@ -74,7 +74,8 @@ def get_all_project_files():
         "WISDOM.md", "PSEUDOCODE.MD", "VERSION.txt", "fortuna-backend-electron.spec",
         "fortuna-backend-webservice.spec", "fortuna-webservice-electron.spec",
         "fortuna-webservice-service.spec", "pyproject.toml", "pytest.ini",
-        "requirements.txt", "requirements-dev.txt", "package.json", "package-lock.json"
+        "requirements.txt", "requirements-dev.txt", "package.json", "package-lock.json",
+        ".github/workflows/build-msi-supreme-combo.yml"
     ]
     for file_name in top_level_files:
         file_path = ROOT_DIR / file_name
@@ -110,31 +111,66 @@ def get_all_project_files():
 
 def balance_files_by_size(files_with_size, num_bins):
     """
-    Distributes files into a specified number of bins, balancing the total size.
-    Uses a greedy algorithm for efficiency.
+    Distributes files into a specified number of bins, balancing by size and count.
+    Uses a hybrid greedy and round-robin approach for better distribution.
     """
-    # Sort files by size in descending order to handle largest files first
-    files_with_size.sort(key=lambda x: x[1], reverse=True)
+    # Define categories for more granular balancing
+    categories = {
+        'large': [], 'medium': [], 'small': [], 'config': [], 'docs': [],
+        'workflows': [], 'scripts': [], 'source': []
+    }
+
+    # Categorize files based on extension and size
+    for path, size in files_with_size:
+        ext = Path(path).suffix.lower()
+        if 'github/workflows' in path:
+            categories['workflows'].append((path, size))
+        elif ext in ['.md', '.txt']:
+            categories['docs'].append((path, size))
+        elif ext in ['.json', '.toml', '.ini', '.spec', '.lock']:
+            categories['config'].append((path, size))
+        elif ext == '.py' and 'scripts' in path:
+            categories['scripts'].append((path, size))
+        elif ext in ['.py', '.js', '.ts', '.tsx', '.css', '.html', '.wxs']:
+            if size > 50 * 1024:  # Over 50KB
+                categories['large'].append((path, size))
+            elif size > 10 * 1024: # Over 10KB
+                categories['medium'].append((path, size))
+            else:
+                categories['small'].append((path, size))
+        else:
+            categories['source'].append((path, size))
 
     bins = [[] for _ in range(num_bins)]
     bin_sizes = [0] * num_bins
 
-    for path, size in files_with_size:
-        # Find the bin with the smallest current total size
-        min_bin_index = bin_sizes.index(min(bin_sizes))
-        # Add the file to that bin
-        bins[min_bin_index].append(path)
-        # Update the bin's total size
-        bin_sizes[min_bin_index] += size
+    # Distribute large files first using greedy approach
+    for category in ['large', 'medium']:
+        # Sort descending to place largest files first
+        categories[category].sort(key=lambda x: x[1], reverse=True)
+        for path, size in categories[category]:
+            min_bin_index = bin_sizes.index(min(bin_sizes))
+            bins[min_bin_index].append(path)
+            bin_sizes[min_bin_index] += size
+
+    # Distribute remaining files using round-robin to balance file count
+    current_bin = 0
+    for category in ['small', 'config', 'docs', 'workflows', 'scripts', 'source']:
+        # Sort alphabetically for consistent distribution
+        categories[category].sort(key=lambda x: x[0])
+        for path, size in categories[category]:
+            bins[current_bin].append(path)
+            bin_sizes[current_bin] += size
+            current_bin = (current_bin + 1) % num_bins
 
     # Print the balancing results for verification
-    print("--- Manifest Balancing Results ---")
+    print("--- Manifest Balancing Results (Enhanced) ---")
     for i, (file_list, total_size) in enumerate(zip(bins, bin_sizes)):
         print(
             f" Manifest {i+1}: {len(file_list):>4} files, "
             f"Total size: {total_size / 1024 / 1024:>6.2f} MB"
         )
-    print("---------------------------------")
+    print("------------------------------------------")
 
     return bins
 
