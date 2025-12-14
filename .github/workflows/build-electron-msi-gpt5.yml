@@ -705,6 +705,7 @@ jobs:
           }
       - name: 🏗️ Build Electron App
         shell: pwsh
+        working-directory: electron
         run: |
           npm ci
           $flag = if ('${{ matrix.arch }}' -eq 'x86') { '--ia32' } else { '--x64' }
