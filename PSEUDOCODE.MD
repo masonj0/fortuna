@@ -502,3 +502,192 @@ WORKFLOW user_launches_application:
 
 ---
 *This concludes the revised and definitive blueprint for the Fortuna Faucet application.*
+
+---
+
+### 9. OPERATION: THE AUDITOR (REAL-TIME VERIFICATION)
+
+**Status:** Implemented (Python)
+**Source:** `python_service/auditor.py`
+
+#### 9.1 System Context
+*Runs as a background thread. Verifies "Qualifier" predictions against official results scraped from AtTheRaces.com to calculate real-time profitability.*
+
+#### 9.2 Database Schema (SQLite)
+
+```pseudocode
+TABLE audit_log:
+  race_id: TEXT PRIMARY KEY      // Format: "VENUE-YYYYMMDD-RR"
+  track_code: TEXT
+  race_number: INTEGER
+  predicted_horse: TEXT
+  timestamp: DATETIME
+  status: TEXT                   // 'PENDING', 'CASHED', 'BURNED'
+  official_payout: REAL          // Default: 0.00
+  net_profit: REAL               // Default: 0.00
+
+  CONSTRAINT status_check CHECK (status IN ('PENDING', 'CASHED', 'BURNED'))
+  INDEX idx_status_timestamp (status, timestamp)
+```
+
+#### 9.3 Auditor Engine Logic
+
+```pseudocode
+MODULE: Auditor_Engine
+DEPENDENCIES: httpx, beautifulsoup4, sqlite3, structlog
+
+CLASS Auditor_Engine:
+
+    PROPERTIES:
+        db_path: String
+        http_client: AsyncClient
+        TOTE_UNIT: Float (2.00)
+        TRACK_CODE_MAP: Dictionary  // Maps "DON" -> "Doncaster", etc.
+
+    FUNCTION __init__(db_path):
+        self.db_path = db_path
+        self.Initialize_Database()
+        self.http_client = NEW AsyncClient(timeout=30)
+
+    # --- Phase 1: The Snapshot ---
+    # Called by OddsEngine when a bet is placed/qualified
+    ASYNC FUNCTION Snapshot_Qualifier(venue_code, race_date, race_number, predicted_horse):
+        race_id = GENERATE_ID(venue_code, race_date, race_number)
+
+        TRY:
+            QUERY = """
+                INSERT INTO audit_log
+                (race_id, track_code, race_number, predicted_horse, timestamp, status)
+                VALUES (?, ?, ?, ?, ?, 'PENDING')
+            """
+            EXECUTE_SQL(self.db_path, QUERY, (race_id, venue_code, race_number, predicted_horse, NOW()))
+            LOG_INFO("Snapshot saved: " + race_id)
+            RETURN TRUE
+        CATCH IntegrityError:
+            LOG_WARN("Race already tracked: " + race_id)
+            RETURN FALSE
+
+    # --- Phase 2: The Fetcher (Background Loop) ---
+    ASYNC FUNCTION Run_Audit_Loop():
+        self.running = TRUE
+        WHILE self.running:
+            TRY:
+                # 1. Get Pending Races (Last 60 mins)
+                cutoff = NOW() - MINUTES(60)
+                pending_races = GET_PENDING_RACES(cutoff)
+
+                IF pending_races IS EMPTY:
+                    SLEEP(120)
+                    CONTINUE
+
+                # 2. Batch by Track
+                unique_tracks = EXTRACT_UNIQUE_TRACKS(pending_races)
+
+                FOR track IN unique_tracks:
+                    track_races = FILTER(pending_races, track)
+
+                    FOR race IN track_races:
+                        # Fetch Official Result from AtTheRaces
+                        result = AWAIT self._Fetch_Official_Result(race.track_code, race.race_number)
+
+                        IF result IS NOT NULL:
+                            self._Determine_Verdict(race, result)
+
+                        SLEEP(2) # Polite delay
+
+            CATCH Exception as e:
+                LOG_ERROR("Audit Loop Error: " + e)
+
+            SLEEP(120)
+
+    # --- Phase 3: The Scraper (AtTheRaces Strategy) ---
+    ASYNC FUNCTION _Fetch_Official_Result(track_code, race_number):
+        # 1. Find the specific Race URL from the daily results page
+        race_url = AWAIT self._Find_Race_URL(track_code, race_number)
+        IF race_url IS NULL: RETURN NULL
+
+        # 2. Fetch the Race Page
+        html = AWAIT self.http_client.GET(race_url)
+
+        # 3. Parse the Table
+        result = self._Parse_AtTheRaces_Results(html, track_code, race_number)
+        RETURN result
+
+    ASYNC FUNCTION _Find_Race_URL(track_code, race_number):
+        base_url = "https://www.attheraces.com/results"
+        html = AWAIT self.http_client.GET(base_url)
+
+        track_name = self.TRACK_CODE_MAP[track_code]
+        track_header = FIND_ELEMENT(html, text=track_name)
+
+        IF track_header EXISTS:
+            # Select the Nth link in the track's panel
+            race_links = SELECT_ALL(track_header.parent, 'a[href*="/racecard/"]')
+            IF LENGTH(race_links) >= race_number:
+                RETURN race_links[race_number - 1].href
+
+        RETURN NULL
+
+    FUNCTION _Parse_AtTheRaces_Results(html, track_code, race_number):
+        table = FIND_TABLE(html, header_contains="Horse")
+        IF table IS NULL: RETURN NULL
+
+        finishers = []
+        win_payout = EXTRACT_WIN_PAYOUT(html) # Parse "Betting returns" table
+
+        FOR row IN table.rows:
+            position = PARSE_INT(row.cells[0])
+            horse_name = row.cells[2].text
+
+            place_payout = 0.0
+            IF position == 1:
+                place_payout = win_payout
+
+            finishers.APPEND({
+                "name": horse_name,
+                "position": position,
+                "place_payout": place_payout
+            })
+
+        RETURN NEW OfficialResult(finishers)
+
+    # --- Phase 4: The Verdict ---
+    FUNCTION _Determine_Verdict(prediction, official_result):
+        did_place = FALSE
+        payout = 0.00
+
+        # Check if predicted horse won (AtTheRaces basic logic)
+        FOR finisher IN official_result.finishers:
+            IF finisher.name == prediction.predicted_horse AND finisher.place_payout > 0:
+                did_place = TRUE
+                payout = finisher.place_payout
+                BREAK
+
+        IF did_place:
+            status = 'CASHED'
+            net_profit = payout - self.TOTE_UNIT
+        ELSE:
+            status = 'BURNED'
+            net_profit = -self.TOTE_UNIT
+
+        UPDATE_DB(prediction.race_id, status, payout, net_profit)
+
+    # --- Phase 5: Dashboard Metrics ---
+    FUNCTION Get_Rolling_Metrics(minutes=60):
+        cutoff = NOW() - MINUTES(minutes)
+        QUERY = """
+            SELECT
+                COUNT(*) as total,
+                SUM(CASE WHEN status='CASHED' THEN 1 ELSE 0 END) as wins,
+                SUM(net_profit) as profit
+            FROM audit_log
+            WHERE timestamp > ? AND status != 'PENDING'
+        """
+        stats = EXECUTE_SQL(self.db_path, QUERY, (cutoff,))
+
+        RETURN {
+            "strike_rate": (stats.wins / stats.total) * 100,
+            "net_profit": stats.profit,
+            "volume": stats.total
+        }
+```
