@@ -1,0 +1,11 @@
+name: 🎩 Build MSI (Hat-Trick Fusion Ultimate)
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    uses: ./.github/workflows/build-msi-reusable-core-v2.yml
+    secrets: inherit
