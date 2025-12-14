@@ -26,7 +26,6 @@
     "web_platform/frontend/app/Providers.tsx",
     "web_platform/frontend/postcss.config.js",
     "web_platform/frontend/public/manifest.json",
-    "web_platform/frontend/public/workbox-4754cb34.js",
     "web_platform/frontend/src/components/LiveModeToggle.tsx",
     "web_platform/frontend/src/components/RaceFilters.tsx",
     "web_platform/frontend/src/components/TrifectaFactors.tsx",
@@ -51,6 +50,7 @@
     "web_service/frontend/app/globals.css",
     "web_service/frontend/app/page.tsx",
     "web_service/frontend/postcss.config.js",
+    "web_service/frontend/public/workbox-4754cb34.js",
     "web_service/frontend/tsconfig.json",
     "wix/product.wxs"
 ]

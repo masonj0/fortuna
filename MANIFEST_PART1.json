@@ -26,6 +26,7 @@
     "web_platform/api_gateway/src/services/DatabaseService.ts",
     "web_platform/frontend/next-env.d.ts",
     "web_platform/frontend/package.json",
+    "web_platform/frontend/public/workbox-4754cb34.js",
     "web_platform/frontend/src/components/ErrorDisplay.tsx",
     "web_platform/frontend/src/components/RaceCardSkeleton.tsx",
     "web_platform/frontend/src/components/Tabs.tsx",
@@ -52,6 +53,5 @@
     "web_service/frontend/next-env.d.ts",
     "web_service/frontend/next.config.mjs",
     "web_service/frontend/public/manifest.json",
-    "web_service/frontend/public/workbox-4754cb34.js",
     "wix/WixUI_CustomProgress.wxs"
 ]
