@@ -294,7 +294,7 @@ jobs:
             await browser.close();
           })();"
 
-      - name: 🕵️ CSI: Windows Post-Mortem (On Failure)
+      - name: '🕵️ CSI: Windows Post-Mortem (On Failure)'
         if: failure()
         shell: pwsh
         run: |
