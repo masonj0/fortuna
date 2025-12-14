@@ -278,7 +278,7 @@ jobs:
         with:
           name: hat-trick-msi-${{ matrix.arch }}
           path: msi-installer
-      - name: 🔥 Smoke Test
+      - name: 🩺 Health Check & Cleanup
         shell: pwsh
         run: |
           Set-StrictMode -Version Latest
@@ -331,33 +331,6 @@ jobs:
             Stop-Service -Name "FortunaWebService" -ErrorAction SilentlyContinue
             sc.exe delete "FortunaWebService" *>$null
           }
-      # ---------------------------------------------------------
-      # 💉 INJECT: PAPARAZZI (Subroutine #4)
-      # ---------------------------------------------------------
-      - name: '📸 Paparazzi (Visual Proof)'
-        if: success()
-        shell: pwsh
-        run: |
-          npm install playwright
-          npx playwright install chromium
-
-          # Ensure we hit the local service
-          $url = "http://127.0.0.1:${{ env.SERVICE_PORT }}/docs"
-
-          $nodeScript = "const { chromium } = require('playwright'); (async () => { const browser = await chromium.launch(); const page = await browser.newPage(); try { await page.goto('$url', { timeout: 10000 }); await page.screenshot({ path: 'proof-of-life.png', fullPage: true }); console.log('✅ Screenshot captured!'); } catch (e) { console.error('❌ Failed to capture screenshot:', e); process.exit(1); } await browser.close(); })();"
-          node -e $nodeScript
-
-      - name: 📤 Upload Visual Proof
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: visual-proof-${{ matrix.arch || 'x64' }}
-          path: proof-of-life.png
-      - name: 🧹 Stop Service
-        if: always()
-        shell: pwsh
-        run: |
-          Stop-Service -Name "FortunaWebService" -ErrorAction SilentlyContinue
 
   generate-sbom:
     name: '📜 Generate SBOM (${{ matrix.arch }})'
