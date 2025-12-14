@@ -151,8 +151,8 @@ jobs:
       - name: Upload Backend
         uses: actions/upload-artifact@v4
         with:
-          name: backend-dist-${{ matrix.arch }}-${{ github.run_id }}
-          path: dist/fortuna-backend.exe
+          name: backend-dist-${{ matrix.arch }}
+          path: dist/fortuna-backend/
 
   package-msi:
     name: '💿 Package MSI (${{ matrix.arch }})'
@@ -167,7 +167,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: backend-dist-${{ matrix.arch }}-${{ github.run_id }}
+          name: backend-dist-${{ matrix.arch }}
           path: staging/backend
       # ---------------------------------------------------------
       # 💉 INJECT: THE DIETICIAN (Subroutine #3)
@@ -263,7 +263,7 @@ jobs:
       - name: Upload MSI
         uses: actions/upload-artifact@v4
         with:
-          name: hat-trick-msi-${{ matrix.arch }}-${{ github.run_id }}
+          name: hat-trick-msi-${{ matrix.arch }}
           path: build_wix/bin/${{ matrix.arch }}/Release/*
 
   smoke-test:
@@ -276,7 +276,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: hat-trick-msi-${{ matrix.arch }}-${{ github.run_id }}
+          name: hat-trick-msi-${{ matrix.arch }}
           path: msi-installer
       - name: 🔥 Smoke Test
         shell: pwsh
