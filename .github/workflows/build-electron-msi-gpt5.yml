@@ -970,7 +970,7 @@ jobs:
 
           if (Test-Path $exe) {
             Write-Host "Starting backend for 10s health check..."
-            $proc = Start-Process -FilePath $exe -PassThru
+            $proc = Start-Process -FilePath $exe -PassThru -WorkingDirectory ${{ env.INSTALL_ROOT }}
             Start-Sleep -Seconds 10
             if (!$proc.HasExited) { Stop-Process -Id $proc.Id -Force; Write-Host "✅ Backend Alive" }
             else { Write-Error "❌ Backend crashed"; exit 1 }
@@ -988,7 +988,7 @@ jobs:
           if (-not (Test-Path $exe)) { throw "❌ Backend executable not found at $exe" }
 
           Write-Host "Starting backend..."
-          $proc = Start-Process -FilePath $exe -PassThru
+          $proc = Start-Process -FilePath $exe -PassThru -WorkingDirectory $installRoot
           try {
             Start-Sleep -Seconds 10
             if ($proc.HasExited) { throw "❌ Backend crashed immediately" }
@@ -1125,6 +1125,7 @@ jobs:
           path: msi-artifact/
           output-file: "sbom-${{ matrix.arch }}.spdx.json"
           format: "spdx-json"
+          upload-artifact: false
 
       - name: 📤 Upload SBOM Artifact
         uses: actions/upload-artifact@v4

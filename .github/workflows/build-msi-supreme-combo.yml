@@ -48,7 +48,8 @@ jobs:
         id: git_version
         shell: pwsh
         run: |
-          $tag = git describe --tags --abbrev=0 2>$null
+          git describe --tags --abbrev=0 > tag.txt 2>$null
+          $tag = Get-Content tag.txt -ErrorAction SilentlyContinue
           if (-not $tag) { $tag = "0.0.0" }
           $tag = $tag -replace "^v", ""
           $run = "${{ github.run_number }}"

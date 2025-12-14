@@ -281,6 +281,39 @@ jobs:
       - name: 🩺 Health Check & Cleanup
         shell: pwsh
         run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "Stop"
+          $msiPath = (Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse | Select-Object -First 1).FullName
+          if (-not $msiPath) { throw "MSI not found!" }
+          Write-Host "Found MSI at $msiPath"
+          # 1. PRE-INSTALL CLEANUP
+          Write-Host "Attempting pre-emptive service removal..."
+          $service = Get-Service -Name "FortunaWebService" -ErrorAction SilentlyContinue
+          if ($service) {
+            sc.exe delete "FortunaWebService"
+            Start-Sleep -Seconds 5
+          }
+          # 2. INSTALL
+          $logFile = "msi-install.log"
+          $msiArgs = "/i `"$msiPath`" /qn /L*v `"$logFile`""
+          Write-Host "Running: msiexec.exe $msiArgs"
+          $proc = Start-Process msiexec.exe -ArgumentList $msiArgs -Wait -PassThru
+          if ($proc.ExitCode -ne 0 -and $proc.ExitCode -ne 3010) {
+            Get-Content $logFile -Tail 50
+            throw "MSI installation failed with exit code $($proc.ExitCode)."
+          }
+          Write-Host "✅ MSI Installation successful."
+          # 3. VERIFY & RUN
+          $progFiles = ${env:ProgramFiles}
+          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
+          $installDir = Join-Path $progFiles "Fortuna Faucet Service"
+          if (-not (Test-Path $installDir)) { throw "Installation directory not found!" }
+          New-Item -ItemType Directory -Path (Join-Path $installDir "data") -Force | Out-Null
+          New-Item -ItemType Directory -Path (Join-Path $installDir "json") -Force | Out-Null
+          New-Item -ItemType Directory -Path (Join-Path $installDir "logs") -Force | Out-Null
+          Start-Service -Name "FortunaWebService"
+          Start-Sleep -Seconds 10
+          # 4. HEALTH CHECK
           try {
             Start-Sleep 10
             $success = $false
@@ -318,6 +351,7 @@ jobs:
           path: backend
           output-file: "sbom-${{ matrix.arch }}.spdx.json"
           format: spdx-json
+          upload-artifact: false
       - name: Upload SBOM
         uses: actions/upload-artifact@v4
         with:
