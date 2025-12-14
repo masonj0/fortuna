@@ -705,26 +705,21 @@ jobs:
           }
       - name: 🏗️ Build Electron App
         shell: pwsh
-        working-directory: electron
         run: |
-          # Set code signing to false for CI
-          $env:CSC_IDENTITY_AUTO_DISCOVERY = 'false'
+          npm ci
+          $flag = if ('${{ matrix.arch }}' -eq 'x86') { '--ia32' } else { '--x64' }
+          npm run build -- --publish never $flag
 
-          # FIX: Map the matrix architecture to Electron Builder flags
-          # x86 must be passed as '--ia32', x64 as '--x64'
-          $archFlag = if ("${{ matrix.arch }}" -eq "x86") { "--ia32" } else { "--x64" }
-
-          Write-Host "🚀 Starting Build for architecture: ${{ matrix.arch }} (Flag: $archFlag)"
-
-          # Pass the flag to the build command
-          npm run build -- --config temp-builder-config.yml --publish never $archFlag 2>&1
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "Electron build failed"
-            exit 1
-          }
-
-          Write-Host "✓ Electron build completed"
+      # GPT-5 FIX: Move MSI into release-artifacts
+      - name: 🏗️ Move MSI into release-artifacts
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem electron/dist -Recurse -Filter "*.msi" | Select-Object -First 1
+          if (-not $msi) { throw "MSI not found in electron/dist" }
+          $dest = "release-artifacts"
+          New-Item -ItemType Directory -Path $dest -Force | Out-Null
+          Move-Item $msi.FullName "$dest/${msi.Name}" -Force
+          echo "msi_path=$dest/${msi.Name}" >> $env:GITHUB_OUTPUT
 
       - name: 🔬 Forensic Packaging Analysis
         shell: pwsh

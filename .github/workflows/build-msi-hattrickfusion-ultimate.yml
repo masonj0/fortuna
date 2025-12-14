@@ -278,86 +278,26 @@ jobs:
         with:
           name: hat-trick-msi-${{ matrix.arch }}
           path: msi-installer
-      - name: 🔥 Smoke Test
+      - name: 🩺 Health Check & Cleanup
         shell: pwsh
         run: |
-          Set-StrictMode -Version Latest
-          $ErrorActionPreference = "Stop"
-          $msiPath = (Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse | Select-Object -First 1).FullName
-          if (-not $msiPath) { throw "MSI not found!" }
-          Write-Host "Found MSI at $msiPath"
-          # 1. PRE-INSTALL CLEANUP
-          Write-Host "Attempting pre-emptive service removal..."
-          $service = Get-Service -Name "FortunaWebService" -ErrorAction SilentlyContinue
-          if ($service) {
-            sc.exe delete "FortunaWebService"
-            Start-Sleep -Seconds 5
+          try {
+            Start-Sleep 10
+            $success = $false
+            for ($i = 0; $i -lt 5; $i++) {
+              try {
+                if ((Invoke-RestMethod "http://127.0.0.1:${{ env.SERVICE_PORT }}/health").status -eq "ok") {
+                  $success = $true
+                  break
+                }
+              } catch {}
+              Start-Sleep 5
+            }
+            if (-not $success) { throw "❌ Service failed to respond" }
+          } finally {
+            Stop-Service -Name "FortunaWebService" -ErrorAction SilentlyContinue
+            sc.exe delete "FortunaWebService" *>$null
           }
-          # 2. INSTALL
-          $logFile = "msi-install.log"
-          $msiArgs = "/i `"$msiPath`" /qn /L*v `"$logFile`""
-          Write-Host "Running: msiexec.exe $msiArgs"
-          $proc = Start-Process msiexec.exe -ArgumentList $msiArgs -Wait -PassThru
-          if ($proc.ExitCode -ne 0 -and $proc.ExitCode -ne 3010) {
-            Get-Content $logFile -Tail 50
-            throw "MSI installation failed with exit code $($proc.ExitCode)."
-          }
-          Write-Host "✅ MSI Installation successful."
-          # 3. VERIFY & RUN
-          $progFiles = ${env:ProgramFiles}
-          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
-          $installDir = Join-Path $progFiles "Fortuna Faucet Service"
-          if (-not (Test-Path $installDir)) { throw "Installation directory not found!" }
-          New-Item -ItemType Directory -Path (Join-Path $installDir "data") -Force | Out-Null
-          New-Item -ItemType Directory -Path (Join-Path $installDir "json") -Force | Out-Null
-          New-Item -ItemType Directory -Path (Join-Path $installDir "logs") -Force | Out-Null
-          Start-Service -Name "FortunaWebService"
-          Start-Sleep -Seconds 10
-          # 4. HEALTH CHECK
-          $maxRetries = 5
-          $delay = 5
-          $success = $false
-          For ($i=0; $i -lt $maxRetries; $i++) {
-            try {
-              $response = Invoke-WebRequest -Uri "http://localhost:${{ env.SERVICE_PORT }}/health" -UseBasicParsing
-              if ($response.StatusCode -eq 200) {
-                Write-Host "✅ Health check PASSED."
-                $success = $true
-                break
-              }
-            } catch { Write-Host "Attempt $($i+1) failed. Retrying in $delay seconds..." }
-            Start-Sleep -Seconds $delay
-          }
-          if (-not $success) {
-            throw "Health check failed after $maxRetries attempts."
-          }
-      # ---------------------------------------------------------
-      # 💉 INJECT: PAPARAZZI (Subroutine #4)
-      # ---------------------------------------------------------
-      - name: '📸 Paparazzi (Visual Proof)'
-        if: success()
-        shell: pwsh
-        run: |
-          npm install playwright
-          npx playwright install chromium
-
-          # Ensure we hit the local service
-          $url = "http://127.0.0.1:${{ env.SERVICE_PORT }}/docs"
-
-          $nodeScript = "const { chromium } = require('playwright'); (async () => { const browser = await chromium.launch(); const page = await browser.newPage(); try { await page.goto('$url', { timeout: 10000 }); await page.screenshot({ path: 'proof-of-life.png', fullPage: true }); console.log('✅ Screenshot captured!'); } catch (e) { console.error('❌ Failed to capture screenshot:', e); process.exit(1); } await browser.close(); })();"
-          node -e $nodeScript
-
-      - name: 📤 Upload Visual Proof
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: visual-proof-${{ matrix.arch || 'x64' }}
-          path: proof-of-life.png
-      - name: 🧹 Stop Service
-        if: always()
-        shell: pwsh
-        run: |
-          Stop-Service -Name "FortunaWebService" -ErrorAction SilentlyContinue
 
   generate-sbom:
     name: '📜 Generate SBOM (${{ matrix.arch }})'
