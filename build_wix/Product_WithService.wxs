@@ -28,6 +28,7 @@
     <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
     <Property Id="WixShellExecTarget" Value="http://localhost:$(var.ServicePort)" />
 
+    <?if $(var.Platform) = x64 ?>
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLFOLDER" Name="Fortuna Faucet Service">
          <Directory Id="Dir_Data" Name="data" />
@@ -35,6 +36,15 @@
          <Directory Id="Dir_Logs" Name="logs" />
       </Directory>
     </StandardDirectory>
+    <?else?>
+    <StandardDirectory Id="ProgramFilesFolder">
+      <Directory Id="INSTALLFOLDER" Name="Fortuna Faucet Service">
+         <Directory Id="Dir_Data" Name="data" />
+         <Directory Id="Dir_Json" Name="json" />
+         <Directory Id="Dir_Logs" Name="logs" />
+      </Directory>
+    </StandardDirectory>
+    <?endif?>
 
     <StandardDirectory Id="ProgramMenuFolder">
         <Directory Id="ApplicationProgramsFolder" Name="Fortuna Faucet"/>
