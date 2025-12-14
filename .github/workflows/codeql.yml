@@ -39,6 +39,17 @@ jobs:
       with:
         node-version: '20'
 
+    - name: Install Python dependencies
+      if: matrix.language == 'python'
+      run: |
+        pip install -r web_service/backend/requirements-dev.txt
+        pip install -r python_service/requirements-dev.txt
+    - name: Install JavaScript dependencies
+      if: matrix.language == 'javascript'
+      run: |
+        npm install --prefix web_platform/frontend
+        npm install --prefix web_service/frontend
+        npm install --prefix electron
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v3
       with:
