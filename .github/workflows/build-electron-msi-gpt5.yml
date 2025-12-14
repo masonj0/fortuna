@@ -709,7 +709,7 @@ jobs:
         run: |
           npm ci
           $flag = if ('${{ matrix.arch }}' -eq 'x86') { '--ia32' } else { '--x64' }
-          npm run build -- --publish never $flag
+          npm run dist -- --config temp-builder-config.yml --publish never $flag
 
       # GPT-5 FIX: Move MSI into release-artifacts
       - name: 🏗️ Move MSI into release-artifacts
