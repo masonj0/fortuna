@@ -1,0 +1,40 @@
+name: 🚀 Release Fortuna
+
+on:
+  push:
+    branches: [main]
+    tags: [v*]
+  workflow_dispatch:
+
+jobs:
+  build:
+    uses: ./.github/workflows/build-msi-reusable-core-v2.yml
+    with:
+      node_version: '20'
+      python_version: '3.11'
+      skip_tests: false
+    secrets:
+      API_KEY: ${{ secrets.API_KEY }}
+      TVG_API_KEY: ${{ secrets.TVG_API_KEY }}
+
+  release:
+    name: 📦 GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: msi-*
+          merge-multiple: true
+          path: release
+
+      - run: |
+          cd release
+          sha256sum *.msi > SHASUMS256.txt
+
+      - uses: softprops/action-gh-release@v1
+        with:
+          files: release/*
+          generate_release_notes: true
