@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    uses: ./.github/workflows/build-msi-reusable-core.yml
+    uses: ./.github/workflows/build-msi-reusable-core-v2.yml
     with:
       node_version: '20'
       python_version: '3.11'

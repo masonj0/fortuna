@@ -8,5 +8,5 @@ on:
 
 jobs:
   build:
-    uses: ./.github/workflows/build-msi-reusable-core.yml
+    uses: ./.github/workflows/build-msi-reusable-core-v2.yml
     secrets: inherit
