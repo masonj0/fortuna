@@ -36,7 +36,7 @@ jobs:
     outputs:
       semver: ${{ steps.ver.outputs.semver }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: 'actions/checkout@v4'
         with: { fetch-depth: 0 }
 
       - name: 🏷️ Versioning
@@ -61,8 +61,8 @@ jobs:
     needs: preflight
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: 'actions/checkout@v4'
+      - uses: 'actions/setup-node@v4'
         with: { node-version: ${{ inputs.node_version }}, cache: 'npm', cache-dependency-path: 'web_platform/frontend/package-lock.json' }
 
       - name: 🔍 Verify Build Script Exists
@@ -75,7 +75,7 @@ jobs:
       - run: npm ci && npm run build
         working-directory: web_platform/frontend
 
-      - uses: actions/upload-artifact@v4
+      - uses: 'actions/upload-artifact@v4'
         with: { name: frontend-dist, path: web_platform/frontend/out }
 
   # =========================================================
@@ -87,12 +87,12 @@ jobs:
     runs-on: windows-latest
     strategy: { matrix: { arch: [x64, x86] } }
     steps:
-      - uses: actions/checkout@v4
+      - uses: 'actions/checkout@v4'
 
-      - uses: actions/download-artifact@v4
+      - uses: 'actions/download-artifact@v4'
         with: { name: frontend-dist, path: web_platform/frontend/out }
 
-      - uses: actions/setup-python@v5
+      - uses: 'actions/setup-python@v5'
         with: { python-version: ${{ inputs.python_version }}, architecture: ${{ matrix.arch }}, cache: 'pip' }
 
       # FIX: Replaced fragile backtick escape with robust multi-line commands
@@ -115,7 +115,7 @@ jobs:
             --add-data "web_service/backend;backend" `
             --add-data "web_platform/frontend/out;ui" `
             web_service/backend/service_entry.py
-      - uses: actions/upload-artifact@v4
+      - uses: 'actions/upload-artifact@v4'
         with: { name: backend-${{ matrix.arch }}, path: dist/fortuna-backend }
 
   # =========================================================
@@ -127,8 +127,8 @@ jobs:
     runs-on: windows-latest
     strategy: { matrix: { arch: [x64, x86] } }
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: 'actions/checkout@v4'
+      - uses: 'actions/download-artifact@v4'
         with: { name: backend-${{ matrix.arch }}, path: staging/backend }
 
       - name: 📝 Inject Restart Script
@@ -156,7 +156,7 @@ jobs:
             }
           } catch { Write-Warning "Canary scan failed or skipped: $_" }
 
-      - uses: actions/upload-artifact@v4
+      - uses: 'actions/upload-artifact@v4'
         with: { name: msi-${{ matrix.arch }}, path: Fortuna-${{ matrix.arch }}.msi }
 
   # =========================================================
@@ -169,7 +169,7 @@ jobs:
     strategy: { matrix: { arch: [x64, x86] } }
     steps:
       # NO CHECKOUT HERE - Pure Artifacts
-      - uses: actions/download-artifact@v4
+      - uses: 'actions/download-artifact@v4'
         with: { name: msi-${{ matrix.arch }} }
 
       - name: 🧹 Clean & Install
@@ -199,7 +199,7 @@ jobs:
     runs-on: windows-latest
     strategy: { matrix: { arch: [x64, x86] } }
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: 'actions/download-artifact@v4'
         with: { name: msi-${{ matrix.arch }} }
 
       - name: 💿 Re-Install for UI
@@ -212,7 +212,7 @@ jobs:
           npm install playwright; npx playwright install chromium --with-deps
           node -e "const { chromium } = require('playwright'); (async () => { const b = await chromium.launch(); const p = await b.newPage(); await p.goto('http://127.0.0.1:${{ inputs.service_port }}/docs'); await p.screenshot({path: 'proof.png'}); await b.close(); })();"
 
-      - uses: actions/upload-artifact@v4
+      - uses: 'actions/upload-artifact@v4'
         with: { name: proof-${{ matrix.arch }}, path: proof.png }
 
       - name: 🧹 Cleanup
