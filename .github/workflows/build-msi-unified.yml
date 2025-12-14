@@ -137,7 +137,7 @@ jobs:
           BACKEND_DIR: ${{ env.BACKEND_DIR }}
           MODULE_PATH: ${{ env.BACKEND_MODULE_PATH }}
           FRONTEND_OUT: ${{ env.FRONTEND_DIR }}/out
-           CONSTRAINTS_FILE: ${{ steps.constraints.outputs.file }}
+          CONSTRAINTS_FILE: ${{ steps.constraints.outputs.file }}
         run: |
           import os
           from pathlib import Path
