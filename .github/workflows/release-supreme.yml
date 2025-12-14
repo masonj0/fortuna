@@ -1,0 +1,27 @@
+name: 🚀 Release (Supreme)
+
+on:
+  push:
+    branches: [ main ]
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  call-core:
+    uses: ./.github/workflows/build-core-universal.yml
+    with:
+      enable_forensics: true
+      enable_dietician: true
+      enable_canary: true
+      enable_paparazzi: true
+    secrets: inherit
+
+  publish:
+    needs: call-core
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { pattern: msi-*, merge-multiple: true, path: release }
+      - run: cd release && sha256sum *.msi > SHASUMS256.txt
+      - uses: softprops/action-gh-release@v1
+        with: { files: release/*, generate_release_notes: true }
