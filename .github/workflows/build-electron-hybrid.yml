@@ -220,6 +220,11 @@ jobs:
           $tempConfigPath = '${{ env.ELECTRON_DIR }}/temp-builder-config.yml'
           $config | ConvertTo-Yaml | Set-Content -Path $tempConfigPath
           Write-Host "✅ Successfully created temporary config '$tempConfigPath' with corrected icon paths."
+      - name: 🛠️ Validate temp config before build
+        shell: pwsh
+        run: |
+          $cfg = 'electron/temp-builder-config.yml'
+          if (-not (Test-Path $cfg)) { throw "Missing electron builder config ($cfg)" }
       - name: 📄 Ensure WiX License Exists for electron-builder
         shell: pwsh
         run: |
@@ -235,6 +240,9 @@ jobs:
           } else {
             Write-Host '✅ Existing license.rtf found.'
           }
+      - name: 🏗️ Build Electron
+        working-directory: ${{ env.ELECTRON_DIR }}
+        run: npm run electron:build
       - name: 🏗️ Build MSI
         working-directory: ${{ env.ELECTRON_DIR }}
         env:
@@ -348,9 +356,11 @@ jobs:
           }
           Write-Error "❌ LAYER 3 FAILED: Service Failed Health Check"
           exit 1
-      - name: Cleanup
+      - name: 💥 Kill residual Electron after smoke
         if: always()
-        run: Stop-Process -Name "Fortuna Faucet", "fortuna-backend" -Force -ErrorAction SilentlyContinue
+        shell: pwsh
+        run: |
+          Get-Process -Name "Fortuna Faucet", "fortuna-backend" -ErrorAction SilentlyContinue | Stop-Process -Force
 
   # ==================================================================================
   # JOB 4: RELEASE (The "Triple-Tap" Staging)
