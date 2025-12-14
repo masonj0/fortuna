@@ -14,7 +14,7 @@ env:
   NODE_VERSION: '20'
   PYTHON_VERSION: '3.11' # 🚀 DOWNGRADE
   # Paths
-  BACKEND_DIR: 'python_service'
+  BACKEND_DIR: 'web_service/backend'
   FRONTEND_DIR: 'web_platform/frontend'
   ELECTRON_DIR: 'electron'
   FORTUNA_PORT: '8102'
@@ -35,8 +35,8 @@ jobs:
         with:
           python-version: '3.12'
       - run: |
-          pip install -r python_service/requirements-dev.txt
-          pytest python_service/tests
+          pip install -r web_service/backend/requirements-dev.txt
+          pytest web_service/backend/tests
   # ==================================================================================
   # JOB 1: BUILD CORE (The "HatTrick" Engine)
   # ==================================================================================

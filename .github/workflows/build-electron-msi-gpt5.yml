@@ -983,7 +983,7 @@ jobs:
              Write-Warning "Backend not found at $exe"
           }
 
-      - name: '🔬 Complete Smoke Test'
+      - name: '🔬 Smoke Test & Visual Verification'
         shell: pwsh
         run: |
           $installRoot = "${{ env.INSTALL_ROOT }}"
@@ -994,30 +994,38 @@ jobs:
 
           Write-Host "Starting backend..."
           $proc = Start-Process -FilePath $exe -PassThru
-          Start-Sleep -Seconds 10
-          if ($proc.HasExited) { throw "❌ Backend crashed immediately" }
+          try {
+            Start-Sleep -Seconds 10
+            if ($proc.HasExited) { throw "❌ Backend crashed immediately" }
 
-          Write-Host "Pinging Health Endpoint..."
-          $response = Invoke-WebRequest -Uri "http://localhost:8102/health" -UseBasicParsing
-          if ($response.StatusCode -eq 200) { Write-Host "✅ SUCCESS: Health Check Passed" } else { throw "❌ Health Check Failed" }
+            Write-Host "Pinging Health Endpoint..."
+            $response = Invoke-WebRequest -Uri "http://localhost:8102/health" -UseBasicParsing
+            if ($response.StatusCode -eq 200) {
+              Write-Host "✅ SUCCESS: Health Check Passed"
+            } else {
+              throw "❌ Health Check Failed"
+            }
 
-          Stop-Process -Id $proc.Id -Force
+            Write-Host "📸 Taking screenshot..."
+            npm install playwright
+            npx playwright install chromium --with-deps
+            $url = "http://127.0.0.1:8102/docs"
+            node -e "const { chromium } = require('playwright'); (async () => { const browser = await chromium.launch(); const page = await browser.newPage(); await page.goto('$url'); await page.screenshot({ path: 'proof.png' }); await browser.close(); })();"
+            Write-Host "✅ Screenshot captured."
 
-      - name: '📸 Paparazzi (Visual Proof)'
-        shell: pwsh
-        run: |
-          npm install playwright
-          npx playwright install chromium --with-deps
-          # FIX: Point to /docs (Swagger UI)
-          $url = "http://127.0.0.1:8102/docs"
-          node -e "const { chromium } = require('playwright'); (async () => { const browser = await chromium.launch(); const page = await browser.newPage(); await page.goto('$url'); await page.screenshot({ path: 'proof.png' }); await browser.close(); })();"
+          } finally {
+            if ($proc -and !$proc.HasExited) {
+              Stop-Process -Id $proc.Id -Force
+              Write-Host "🛑 Backend stopped."
+            }
+          }
 
       - name: 📤 Upload Visual Proof
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: visual-proof-${{ github.run_id }}
-          path: proof-of-life.png
+          path: proof.png
           retention-days: 7
 
       - name: '🚨 Emergency Diagnostics (On Failure)'
@@ -1097,8 +1105,8 @@ jobs:
         uses: ./.github/actions/run-asgi-diagnostics
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          backend-dir: 'python_service'
-          backend-module-path: 'python_service'
+          backend-dir: 'web_service/backend'
+          backend-module-path: 'web_service.backend'
 
   generate-sbom:
     name: '📜 Generate SBOM (${{ matrix.arch }})'
