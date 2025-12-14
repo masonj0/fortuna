@@ -1,0 +1,187 @@
+name: 🧩 Reusable MSI Build Pipeline
+
+on:
+  workflow_call:
+    inputs:
+      node_version:
+        type: string
+        default: '20'
+      python_version:
+        type: string
+        default: '3.11'
+      wix_version:
+        type: string
+        default: '4.0.5'
+      skip_tests:
+        type: boolean
+        default: false
+      service_port:
+        type: string
+        default: '8102'
+
+    outputs:
+      semver:
+        description: Derived semantic version
+        value: ${{ jobs.preflight.outputs.semver }}
+      build_id:
+        description: Build identifier
+        value: ${{ jobs.preflight.outputs.build_id }}
+
+    secrets:
+      API_KEY:
+        required: false
+      TVG_API_KEY:
+        required: false
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  FORTUNA_ENV: smoke-test
+
+jobs:
+# =========================================================
+# PREFLIGHT
+# =========================================================
+  preflight:
+    name: 🔍 Preflight
+    runs-on: windows-latest
+    outputs:
+      semver: ${{ steps.version.outputs.semver }}
+      build_id: ${{ steps.version.outputs.build_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🏷️ Version
+        id: version
+        shell: pwsh
+        run: |
+          git describe --tags --abbrev=0 > tag.txt 2>$null
+          $tag = Get-Content tag.txt -ErrorAction SilentlyContinue
+          if (-not $tag) { $tag = "v0.0.0" }
+          $tag = $tag -replace '^v',''
+          "semver=$tag" >> $env:GITHUB_OUTPUT
+          "build_id=${{ github.run_number }}" >> $env:GITHUB_OUTPUT
+
+      - name: 🔎 Assets
+        shell: pwsh
+        run: |
+          $files = @(
+            "web_platform/frontend/package.json",
+            "web_service/backend/requirements.txt",
+            "build_wix/Product_WithService.wxs"
+          )
+          foreach ($f in $files) {
+            if (-not (Test-Path $f)) {
+              throw "Missing $f"
+            }
+          }
+
+# =========================================================
+# FRONTEND
+# =========================================================
+  frontend:
+    name: ⚛️ Frontend
+    runs-on: windows-latest
+    needs: preflight
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+          cache: npm
+          cache-dependency-path: web_platform/frontend/package-lock.json
+
+      - working-directory: web_platform/frontend
+        run: |
+          npm ci
+          npm run build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: web_platform/frontend/out
+
+# =========================================================
+# BACKEND
+# =========================================================
+  backend:
+    name: 🐍 Backend (${{ matrix.arch }})
+    runs-on: windows-latest
+    needs: frontend
+    strategy:
+      matrix:
+        arch: [x64, x86]
+      fail-fast: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: web_platform/frontend/out
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+          architecture: ${{ matrix.arch }}
+          cache: pip
+
+      - name: Install deps
+        run: |
+          pip install -r web_service/backend/requirements.txt
+          pip install pyinstaller
+
+      - name: Quality gate
+        if: matrix.arch == 'x64' && inputs.skip_tests != true
+        run: python -m compileall web_service/backend -q
+
+      - name: Build binary
+        run: |
+          pyinstaller --noconfirm --onedir --clean `
+            --name fortuna-backend `
+            --add-data "web_service/backend;backend" `
+            --add-data "web_platform/frontend/out;ui" `
+            web_service/backend/service_entry.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backend-${{ matrix.arch }}
+          path: dist/fortuna-backend
+
+# =========================================================
+# MSI
+# =========================================================
+  msi:
+    name: 📦 MSI (${{ matrix.arch }})
+    runs-on: windows-latest
+    needs: backend
+    strategy:
+      matrix:
+        arch: [x64, x86]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: backend-${{ matrix.arch }}
+          path: staging/backend
+
+      - run: |
+          dotnet tool install --global wix --version ${{ inputs.wix_version }}
+          echo "$env:USERPROFILE\\.dotnet\\tools" >> $env:GITHUB_PATH
+
+      - run: |
+          wix build build_wix/Product_WithService.wxs `
+            -arch ${{ matrix.arch }} `
+            -o Fortuna-${{ matrix.arch }}.msi `
+            -d Version="${{ needs.preflight.outputs.semver }}" `
+            -d SourceDir="staging"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: msi-${{ matrix.arch }}
+          path: Fortuna-${{ matrix.arch }}.msi
