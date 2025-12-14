@@ -707,24 +707,20 @@ jobs:
         shell: pwsh
         working-directory: electron
         run: |
-          # Set code signing to false for CI
-          $env:CSC_IDENTITY_AUTO_DISCOVERY = 'false'
+          npm ci
+          $flag = if ('${{ matrix.arch }}' -eq 'x86') { '--ia32' } else { '--x64' }
+          npm run electron:build -- --publish never $flag
 
-          # FIX: Map the matrix architecture to Electron Builder flags
-          # x86 must be passed as '--ia32', x64 as '--x64'
-          $archFlag = if ("${{ matrix.arch }}" -eq "x86") { "--ia32" } else { "--x64" }
-
-          Write-Host "🚀 Starting Build for architecture: ${{ matrix.arch }} (Flag: $archFlag)"
-
-          # Pass the flag to the build command
-          npm run build -- --config temp-builder-config.yml --publish never $archFlag 2>&1
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "Electron build failed"
-            exit 1
-          }
-
-          Write-Host "✓ Electron build completed"
+      # GPT-5 FIX: Move MSI into release-artifacts
+      - name: 🏗️ Move MSI into release-artifacts
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem electron/dist -Recurse -Filter "*.msi" | Select-Object -First 1
+          if (-not $msi) { throw "MSI not found in electron/dist" }
+          $dest = "release-artifacts"
+          New-Item -ItemType Directory -Path $dest -Force | Out-Null
+          Move-Item $msi.FullName "$dest/${msi.Name}" -Force
+          echo "msi_path=$dest/${msi.Name}" >> $env:GITHUB_OUTPUT
 
       - name: 🔬 Forensic Packaging Analysis
         shell: pwsh
@@ -975,7 +971,7 @@ jobs:
 
           if (Test-Path $exe) {
             Write-Host "Starting backend for 10s health check..."
-            $proc = Start-Process -FilePath $exe -PassThru
+            $proc = Start-Process -FilePath $exe -PassThru -WorkingDirectory ${{ env.INSTALL_ROOT }}
             Start-Sleep -Seconds 10
             if (!$proc.HasExited) { Stop-Process -Id $proc.Id -Force; Write-Host "✅ Backend Alive" }
             else { Write-Error "❌ Backend crashed"; exit 1 }
@@ -993,7 +989,7 @@ jobs:
           if (-not (Test-Path $exe)) { throw "❌ Backend executable not found at $exe" }
 
           Write-Host "Starting backend..."
-          $proc = Start-Process -FilePath $exe -PassThru
+          $proc = Start-Process -FilePath $exe -PassThru -WorkingDirectory $installRoot
           try {
             Start-Sleep -Seconds 10
             if ($proc.HasExited) { throw "❌ Backend crashed immediately" }
@@ -1130,6 +1126,7 @@ jobs:
           path: msi-artifact/
           output-file: "sbom-${{ matrix.arch }}.spdx.json"
           format: "spdx-json"
+          upload-artifact: false
 
       - name: 📤 Upload SBOM Artifact
         uses: actions/upload-artifact@v4
