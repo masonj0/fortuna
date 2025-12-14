@@ -505,125 +505,189 @@ WORKFLOW user_launches_application:
 
 ---
 
-## 9. OPERATION: THE AUDITOR (REAL-TIME VERIFICATION)
+### 9. OPERATION: THE AUDITOR (REAL-TIME VERIFICATION)
 
-### 9.1 System Context
-*This module runs as a background thread within the Python Backend. It provides the "Source of Truth" by verifying predictions against official results (Equibase/GBGB) and calculating the "Favorite to Place" profitability in real-time.*
+**Status:** Implemented (Python)
+**Source:** `python_service/auditor.py`
 
-### 9.2 Database Schema (SQLite)
+#### 9.1 System Context
+*Runs as a background thread. Verifies "Qualifier" predictions against official results scraped from AtTheRaces.com to calculate real-time profitability.*
+
+#### 9.2 Database Schema (SQLite)
 
 ```pseudocode
 TABLE audit_log:
-  race_id: TEXT PRIMARY KEY (e.g., "GP-20251213-05")
+  race_id: TEXT PRIMARY KEY      // Format: "VENUE-YYYYMMDD-RR"
   track_code: TEXT
-  race_number: INT
+  race_number: INTEGER
   predicted_horse: TEXT
   timestamp: DATETIME
-  status: TEXT (Default: 'PENDING') // Options: 'PENDING', 'CASHED', 'BURNED'
-  official_payout: REAL (Default: 0.00)
-  net_profit: REAL (Default: 0.00)
+  status: TEXT                   // 'PENDING', 'CASHED', 'BURNED'
+  official_payout: REAL          // Default: 0.00
+  net_profit: REAL               // Default: 0.00
+
+  CONSTRAINT status_check CHECK (status IN ('PENDING', 'CASHED', 'BURNED'))
+  INDEX idx_status_timestamp (status, timestamp)
 ```
 
-### 9.3 Auditor Engine Logic (`auditor.py`)
+#### 9.3 Auditor Engine Logic
 
 ```pseudocode
-CLASS AuditorEngine:
-  INIT(db_connection):
-    self.db <- db_connection
-    self.http_client <- httpx.AsyncClient()
-    self.TOTE_UNIT <- 2.00
+MODULE: Auditor_Engine
+DEPENDENCIES: httpx, beautifulsoup4, sqlite3, structlog
 
-  // --- Phase 1: The Snapshot ---
-  // Called by OddsEngine when a race qualifies as a bet
-  ASYNC FUNCTION snapshot_qualifier(race, predicted_horse):
-    race_id <- generate_id(race.venue, race.date, race.number)
+CLASS Auditor_Engine:
 
-    TRY:
-      SQL_INSERT into audit_log (
-        race_id, track_code, race_number, predicted_horse, timestamp, status
-      ) VALUES (
-        race_id, race.venue_code, race.number, predicted_horse, NOW(), 'PENDING'
-      )
-      LOG "Snapshot saved for verification: " + race_id
-    CATCH IntegrityError:
-      LOG_WARN "Race already tracked: " + race_id
+    PROPERTIES:
+        db_path: String
+        http_client: AsyncClient
+        TOTE_UNIT: Float (2.00)
+        TRACK_CODE_MAP: Dictionary  // Maps "DON" -> "Doncaster", etc.
 
-  // --- Phase 2: The Fetcher (Background Loop) ---
-  // Runs continuously to check results for the last hour
-  ASYNC FUNCTION run_audit_loop():
-    WHILE True:
-      // 1. Find pending races from the last 60 minutes
-      cutoff_time <- NOW() - MINUTES(60)
-      pending_races <- SQL_SELECT * FROM audit_log
-                       WHERE status = 'PENDING' AND timestamp > cutoff_time
+    FUNCTION __init__(db_path):
+        self.db_path = db_path
+        self.Initialize_Database()
+        self.http_client = NEW AsyncClient(timeout=30)
 
-      IF pending_races is EMPTY:
-        SLEEP 120 seconds
-        CONTINUE
+    # --- Phase 1: The Snapshot ---
+    # Called by OddsEngine when a bet is placed/qualified
+    ASYNC FUNCTION Snapshot_Qualifier(venue_code, race_date, race_number, predicted_horse):
+        race_id = GENERATE_ID(venue_code, race_date, race_number)
 
-      // 2. Fetch Official Results (Batch by Track to be polite)
-      FOR race IN pending_races:
-        official_result <- AWAIT self._fetch_official_result(race.track_code, race.race_number)
+        TRY:
+            QUERY = """
+                INSERT INTO audit_log
+                (race_id, track_code, race_number, predicted_horse, timestamp, status)
+                VALUES (?, ?, ?, ?, ?, 'PENDING')
+            """
+            EXECUTE_SQL(self.db_path, QUERY, (race_id, venue_code, race_number, predicted_horse, NOW()))
+            LOG_INFO("Snapshot saved: " + race_id)
+            RETURN TRUE
+        CATCH IntegrityError:
+            LOG_WARN("Race already tracked: " + race_id)
+            RETURN FALSE
 
-        IF official_result is NOT NULL:
-          self._determine_verdict(race, official_result)
+    # --- Phase 2: The Fetcher (Background Loop) ---
+    ASYNC FUNCTION Run_Audit_Loop():
+        self.running = TRUE
+        WHILE self.running:
+            TRY:
+                # 1. Get Pending Races (Last 60 mins)
+                cutoff = NOW() - MINUTES(60)
+                pending_races = GET_PENDING_RACES(cutoff)
 
-      SLEEP 120 seconds
+                IF pending_races IS EMPTY:
+                    SLEEP(120)
+                    CONTINUE
 
-  // --- Phase 3: The Verdict & Economics ---
-  FUNCTION _determine_verdict(prediction, official_result):
-    did_place <- FALSE
-    payout <- 0.00
+                # 2. Batch by Track
+                unique_tracks = EXTRACT_UNIQUE_TRACKS(pending_races)
 
-    // Check if our horse is in the official "Place" payouts
-    // (Note: "Place" in US racing covers 1st and 2nd)
-    FOR finisher IN official_result.finishers:
-      IF finisher.name == prediction.predicted_horse AND finisher.place_payout > 0:
-        did_place <- TRUE
-        payout <- finisher.place_payout
+                FOR track IN unique_tracks:
+                    track_races = FILTER(pending_races, track)
 
-    // Calculate Net Profit based on $2.00 Unit
-    IF did_place:
-      new_status <- 'CASHED'
-      net_profit <- payout - self.TOTE_UNIT
-      LOG_SUCCESS `💰 CASHED: ${prediction.race_id} | Profit: $${net_profit}`
-    ELSE:
-      new_status <- 'BURNED'
-      net_profit <- -self.TOTE_UNIT // Lost the $2.00 stake
-      LOG_FAIL `🔥 BURNED: ${prediction.race_id} | Loss: -$2.00`
+                    FOR race IN track_races:
+                        # Fetch Official Result from AtTheRaces
+                        result = AWAIT self._Fetch_Official_Result(race.track_code, race.race_number)
 
-    // Update the Source of Truth
-    SQL_UPDATE audit_log
-    SET status = new_status, official_payout = payout, net_profit = net_profit
-    WHERE race_id = prediction.race_id
+                        IF result IS NOT NULL:
+                            self._Determine_Verdict(race, result)
 
-  // --- Helper: Scraper Logic ---
-  ASYNC FUNCTION _fetch_official_result(track_code, race_number):
-    // Logic to scrape Equibase Summary Results
-    html <- AWAIT self.http_client.GET("https://www.equibase.com/static/chart/summary/index.html")
-    parsed_data <- parse_html_table(html)
+                        SLEEP(2) # Polite delay
 
-    // Return structured object if result is posted, else NULL
-    RETURN find_race_in_summary(parsed_data, track_code, race_number)
+            CATCH Exception as e:
+                LOG_ERROR("Audit Loop Error: " + e)
 
-  // --- Phase 4: Dashboard Metrics ---
-  FUNCTION get_rolling_metrics():
-    // Returns stats for the UI "Last Hour" overlay
-    cutoff <- NOW() - MINUTES(60)
+            SLEEP(120)
 
-    stats <- SQL_QUERY """
-      SELECT
-        COUNT(*) as total,
-        SUM(CASE WHEN status = 'CASHED' THEN 1 ELSE 0 END) as wins,
-        SUM(net_profit) as profit
-      FROM audit_log
-      WHERE timestamp > cutoff AND status != 'PENDING'
-    """
+    # --- Phase 3: The Scraper (AtTheRaces Strategy) ---
+    ASYNC FUNCTION _Fetch_Official_Result(track_code, race_number):
+        # 1. Find the specific Race URL from the daily results page
+        race_url = AWAIT self._Find_Race_URL(track_code, race_number)
+        IF race_url IS NULL: RETURN NULL
 
-    strike_rate <- (stats.wins / stats.total) * 100
-    RETURN {
-      "strike_rate": strike_rate,
-      "net_profit": stats.profit,
-      "volume": stats.total
-    }
+        # 2. Fetch the Race Page
+        html = AWAIT self.http_client.GET(race_url)
+
+        # 3. Parse the Table
+        result = self._Parse_AtTheRaces_Results(html, track_code, race_number)
+        RETURN result
+
+    ASYNC FUNCTION _Find_Race_URL(track_code, race_number):
+        base_url = "https://www.attheraces.com/results"
+        html = AWAIT self.http_client.GET(base_url)
+
+        track_name = self.TRACK_CODE_MAP[track_code]
+        track_header = FIND_ELEMENT(html, text=track_name)
+
+        IF track_header EXISTS:
+            # Select the Nth link in the track's panel
+            race_links = SELECT_ALL(track_header.parent, 'a[href*="/racecard/"]')
+            IF LENGTH(race_links) >= race_number:
+                RETURN race_links[race_number - 1].href
+
+        RETURN NULL
+
+    FUNCTION _Parse_AtTheRaces_Results(html, track_code, race_number):
+        table = FIND_TABLE(html, header_contains="Horse")
+        IF table IS NULL: RETURN NULL
+
+        finishers = []
+        win_payout = EXTRACT_WIN_PAYOUT(html) # Parse "Betting returns" table
+
+        FOR row IN table.rows:
+            position = PARSE_INT(row.cells[0])
+            horse_name = row.cells[2].text
+
+            place_payout = 0.0
+            IF position == 1:
+                place_payout = win_payout
+
+            finishers.APPEND({
+                "name": horse_name,
+                "position": position,
+                "place_payout": place_payout
+            })
+
+        RETURN NEW OfficialResult(finishers)
+
+    # --- Phase 4: The Verdict ---
+    FUNCTION _Determine_Verdict(prediction, official_result):
+        did_place = FALSE
+        payout = 0.00
+
+        # Check if predicted horse won (AtTheRaces basic logic)
+        FOR finisher IN official_result.finishers:
+            IF finisher.name == prediction.predicted_horse AND finisher.place_payout > 0:
+                did_place = TRUE
+                payout = finisher.place_payout
+                BREAK
+
+        IF did_place:
+            status = 'CASHED'
+            net_profit = payout - self.TOTE_UNIT
+        ELSE:
+            status = 'BURNED'
+            net_profit = -self.TOTE_UNIT
+
+        UPDATE_DB(prediction.race_id, status, payout, net_profit)
+
+    # --- Phase 5: Dashboard Metrics ---
+    FUNCTION Get_Rolling_Metrics(minutes=60):
+        cutoff = NOW() - MINUTES(minutes)
+        QUERY = """
+            SELECT
+                COUNT(*) as total,
+                SUM(CASE WHEN status='CASHED' THEN 1 ELSE 0 END) as wins,
+                SUM(net_profit) as profit
+            FROM audit_log
+            WHERE timestamp > ? AND status != 'PENDING'
+        """
+        stats = EXECUTE_SQL(self.db_path, QUERY, (cutoff,))
+
+        RETURN {
+            "strike_rate": (stats.wins / stats.total) * 100,
+            "net_profit": stats.profit,
+            "volume": stats.total
+        }
 ```
