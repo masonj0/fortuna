@@ -52,15 +52,21 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: 🐞 Debug Environment
+      - name: 🐞 Expanded Preflight Diagnostics
         shell: pwsh
         run: |
-          echo "--- PATH ---"
-          echo $env:PATH
+          echo "--- USER ---"
+          whoami
+          echo "--- LOCATION ---"
+          Get-Location | Format-List
           echo "--- GIT VERSION ---"
           git --version
-          echo "--- WORKSPACE FILES ---"
-          ls -R
+          echo "--- ENVIRONMENT VARIABLES ---"
+          Get-ChildItem Env: | Sort-Object Name | Format-Table -Wrap -AutoSize
+          echo "--- PATH (split for readability) ---"
+          $env:PATH -split ';' | ForEach-Object { "$_" }
+          echo "--- WORKSPACE FILES (RECURSIVE) ---"
+          ls -R -Force
 
       - name: 🏷️ Version
         id: version
