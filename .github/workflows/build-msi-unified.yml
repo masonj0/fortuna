@@ -357,9 +357,9 @@ jobs:
           if (-not (Test-Path $installRoot)) { Write-Error "❌ LAYER 1 FAILED: Install directory not found."; exit 1 }
           New-Item -Path "$installRoot\data", "$installRoot\json", "$installRoot\logs" -ItemType Directory -Force | Out-Null
           # --- LAYER 2: PROCESS VERIFICATION ---
-          Start-Service "FortunaWebService"
+          Start-Service "Fortuna Faucet Service"
           Start-Sleep -Seconds 10
-          $svc = Get-Service "FortunaWebService"
+          $svc = Get-Service "Fortuna Faucet Service"
           if ($svc.Status -ne 'Running') {
             Write-Error "❌ LAYER 2 FAILED: Service failed to start. Status: $($svc.Status)"
             exit 1
@@ -402,4 +402,4 @@ jobs:
 
       - name: Cleanup
         if: always()
-        run: sc.exe delete FortunaWebService
+        run: sc.exe delete "Fortuna Faucet Service"
