@@ -88,7 +88,7 @@ jobs:
           Write-Host "--- Versioning step complete. ---"
 
       - name: 🔎 Forensic Asset Verification
-        if: ${{ inputs.enable_forensics }}
+        if: ${{ inputs.enable_forensics == 'true' }}
         shell: pwsh
         run: |
           # Checking paths based on Supreme Combo structure
@@ -207,7 +207,7 @@ jobs:
           echo net start FortunaWebService >> staging\backend\restart_service.bat
 
       - name: ⚖️ The Dietician
-        if: ${{ inputs.enable_dietician }}
+        if: ${{ inputs.enable_dietician == 'true' }}
         shell: pwsh
         run: |
           # 🎯 CRITICAL FIX: Indentation corrected here.
@@ -225,7 +225,7 @@ jobs:
           wix build build_wix/Product_WithService.wxs -arch ${{ matrix.arch }} -o Fortuna-${{ matrix.arch }}.msi -d Version="${{ needs.preflight.outputs.semver }}" -d SourceDir="staging"
 
       - name: 🦜 The Canary
-        if: ${{ inputs.enable_canary }}
+        if: ${{ inputs.enable_canary == 'true' }}
         shell: pwsh
         run: |
           # 🟢 Corrected: Multi-line script indentation fixed
@@ -281,7 +281,7 @@ jobs:
   ui-proof:
     name: 📸 Paparazzi (${{ matrix.arch }})
     needs: smoke-test
-    if: ${{ inputs.enable_paparazzi }}
+    if: ${{ inputs.enable_paparazzi == 'true' }}
     runs-on: windows-latest
     strategy:
       matrix:
