@@ -1,4 +1,5 @@
 name: 🧬 Universal Core (MSI)
+
 on:
   workflow_call:
     inputs:
@@ -56,7 +57,6 @@ jobs:
       semver: ${{ steps.ver.outputs.semver }}
     steps:
       - uses: actions/checkout@v4
-        # 🟢 Corrected: Switched from inline mapping to block mapping for reliability
         with:
           fetch-depth: 0
 
@@ -64,8 +64,14 @@ jobs:
         id: ver
         shell: pwsh
         run: |
-          $tag = git describe --tags --abbrev=0 2>$null; if (-not $tag) { $tag = "v0.0.0" }
-          "semver=$($tag -replace '^v','')" >> $env:GITHUB_OUTPUT
+          $tag = git describe --tags --abbrev=0 2>$null
+          if ([string]::IsNullOrEmpty($tag)) { $tag = "v0.0.0" }
+          $semver = $tag -replace '^v',''
+          "semver=$semver" >> $env:GITHUB_OUTPUT
+
+      - name: ✨ Runner Stabilization Step
+        # Workaround for the Windows Runner crash when setting an output and immediately starting the next step.
+        run: echo 'Runner stabilization complete.'
 
       - name: 🔎 Forensic Asset Verification
         if: ${{ inputs.enable_forensics }}
@@ -94,14 +100,11 @@ jobs:
         shell: pwsh
         working-directory: electron
         run: |
-          # 🟢 Corrected: Multi-line script indentation fixed
           $pkg = Get-Content package.json | ConvertFrom-Json
           if (-not $pkg.scripts.build) { throw "❌ package.json in electron/ is missing 'build' script!" }
 
-      - name: 🏗️ Build Frontend
+      - run: npm ci && npm run build
         working-directory: electron
-        run: |
-          npm ci && npm run build
 
       - uses: actions/upload-artifact@v4
         with:
@@ -126,7 +129,6 @@ jobs:
           path: electron/out
 
       - uses: actions/setup-python@v5
-        # 🎯 CRITICAL FIX: Replaced inline mapping with block mapping to solve line 121 error.
         with:
           python-version: ${{ inputs.python_version }}
           architecture: ${{ matrix.arch }}
@@ -135,7 +137,6 @@ jobs:
       - name: 🧾 Arch Constraints
         shell: pwsh
         run: |
-          # 🟢 Corrected: Multi-line script indentation fixed
           if ('${{ matrix.arch }}' -eq 'x86') {
             Set-Content constraints.txt 'numpy==1.23.5'
             Add-Content constraints.txt 'pandas==1.5.3'
@@ -143,13 +144,9 @@ jobs:
             New-Item constraints.txt -Force
           }
 
-      - name: 📦 Install Dependencies
-        run: |
-          pip install -r web_service/backend/requirements.txt -c constraints.txt && pip install pyinstaller
-
+      - run: pip install -r web_service/backend/requirements.txt -c constraints.txt && pip install pyinstaller
       - name: 🏗️ PyInstaller
         run: |
-          # 🟢 Corrected: Multi-line script indentation fixed
           pyinstaller --noconfirm --onedir --clean --name fortuna-backend `
             --hidden-import=win32timezone --hidden-import=win32serviceutil `
             --add-data "web_service/backend;backend" `
@@ -157,7 +154,6 @@ jobs:
             web_service/backend/service_entry.py
 
       - uses: actions/upload-artifact@v4
-        # 🟢 Corrected: Switched from inline mapping to block mapping for reliability
         with:
           name: backend-${{ matrix.arch }}
           path: dist/fortuna-backend
@@ -175,7 +171,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
-        # 🟢 Corrected: Switched from inline mapping to block mapping for reliability
         with:
           name: backend-${{ matrix.arch }}
           path: staging/backend
@@ -187,35 +182,38 @@ jobs:
           echo net start FortunaWebService >> staging\backend\restart_service.bat
 
       - name: ⚖️ The Dietician
-        if: ${{ inputs.enable_dietician }}
+        if: ${{ inputs.enable_dietician == 'true' }}
         shell: pwsh
         run: |
-          # 🎯 CRITICAL FIX: Indentation corrected here.
-          Write-Host "Payload: $((Get-ChildItem staging -Recurse | Measure-Object -Sum Length).Sum / 1MB) MB"
+          $size = (Get-ChildItem staging -Recurse | Measure-Object -Sum Length).Sum / 1MB
+          Write-Host "Payload Size: $size MB"
 
       - name: 🔧 Setup WiX
+        shell: pwsh
         run: |
-          # 🎯 CRITICAL FIX: Indentation corrected here.
-          dotnet tool install --global wix --version ${{ inputs.wix_version }}
-          echo "$env:USERPROFILE\.dotnet\tools" >> $env:GITHUB_PATH
+          dotnet tool install --global wix --version "${{ inputs.wix_version }}"
+          echo "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Append
 
       - name: 🏗️ Build MSI
+        shell: pwsh
         run: |
-          # 🎯 CRITICAL FIX: Indentation corrected here.
-          wix build build_wix/Product_WithService.wxs -arch ${{ matrix.arch }} -o Fortuna-${{ matrix.arch }}.msi -d Version="${{ needs.preflight.outputs.semver }}" -d SourceDir="staging"
+          wix build build_wix/Product_WithService.wxs `
+            -arch ${{ matrix.arch }} `
+            -o Fortuna-${{ matrix.arch }}.msi `
+            -d Version="${{ needs.preflight.outputs.semver }}" `
+            -d SourceDir="staging"
 
       - name: 🦜 The Canary
         if: ${{ inputs.enable_canary }}
         shell: pwsh
         run: |
-          # 🟢 Corrected: Multi-line script indentation fixed
           try {
             if (Test-Path "C:\Program Files\Windows Defender\MpCmdRun.exe") {
                & "C:\Program Files\Windows Defender\MpCmdRun.exe" -Scan -ScanType 3 -File "$pwd\Fortuna-${{ matrix.arch }}.msi"
             }
           } catch { Write-Warning "Canary scan failed or skipped: $_" }
+
       - uses: actions/upload-artifact@v4
-        # 🟢 Corrected: Switched from inline mapping to block mapping for reliability
         with:
           name: msi-${{ matrix.arch }}
           path: Fortuna-${{ matrix.arch }}.msi
@@ -233,27 +231,25 @@ jobs:
     steps:
       # NO CHECKOUT HERE - Pure Artifacts
       - uses: actions/download-artifact@v4
-        # 🟢 Corrected: Switched from inline mapping to block mapping for reliability
         with:
           name: msi-${{ matrix.arch }}
 
       - name: 🧹 Clean & Install
         shell: pwsh
         run: |
-          # 🟢 Corrected: Multi-line script indentation fixed
           sc.exe delete "FortunaWebService" *>$null; Start-Sleep 2
           Start-Process msiexec.exe -ArgumentList "/i Fortuna-${{ matrix.arch }}.msi /quiet /norestart" -Wait
+
       - name: 🩺 Health Check
         shell: pwsh
         run: |
-          # 🟢 Corrected: Multi-line script indentation fixed
           Start-Sleep 10
           for($i=0;$i -lt 5;$i++) { try { if ((Invoke-RestMethod "http://127.0.0.1:${{ inputs.service_port }}/health").status -eq "ok") { return } } catch { Start-Sleep 5 } }
           throw "Dead Service"
+
       - name: 🧹 Cleanup
         if: always()
-        run: |
-          sc.exe delete "FortunaWebService" *>$null
+        run: sc.exe delete "FortunaWebService" *>$null
 
   # =========================================================
   # 6. UI PROOF (Heavy/Optional)
@@ -268,28 +264,24 @@ jobs:
         arch: [x64, x86]
     steps:
       - uses: actions/download-artifact@v4
-        # 🟢 Corrected: Switched from inline mapping to block mapping for reliability
         with:
           name: msi-${{ matrix.arch }}
 
       - name: 💿 Re-Install for UI
         shell: pwsh
-        run: |
-          Start-Process msiexec.exe -ArgumentList "/i Fortuna-${{ matrix.arch }}.msi /quiet /norestart" -Wait
+        run: Start-Process msiexec.exe -ArgumentList "/i Fortuna-${{ matrix.arch }}.msi /quiet /norestart" -Wait
 
       - name: 📸 Run Playwright
         shell: pwsh
         run: |
-          # 🟢 CRITICAL FIX: Multi-line script indentation fixed
           npm install playwright; npx playwright install chromium --with-deps
           node -e "const { chromium } = require('playwright'); (async () => { const b = await chromium.launch(); const p = await b.newPage(); await p.goto('http://127.0.0.1:${{ inputs.service_port }}/docs'); await p.screenshot({path: 'proof.png'}); await b.close(); })();"
+
       - uses: actions/upload-artifact@v4
-        # 🟢 Corrected: Switched from inline mapping to block mapping for reliability
         with:
           name: proof-${{ matrix.arch }}
           path: proof.png
 
       - name: 🧹 Cleanup
         if: always()
-        run: |
-          sc.exe delete "FortunaWebService" *>$null
+        run: sc.exe delete "FortunaWebService" *>$null

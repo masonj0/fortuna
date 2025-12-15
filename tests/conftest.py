@@ -74,16 +74,26 @@ def event_loop():
 # =============================================================================
 @pytest.fixture
 async def app(mock_dangerous_dependencies, test_settings):
-    from asgi_lifespan import LifespanManager
     from python_service.api import app as fastapi_app
+    from python_service.api import get_settings
     from python_service.engine import OddsEngine
 
-    # Attach a mock engine to the app state to prevent startup hangs
+    # Override the get_settings dependency
+    fastapi_app.dependency_overrides[get_settings] = lambda: test_settings
+
+    # Manually run startup events
+    await fastapi_app.router.startup()
+
+    # Attach a mock engine to the app state
     fastapi_app.state.engine = OddsEngine(config=test_settings)
 
-    # Increase timeout to 30s to prevent slow CI runners from failing
-    async with LifespanManager(fastapi_app, startup_timeout=30) as manager:
-        yield manager.app
+    yield fastapi_app
+
+    # Manually run shutdown events
+    await fastapi_app.router.shutdown()
+
+    # Clear the dependency override
+    fastapi_app.dependency_overrides = {}
 
 @pytest.fixture
 async def client(app):
@@ -96,8 +106,8 @@ async def client(app):
 # =============================================================================
 CACHE_DIR = Path("python_service/cache")
 
-@pytest.fixture
-async def clear_cache():
+@pytest.fixture(autouse=True)
+def clear_cache():
     """Ensures a clean slate for file-based caches."""
     if CACHE_DIR.exists():
         shutil.rmtree(CACHE_DIR)
@@ -117,9 +127,17 @@ def create_mock_race(source, venue, race_number, start_time, runners_data):
     # This is often safer for tests than instantiating complex models directly.
 
     runners = []
+    if not runners_data:
+        runners_data.append({"number": 1, "name": "Test Horse", "odds": "1.0"})
     for r in runners_data:
         # Construct the nested odds dictionary: { 'Source': { 'win': Decimal(...) } }
-        odds_struct = {source: {'win': Decimal(str(r.get('odds', '0.0')))}}
+        odds_struct = {
+            source: {
+                "win": Decimal(str(r.get("odds", "0.0"))),
+                "source": source,
+                "last_updated": datetime.now(),
+            }
+        }
 
         runners.append({
             "number": r['number'],

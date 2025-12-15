@@ -27,7 +27,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
-from starlette.websockets import WebSocketDisconnect
+from fastapi import WebSocketDisconnect
 
 # --- PyInstaller Explicit Imports ---
 from .analyzer import AnalyzerEngine
