@@ -52,10 +52,10 @@ def test_skip_request(manager: ManualOverrideManager):
 
 
 @pytest.mark.asyncio
-async def test_get_pending_overrides_endpoint(client):
+async def test_get_pending_overrides_endpoint(app, client):
     # ARRANGE
     # Access the manager *after* the TestClient has run the lifespan startup
-    manager = client.app.state.manual_override_manager
+    manager = app.state.manual_override_manager
     manager.clear_old_requests(max_age_hours=-1)  # Ensure a clean state by clearing all
     manager.register_failure("EndpointAdapter", "http://endpoint.com/data")
 
@@ -69,9 +69,9 @@ async def test_get_pending_overrides_endpoint(client):
 
 
 @pytest.mark.asyncio
-async def test_submit_manual_data_endpoint(client):
+async def test_submit_manual_data_endpoint(app, client):
     # ARRANGE
-    manager = client.app.state.manual_override_manager
+    manager = app.state.manual_override_manager
     manager.clear_old_requests(max_age_hours=-1)
     request_id = manager.register_failure("SubmitAdapter", "http://submit.com/data")
     submission = {
@@ -92,9 +92,9 @@ async def test_submit_manual_data_endpoint(client):
 
 
 @pytest.mark.asyncio
-async def test_skip_manual_override_endpoint(client):
+async def test_skip_manual_override_endpoint(app, client):
     # ARRANGE
-    manager = client.app.state.manual_override_manager
+    manager = app.state.manual_override_manager
     manager.clear_old_requests(max_age_hours=-1)
     request_id = manager.register_failure("SkipAdapter", "http://skip.com/data")
     response = await client.post(f"/api/manual-overrides/skip/{request_id}", headers={"X-API-Key": API_KEY})
