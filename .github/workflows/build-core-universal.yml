@@ -123,10 +123,7 @@ jobs:
           path: electron/out
 
       - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ inputs.python_version }}
-          architecture: ${{ matrix.arch }}
-          cache: 'pip'
+        with: { python-version: ${{ inputs.python_version }}, architecture: ${{ matrix.arch }}, cache: 'pip' }
 
       - name: 🧾 Arch Constraints
         shell: pwsh
@@ -142,9 +139,7 @@ jobs:
             --add-data "electron/out;ui" `
             web_service/backend/service_entry.py
       - uses: actions/upload-artifact@v4
-        with:
-          name: backend-${{ matrix.arch }}
-          path: dist/fortuna-backend
+        with: { name: backend-${{ matrix.arch }}, path: dist/fortuna-backend }
 
   # =========================================================
   # 4. PACKAGE MSI
@@ -159,9 +154,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
-        with:
-          name: backend-${{ matrix.arch }}
-          path: staging/backend
+        with: { name: backend-${{ matrix.arch }}, path: staging/backend }
 
       - name: 📝 Inject Restart Script
         run: echo net stop FortunaWebService > staging\backend\restart_service.bat & echo net start FortunaWebService >> staging\backend\restart_service.bat
@@ -189,9 +182,7 @@ jobs:
           } catch { Write-Warning "Canary scan failed or skipped: $_" }
 
       - uses: actions/upload-artifact@v4
-        with:
-          name: msi-${{ matrix.arch }}
-          path: Fortuna-${{ matrix.arch }}.msi
+        with: { name: msi-${{ matrix.arch }}, path: Fortuna-${{ matrix.arch }}.msi }
 
   # =========================================================
   # 5. SMOKE TEST (Fast)
@@ -206,8 +197,7 @@ jobs:
     steps:
       # NO CHECKOUT HERE - Pure Artifacts
       - uses: actions/download-artifact@v4
-        with:
-          name: msi-${{ matrix.arch }}
+        with: { name: msi-${{ matrix.arch }} }
 
       - name: 🧹 Clean & Install
         shell: pwsh
@@ -239,8 +229,7 @@ jobs:
         arch: [x64, x86]
     steps:
       - uses: actions/download-artifact@v4
-        with:
-          name: msi-${{ matrix.arch }}
+        with: { name: msi-${{ matrix.arch }} }
 
       - name: 💿 Re-Install for UI
         shell: pwsh
@@ -253,9 +242,7 @@ jobs:
           node -e "const { chromium } = require('playwright'); (async () => { const b = await chromium.launch(); const p = await b.newPage(); await p.goto('http://127.0.0.1:${{ inputs.service_port }}/docs'); await p.screenshot({path: 'proof.png'}); await b.close(); })();"
 
       - uses: actions/upload-artifact@v4
-        with:
-          name: proof-${{ matrix.arch }}
-          path: proof.png
+        with: { name: proof-${{ matrix.arch }}, path: proof.png }
 
       - name: 🧹 Cleanup
         if: always()
