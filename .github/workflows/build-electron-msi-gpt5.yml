@@ -560,9 +560,8 @@ jobs:
       - name: 📥 Download Python Service
         uses: actions/download-artifact@v4
         with:
-          # 🚀 Download the MATCHING architecture
           name: python-service-${{ matrix.arch }}-${{ needs.validate-environment.outputs.build_id }}
-          path: python-service-bin
+          path: dist/service
 
       - name: 📥 Download Frontend Dist
         uses: actions/download-artifact@v4
@@ -573,12 +572,8 @@ jobs:
       - name: 🚚 Stage Backend for Electron Builder
         shell: pwsh
         run: |
-          # FIX: The config looks for '../python-service-bin' relative to the 'electron' dir,
-          # so we place the artifact at the repo root.
-          $dest = "python-service-bin"
-          New-Item -ItemType Directory -Path $dest -Force | Out-Null
-          Move-Item -Path "python-service-bin/*" -Destination $dest -Force
-          Write-Host "✅ Backend staged to root '$dest' directory."
+          $dest = "dist/service"
+          Write-Host "✅ Backend already in correct location: '$dest'"
           Write-Host "Contents:"
           Get-ChildItem -Path $dest -Recurse | ForEach-Object { Write-Host " - $($_.Name)" }
 
@@ -618,6 +613,7 @@ jobs:
           $ErrorActionPreference = "Stop"
 
           # Install and import the required module for YAML parsing
+          Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force
           Install-Module -Name powershell-yaml -Force -Scope CurrentUser -ErrorAction Stop
           Import-Module powershell-yaml
 
@@ -735,7 +731,6 @@ jobs:
         env:
           ARCH: ${{ matrix.arch }}
         run: |
-          # FIX: Dynamic path selection for x86 vs x64
           $unpackedDir = if ($env:ARCH -eq 'x86') { "win-ia32-unpacked" } else { "win-unpacked" }
           $resourcesPath = "electron/dist/$unpackedDir/resources"
 
@@ -744,7 +739,7 @@ jobs:
             Get-ChildItem -Path $resourcesPath -Recurse | Format-Table FullName, Length
 
             Write-Host "=== CHECKING FOR BACKEND EXECUTABLE ==="
-            if (Test-Path "$resourcesPath/python-service-bin/fortuna-backend.exe") {
+            if (Test-Path "$resourcesPath/fortuna-backend.exe") {
                 Write-Host "✅ fortuna-backend.exe exists"
             } else {
                 Write-Error "❌ fortuna-backend.exe MISSING in $resourcesPath"
@@ -953,17 +948,16 @@ jobs:
           $installRoot = "${{ env.INSTALL_ROOT }}"
           if (-not (Test-Path $installRoot)) { throw "❌ Install directory not found at $installRoot" }
 
-          $exe = "$installRoot\resources\python-service-bin\fortuna-backend.exe"
+          $exe = "$installRoot\fortuna-backend.exe"
           if (-not (Test-Path $exe)) { throw "❌ Backend executable not found at $exe" }
 
-          Write-Host "Starting backend..."
-          $proc = Start-Process -FilePath $exe -PassThru -WorkingDirectory "$installRoot"
+          Write-Host "Creating and starting service..."
+          sc.exe create FortunaWebService binPath= "`"$exe`""
+          sc.exe start FortunaWebService
+
           try {
             Write-Host "Waiting 15 seconds for service to initialize..."
             Start-Sleep -Seconds 15
-            if ($proc.HasExited) {
-              throw "❌ Backend crashed immediately after launch. Exit Code: $($proc.ExitCode)"
-            }
 
             Write-Host "Pinging Health Endpoint (up to 5 attempts)..."
             $healthUrl = "http://localhost:8102/health"
@@ -992,10 +986,9 @@ jobs:
             Write-Host "✅ Screenshot captured."
 
           } finally {
-            if ($proc -and !$proc.HasExited) {
-              Stop-Process -Id $proc.Id -Force
-              Write-Host "🛑 Backend stopped."
-            }
+            sc.exe stop FortunaWebService
+            sc.exe delete FortunaWebService
+            Write-Host "🛑 Backend service stopped and deleted."
           }
 
       - name: 📤 Upload Visual Proof
