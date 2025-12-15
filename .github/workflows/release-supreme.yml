@@ -8,7 +8,7 @@ on:
 
 jobs:
   call-core:
-    uses: ./.github/workflows/build-core-universal.yml
+    uses: './.github/workflows/build-core-universal.yml'
     with:
       enable_forensics: true
       enable_dietician: true
@@ -21,8 +21,8 @@ jobs:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: 'actions/download-artifact@v4'
         with: { pattern: msi-*, merge-multiple: true, path: release }
       - run: cd release && sha256sum *.msi > SHASUMS256.txt
-      - uses: softprops/action-gh-release@v1
+      - uses: 'softprops/action-gh-release@v1'
         with: { files: release/*, generate_release_notes: true }
