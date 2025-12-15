@@ -93,7 +93,7 @@ jobs:
     runs-on: windows-latest
     strategy: { matrix: { arch: [x64, x86] } }
     steps:
-      - uses: actions/checkout@v4
+      - uses: 'actions/checkout@v4'
 
       - uses: actions/download-artifact@v4
         with:
