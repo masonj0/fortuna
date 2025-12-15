@@ -64,16 +64,23 @@ jobs:
         id: ver
         shell: pwsh
         run: |
-          $tag = git describe --tags --abbrev=0 2>$null; if (-not $tag) { $tag = "v0.0.0" }
-          "semver=$($tag -replace '^v','')" >> $env:GITHUB_OUTPUT
+          $tag = git describe --tags --abbrev=0 2>$null
+          if ([string]::IsNullOrEmpty($tag)) { $tag = "v0.0.0" }
+          $semver = $tag -replace '^v',''
+          "semver=$semver" >> $env:GITHUB_OUTPUT
 
       - name: 🔎 Forensic Asset Verification
-        if: ${{ inputs.enable_forensics }}
-        shell: pwsh
+        # IMPORTANT FIX: The Runner repeatedly crashed between steps after outputting 'semver',
+        # likely due to an internal Windows Runner bug when initializing the `pwsh` shell consecutively within a job.
+        # Switching to the standard `cmd` shell for this step bypasses this known, unstable behavior.
+        if: ${{ inputs.enable_forensics == 'true' }}
+        shell: cmd
         run: |
-          # Checking paths based on Supreme Combo structure
-          $files = @("electron/package.json", "web_service/backend/requirements.txt", "build_wix/Product_WithService.wxs")
-          foreach ($f in $files) { if (-not (Test-Path $f)) { throw "Missing $f" } }
+          @echo Checking critical forensic asset paths...
+          if not exist "electron/package.json" exit 1
+          if not exist "web_service/backend/requirements.txt" exit 1
+          if not exist "build_wix/Product_WithService.wxs" exit 1
+          @echo Forensic Asset Verification passed.
 
   # =========================================================
   # 2. BUILD FRONTEND
@@ -187,7 +194,7 @@ jobs:
           echo net start FortunaWebService >> staging\backend\restart_service.bat
 
       - name: ⚖️ The Dietician
-        if: ${{ inputs.enable_dietician }}
+        if: ${{ inputs.enable_dietician == 'true' }}
         shell: pwsh
         run: |
           # 🎯 CRITICAL FIX: Indentation corrected here.
@@ -205,7 +212,7 @@ jobs:
           wix build build_wix/Product_WithService.wxs -arch ${{ matrix.arch }} -o Fortuna-${{ matrix.arch }}.msi -d Version="${{ needs.preflight.outputs.semver }}" -d SourceDir="staging"
 
       - name: 🦜 The Canary
-        if: ${{ inputs.enable_canary }}
+        if: ${{ inputs.enable_canary == 'true' }}
         shell: pwsh
         run: |
           # 🟢 Corrected: Multi-line script indentation fixed
@@ -261,7 +268,7 @@ jobs:
   ui-proof:
     name: 📸 Paparazzi (${{ matrix.arch }})
     needs: smoke-test
-    if: ${{ inputs.enable_paparazzi }}
+    if: ${{ inputs.enable_paparazzi == 'true' }}
     runs-on: windows-latest
     strategy:
       matrix:
