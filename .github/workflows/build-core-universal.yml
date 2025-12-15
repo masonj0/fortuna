@@ -153,7 +153,7 @@ jobs:
       - name: ⚖️ The Dietician
         if: ${{ inputs.enable_dietician }}
         shell: pwsh
-        run: Write-Host "Payload: $((Get-ChildItem staging -Recurse | Measure-Object -Sum Length).Sum / 1MB) MB"
+        run: Write-Host "Payload: $((Get-ChildItem staging -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB) MB"
 
       - name: 🔧 Setup WiX
         run: dotnet tool install --global wix --version ${{ inputs.wix_version }} && echo "$env:USERPROFILE\\.dotnet\\tools" >> $env:GITHUB_PATH
