@@ -4,23 +4,43 @@ on:
   workflow_call:
     inputs:
       # --- VERSIONING ---
-      node_version: { type: string, default: '20' }
-      python_version: { type: string, default: '3.11' }
-      wix_version: { type: string, default: '4.0.5' }
+      node_version:
+        type: string
+        default: '20'
+      python_version:
+        type: string
+        default: '3.11'
+      wix_version:
+        type: string
+        default: '4.0.5'
 
       # --- FEATURE TOGGLES ---
-      enable_dietician: { type: boolean, default: false }
-      enable_canary: { type: boolean, default: false }
-      enable_paparazzi: { type: boolean, default: false }
-      enable_forensics: { type: boolean, default: false }
+      enable_dietician:
+        type: boolean
+        default: false
+      enable_canary:
+        type: boolean
+        default: false
+      enable_paparazzi:
+        type: boolean
+        default: false
+      enable_forensics:
+        type: boolean
+        default: false
 
       # --- CONFIG ---
-      service_port: { type: string, default: '8102' }
-      skip_tests: { type: boolean, default: false }
+      service_port:
+        type: string
+        default: '8102'
+      skip_tests:
+        type: boolean
+        default: false
 
     secrets:
-      API_KEY: { required: false }
-      TVG_API_KEY: { required: false }
+      API_KEY:
+        required: false
+      TVG_API_KEY:
+        required: false
 
 env:
   DOTNET_VERSION: '8.0.x'
@@ -50,7 +70,7 @@ jobs:
         if: ${{ inputs.enable_forensics }}
         shell: pwsh
         run: |
-          # FIXED: Checking known-good paths from Supreme workflow
+          # Checking paths based on Supreme Combo structure
           $files = @("electron/package.json", "web_service/backend/requirements.txt", "build_wix/Product_WithService.wxs")
           foreach ($f in $files) { if (-not (Test-Path $f)) { throw "Missing $f" } }
 
@@ -64,7 +84,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: ${{ inputs.node_version }}, cache: 'npm', cache-dependency-path: 'electron/package-lock.json' }
+        with:
+          node-version: ${{ inputs.node_version }}
+          cache: 'npm'
+          cache-dependency-path: 'electron/package-lock.json'
 
       - name: 🔍 Verify Build Script Exists
         shell: pwsh
@@ -77,7 +100,9 @@ jobs:
         working-directory: electron
 
       - uses: actions/upload-artifact@v4
-        with: { name: frontend-dist, path: electron/out }
+        with:
+          name: frontend-dist
+          path: electron/out
 
   # =========================================================
   # 3. BUILD BACKEND
@@ -86,17 +111,20 @@ jobs:
     name: 🐍 Backend (${{ matrix.arch }})
     needs: [preflight, build-frontend]
     runs-on: windows-latest
-    strategy: { matrix: { arch: [x64, x86] } }
+    strategy:
+      matrix:
+        arch: [x64, x86]
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/download-artifact@v4
-        with: { name: frontend-dist, path: electron/out }
+        with:
+          name: frontend-dist
+          path: electron/out
 
       - uses: actions/setup-python@v5
         with: { python-version: ${{ inputs.python_version }}, architecture: ${{ matrix.arch }}, cache: 'pip' }
 
-      # FIX: Flattened to single line to prevent YAML syntax errors
       - name: 🧾 Arch Constraints
         shell: pwsh
         run: if ('${{ matrix.arch }}' -eq 'x86') { Set-Content constraints.txt 'numpy==1.23.5'; Add-Content constraints.txt 'pandas==1.5.3' } else { New-Item constraints.txt -Force }
@@ -120,7 +148,9 @@ jobs:
     name: 📦 MSI (${{ matrix.arch }})
     needs: build-backend
     runs-on: windows-latest
-    strategy: { matrix: { arch: [x64, x86] } }
+    strategy:
+      matrix:
+        arch: [x64, x86]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -161,7 +191,9 @@ jobs:
     name: 🚬 Smoke (${{ matrix.arch }})
     needs: package-msi
     runs-on: windows-latest
-    strategy: { matrix: { arch: [x64, x86] } }
+    strategy:
+      matrix:
+        arch: [x64, x86]
     steps:
       # NO CHECKOUT HERE - Pure Artifacts
       - uses: actions/download-artifact@v4
@@ -192,7 +224,9 @@ jobs:
     needs: smoke-test
     if: ${{ inputs.enable_paparazzi }}
     runs-on: windows-latest
-    strategy: { matrix: { arch: [x64, x86] } }
+    strategy:
+      matrix:
+        arch: [x64, x86]
     steps:
       - uses: actions/download-artifact@v4
         with: { name: msi-${{ matrix.arch }} }
