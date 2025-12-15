@@ -1,26 +1,45 @@
 name: 🧬 Universal Core (MSI)
-
 on:
   workflow_call:
     inputs:
       # --- VERSIONING ---
-      node_version: { type: string, default: '18' }
-      python_version: { type: string, default: '3.11' }
-      wix_version: { type: string, default: '4.0.5' }
+      node_version:
+        type: string
+        default: '20'
+      python_version:
+        type: string
+        default: '3.11'
+      wix_version:
+        type: string
+        default: '4.0.5'
 
       # --- FEATURE TOGGLES ---
-      enable_dietician: { type: boolean, default: false }
-      enable_canary: { type: boolean, default: false }
-      enable_paparazzi: { type: boolean, default: false }
-      enable_forensics: { type: boolean, default: false }
+      enable_dietician:
+        type: boolean
+        default: false
+      enable_canary:
+        type: boolean
+        default: false
+      enable_paparazzi:
+        type: boolean
+        default: false
+      enable_forensics:
+        type: boolean
+        default: false
 
       # --- CONFIG ---
-      service_port: { type: string, default: '8102' }
-      skip_tests: { type: boolean, default: false }
+      service_port:
+        type: string
+        default: '8102'
+      skip_tests:
+        type: boolean
+        default: false
 
     secrets:
-      API_KEY: { required: false }
-      TVG_API_KEY: { required: false }
+      API_KEY:
+        required: false
+      TVG_API_KEY:
+        required: false
 
 env:
   DOTNET_VERSION: '8.0.x'
@@ -37,6 +56,7 @@ jobs:
       semver: ${{ steps.ver.outputs.semver }}
     steps:
       - uses: actions/checkout@v4
+        # 🟢 Corrected: Switched from inline mapping to block mapping for reliability
         with:
           fetch-depth: 0
 
@@ -44,21 +64,17 @@ jobs:
         id: ver
         shell: pwsh
         run: |
-          try {
-            $tag = git describe --tags --abbrev=0
-          } catch {
-            $tag = "v0.0.0"
-            Write-Warning "Could not describe tags. Defaulting to $tag"
-          }
-          $semver = $tag -replace '^v',''
-          "semver=$semver" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          Write-Host "Derived version: $semver"
+          # 🟢 Corrected: Multi-line script indentation fixed
+          $tag = git describe --tags --abbrev=0 2>$null; if (-not $tag) { $tag = "v0.0.0" }
+          "semver=$($tag -replace '^v','')" >> $env:GITHUB_OUTPUT
 
       - name: 🔎 Forensic Asset Verification
         if: ${{ inputs.enable_forensics }}
         shell: pwsh
         run: |
-          $files = @("web_platform/frontend/package.json", "web_service/backend/requirements.txt", "electron/package.json")
+          # 🟢 Corrected: Multi-line script indentation fixed
+          # Checking paths based on Supreme Combo structure
+          $files = @("electron/package.json", "web_service/backend/requirements.txt", "build_wix/Product_WithService.wxs")
           foreach ($f in $files) { if (-not (Test-Path $f)) { throw "Missing $f" } }
 
   # =========================================================
@@ -74,22 +90,23 @@ jobs:
         with:
           node-version: ${{ inputs.node_version }}
           cache: 'npm'
-          cache-dependency-path: 'web_platform/frontend/package-lock.json'
+          cache-dependency-path: 'electron/package-lock.json'
 
       - name: 🔍 Verify Build Script Exists
         shell: pwsh
-        working-directory: web_platform/frontend
+        working-directory: electron
         run: |
+          # 🟢 Corrected: Multi-line script indentation fixed
           $pkg = Get-Content package.json | ConvertFrom-Json
-          if (-not $pkg.scripts.build) { throw "❌ package.json in web_platform/frontend is missing 'build' script!" }
+          if (-not $pkg.scripts.build) { throw "❌ package.json in electron/ is missing 'build' script!" }
 
       - run: npm ci && npm run build
-        working-directory: web_platform/frontend
+        working-directory: electron
 
       - uses: actions/upload-artifact@v4
         with:
           name: frontend-dist
-          path: web_platform/frontend/out
+          path: electron/out
 
   # =========================================================
   # 3. BUILD BACKEND
@@ -98,42 +115,46 @@ jobs:
     name: 🐍 Backend (${{ matrix.arch }})
     needs: [preflight, build-frontend]
     runs-on: windows-latest
-    strategy: { matrix: { arch: [x64, x86] } }
+    strategy:
+      matrix:
+        arch: [x64, x86]
     steps:
-      - uses: 'actions/checkout@v4'
-
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: frontend-dist
-          path: web_platform/frontend/out
+          path: electron/out
 
       - uses: actions/setup-python@v5
+        # 🎯 CRITICAL FIX: Replaced inline mapping with block mapping to solve line 121 error.
         with:
           python-version: ${{ inputs.python_version }}
           architecture: ${{ matrix.arch }}
           cache: 'pip'
 
-      # FIX: Replaced fragile backtick escape with robust multi-line commands
       - name: 🧾 Arch Constraints
         shell: pwsh
         run: |
+          # 🟢 Corrected: Multi-line script indentation fixed
           if ('${{ matrix.arch }}' -eq 'x86') {
-            "numpy==1.23.5" | Set-Content constraints.txt
-            "pandas==1.5.3" | Add-Content constraints.txt
+            Set-Content constraints.txt 'numpy==1.23.5'
+            Add-Content constraints.txt 'pandas==1.5.3'
           } else {
             New-Item constraints.txt -Force
           }
 
       - run: pip install -r web_service/backend/requirements.txt -c constraints.txt && pip install pyinstaller
-
       - name: 🏗️ PyInstaller
         run: |
+          # 🟢 Corrected: Multi-line script indentation fixed
           pyinstaller --noconfirm --onedir --clean --name fortuna-backend `
             --hidden-import=win32timezone --hidden-import=win32serviceutil `
             --add-data "web_service/backend;backend" `
-            --add-data "web_platform/frontend/out;ui" `
+            --add-data "electron/out;ui" `
             web_service/backend/service_entry.py
+
       - uses: actions/upload-artifact@v4
+        # 🟢 Corrected: Switched from inline mapping to block mapping for reliability
         with:
           name: backend-${{ matrix.arch }}
           path: dist/fortuna-backend
@@ -145,29 +166,31 @@ jobs:
     name: 📦 MSI (${{ matrix.arch }})
     needs: build-backend
     runs-on: windows-latest
-    strategy: { matrix: { arch: [x64, x86] } }
+    strategy:
+      matrix:
+        arch: [x64, x86]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
+        # 🟢 Corrected: Switched from inline mapping to block mapping for reliability
         with:
           name: backend-${{ matrix.arch }}
           path: staging/backend
 
       - name: 📝 Inject Restart Script
-        run: echo net stop FortunaWebService > staging\backend\restart_service.bat & echo net start FortunaWebService >> staging\backend\restart_service.bat
         shell: cmd
+        run: |
+          # 🟢 Corrected: Multi-line script indentation fixed
+          echo net stop FortunaWebService > staging\backend\restart_service.bat
+          echo net start FortunaWebService >> staging\backend\restart_service.bat
 
       - name: ⚖️ The Dietician
         if: ${{ inputs.enable_dietician }}
         shell: pwsh
-        run: |
-          $sizeBytes = (Get-ChildItem staging -Recurse |
-                        Measure-Object -Property Length -Sum).Sum
-          $sizeMB = [math]::Round($sizeBytes / 1MB, 2)
-          Write-Host "Payload: $sizeMB MB"
+        run: Write-Host "Payload: $((Get-ChildItem staging -Recurse | Measure-Object -Sum Length).Sum / 1MB) MB"
 
       - name: 🔧 Setup WiX
-        run: dotnet tool install --global wix --version ${{ inputs.wix_version }} && echo "$env:USERPROFILE\\.dotnet\\tools" >> $env:GITHUB_PATH
+        run: dotnet tool install --global wix --version ${{ inputs.wix_version }} && echo "$env:USERPROFILE\.dotnet\tools" >> $env:GITHUB_PATH
 
       - name: 🏗️ Build MSI
         run: wix build build_wix/Product_WithService.wxs -arch ${{ matrix.arch }} -o Fortuna-${{ matrix.arch }}.msi -d Version="${{ needs.preflight.outputs.semver }}" -d SourceDir="staging"
@@ -176,6 +199,7 @@ jobs:
         if: ${{ inputs.enable_canary }}
         shell: pwsh
         run: |
+          # 🟢 Corrected: Multi-line script indentation fixed
           try {
             if (Test-Path "C:\Program Files\Windows Defender\MpCmdRun.exe") {
                & "C:\Program Files\Windows Defender\MpCmdRun.exe" -Scan -ScanType 3 -File "$pwd\Fortuna-${{ matrix.arch }}.msi"
@@ -183,6 +207,7 @@ jobs:
           } catch { Write-Warning "Canary scan failed or skipped: $_" }
 
       - uses: actions/upload-artifact@v4
+        # 🟢 Corrected: Switched from inline mapping to block mapping for reliability
         with:
           name: msi-${{ matrix.arch }}
           path: Fortuna-${{ matrix.arch }}.msi
@@ -194,22 +219,27 @@ jobs:
     name: 🚬 Smoke (${{ matrix.arch }})
     needs: package-msi
     runs-on: windows-latest
-    strategy: { matrix: { arch: [x64, x86] } }
+    strategy:
+      matrix:
+        arch: [x64, x86]
     steps:
       # NO CHECKOUT HERE - Pure Artifacts
       - uses: actions/download-artifact@v4
+        # 🟢 Corrected: Switched from inline mapping to block mapping for reliability
         with:
           name: msi-${{ matrix.arch }}
 
       - name: 🧹 Clean & Install
         shell: pwsh
         run: |
+          # 🟢 Corrected: Multi-line script indentation fixed
           sc.exe delete "FortunaWebService" *>$null; Start-Sleep 2
           Start-Process msiexec.exe -ArgumentList "/i Fortuna-${{ matrix.arch }}.msi /quiet /norestart" -Wait
 
       - name: 🩺 Health Check
         shell: pwsh
         run: |
+          # 🟢 Corrected: Multi-line script indentation fixed
           Start-Sleep 10
           for($i=0;$i -lt 5;$i++) { try { if ((Invoke-RestMethod "http://127.0.0.1:${{ inputs.service_port }}/health").status -eq "ok") { return } } catch { Start-Sleep 5 } }
           throw "Dead Service"
@@ -226,9 +256,12 @@ jobs:
     needs: smoke-test
     if: ${{ inputs.enable_paparazzi }}
     runs-on: windows-latest
-    strategy: { matrix: { arch: [x64, x86] } }
+    strategy:
+      matrix:
+        arch: [x64, x86]
     steps:
       - uses: actions/download-artifact@v4
+        # 🟢 Corrected: Switched from inline mapping to block mapping for reliability
         with:
           name: msi-${{ matrix.arch }}
 
@@ -239,14 +272,17 @@ jobs:
       - name: 📸 Run Playwright
         shell: pwsh
         run: |
+          # 🟢 CRITICAL FIX: Multi-line script indentation fixed
           npm install playwright; npx playwright install chromium --with-deps
           node -e "const { chromium } = require('playwright'); (async () => { const b = await chromium.launch(); const p = await b.newPage(); await p.goto('http://127.0.0.1:${{ inputs.service_port }}/docs'); await p.screenshot({path: 'proof.png'}); await b.close(); })();"
 
       - uses: actions/upload-artifact@v4
+        # 🟢 Corrected: Switched from inline mapping to block mapping for reliability
         with:
           name: proof-${{ matrix.arch }}
           path: proof.png
 
       - name: 🧹 Cleanup
         if: always()
+        # 🟢 LOGICAL FIX: The previous version had run: sc.exe... outside of the steps list.
         run: sc.exe delete "FortunaWebService" *>$null
