@@ -60,7 +60,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: 🏷️ Versioning
+      - name: 🏷️ Versioning - DETAILED LOGGING
         id: ver
         shell: pwsh
         run: |
