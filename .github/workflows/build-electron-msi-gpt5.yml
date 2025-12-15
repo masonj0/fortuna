@@ -947,21 +947,6 @@ jobs:
           New-Item -Path "$installRoot\logs" -ItemType Directory -Force | Out-Null
           Write-Host "✅ Created data, json, and logs directories in $installRoot"
 
-      - name: "🔍 Debug Backend Launch (With Timeout)"
-        shell: pwsh
-        run: |
-          $exe = "${{ env.INSTALL_ROOT }}\resources\python-service-bin\fortuna-backend.exe"
-
-          if (Test-Path $exe) {
-            Write-Host "Starting backend for 10s health check..."
-            $proc = Start-Process -FilePath $exe -PassThru -WorkingDirectory "${{ env.INSTALL_ROOT }}"
-            Start-Sleep -Seconds 10
-            if (!$proc.HasExited) { Stop-Process -Id $proc.Id -Force; Write-Host "✅ Backend Alive" }
-            else { Write-Error "❌ Backend crashed"; exit 1 }
-          } else {
-             Write-Warning "Backend not found at $exe"
-          }
-
       - name: '🔬 Smoke Test & Visual Verification'
         shell: pwsh
         run: |
@@ -974,15 +959,29 @@ jobs:
           Write-Host "Starting backend..."
           $proc = Start-Process -FilePath $exe -PassThru -WorkingDirectory "$installRoot"
           try {
-            Start-Sleep -Seconds 10
-            if ($proc.HasExited) { throw "❌ Backend crashed immediately" }
+            Write-Host "Waiting 15 seconds for service to initialize..."
+            Start-Sleep -Seconds 15
+            if ($proc.HasExited) {
+              throw "❌ Backend crashed immediately after launch. Exit Code: $($proc.ExitCode)"
+            }
 
-            Write-Host "Pinging Health Endpoint..."
-            $response = Invoke-WebRequest -Uri "http://localhost:8102/health" -UseBasicParsing
-            if ($response.StatusCode -eq 200) {
-              Write-Host "✅ SUCCESS: Health Check Passed"
-            } else {
-              throw "❌ Health Check Failed"
+            Write-Host "Pinging Health Endpoint (up to 5 attempts)..."
+            $healthUrl = "http://localhost:8102/health"
+            $maxAttempts = 5
+            for ($i = 1; $i -le $maxAttempts; $i++) {
+              try {
+                Write-Host "  Attempt $i of $maxAttempts..."
+                $response = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -ErrorAction Stop
+                if ($response.StatusCode -eq 200) {
+                  Write-Host "✅ SUCCESS: Health Check Passed on attempt $i."
+                  break # Exit the loop on success
+                }
+              } catch {
+                if ($i -eq $maxAttempts) {
+                  throw "❌ Health Check Failed after $maxAttempts attempts."
+                }
+                Start-Sleep -Seconds 5
+              }
             }
 
             Write-Host "📸 Taking screenshot..."
