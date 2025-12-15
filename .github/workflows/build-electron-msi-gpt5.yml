@@ -704,49 +704,6 @@ jobs:
           } else {
             Write-Host '✅ Existing license.rtf found.'
           }
-      - name: 🏗️ Build Electron App
-        shell: pwsh
-        working-directory: electron
-        run: |
-          npm ci
-          $flag = if ('${{ matrix.arch }}' -eq 'x86') { '--ia32' } else { '--x64' }
-          npm run dist -- --config temp-builder-config.yml --publish never $flag
-
-      # GPT-5 FIX: Move MSI into release-artifacts
-      - name: 🏗️ Move MSI into release-artifacts
-        shell: pwsh
-        run: |
-          $msi = Get-ChildItem electron/dist -Recurse -Filter "*.msi" | Select-Object -First 1
-          if (-not $msi) { throw "MSI not found in electron/dist" }
-          $dest = "release-artifacts"
-          New-Item -ItemType Directory -Path $dest -Force | Out-Null
-          Move-Item $msi.FullName "$dest/${msi.Name}" -Force
-          echo "msi_path=$dest/${msi.Name}" >> $env:GITHUB_OUTPUT
-
-      - name: 🔬 Forensic Packaging Analysis
-        shell: pwsh
-        env:
-          ARCH: ${{ matrix.arch }}
-        run: |
-          # FIX: Dynamic path selection for x86 vs x64
-          $unpackedDir = if ($env:ARCH -eq 'x86') { "win-ia32-unpacked" } else { "win-unpacked" }
-          $resourcesPath = "electron/dist/$unpackedDir/resources"
-
-          Write-Host "=== RESOURCES FOLDER DUMP ($unpackedDir) ==="
-          if (Test-Path $resourcesPath) {
-            Get-ChildItem -Path $resourcesPath -Recurse | Format-Table FullName, Length
-
-            Write-Host "=== CHECKING FOR BACKEND EXECUTABLE ==="
-            if (Test-Path "$resourcesPath/python-service-bin/fortuna-backend.exe") {
-                Write-Host "✅ fortuna-backend.exe exists"
-            } else {
-                Write-Error "❌ fortuna-backend.exe MISSING in $resourcesPath"
-                exit 1
-            }
-          } else {
-            Write-Error "❌ Unpacked directory not found: $resourcesPath"
-            exit 1
-          }
       - name: 🏗️ Build MSI with electron-builder
         shell: pwsh
         working-directory: electron
@@ -772,6 +729,31 @@ jobs:
           }
 
           Write-Host "✓ MSI build completed"
+
+      - name: 🔬 Forensic Packaging Analysis
+        shell: pwsh
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          # FIX: Dynamic path selection for x86 vs x64
+          $unpackedDir = if ($env:ARCH -eq 'x86') { "win-ia32-unpacked" } else { "win-unpacked" }
+          $resourcesPath = "electron/dist/$unpackedDir/resources"
+
+          Write-Host "=== RESOURCES FOLDER DUMP ($unpackedDir) ==="
+          if (Test-Path $resourcesPath) {
+            Get-ChildItem -Path $resourcesPath -Recurse | Format-Table FullName, Length
+
+            Write-Host "=== CHECKING FOR BACKEND EXECUTABLE ==="
+            if (Test-Path "$resourcesPath/python-service-bin/fortuna-backend.exe") {
+                Write-Host "✅ fortuna-backend.exe exists"
+            } else {
+                Write-Error "❌ fortuna-backend.exe MISSING in $resourcesPath"
+                exit 1
+            }
+          } else {
+            Write-Error "❌ Unpacked directory not found: $resourcesPath"
+            exit 1
+          }
 
       - name: Rename & Hash MSI
         id: name_msi
