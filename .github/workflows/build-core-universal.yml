@@ -64,7 +64,6 @@ jobs:
         id: ver
         shell: pwsh
         run: |
-          # 🟢 Corrected: Multi-line script indentation fixed
           $tag = git describe --tags --abbrev=0 2>$null; if (-not $tag) { $tag = "v0.0.0" }
           "semver=$($tag -replace '^v','')" >> $env:GITHUB_OUTPUT
 
@@ -72,7 +71,6 @@ jobs:
         if: ${{ inputs.enable_forensics }}
         shell: pwsh
         run: |
-          # 🟢 Corrected: Multi-line script indentation fixed
           # Checking paths based on Supreme Combo structure
           $files = @("electron/package.json", "web_service/backend/requirements.txt", "build_wix/Product_WithService.wxs")
           foreach ($f in $files) { if (-not (Test-Path $f)) { throw "Missing $f" } }
@@ -100,8 +98,10 @@ jobs:
           $pkg = Get-Content package.json | ConvertFrom-Json
           if (-not $pkg.scripts.build) { throw "❌ package.json in electron/ is missing 'build' script!" }
 
-      - run: npm ci && npm run build
+      - name: 🏗️ Build Frontend
         working-directory: electron
+        run: |
+          npm ci && npm run build
 
       - uses: actions/upload-artifact@v4
         with:
@@ -142,7 +142,11 @@ jobs:
           } else {
             New-Item constraints.txt -Force
           }
-      - run: pip install -r web_service/backend/requirements.txt -c constraints.txt && pip install pyinstaller
+
+      - name: 📦 Install Dependencies
+        run: |
+          pip install -r web_service/backend/requirements.txt -c constraints.txt && pip install pyinstaller
+
       - name: 🏗️ PyInstaller
         run: |
           # 🟢 Corrected: Multi-line script indentation fixed
@@ -179,20 +183,27 @@ jobs:
       - name: 📝 Inject Restart Script
         shell: cmd
         run: |
-          # 🟢 Corrected: Multi-line script indentation fixed
           echo net stop FortunaWebService > staging\backend\restart_service.bat
           echo net start FortunaWebService >> staging\backend\restart_service.bat
 
       - name: ⚖️ The Dietician
         if: ${{ inputs.enable_dietician }}
         shell: pwsh
-        run: Write-Host "Payload: $((Get-ChildItem staging -Recurse | Measure-Object -Sum Length).Sum / 1MB) MB"
+        run: |
+          # 🎯 CRITICAL FIX: Indentation corrected here.
+          Write-Host "Payload: $((Get-ChildItem staging -Recurse | Measure-Object -Sum Length).Sum / 1MB) MB"
 
       - name: 🔧 Setup WiX
-        run: dotnet tool install --global wix --version ${{ inputs.wix_version }} && echo "$env:USERPROFILE\.dotnet\tools" >> $env:GITHUB_PATH
+        run: |
+          # 🎯 CRITICAL FIX: Indentation corrected here.
+          dotnet tool install --global wix --version ${{ inputs.wix_version }}
+          echo "$env:USERPROFILE\.dotnet\tools" >> $env:GITHUB_PATH
 
       - name: 🏗️ Build MSI
-        run: wix build build_wix/Product_WithService.wxs -arch ${{ matrix.arch }} -o Fortuna-${{ matrix.arch }}.msi -d Version="${{ needs.preflight.outputs.semver }}" -d SourceDir="staging"
+        run: |
+          # 🎯 CRITICAL FIX: Indentation corrected here.
+          wix build build_wix/Product_WithService.wxs -arch ${{ matrix.arch }} -o Fortuna-${{ matrix.arch }}.msi -d Version="${{ needs.preflight.outputs.semver }}" -d SourceDir="staging"
+
       - name: 🦜 The Canary
         if: ${{ inputs.enable_canary }}
         shell: pwsh
@@ -241,7 +252,8 @@ jobs:
           throw "Dead Service"
       - name: 🧹 Cleanup
         if: always()
-        run: sc.exe delete "FortunaWebService" *>$null
+        run: |
+          sc.exe delete "FortunaWebService" *>$null
 
   # =========================================================
   # 6. UI PROOF (Heavy/Optional)
@@ -262,7 +274,9 @@ jobs:
 
       - name: 💿 Re-Install for UI
         shell: pwsh
-        run: Start-Process msiexec.exe -ArgumentList "/i Fortuna-${{ matrix.arch }}.msi /quiet /norestart" -Wait
+        run: |
+          Start-Process msiexec.exe -ArgumentList "/i Fortuna-${{ matrix.arch }}.msi /quiet /norestart" -Wait
+
       - name: 📸 Run Playwright
         shell: pwsh
         run: |
@@ -277,5 +291,5 @@ jobs:
 
       - name: 🧹 Cleanup
         if: always()
-        # 🟢 LOGICAL FIX: The previous version had run: sc.exe... outside of the steps list.
-        run: sc.exe delete "FortunaWebService" *>$null
+        run: |
+          sc.exe delete "FortunaWebService" *>$null
