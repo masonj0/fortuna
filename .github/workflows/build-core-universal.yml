@@ -60,7 +60,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: 🏷️ Versioning
+      - name: 🏷️ Versioning - DETAILED LOGGING
         id: ver
         shell: pwsh
         run: |
@@ -74,12 +74,17 @@ jobs:
         run: echo 'Runner stabilization complete.'
 
       - name: 🔎 Forensic Asset Verification
-        if: ${{ inputs.enable_forensics }}
-        shell: pwsh
+        # IMPORTANT FIX: The Runner repeatedly crashed between steps after outputting 'semver',
+        # likely due to an internal Windows Runner bug when initializing the `pwsh` shell consecutively within a job.
+        # Switching to the standard `cmd` shell for this step bypasses this known, unstable behavior.
+        if: ${{ inputs.enable_forensics == 'true' }}
+        shell: cmd
         run: |
-          # Checking paths based on Supreme Combo structure
-          $files = @("electron/package.json", "web_service/backend/requirements.txt", "build_wix/Product_WithService.wxs")
-          foreach ($f in $files) { if (-not (Test-Path $f)) { throw "Missing $f" } }
+          @echo Checking critical forensic asset paths...
+          if not exist "electron/package.json" exit 1
+          if not exist "web_service/backend/requirements.txt" exit 1
+          if not exist "build_wix/Product_WithService.wxs" exit 1
+          @echo Forensic Asset Verification passed.
 
   # =========================================================
   # 2. BUILD FRONTEND
@@ -204,7 +209,7 @@ jobs:
             -d SourceDir="staging"
 
       - name: 🦜 The Canary
-        if: ${{ inputs.enable_canary }}
+        if: ${{ inputs.enable_canary == 'true' }}
         shell: pwsh
         run: |
           try {
@@ -257,7 +262,7 @@ jobs:
   ui-proof:
     name: 📸 Paparazzi (${{ matrix.arch }})
     needs: smoke-test
-    if: ${{ inputs.enable_paparazzi }}
+    if: ${{ inputs.enable_paparazzi == 'true' }}
     runs-on: windows-latest
     strategy:
       matrix:
