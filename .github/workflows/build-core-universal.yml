@@ -142,7 +142,6 @@ jobs:
           } else {
             New-Item constraints.txt -Force
           }
-
       - run: pip install -r web_service/backend/requirements.txt -c constraints.txt && pip install pyinstaller
       - name: 🏗️ PyInstaller
         run: |
@@ -194,7 +193,6 @@ jobs:
 
       - name: 🏗️ Build MSI
         run: wix build build_wix/Product_WithService.wxs -arch ${{ matrix.arch }} -o Fortuna-${{ matrix.arch }}.msi -d Version="${{ needs.preflight.outputs.semver }}" -d SourceDir="staging"
-
       - name: 🦜 The Canary
         if: ${{ inputs.enable_canary }}
         shell: pwsh
@@ -205,7 +203,6 @@ jobs:
                & "C:\Program Files\Windows Defender\MpCmdRun.exe" -Scan -ScanType 3 -File "$pwd\Fortuna-${{ matrix.arch }}.msi"
             }
           } catch { Write-Warning "Canary scan failed or skipped: $_" }
-
       - uses: actions/upload-artifact@v4
         # 🟢 Corrected: Switched from inline mapping to block mapping for reliability
         with:
@@ -235,7 +232,6 @@ jobs:
           # 🟢 Corrected: Multi-line script indentation fixed
           sc.exe delete "FortunaWebService" *>$null; Start-Sleep 2
           Start-Process msiexec.exe -ArgumentList "/i Fortuna-${{ matrix.arch }}.msi /quiet /norestart" -Wait
-
       - name: 🩺 Health Check
         shell: pwsh
         run: |
@@ -243,7 +239,6 @@ jobs:
           Start-Sleep 10
           for($i=0;$i -lt 5;$i++) { try { if ((Invoke-RestMethod "http://127.0.0.1:${{ inputs.service_port }}/health").status -eq "ok") { return } } catch { Start-Sleep 5 } }
           throw "Dead Service"
-
       - name: 🧹 Cleanup
         if: always()
         run: sc.exe delete "FortunaWebService" *>$null
@@ -268,14 +263,12 @@ jobs:
       - name: 💿 Re-Install for UI
         shell: pwsh
         run: Start-Process msiexec.exe -ArgumentList "/i Fortuna-${{ matrix.arch }}.msi /quiet /norestart" -Wait
-
       - name: 📸 Run Playwright
         shell: pwsh
         run: |
           # 🟢 CRITICAL FIX: Multi-line script indentation fixed
           npm install playwright; npx playwright install chromium --with-deps
           node -e "const { chromium } = require('playwright'); (async () => { const b = await chromium.launch(); const p = await b.newPage(); await p.goto('http://127.0.0.1:${{ inputs.service_port }}/docs'); await p.screenshot({path: 'proof.png'}); await b.close(); })();"
-
       - uses: actions/upload-artifact@v4
         # 🟢 Corrected: Switched from inline mapping to block mapping for reliability
         with:
