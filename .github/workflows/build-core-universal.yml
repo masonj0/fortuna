@@ -125,9 +125,16 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: ${{ inputs.python_version }}, architecture: ${{ matrix.arch }}, cache: 'pip' }
 
+      # FIX: Using Block Scalar (|) to safely handle PowerShell braces
       - name: 🧾 Arch Constraints
         shell: pwsh
-        run: if ('${{ matrix.arch }}' -eq 'x86') { Set-Content constraints.txt 'numpy==1.23.5'; Add-Content constraints.txt 'pandas==1.5.3' } else { New-Item constraints.txt -Force }
+        run: |
+          if ('${{ matrix.arch }}' -eq 'x86') {
+            Set-Content constraints.txt 'numpy==1.23.5'
+            Add-Content constraints.txt 'pandas==1.5.3'
+          } else {
+            New-Item constraints.txt -Force
+          }
 
       - run: pip install -r web_service/backend/requirements.txt -c constraints.txt && pip install pyinstaller
 
@@ -157,8 +164,10 @@ jobs:
         with: { name: backend-${{ matrix.arch }}, path: staging/backend }
 
       - name: 📝 Inject Restart Script
-        run: echo net stop FortunaWebService > staging\backend\restart_service.bat & echo net start FortunaWebService >> staging\backend\restart_service.bat
         shell: cmd
+        run: |
+          echo net stop FortunaWebService > staging\backend\restart_service.bat
+          echo net start FortunaWebService >> staging\backend\restart_service.bat
 
       - name: ⚖️ The Dietician
         if: ${{ inputs.enable_dietician }}
