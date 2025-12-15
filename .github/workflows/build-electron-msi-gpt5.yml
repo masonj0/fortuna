@@ -304,6 +304,7 @@ jobs:
             " a.zipfiles,",
             " a.datas,",
             " [],",
+            " exclude_binaries=False,",
             " name='fortuna-backend',",
             " debug=False,",
             " bootloader_ignore_signals=False,",
