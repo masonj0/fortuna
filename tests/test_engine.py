@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, date
 from decimal import Decimal
 from tests.conftest import create_mock_race, get_test_settings
@@ -15,12 +15,13 @@ async def test_engine_initialization():
     assert engine.config.API_KEY == "test-override-key-123"
 
 @pytest.mark.asyncio
-async def test_fetch_all_odds_success(clear_cache):
+@patch("python_service.engine.OddsEngine._time_adapter_fetch")
+async def test_fetch_all_odds_success(mock_fetch, clear_cache):
     """Test happy path: fetching odds from a single adapter."""
     # ARRANGE
-    engine = OddsEngine(config=get_test_settings())
-    mock_adapter = AsyncMock(spec=BaseAdapterV3)
-    mock_adapter.source_name = "MockSource"
+    settings = get_test_settings()
+    settings.CACHE_ENABLED = False
+    engine = OddsEngine(config=settings)
 
     today = datetime.now()
     mock_race = create_mock_race(
@@ -28,7 +29,12 @@ async def test_fetch_all_odds_success(clear_cache):
         [{"number": 1, "name": "Secretariat", "odds": "1.5"}]
     )
 
-    mock_adapter.get_races.return_value = [mock_race]
+    # This is the new way to mock the data
+    mock_fetch.return_value = ("MockSource", {"races": [mock_race], "source_info": {"name": "MockSource", "status": "SUCCESS", "races_fetched": 1, "fetch_duration": 0.1}}, 0.1)
+
+    # We still need to give the engine an adapter to iterate over
+    mock_adapter = MagicMock(spec=BaseAdapterV3)
+    mock_adapter.source_name = "MockSource"
     engine.adapters = [mock_adapter]
 
     # ACT
@@ -40,23 +46,26 @@ async def test_fetch_all_odds_success(clear_cache):
     assert result["races"][0]["runners"][0]["name"] == "Secretariat"
 
 @pytest.mark.asyncio
-async def test_fetch_all_odds_resilience(clear_cache):
+@patch("python_service.engine.OddsEngine._time_adapter_fetch")
+async def test_fetch_all_odds_resilience(mock_fetch, clear_cache):
     """Test that one failing adapter does not crash the whole engine."""
     # ARRANGE
-    engine = OddsEngine(config=get_test_settings())
+    settings = get_test_settings()
+    settings.CACHE_ENABLED = False
+    engine = OddsEngine(config=settings)
 
-    # Adapter 1: Success
-    good_adapter = AsyncMock(spec=BaseAdapterV3)
-    good_adapter.source_name = "GoodSource"
-    good_adapter.get_races.return_value = [
-        create_mock_race("GoodSource", "Track A", 1, datetime.now(), [])
-    ]
+    # Mock successful adapter data
+    good_race = create_mock_race("GoodSource", "Track A", 1, datetime.now(), [])
+    good_payload = ("GoodSource", {"races": [good_race], "source_info": {"name": "GoodSource", "status": "SUCCESS", "races_fetched": 1, "fetch_duration": 0.1}}, 0.1)
 
-    # Adapter 2: Failure
-    bad_adapter = AsyncMock(spec=BaseAdapterV3)
-    bad_adapter.source_name = "BadSource"
-    bad_adapter.get_races.side_effect = Exception("API Down")
+    # Mock failed adapter data
+    bad_payload = ("BadSource", {"races": [], "source_info": {"name": "BadSource", "status": "FAILED", "error_message": "API Down", "races_fetched": 0, "fetch_duration": 0.1}}, 0.1)
 
+    mock_fetch.side_effect = [good_payload, bad_payload]
+
+    # We still need to give the engine adapters to iterate over
+    good_adapter = MagicMock(spec=BaseAdapterV3); good_adapter.source_name = "GoodSource"
+    bad_adapter = MagicMock(spec=BaseAdapterV3); bad_adapter.source_name = "BadSource"
     engine.adapters = [good_adapter, bad_adapter]
 
     # ACT
@@ -72,24 +81,26 @@ async def test_fetch_all_odds_resilience(clear_cache):
     assert bad_info["status"] == "FAILED"
 
 @pytest.mark.asyncio
-async def test_race_aggregation_and_deduplication(clear_cache):
+@patch("python_service.engine.OddsEngine._time_adapter_fetch")
+async def test_race_aggregation_and_deduplication(mock_fetch, clear_cache):
     """Test merging identical races from different sources."""
-    engine = OddsEngine(config=get_test_settings())
+    settings = get_test_settings()
+    settings.CACHE_ENABLED = False
+    engine = OddsEngine(config=settings)
     now = datetime.now()
 
     # Same race, different sources, slightly different odds
     race_a = create_mock_race("SourceA", "Ascot", 1, now, [{"number": 1, "name": "Horse X", "odds": "2.0"}])
     race_b = create_mock_race("SourceB", "Ascot", 1, now, [{"number": 1, "name": "Horse X", "odds": "2.2"}])
 
-    adapter_a = AsyncMock(spec=BaseAdapterV3)
-    adapter_a.source_name = "SourceA"
-    adapter_a.get_races.return_value = [race_a]
+    payload_a = ("SourceA", {"races": [race_a], "source_info": {"name": "SourceA", "status": "SUCCESS", "races_fetched": 1, "fetch_duration": 0.1}}, 0.1)
+    payload_b = ("SourceB", {"races": [race_b], "source_info": {"name": "SourceB", "status": "SUCCESS", "races_fetched": 1, "fetch_duration": 0.1}}, 0.1)
+    mock_fetch.side_effect = [payload_a, payload_b]
 
-    adapter_b = AsyncMock(spec=BaseAdapterV3)
-    adapter_b.source_name = "SourceB"
-    adapter_b.get_races.return_value = [race_b]
-
+    adapter_a = MagicMock(spec=BaseAdapterV3); adapter_a.source_name = "SourceA"
+    adapter_b = MagicMock(spec=BaseAdapterV3); adapter_b.source_name = "SourceB"
     engine.adapters = [adapter_a, adapter_b]
+
 
     # ACT
     result = await engine.fetch_all_odds("2025-12-08")
