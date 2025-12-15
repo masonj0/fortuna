@@ -44,8 +44,15 @@ jobs:
         id: ver
         shell: pwsh
         run: |
-          $tag = git describe --tags --abbrev=0 2>$null; if (-not $tag) { $tag = "v0.0.0" }
-          "semver=$($tag -replace '^v','')" >> $env:GITHUB_OUTPUT
+          try {
+            $tag = git describe --tags --abbrev=0
+          } catch {
+            $tag = "v0.0.0"
+            Write-Warning "Could not describe tags. Defaulting to $tag"
+          }
+          $semver = $tag -replace '^v',''
+          "semver=$semver" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Write-Host "Derived version: $semver"
 
       - name: 🔎 Forensic Asset Verification
         if: ${{ inputs.enable_forensics }}
