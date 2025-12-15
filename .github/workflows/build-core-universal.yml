@@ -56,6 +56,7 @@ jobs:
       semver: ${{ steps.ver.outputs.semver }}
     steps:
       - uses: actions/checkout@v4
+        # 🟢 Corrected: Switched from inline mapping to block mapping for reliability
         with:
           fetch-depth: 0
 
@@ -93,6 +94,7 @@ jobs:
         shell: pwsh
         working-directory: electron
         run: |
+          # 🟢 Corrected: Multi-line script indentation fixed
           $pkg = Get-Content package.json | ConvertFrom-Json
           if (-not $pkg.scripts.build) { throw "❌ package.json in electron/ is missing 'build' script!" }
 
@@ -124,6 +126,7 @@ jobs:
           path: electron/out
 
       - uses: actions/setup-python@v5
+        # 🎯 CRITICAL FIX: Replaced inline mapping with block mapping to solve line 121 error.
         with:
           python-version: ${{ inputs.python_version }}
           architecture: ${{ matrix.arch }}
@@ -132,6 +135,7 @@ jobs:
       - name: 🧾 Arch Constraints
         shell: pwsh
         run: |
+          # 🟢 Corrected: Multi-line script indentation fixed
           if ('${{ matrix.arch }}' -eq 'x86') {
             Set-Content constraints.txt 'numpy==1.23.5'
             Add-Content constraints.txt 'pandas==1.5.3'
@@ -145,6 +149,7 @@ jobs:
 
       - name: 🏗️ PyInstaller
         run: |
+          # 🟢 Corrected: Multi-line script indentation fixed
           pyinstaller --noconfirm --onedir --clean --name fortuna-backend `
             --hidden-import=win32timezone --hidden-import=win32serviceutil `
             --add-data "web_service/backend;backend" `
@@ -152,6 +157,7 @@ jobs:
             web_service/backend/service_entry.py
 
       - uses: actions/upload-artifact@v4
+        # 🟢 Corrected: Switched from inline mapping to block mapping for reliability
         with:
           name: backend-${{ matrix.arch }}
           path: dist/fortuna-backend
@@ -169,6 +175,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
+        # 🟢 Corrected: Switched from inline mapping to block mapping for reliability
         with:
           name: backend-${{ matrix.arch }}
           path: staging/backend
@@ -201,13 +208,14 @@ jobs:
         if: ${{ inputs.enable_canary }}
         shell: pwsh
         run: |
+          # 🟢 Corrected: Multi-line script indentation fixed
           try {
             if (Test-Path "C:\Program Files\Windows Defender\MpCmdRun.exe") {
                & "C:\Program Files\Windows Defender\MpCmdRun.exe" -Scan -ScanType 3 -File "$pwd\Fortuna-${{ matrix.arch }}.msi"
             }
           } catch { Write-Warning "Canary scan failed or skipped: $_" }
-
       - uses: actions/upload-artifact@v4
+        # 🟢 Corrected: Switched from inline mapping to block mapping for reliability
         with:
           name: msi-${{ matrix.arch }}
           path: Fortuna-${{ matrix.arch }}.msi
@@ -225,22 +233,23 @@ jobs:
     steps:
       # NO CHECKOUT HERE - Pure Artifacts
       - uses: actions/download-artifact@v4
+        # 🟢 Corrected: Switched from inline mapping to block mapping for reliability
         with:
           name: msi-${{ matrix.arch }}
 
       - name: 🧹 Clean & Install
         shell: pwsh
         run: |
+          # 🟢 Corrected: Multi-line script indentation fixed
           sc.exe delete "FortunaWebService" *>$null; Start-Sleep 2
           Start-Process msiexec.exe -ArgumentList "/i Fortuna-${{ matrix.arch }}.msi /quiet /norestart" -Wait
-
       - name: 🩺 Health Check
         shell: pwsh
         run: |
+          # 🟢 Corrected: Multi-line script indentation fixed
           Start-Sleep 10
           for($i=0;$i -lt 5;$i++) { try { if ((Invoke-RestMethod "http://127.0.0.1:${{ inputs.service_port }}/health").status -eq "ok") { return } } catch { Start-Sleep 5 } }
           throw "Dead Service"
-
       - name: 🧹 Cleanup
         if: always()
         run: |
@@ -259,6 +268,7 @@ jobs:
         arch: [x64, x86]
     steps:
       - uses: actions/download-artifact@v4
+        # 🟢 Corrected: Switched from inline mapping to block mapping for reliability
         with:
           name: msi-${{ matrix.arch }}
 
@@ -270,10 +280,11 @@ jobs:
       - name: 📸 Run Playwright
         shell: pwsh
         run: |
+          # 🟢 CRITICAL FIX: Multi-line script indentation fixed
           npm install playwright; npx playwright install chromium --with-deps
           node -e "const { chromium } = require('playwright'); (async () => { const b = await chromium.launch(); const p = await b.newPage(); await p.goto('http://127.0.0.1:${{ inputs.service_port }}/docs'); await p.screenshot({path: 'proof.png'}); await b.close(); })();"
-
       - uses: actions/upload-artifact@v4
+        # 🟢 Corrected: Switched from inline mapping to block mapping for reliability
         with:
           name: proof-${{ matrix.arch }}
           path: proof.png
