@@ -189,13 +189,24 @@ jobs:
       - name: ⚖️ The Dietician
         if: ${{ inputs.enable_dietician == 'true' }}
         shell: pwsh
-        run: Write-Host "Payload: $((Get-ChildItem staging -Recurse | Measure-Object -Sum Length).Sum / 1MB) MB"
+        run: |
+          $size = (Get-ChildItem staging -Recurse | Measure-Object -Sum Length).Sum / 1MB
+          Write-Host "Payload Size: $size MB"
 
       - name: 🔧 Setup WiX
-        run: dotnet tool install --global wix --version ${{ inputs.wix_version }} && echo "$env:USERPROFILE\.dotnet\tools" >> $env:GITHUB_PATH
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix --version "${{ inputs.wix_version }}"
+          echo "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Append
 
       - name: 🏗️ Build MSI
-        run: wix build build_wix/Product_WithService.wxs -arch ${{ matrix.arch }} -o Fortuna-${{ matrix.arch }}.msi -d Version="${{ needs.preflight.outputs.semver }}" -d SourceDir="staging"
+        shell: pwsh
+        run: |
+          wix build build_wix/Product_WithService.wxs `
+            -arch ${{ matrix.arch }} `
+            -o Fortuna-${{ matrix.arch }}.msi `
+            -d Version="${{ needs.preflight.outputs.semver }}" `
+            -d SourceDir="staging"
 
       - name: 🦜 The Canary
         if: ${{ inputs.enable_canary == 'true' }}

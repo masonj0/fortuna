@@ -34,7 +34,9 @@ async def test_get_races_endpoint_success(mock_fetch_all_odds, client):
         source_info=[],
     )
     mock_fetch_all_odds.return_value = mock_response.model_dump()
-    headers = {"X-API-Key": "a_secure_test_api_key_that_is_long_enough"}
+    from tests.conftest import get_test_settings
+    settings = get_test_settings()
+    headers = {"X-API-Key": settings.API_KEY}
 
     # ACT
     response = await client.get(f"/api/races?race_date={today.isoformat()}", headers=headers)

@@ -295,6 +295,15 @@ class OddsEngine:
                 if race.source not in existing_race.source:
                     existing_race.source.append(race.source)
 
+        for race in race_map.values():
+            runner_map = {}
+            for runner in race.runners:
+                if runner.number not in runner_map:
+                    runner_map[runner.number] = runner
+                else:
+                    existing_runner = runner_map[runner.number]
+                    existing_runner.odds.update(runner.odds)
+            race.runners = list(runner_map.values())
         return list(race_map.values())
 
     async def _broadcast_update(self, data: Dict[str, Any]):
@@ -346,7 +355,9 @@ class OddsEngine:
                 source_info = adapter_result.get("source_info", {})
                 source_infos.append(source_info)
                 if source_info.get("status") == "SUCCESS":
-                    all_races.extend(adapter_result.get("races", []))
+                    # Convert dicts to Race objects before extending all_races
+                    races_as_models = [Race(**race_data) for race_data in adapter_result.get("races", [])]
+                    all_races.extend(races_as_models)
                 else:
                     errors.append({
                         "adapter_name": adapter.source_name,
