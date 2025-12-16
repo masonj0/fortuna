@@ -1,7 +1,8 @@
 [
     ".github/dependabot.yml",
-    ".github/workflows/build-core-universal.yml",
-    ".github/workflows/release-supreme.yml",
+    ".github/workflows/build-electron-hybrid.yml",
+    ".github/workflows/build-msi-supreme-combo.yml",
+    ".github/workflows/formerly-the-core-of-reusable.yml",
     "AGENTS.md",
     "VERSION.txt",
     "electron/preload.js",

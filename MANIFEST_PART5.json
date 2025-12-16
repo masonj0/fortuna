@@ -1,5 +1,6 @@
 [
-    ".github/workflows/build-electron-msi-gpt5.yml",
+    ".github/workflows/build-msi-hat-trick-fusion.yml",
+    ".github/workflows/build-supreme.yml",
     "HISTORY.md",
     "electron/assets/license.rtf",
     "electron/package.json",
