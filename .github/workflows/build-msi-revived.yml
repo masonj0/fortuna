@@ -91,18 +91,14 @@ jobs:
         run: |
           python -m pip install --upgrade pip setuptools wheel
           # 🚀 Apply Constraints
-          pip install -r ${{ env.BACKEND_DIR }}/requirements.txt -c ${{ steps.co
-nstraints.outputs.file }}
+          pip install -r ${{ env.BACKEND_DIR }}/requirements.txt -c ${{ steps.constraints.outputs.file }}
           pip install pyinstaller==6.6.0 pywin32
 
       - name: Build Backend (PyInstaller)
         run: |
           # CRITICAL: Target service_entry.py for Windows Service
           # CRITICAL: Add win32timezone to prevent Error 1053
-          pyinstaller --noconfirm --onedir --clean --name fortuna-backend --hidd
-en-import=win32timezone --hidden-import=win32serviceutil --add-data "web_service
-/backend;backend" --add-data "web_platform/frontend/out;ui" web_service/backend/
-service_entry.py
+          pyinstaller --noconfirm --onedir --clean --name fortuna-backend --hidden-import=win32timezone --hidden-import=win32serviceutil --add-data "web_service/backend;backend" --add-data "web_platform/frontend/out;ui" web_service/backend/service_entry.py
 
       - uses: actions/upload-artifact@v4
         with:
@@ -134,29 +130,49 @@ service_entry.py
       - name: '⚖️ The Dietician (Size Analysis)'
         shell: pwsh
         run: |
-          $size = (Get-ChildItem staging -Recurse | Measure-Object -Property Len
-gth -Sum).Sum / 1MB
+          $size = (Get-ChildItem staging -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB
           Write-Host "Total Payload: $([math]::Round($size, 2)) MB"
 
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
+      - name: Prepare WiX Project
+        shell: pwsh
+        working-directory: ${{ env.WIX_DIR }}
+        run: |
+          if (-not (Test-Path build_wix)) { New-Item -ItemType Directory -Path build_wix | Out-Null }
+          $proj = @(
+            '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">',
+            '  <PropertyGroup>',
+            '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>',
+            '    <OutputType>Package</OutputType>',
+            '    <Platforms>x64;x86</Platforms>',
+            '    <DefineConstants>Version=$(Version);SourceDir=$(SourceDir);ServicePort=$(ServicePort);Platform=$(Platform)</DefineConstants>',
+            '  </PropertyGroup>',
+            '  <ItemGroup>',
+            '    <PackageReference Include="WixToolset.UI.wixext" Version="${{ env.WIX_VERSION }}" />',
+            '    <PackageReference Include="WixToolset.Firewall.wixext" Version="${{ env.WIX_VERSION }}" />',
+            '    <PackageReference Include="WixToolset.Util.wixext" Version="${{ env.WIX_VERSION }}" />',
+            '  </ItemGroup>',
+            '  <ItemGroup>',
+            '    <Compile Include="Product_WithService.wxs" />',
+            '  </ItemGroup>',
+            '</Project>'
+          )
+          Set-Content build_wix/Fortuna.wixproj ($proj -join "`r`n") -Encoding utf8
+
       - name: Build MSI
         working-directory: ${{ env.WIX_DIR }}
         run: |
           # 🚀 Pass Matrix Arch to WiX
-          dotnet build Fortuna.wixproj -c Release -p:Platform=${{ matrix.arch }}
- -p:Version="0.0.${{ github.run_number }}" -p:SourceDir="../staging/backend" -p:
-ServicePort="${{ env.FORTUNA_PORT }}"
+          dotnet build Fortuna.wixproj -c Release -p:Platform=${{ matrix.arch }} -p:Version="0.0.${{ github.run_number }}" -p:SourceDir="../staging/backend" -p:ServicePort="${{ env.FORTUNA_PORT }}"
 
       - name: Rename & Hash
         run: |
           $releaseDir = "${{ env.WIX_DIR }}/bin/${{ matrix.arch }}/Release"
-          $msi = Get-ChildItem -Path $releaseDir -Filter "*.msi" | Select -First
- 1
-          $target = "FortunaService-${{ matrix.arch }}-${{ github.run_number }}.
-msi"
+          $msi = Get-ChildItem -Path $releaseDir -Filter "*.msi" | Select -First 1
+          $target = "FortunaService-${{ matrix.arch }}-${{ github.run_number }}.msi"
           Move-Item $msi.FullName -Destination "$releaseDir/$target" -Force
           Write-Host "✅ MSI Ready: $target"
 
@@ -182,8 +198,7 @@ msi"
       - name: Install MSI
         run: |
           $msi = Get-ChildItem installer/*.msi | Select -First 1
-          Start-Process msiexec.exe -ArgumentList "/i `"$($msi.FullName)`" /qn /
-L*v install.log" -Wait
+          Start-Process msiexec.exe -ArgumentList "/i `"$($msi.FullName)`" /qn /L*v install.log" -Wait
 
       - name: Verify Service & Port
         shell: pwsh
@@ -191,20 +206,16 @@ L*v install.log" -Wait
           ARCH: ${{ matrix.arch }}
         run: |
           # 🚀 DYNAMIC PATH LOGIC
-          $progFiles = if ($env:ARCH -eq 'x86') { ${env:ProgramFiles(x86)} } els
-e { $env:ProgramFiles }
+          $progFiles = if ($env:ARCH -eq 'x86') { ${env:ProgramFiles(x86)} } else { $env:ProgramFiles }
           $installRoot = "$progFiles\FortunaWeb"
 
-          if (-not (Test-Path $installRoot)) { throw "❌ Install dir not found at
- $installRoot" }
+          if (-not (Test-Path $installRoot)) { throw "❌ Install dir not found at $installRoot" }
 
           Write-Host "Waiting for service..."
           Start-Sleep -Seconds 10
 
-          $response = Invoke-WebRequest -Uri "http://localhost:${{ env.FORTUNA_P
-ORT }}/health" -UseBasicParsing
-          if ($response.StatusCode -eq 200) { Write-Host "✅ Service Healthy" } e
-lse { throw "❌ Service Failed" }
+          $response = Invoke-WebRequest -Uri "http://localhost:${{ env.FORTUNA_PORT }}/health" -UseBasicParsing
+          if ($response.StatusCode -eq 200) { Write-Host "✅ Service Healthy" } else { throw "❌ Service Failed" }
 
       - name: '📸 Paparazzi (Visual Proof)'
         run: |
@@ -212,10 +223,7 @@ lse { throw "❌ Service Failed" }
           npx playwright install chromium --with-deps
           # FIX: Point to /docs
           $url = "http://127.0.0.1:${{ env.FORTUNA_PORT }}/docs"
-          node -e "const { chromium } = require('playwright'); (async () => { co
-nst browser = await chromium.launch(); const page = await browser.newPage(); awa
-it page.goto('$url'); await page.screenshot({ path: 'proof.png' }); await browse
-r.close(); })();"
+          node -e "const { chromium } = require('playwright'); (async () => { const browser = await chromium.launch(); const page = await browser.newPage(); await page.goto('$url'); await page.screenshot({ path: 'proof.png' }); await browser.close(); })();"
 
       - uses: actions/upload-artifact@v4
         if: always()

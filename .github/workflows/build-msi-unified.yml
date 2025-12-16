@@ -49,21 +49,17 @@ jobs:
         run: |
           $MAX_FAILURES = 30
           Write-Host "Running Test Suite (Threshold: $MAX_FAILURES failures)..."
-          cmd /c "pytest web_service/backend --junitxml=test-report.xml" || Writ
-e-Host "Pytest finished with issues."
+          cmd /c "pytest web_service/backend --junitxml=test-report.xml" || Write-Host "Pytest finished with issues."
 
           if (Test-Path "test-report.xml") {
               [xml]$xml = Get-Content "test-report.xml"
               $failures = 0; $errors = 0
-              if ($xml.testsuites) { $failures = [int]$xml.testsuites.failures;
-$errors = [int]$xml.testsuites.errors }
-              elseif ($xml.testsuite) { $failures = [int]$xml.testsuite.failures
-; $errors = [int]$xml.testsuite.errors }
+              if ($xml.testsuites) { $failures = [int]$xml.testsuites.failures; $errors = [int]$xml.testsuites.errors }
+              elseif ($xml.testsuite) { $failures = [int]$xml.testsuite.failures; $errors = [int]$xml.testsuite.errors }
 
               $total = $failures + $errors
               Write-Host "Total Issues: $total (Limit: $MAX_FAILURES)"
-              if ($total -gt $MAX_FAILURES) { Write-Error "❌ Too many failures."
-; exit 1 }
+              if ($total -gt $MAX_FAILURES) { Write-Error "❌ Too many failures."; exit 1 }
               else { Write-Host "✅ Failure count acceptable."; exit 0 }
           } else {
               Write-Warning "No test report found. Skipping gate."
@@ -88,8 +84,7 @@ $errors = [int]$xml.testsuites.errors }
 
       - name: Set Build ID
         id: vars
-        run: echo "build_id=${{ github.run_id }}-${{ github.run_attempt }}" | Ou
-t-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+        run: echo "build_id=${{ github.run_id }}-${{ github.run_attempt }}" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -103,9 +98,7 @@ t-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
         uses: actions/cache@v4
         with:
           path: ${{ env.FRONTEND_DIR }}/out
-          key: ${{ runner.os }}-frontend-${{ hashFiles('**/package-lock.json', '
-${{ env.FRONTEND_DIR }}/**/*.js', '${{ env.FRONTEND_DIR }}/**/*.ts', '${{ env.FR
-ONTEND_DIR }}/**/*.tsx', '${{ env.FRONTEND_DIR }}/**/*.css') }}
+          key: ${{ runner.os }}-frontend-${{ hashFiles('**/package-lock.json', '${{ env.FRONTEND_DIR }}/**/*.js', '${{ env.FRONTEND_DIR }}/**/*.ts', '${{ env.FRONTEND_DIR }}/**/*.tsx', '${{ env.FRONTEND_DIR }}/**/*.css') }}
           restore-keys: |
             ${{ runner.os }}-frontend-
 
@@ -150,8 +143,7 @@ ONTEND_DIR }}/**/*.tsx', '${{ env.FRONTEND_DIR }}/**/*.css') }}
           from pathlib import Path
 
           # Install deps with constraints
-          os.system("pip install -r " + os.environ['BACKEND_DIR'] + "/requiremen
-ts.txt -c " + os.environ['CONSTRAINTS_FILE'])
+          os.system("pip install -r " + os.environ['BACKEND_DIR'] + "/requirements.txt -c " + os.environ['CONSTRAINTS_FILE'])
           os.system("pip install pyinstaller==6.6.0 pywin32")
 
           bk_dir = os.environ['BACKEND_DIR'].replace('\\', '/')
@@ -161,18 +153,15 @@ ts.txt -c " + os.environ['CONSTRAINTS_FILE'])
 
           spec = f"""
           # -- mode: python ; coding: utf-8 --
-          from PyInstaller.utils.hooks import collect_data_files, collect_submod
-ules
+          from PyInstaller.utils.hooks import collect_data_files, collect_submodules
           block_cipher = None
           a = Analysis(
               ['{entry}'],
               pathex=[],
               binaries=[],
-              datas=collect_data_files('uvicorn') + collect_data_files('slowapi'
-) + [('{frontend_out}', 'ui')],
+              datas=collect_data_files('uvicorn') + collect_data_files('slowapi') + [('{frontend_out}', 'ui')],
               # FIX: Added win32timezone to prevent Error 1053
-              hiddenimports=collect_submodules('{mod_path}') + ['win32timezone']
-,
+              hiddenimports=collect_submodules('{mod_path}') + ['win32timezone'],
               hookspath=[],
               runtime_hooks=[],
               excludes=['tests', 'pytest'],
@@ -184,8 +173,7 @@ ules
           pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
           exe = EXE(
               pyz, a.scripts, [],
-              exclude_binaries=True, name='fortuna-backend', debug=False, bootlo
-ader_ignore_signals=False, strip=False, upx=True, console=False
+              exclude_binaries=True, name='fortuna-backend', debug=False, bootloader_ignore_signals=False, strip=False, upx=True, console=False
           )
           coll = COLLECT(
               exe, a.binaries, a.zipfiles, a.datas,
@@ -202,22 +190,18 @@ ader_ignore_signals=False, strip=False, upx=True, console=False
           Set-StrictMode -Version Latest
           $outDir = Resolve-Path "out"
           $manifestPath = "frontend-manifest.tsv"
-          "RelativePath`tSizeBytes`tSHA256" | Out-File $manifestPath -Encoding u
-tf8
+          "RelativePath`tSizeBytes`tSHA256" | Out-File $manifestPath -Encoding utf8
           $files = Get-ChildItem -Path $outDir -Recurse -File
           foreach ($f in $files) {
             $rel = $f.FullName.Substring($outDir.Path.Length).TrimStart('\','/')
-            $hash = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.Substring(
-0,16)
-            "$rel`t$($f.Length)`t$hash" | Out-File $manifestPath -Encoding utf8
--Append
+            $hash = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.Substring(0,16)
+            "$rel`t$($f.Length)`t$hash" | Out-File $manifestPath -Encoding utf8 -Append
           }
 
       - name: Upload Backend and Frontend Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: build-artifacts-${{ matrix.arch }}-${{ steps.vars.outputs.build_
-id }}
+          name: build-artifacts-${{ matrix.arch }}-${{ steps.vars.outputs.build_id }}
           path: |
             dist/fortuna-backend/
             ${{ env.FRONTEND_DIR }}/frontend-manifest.tsv
@@ -240,8 +224,7 @@ id }}
       - name: Download Build Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: build-artifacts-${{ matrix.arch }}-${{ needs.build-executable.ou
-tputs.build_id }}
+          name: build-artifacts-${{ matrix.arch }}-${{ needs.build-executable.outputs.build_id }}
           path: staging
 
       - name: '⚖️ The Dietician (Size Analysis)'
@@ -250,37 +233,28 @@ tputs.build_id }}
           $target = "staging"
           $limitMB = 300
           Write-Host "--- 📊 Size Breakdown ---"
-          $files = Get-ChildItem -Path $target -Recurse -File -ErrorAction Silen
-tlyContinue
+          $files = Get-ChildItem -Path $target -Recurse -File -ErrorAction SilentlyContinue
           if (!$files) { Write-Warning "No files found to weigh."; exit 0 }
           $totalBytes = ($files | Measure-Object -Property Length -Sum).Sum
           $totalMB = [math]::Round($totalBytes / 1MB, 2)
           Write-Host "Total Payload Size: $totalMB MB"
           if ($totalMB -gt $limitMB) {
-              Write-Warning "⚠️ BLOAT ALERT: Build exceeds $limitMB MB limit! Ch
-eck the heaviest files below."
+              Write-Warning "⚠️ BLOAT ALERT: Build exceeds $limitMB MB limit! Check the heaviest files below."
           } else {
-              Write-Host "✅ Size within limits (< $limitMB MB)." -ForegroundColo
-r Green
+              Write-Host "✅ Size within limits (< $limitMB MB)." -ForegroundColor Green
           }
           Write-Host "`n--- 🐘 Top 10 Heaviest Files ---"
-          $files | Sort-Object Length -Descending | Select-Object -First 10 @{N=
-'File';E={$_.FullName.Replace($pwd,'')}}, @{N='Size(MB)';E={"{0:N2}" -f ($_.Leng
-th/1MB)}} | Format-Table -AutoSize
+          $files | Sort-Object Length -Descending | Select-Object -First 10 @{N='File';E={$_.FullName.Replace($pwd,'')}}, @{N='Size(MB)';E={"{0:N2}" -f ($_.Length/1MB)}} | Format-Table -AutoSize
 
       - name: Prepare Staging
         shell: pwsh
         run: |
           # Rename EXE for WiX
-          Rename-Item -Path staging/fortuna-backend.exe -NewName fortuna-webserv
-ice.exe -Force
+          Rename-Item -Path staging/fortuna-backend.exe -NewName fortuna-webservice.exe -Force
 
           # Create Restart Script (Required by WiX)
-          $scriptContent = "@echo off`r`necho Requesting Admin privileges...`r`n
-net stop FortunaWebService`r`nnet start FortunaWebService`r`necho Service Restar
-ted.`r`npause"
-          Set-Content -Path "staging/restart_service.bat" -Value $scriptContent
--Encoding Ascii
+          $scriptContent = "@echo off`r`necho Requesting Admin privileges...`r`nnet stop FortunaWebService`r`nnet start FortunaWebService`r`necho Service Restarted.`r`npause"
+          Set-Content -Path "staging/restart_service.bat" -Value $scriptContent -Encoding Ascii
           Write-Host "✅ Created restart_service.bat"
 
       - name: Setup .NET SDK
@@ -291,18 +265,15 @@ ted.`r`npause"
       - name: Prepare WiX Project
         shell: pwsh
         run: |
-          if (-not (Test-Path build_wix)) { New-Item -ItemType Directory -Path b
-uild_wix | Out-Null }
+          if (-not (Test-Path build_wix)) { New-Item -ItemType Directory -Path build_wix | Out-Null }
 
           # License
           if (-not (Test-Path 'build_wix/license.rtf')) {
-             Set-Content -Path 'build_wix/license.rtf' -Value '{\rtf1\ansi Place
-holder License}' -Encoding Ascii
+             Set-Content -Path 'build_wix/license.rtf' -Value '{\rtf1\ansi Placeholder License}' -Encoding Ascii
           }
 
           # Copy WXS
-          Copy-Item "${{ env.WIX_DIR }}/Product_WithService.wxs" "${{ env.WIX_DI
-R }}/Product.wxs" -Force
+          Copy-Item "${{ env.WIX_DIR }}/Product_WithService.wxs" "${{ env.WIX_DIR }}/Product.wxs" -Force
 
           # Generate Project
           $proj = @(
@@ -311,30 +282,23 @@ R }}/Product.wxs" -Force
             '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>',
             '    <OutputType>Package</OutputType>',
             '    <Platforms>x64;x86</Platforms>',
-            '    <DefineConstants>Version=$(Version);SourceDir=$(SourceDir);Serv
-icePort=$(ServicePort);Platform=$(Platform)</DefineConstants>',
+            '    <DefineConstants>Version=$(Version);SourceDir=$(SourceDir);ServicePort=$(ServicePort);Platform=$(Platform)</DefineConstants>',
             '  </PropertyGroup>',
             '  <ItemGroup>',
-            '    <PackageReference Include="WixToolset.UI.wixext" Version="${{ e
-nv.WIX_VERSION }}" />',
-            '    <PackageReference Include="WixToolset.Firewall.wixext" Version=
-"${{ env.WIX_VERSION }}" />',
-            '    <PackageReference Include="WixToolset.Util.wixext" Version="${{
- env.WIX_VERSION }}" />',
+            '    <PackageReference Include="WixToolset.UI.wixext" Version="${{ env.WIX_VERSION }}" />',
+            '    <PackageReference Include="WixToolset.Firewall.wixext" Version="${{ env.WIX_VERSION }}" />',
+            '    <PackageReference Include="WixToolset.Util.wixext" Version="${{ env.WIX_VERSION }}" />',
             '  </ItemGroup>',
             '  <ItemGroup>',
             '    <Compile Include="Product.wxs" />',
             '  </ItemGroup>',
             '</Project>'
           )
-          Set-Content "${{ env.WIX_DIR }}/Fortuna.wixproj" -Value ($proj -join "
-`r`n") -Encoding utf8
+          Set-Content "${{ env.WIX_DIR }}/Fortuna.wixproj" -Value ($proj -join "`r`n") -Encoding utf8
 
       - name: Build MSI
         working-directory: ${{ env.WIX_DIR }}
-        run: dotnet build Fortuna.wixproj -c Release -p:Platform=${{ matrix.arch
- }} -p:Version="0.0.${{ github.run_number }}" -p:SourceDir="../staging" -p:Servi
-cePort="${{ env.SERVICE_PORT }}"
+        run: dotnet build Fortuna.wixproj -c Release -p:Platform=${{ matrix.arch }} -p:Version="0.0.${{ github.run_number }}" -p:SourceDir="../staging" -p:ServicePort="${{ env.SERVICE_PORT }}"
 
       - name: Rename & Hash MSI
         id: name_msi
@@ -343,8 +307,7 @@ cePort="${{ env.SERVICE_PORT }}"
           $ver = "0.0.${{ github.run_number }}"
           $sha = "${{ github.sha }}".Substring(0,7)
           $releaseDir = "${{ env.WIX_DIR }}/bin/${{ matrix.arch }}/Release"
-          $msiFound = Get-ChildItem -Path $releaseDir -Filter "*.msi" | Select-O
-bject -First 1
+          $msiFound = Get-ChildItem -Path $releaseDir -Filter "*.msi" | Select-Object -First 1
           if (-not $msiFound) {
             Write-Error "❌ FATAL: No MSI file found in $releaseDir."
             exit 1
@@ -359,8 +322,7 @@ bject -First 1
       - name: Upload MSI Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: msi-installer-${{ matrix.arch }}-${{ needs.build-executable.outp
-uts.build_id }}
+          name: msi-installer-${{ matrix.arch }}-${{ needs.build-executable.outputs.build_id }}
           path: ${{ env.WIX_DIR }}/bin/${{ matrix.arch }}/Release/*
           retention-days: 1
 
@@ -376,20 +338,16 @@ uts.build_id }}
       - name: Download MSI
         uses: actions/download-artifact@v4
         with:
-          name: msi-installer-${{ matrix.arch }}-${{ needs.package-msi.outputs.b
-uild_id }}
+          name: msi-installer-${{ matrix.arch }}-${{ needs.package-msi.outputs.build_id }}
           path: msi-installer
 
       - name: Install MSI
         shell: pwsh
         run: |
-          $msi = Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse |
-Select-Object -First 1
+          $msi = Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse | Select-Object -First 1
           if (-not $msi) { throw "No MSI found" }
-          $proc = Start-Process msiexec.exe -ArgumentList "/i `"$($msi.FullName)
-`" /qn /L*v msi-install.log" -Wait -PassThru
-          if ($proc.ExitCode -ne 0) { throw "Install failed: $($proc.ExitCode)"
-}
+          $proc = Start-Process msiexec.exe -ArgumentList "/i `"$($msi.FullName)`" /qn /L*v msi-install.log" -Wait -PassThru
+          if ($proc.ExitCode -ne 0) { throw "Install failed: $($proc.ExitCode)" }
 
       - name: '🔬 Complete Smoke Test (3-Layer Defense)'
         shell: pwsh
@@ -397,31 +355,25 @@ Select-Object -First 1
           Set-StrictMode -Version Latest
           $ErrorActionPreference = "Stop"
           $progFiles = ${env:ProgramFiles}
-          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(
-x86)} }
+          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
           $installRoot = Join-Path $progFiles "Fortuna Faucet Service"
           # --- LAYER 1: FILE VERIFICATION ---
-          if (-not (Test-Path $installRoot)) { Write-Error "❌ LAYER 1 FAILED: In
-stall directory not found."; exit 1 }
-          New-Item -Path "$installRoot\data", "$installRoot\json", "$installRoot
-\logs" -ItemType Directory -Force | Out-Null
+          if (-not (Test-Path $installRoot)) { Write-Error "❌ LAYER 1 FAILED: Install directory not found."; exit 1 }
+          New-Item -Path "$installRoot\data", "$installRoot\json", "$installRoot\logs" -ItemType Directory -Force | Out-Null
           # --- LAYER 2: PROCESS VERIFICATION ---
           Start-Service "Fortuna Faucet Service"
           Start-Sleep -Seconds 10
           $svc = Get-Service "Fortuna Faucet Service"
           if ($svc.Status -ne 'Running') {
-            Write-Error "❌ LAYER 2 FAILED: Service failed to start. Status: $($s
-vc.Status)"
+            Write-Error "❌ LAYER 2 FAILED: Service failed to start. Status: $($svc.Status)"
             exit 1
           }
           # --- LAYER 3: NETWORK VERIFICATION ---
           $maxAttempts = 10
           for ($i = 1; $i -le $maxAttempts; $i++) {
             try {
-              $response = Invoke-WebRequest -Uri "http://localhost:${{ env.SERVI
-CE_PORT }}/health" -Method Get -UseBasicParsing -ErrorAction Stop
-              if ($response.StatusCode -eq 200) { Write-Host "✅✅✅ SMOKE TEST PAS
-SED ✅✅✅"; exit 0 }
+              $response = Invoke-WebRequest -Uri "http://localhost:${{ env.SERVICE_PORT }}/health" -Method Get -UseBasicParsing -ErrorAction Stop
+              if ($response.StatusCode -eq 200) { Write-Host "✅✅✅ SMOKE TEST PASSED ✅✅✅"; exit 0 }
             } catch { Start-Sleep -Seconds 5 }
           }
           Write-Error "❌ LAYER 3 FAILED: Service Failed Health Check"
@@ -438,8 +390,7 @@ SED ✅✅✅"; exit 0 }
               try {
                 const browser = await chromium.launch();
                 const page = await browser.newPage();
-                await page.goto('http://127.0.0.1:${{ env.SERVICE_PORT }}/docs',
- { timeout: 15000 });
+                await page.goto('http://127.0.0.1:${{ env.SERVICE_PORT }}/docs', { timeout: 15000 });
                 await page.waitForSelector('.swagger-ui', { timeout: 5000 });
                 await page.screenshot({ path: 'proof.png', fullPage: true });
                 await browser.close();

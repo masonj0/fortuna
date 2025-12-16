@@ -59,8 +59,7 @@ jobs:
       - name: 🔎 Forensic Asset Verification (GPT5)
         shell: pwsh
         run: |
-          $critical = @("web_platform/frontend/package.json", "web_service/backe
-nd/requirements.txt", "build_wix/Product_WithService.wxs")
+          $critical = @("web_platform/frontend/package.json", "web_service/backend/requirements.txt", "build_wix/Product_WithService.wxs")
           foreach ($file in $critical) {
             if (-not (Test-Path $file)) {
               Write-Error "❌ FATAL: Missing critical asset: $file"; exit 1
@@ -108,8 +107,7 @@ nd/requirements.txt", "build_wix/Product_WithService.wxs")
 
       - name: 📦 Install Dependencies
         run: |
-          pip install -r web_service/backend/requirements.txt -c ${{ steps.const
-raints.outputs.file }}
+          pip install -r web_service/backend/requirements.txt -c ${{ steps.constraints.outputs.file }}
           pip install pyinstaller
 
       - name: 🧪 Backend Quality Gate (Fail Fast)
@@ -187,19 +185,15 @@ raints.outputs.file }}
         shell: cmd
         run: |
           echo @echo off > staging\\backend\\restart_service.bat
-          echo net stop FortunaWebService >> staging\\backend\\restart_service.b
-at
-          echo net start FortunaWebService >> staging\\backend\\restart_service.
-bat
+          echo net stop FortunaWebService >> staging\\backend\\restart_service.bat
+          echo net start FortunaWebService >> staging\\backend\\restart_service.bat
 
       - name: ⚖️ The Dietician (Size Analysis)
         shell: pwsh
         run: |
-          $size = (Get-ChildItem staging -Recurse | Measure-Object -Property Len
-gth -Sum).Sum / 1MB
+          $size = (Get-ChildItem staging -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB
           Write-Host "📊 Total Payload: $([math]::Round($size, 2)) MB"
-          if ($size -gt 300) { Write-Warning "⚠️ BLOAT ALERT: Payload exceeds 30
-0MB!" }
+          if ($size -gt 300) { Write-Warning "⚠️ BLOAT ALERT: Payload exceeds 300MB!" }
 
       - name: 🔧 Setup WiX
         run: dotnet tool install --global wix --version ${{ env.WIX_VERSION }}
@@ -221,8 +215,7 @@ gth -Sum).Sum / 1MB
           $msi = "Fortuna-${{ matrix.arch }}.msi"
           if (Test-Path "C:\\Program Files\\Windows Defender\\MpCmdRun.exe") {
             Write-Host "🛡️ Scanning $msi with Windows Defender..."
-            & "C:\\Program Files\\Windows Defender\\MpCmdRun.exe" -Scan -ScanTyp
-e 3 -File "$pwd\\$msi"
+            & "C:\\Program Files\\Windows Defender\\MpCmdRun.exe" -Scan -ScanType 3 -File "$pwd\\$msi"
             if ($LASTEXITCODE -ne 0) { throw "🦠 MALWARE DETECTED in MSI!" }
           }
 
@@ -259,21 +252,17 @@ e 3 -File "$pwd\\$msi"
         shell: pwsh
         run: |
           $msi = "Fortuna-${{ matrix.arch }}.msi"
-          Start-Process msiexec.exe -ArgumentList "/i $msi /quiet /norestart" -W
-ait
+          Start-Process msiexec.exe -ArgumentList "/i $msi /quiet /norestart" -Wait
           Start-Sleep 10 # Give service time to register
 
       - name: 🔍 Dynamic Path Verification (Revived)
         shell: pwsh
         run: |
-          $progFiles = if ('${{ matrix.arch }}' -eq 'x86') { ${env:ProgramFiles(
-x86)} } else { $env:ProgramFiles }
+          $progFiles = if ('${{ matrix.arch }}' -eq 'x86') { ${env:ProgramFiles(x86)} } else { $env:ProgramFiles }
           $installRoot = Join-Path $progFiles "Fortuna Faucet Service"
-          if (-not (Test-Path $installRoot)) { throw "❌ Install dir not found at
- $installRoot" }
+          if (-not (Test-Path $installRoot)) { throw "❌ Install dir not found at $installRoot" }
           Write-Host "✅ Found install at $installRoot"
-          New-Item -Path "$installRoot\data", "$installRoot\json", "$installRoot
-\logs" -ItemType Directory -Force | Out-Null
+          New-Item -Path "$installRoot\data", "$installRoot\json", "$installRoot\logs" -ItemType Directory -Force | Out-Null
           Start-Service "FortunaWebService"
           Start-Sleep 10
 
@@ -282,10 +271,8 @@ x86)} } else { $env:ProgramFiles }
         run: |
           for ($i=0; $i -lt 5; $i++) {
             try {
-              $resp = Invoke-RestMethod "http://127.0.0.1:${{ env.SERVICE_PORT }
-}/health" -ErrorAction Stop
-              if ($resp.status -eq "ok") { Write-Host "✅ Service Healthy"; retur
-n }
+              $resp = Invoke-RestMethod "http://127.0.0.1:${{ env.SERVICE_PORT }}/health" -ErrorAction Stop
+              if ($resp.status -eq "ok") { Write-Host "✅ Service Healthy"; return }
             } catch { Write-Host "⏳ Waiting for service..." }
             Start-Sleep 5
           }
