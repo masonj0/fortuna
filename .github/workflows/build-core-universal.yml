@@ -98,8 +98,6 @@ jobs:
           # Outputs
           $timestamp = Get-Date -Format 'yyyy-MM-ddTHH:mm:ssZ'
           $shortSha = $env:GITHUB_SHA.Substring(0,7)
-
-          # 🔥 FIX: Use stable run_id instead of run_attempt
           $buildId = "${{ github.run_id }}"
 
           # FIX: Use single quotes to prevent JSON escaping issues
