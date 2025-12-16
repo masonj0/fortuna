@@ -155,10 +155,10 @@ jobs:
 
           # Resource warnings
           if ($diskFreeGB -lt 10) {
-            Write-Host "::warning::Low disk space: Only $diskFreeGB GB free"
+            Write-Host '::warning::Low disk space: Only $diskFreeGB GB free'
           }
           if ($ramFreeGB -lt 2) {
-            Write-Host "::warning::Low memory: Only $ramFreeGB GB free"
+            Write-Host '::warning::Low memory: Only $ramFreeGB GB free'
           }
 
           # Outputs
