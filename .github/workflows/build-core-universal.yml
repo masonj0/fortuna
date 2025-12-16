@@ -5,43 +5,52 @@ on:
     inputs:
       # --- VERSIONING ---
       node_version:
-        description: 'Node.js version to use'
+        description: 'Node.js version to use for the build'
+        required: false
         type: string
         default: '20'
       python_version:
-        description: 'Python version to use'
+        description: 'Python version to use for the build'
+        required: false
         type: string
         default: '3.11'
       wix_version:
-        description: 'WiX Toolset version'
+        description: 'Version of the WiX Toolset to install'
+        required: false
         type: string
         default: '4.0.5'
 
       # --- FEATURE TOGGLES ---
       enable_dietician:
-        description: 'Run pre-package size analysis'
+        description: 'If true, runs a pre-package size analysis job'
+        required: false
         type: boolean
         default: false
       enable_canary:
-        description: 'Run Windows Defender malware scan'
+        description: 'If true, runs a Windows Defender malware scan on the MSI'
+        required: false
         type: boolean
         default: false
       enable_paparazzi:
-        description: 'Run Playwright visual verification'
+        description: 'If true, runs a Playwright-based visual verification test'
+        required: false
         type: boolean
         default: false
       enable_forensics:
-        description: 'Run deep asset verification pre-flight'
+        description: 'If true, runs a deep asset verification pre-flight job'
+        required: false
         type: boolean
         default: false
 
       # --- CONFIG ---
       service_port:
-        description: 'Localhost port for the backend service'
+        description: 'The localhost port to use for the backend service during smoke tests'
+        required: false
         type: string
         default: '8102'
       skip_tests:
-        description: 'Skip heavy unit tests'
+        description: 'If true, skips running the unit test suite'
+        required: false
         type: boolean
         default: false
 
@@ -403,7 +412,7 @@ jobs:
             Write-Host "   ✅ Valid SemVer format"
           } else {
             Write-Host "   ⚠️ Non-standard version format: $semver"
-            Write-Host "::warning::Version '$semver' does not follow standard SemVer"
+            Write-Host "::warning::Version `$semver` does not follow standard SemVer"
           }
 
           Write-Host ""
@@ -437,7 +446,7 @@ jobs:
           @echo ════════════════════════════════════════════════════════════
           @echo  Runner stabilization checkpoint - preventing shell crash
           @echo ════════════════════════════════════════════════════════════
-          timeout /t 2 /nobreak >nul
+          timeout /t 2 /nobreak
 
       # -------------------------------------------------------
       # CORE ASSET VERIFICATION (Always runs)
