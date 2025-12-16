@@ -1,0 +1,348 @@
+name: 🚀 Supreme Combo Build (MSI)
+
+on:
+  push:
+    branches: ["main"]
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      skip_tests:
+        description: 'Skip heavy tests?'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '20'
+  PYTHON_VERSION: '3.11' # 3.12 breaks some x86 wheels
+  DOTNET_VERSION: '8.0.x'
+  WIX_VERSION: '4.0.5'
+  SERVICE_PORT: '8102'
+
+  # Mock credentials for smoke tests to prevent crashes
+  API_KEY: mock_key
+  TVG_API_KEY: mock
+  GREYHOUND_API_URL: http://mock
+  FORTUNA_ENV: smoke-test
+
+jobs:
+  # =========================================================
+  # PHASE 1: PRE-FLIGHT & INTEGRITY
+  # =========================================================
+  preflight-check:
+    name: 🔍 System & Asset Preflight
+    runs-on: windows-latest
+    outputs:
+      semver: ${{ steps.git_version.outputs.semver }}
+      build_id: ${{ steps.git_version.outputs.build_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🏷️ Derive SemVer & Build ID
+        id: git_version
+        shell: pwsh
+        run: |
+          $tag = git describe --tags --abbrev=0 2>$null
+          if (-not $tag) { $tag = "0.0.0" }
+          $tag = $tag -replace "^v", ""
+          $run = "${{ github.run_number }}"
+          echo "semver=$tag" >> $env:GITHUB_OUTPUT
+          echo "build_id=$run" >> $env:GITHUB_OUTPUT
+          Write-Host "Build Version: $tag.$run"
+
+      - name: 🔎 Forensic Asset Verification (GPT5)
+        shell: pwsh
+        run: |
+          $critical = @("web_platform/frontend/package.json", "web_service/backe
+nd/requirements.txt", "build_wix/Product_WithService.wxs")
+          foreach ($file in $critical) {
+            if (-not (Test-Path $file)) {
+              Write-Error "❌ FATAL: Missing critical asset: $file"; exit 1
+            }
+            $hash = (Get-FileHash $file).Hash
+            Write-Host "✅ Verified: $file ($hash)"
+          }
+
+  # =========================================================
+  # PHASE 2: PARALLEL BUILDS (Matrix Architecture)
+  # =========================================================
+  build-backend:
+    name: 🐍 Build Backend (${{ matrix.arch }})
+    needs: [preflight-check, build-frontend]
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        arch: [x64, x86]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: web_platform/frontend/out
+
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          architecture: ${{ matrix.arch }}
+          cache: 'pip'
+
+      - name: 🧾 Create Architecture Constraints (Revived)
+        id: constraints
+        shell: pwsh
+        run: |
+          $file = "constraints.txt"
+          if ('${{ matrix.arch }}' -eq 'x86') {
+            Write-Host "🛡️ ACTIVATING X86 SAFE MODE"
+            "numpy==1.23.5`r`npandas==1.5.3" | Set-Content $file
+          } else {
+            New-Item $file -ItemType File -Force
+          }
+          echo "file=$file" >> $env:GITHUB_OUTPUT
+
+      - name: 📦 Install Dependencies
+        run: |
+          pip install -r web_service/backend/requirements.txt -c ${{ steps.const
+raints.outputs.file }}
+          pip install pyinstaller
+
+      - name: 🧪 Backend Quality Gate (Fail Fast)
+        if: matrix.arch == 'x64' && !inputs.skip_tests
+        run: |
+          python -m compileall web_service/backend -q
+
+      - name: 🏗️ Build Binary (PyInstaller)
+        shell: pwsh
+        run: |
+          # CRITICAL: Hidden imports for Windows Service (Subroutine #6)
+          pyinstaller --noconfirm --onedir --clean `
+            --name fortuna-backend `
+            --hidden-import=win32timezone `
+            --hidden-import=win32serviceutil `
+            --hidden-import=win32service `
+            --hidden-import=win32event `
+            --add-data "web_service/backend;backend" `
+            --add-data "web_platform/frontend/out;ui" `
+            web_service/backend/service_entry.py
+
+      - name: 📤 Upload Backend Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-dist-${{ matrix.arch }}
+          path: dist/fortuna-backend
+          retention-days: 1
+
+  build-frontend:
+    name: ⚛️ Build Frontend
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 🟢 Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: web_platform/frontend/package-lock.json
+
+      - name: 🏗️ Build Next.js/React
+        working-directory: web_platform/frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: 📤 Upload Frontend Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: web_platform/frontend/out
+          retention-days: 1
+
+  # =========================================================
+  # PHASE 3: PACKAGE MSI (The Dietician & The Canary)
+  # =========================================================
+  package-msi:
+    name: 📦 Package MSI (${{ matrix.arch }})
+    needs: [build-backend]
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        arch: [x64, x86]
+    steps:
+      - uses: actions/checkout@v4
+
+      # Download Artifacts
+      - uses: actions/download-artifact@v4
+        with:
+          name: backend-dist-${{ matrix.arch }}
+          path: staging/backend
+
+      - name: 📝 Inject Restart Script (Revived)
+        shell: cmd
+        run: |
+          echo @echo off > staging\\backend\\restart_service.bat
+          echo net stop FortunaWebService >> staging\\backend\\restart_service.b
+at
+          echo net start FortunaWebService >> staging\\backend\\restart_service.
+bat
+
+      - name: ⚖️ The Dietician (Size Analysis)
+        shell: pwsh
+        run: |
+          $size = (Get-ChildItem staging -Recurse | Measure-Object -Property Len
+gth -Sum).Sum / 1MB
+          Write-Host "📊 Total Payload: $([math]::Round($size, 2)) MB"
+          if ($size -gt 300) { Write-Warning "⚠️ BLOAT ALERT: Payload exceeds 30
+0MB!" }
+
+      - name: 🔧 Setup WiX
+        run: dotnet tool install --global wix --version ${{ env.WIX_VERSION }}
+
+      - name: 🏗️ Build MSI
+        shell: pwsh
+        run: |
+          $arch = "${{ matrix.arch }}"
+          wix build build_wix/Product_WithService.wxs `
+            -arch $arch `
+            -o "Fortuna-${arch}.msi" `
+            -d Version="${{ needs.preflight-check.outputs.semver }}" `
+            -d SourceDir="staging/backend" `
+            -d Platform=$arch
+
+      - name: 🦜 The Canary (Malware Scan)
+        shell: pwsh
+        run: |
+          $msi = "Fortuna-${{ matrix.arch }}.msi"
+          if (Test-Path "C:\\Program Files\\Windows Defender\\MpCmdRun.exe") {
+            Write-Host "🛡️ Scanning $msi with Windows Defender..."
+            & "C:\\Program Files\\Windows Defender\\MpCmdRun.exe" -Scan -ScanTyp
+e 3 -File "$pwd\\$msi"
+            if ($LASTEXITCODE -ne 0) { throw "🦠 MALWARE DETECTED in MSI!" }
+          }
+
+      - name: 📤 Upload MSI
+        uses: actions/upload-artifact@v4
+        with:
+          name: msi-${{ matrix.arch }}
+          path: Fortuna-${{ matrix.arch }}.msi
+
+  # =========================================================
+  # PHASE 4: SMOKE TEST (Paparazzi & CSI)
+  # =========================================================
+  smoke-test:
+    name: 🚬 Smoke Test (${{ matrix.arch }})
+    needs: package-msi
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        arch: [x64, x86]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4 # Needed for Playwright
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: msi-${{ matrix.arch }}
+
+      - name: 🧹 Pre-Install Cleanup
+        shell: pwsh
+        run: |
+          sc.exe delete "FortunaWebService" *>$null; Start-Sleep 2
+
+      - name: 💿 Install MSI
+        shell: pwsh
+        run: |
+          $msi = "Fortuna-${{ matrix.arch }}.msi"
+          Start-Process msiexec.exe -ArgumentList "/i $msi /quiet /norestart" -W
+ait
+          Start-Sleep 10 # Give service time to register
+
+      - name: 🔍 Dynamic Path Verification (Revived)
+        shell: pwsh
+        run: |
+          $progFiles = if ('${{ matrix.arch }}' -eq 'x86') { ${env:ProgramFiles(
+x86)} } else { $env:ProgramFiles }
+          $installRoot = Join-Path $progFiles "Fortuna Faucet Service"
+          if (-not (Test-Path $installRoot)) { throw "❌ Install dir not found at
+ $installRoot" }
+          Write-Host "✅ Found install at $installRoot"
+          New-Item -Path "$installRoot\data", "$installRoot\json", "$installRoot
+\logs" -ItemType Directory -Force | Out-Null
+          Start-Service "FortunaWebService"
+          Start-Sleep 10
+
+      - name: 🩺 Health Check
+        shell: pwsh
+        run: |
+          for ($i=0; $i -lt 5; $i++) {
+            try {
+              $resp = Invoke-RestMethod "http://127.0.0.1:${{ env.SERVICE_PORT }
+}/health" -ErrorAction Stop
+              if ($resp.status -eq "ok") { Write-Host "✅ Service Healthy"; retur
+n }
+            } catch { Write-Host "⏳ Waiting for service..." }
+            Start-Sleep 5
+          }
+          throw "❌ Service failed to respond"
+
+      - name: 📸 Paparazzi (Visual Proof)
+        shell: pwsh
+        run: |
+          npm install playwright
+          npx playwright install chromium --with-deps
+          $url = "http://127.0.0.1:${{ env.SERVICE_PORT }}/docs"
+          node -e "const { chromium } = require('playwright'); (async () => {
+            const browser = await chromium.launch();
+            const page = await browser.newPage();
+            try {
+              await page.goto('$url', {timeout: 15000});
+              await page.screenshot({ path: 'proof.png' });
+            } catch(e) { console.error(e); process.exit(1); }
+            await browser.close();
+          })();"
+
+      - name: '🕵️ CSI: Windows Post-Mortem (On Failure)'
+        if: failure()
+        shell: pwsh
+        run: |
+          Get-Process | Where-Object { $_.ProcessName -match "fortuna" }
+          Get-EventLog -LogName Application -Newest 50 -EntryType Error,Warning
+
+      - name: 📤 Upload Proof
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-proof-${{ matrix.arch }}
+          path: proof.png
+
+  # =========================================================
+  # PHASE 5: RELEASE
+  # =========================================================
+  release:
+    name: 🚀 Publish Release
+    needs: smoke-test
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: msi-*
+          merge-multiple: true
+          path: release_assets
+
+      - name: 🔏 Generate Checksums
+        run: |
+          cd release_assets
+          sha256sum *.msi > SHASUMS256.txt
+
+      - name: 📦 Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release_assets/*
+          generate_release_notes: true
