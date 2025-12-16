@@ -289,7 +289,7 @@ jobs:
   # =========================================================
   ui-proof:
     name: 📸 Paparazzi (${{ matrix.arch }})
-    needs: smoke-test
+    needs: [preflight, smoke-test]
     if: ${{ inputs.enable_paparazzi }}
     runs-on: windows-latest
     timeout-minutes: 15
