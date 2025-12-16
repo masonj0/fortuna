@@ -5,52 +5,43 @@ on:
     inputs:
       # --- VERSIONING ---
       node_version:
-        description: 'Node.js version to use for the build'
-        required: false
+        description: 'Node.js version to use'
         type: string
         default: '20'
       python_version:
-        description: 'Python version to use for the build'
-        required: false
+        description: 'Python version to use'
         type: string
         default: '3.11'
       wix_version:
-        description: 'Version of the WiX Toolset to install'
-        required: false
+        description: 'WiX Toolset version'
         type: string
         default: '4.0.5'
 
       # --- FEATURE TOGGLES ---
       enable_dietician:
-        description: 'If true, runs a pre-package size analysis job'
-        required: false
+        description: 'Run pre-package size analysis'
         type: boolean
         default: false
       enable_canary:
-        description: 'If true, runs a Windows Defender malware scan on the MSI'
-        required: false
+        description: 'Run Windows Defender malware scan'
         type: boolean
         default: false
       enable_paparazzi:
-        description: 'If true, runs a Playwright-based visual verification test'
-        required: false
+        description: 'Run Playwright visual verification'
         type: boolean
         default: false
       enable_forensics:
-        description: 'If true, runs a deep asset verification pre-flight job'
-        required: false
+        description: 'Run deep asset verification pre-flight'
         type: boolean
         default: false
 
       # --- CONFIG ---
       service_port:
-        description: 'The localhost port to use for the backend service during smoke tests'
-        required: false
+        description: 'Localhost port for the backend service'
         type: string
         default: '8102'
       skip_tests:
-        description: 'If true, skips running the unit test suite'
-        required: false
+        description: 'Skip heavy unit tests'
         type: boolean
         default: false
 
@@ -88,6 +79,8 @@ jobs:
       is_tag: ${{ steps.env.outputs.is_tag }}
       branch: ${{ steps.env.outputs.branch }}
       diagnostics_passed: ${{ steps.summary.outputs.passed }}
+      # 🔥 FIX: Export stable build_id
+      build_id: ${{ steps.env.outputs.build_id }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -102,68 +95,12 @@ jobs:
         run: |
           Write-Host '::group::🖥️ Runner Environment'
 
-          $diag = @{
-            runner = @{
-              os = $env:RUNNER_OS
-              arch = $env:PROCESSOR_ARCHITECTURE
-              name = $env:RUNNER_NAME
-              temp = $env:RUNNER_TEMP
-              workspace = $env:GITHUB_WORKSPACE
-            }
-            workflow = @{
-              event = $env:GITHUB_EVENT_NAME
-              ref = $env:GITHUB_REF
-              sha = $env:GITHUB_SHA
-              actor = $env:GITHUB_ACTOR
-              run_id = $env:GITHUB_RUN_ID
-              run_number = $env:GITHUB_RUN_NUMBER
-            }
-          }
-
-          Write-Host '┌─────────────────────────────────────────────────────────────┐'
-          Write-Host '│                    RUNNER INFO                              │'
-          Write-Host '├─────────────────────────────────────────────────────────────┤'
-          Write-Host "│ OS:        $($diag.runner.os.PadRight(47)) │"
-          Write-Host "│ Arch:      $($diag.runner.arch.PadRight(47)) │"
-          Write-Host "│ Name:      $($diag.runner.name.PadRight(47)) │"
-          Write-Host '└─────────────────────────────────────────────────────────────┘'
-
-          # System Resources
-          Write-Host "`n┌─────────────────────────────────────────────────────────────┐"
-          Write-Host '│                  SYSTEM RESOURCES                           │'
-          Write-Host '├─────────────────────────────────────────────────────────────┤'
-
-          $disk = Get-PSDrive C
-          $diskFreeGB = [math]::Round($disk.Free/1GB, 2)
-          $diskUsedGB = [math]::Round($disk.Used/1GB, 2)
-          $diskTotalGB = $diskFreeGB + $diskUsedGB
-          $diskPct = [math]::Round(($diskUsedGB / $diskTotalGB) * 100, 1)
-
-          $ram = Get-CimInstance Win32_OperatingSystem
-          $ramTotalGB = [math]::Round($ram.TotalVisibleMemorySize/1MB, 2)
-          $ramFreeGB = [math]::Round($ram.FreePhysicalMemory/1MB, 2)
-          $ramUsedGB = $ramTotalGB - $ramFreeGB
-          $ramPct = [math]::Round(($ramUsedGB / $ramTotalGB) * 100, 1)
-
-          $cpuInfo = Get-CimInstance Win32_Processor | Select-Object -First 1
-
-          Write-Host "│ CPU:       $($cpuInfo.Name.Substring(0, [Math]::Min(47, $cpuInfo.Name.Length)).PadRight(47)) │"
-          Write-Host "│ Cores:     $($("$($cpuInfo.NumberOfCores) cores / $($cpuInfo.NumberOfLogicalProcessors) threads").PadRight(47)) │"
-          Write-Host "│ RAM:       $($("$ramFreeGB GB free / $ramTotalGB GB total ($ramPct% used)").PadRight(47)) │"
-          Write-Host "│ Disk (C:): $($("$diskFreeGB GB free / $diskTotalGB GB total ($diskPct% used)").PadRight(47)) │"
-          Write-Host '└─────────────────────────────────────────────────────────────┘'
-
-          # Resource warnings
-          if ($diskFreeGB -lt 10) {
-            Write-Host '::warning::Low disk space: Only $diskFreeGB GB free'
-          }
-          if ($ramFreeGB -lt 2) {
-            Write-Host '::warning::Low memory: Only $ramFreeGB GB free'
-          }
-
           # Outputs
           $timestamp = Get-Date -Format 'yyyy-MM-ddTHH:mm:ssZ'
           $shortSha = $env:GITHUB_SHA.Substring(0,7)
+
+          # 🔥 FIX: Use stable run_id instead of run_attempt
+          $buildId = "${{ github.run_id }}"
 
           # FIX: Use single quotes to prevent JSON escaping issues
           $isTag = 'false'
@@ -177,155 +114,7 @@ jobs:
           "short_sha=$shortSha" >> $env:GITHUB_OUTPUT
           "is_tag=$isTag" >> $env:GITHUB_OUTPUT
           "branch=$branch" >> $env:GITHUB_OUTPUT
-
-          Write-Host '::endgroup::'
-
-      # -------------------------------------------------------
-      # INPUT VALIDATION
-      # -------------------------------------------------------
-      - name: ✅ Input Validation
-        id: inputs
-        shell: pwsh
-        run: |
-          Write-Host '::group::✅ Input Validation'
-
-          $errors = [System.Collections.ArrayList]@()
-          $warnings = [System.Collections.ArrayList]@()
-
-          Write-Host '┌─────────────────────────────────────────────────────────────┐'
-          Write-Host '│                   INPUT PARAMETERS                          │'
-          Write-Host '├─────────────────────────────────────────────────────────────┤'
-
-          # Node version
-          $nodeVer = "${{ inputs.node_version }}"
-          $nodeValid = $nodeVer -match '^\d+(\.\d+)?(\.\d+)?$'
-          $nodeIcon = if ($nodeValid) { '✅' } else { '❌' }
-          Write-Host "│ $nodeIcon Node Version:    $($nodeVer.PadRight(43)) │"
-          if (-not $nodeValid) { [void]$errors.Add("Invalid node_version: $nodeVer") }
-
-          # Python version
-          $pyVer = "${{ inputs.python_version }}"
-          $pyValid = $pyVer -match '^\d+\.\d+(\.\d+)?$'
-          $pyIcon = if ($pyValid) { '✅' } else { '❌' }
-          Write-Host "│ $pyIcon Python Version:  $($pyVer.PadRight(43)) │"
-          if (-not $pyValid) { [void]$errors.Add("Invalid python_version: $pyVer") }
-
-          # WiX version
-          $wixVer = "${{ inputs.wix_version }}"
-          $wixValid = $wixVer -match '^\d+\.\d+\.\d+$'
-          $wixIcon = if ($wixValid) { '✅' } else { '❌' }
-          Write-Host "│ $wixIcon WiX Version:     $($wixVer.PadRight(43)) │"
-          if (-not $wixValid) { [void]$errors.Add("Invalid wix_version: $wixVer") }
-
-          # Port validation
-          $port = "${{ inputs.service_port }}"
-          $portNum = 0
-          $portValid = [int]::TryParse($port, [ref]$portNum) -and $portNum -ge 1 -and $portNum -le 65535
-          $portIcon = if ($portValid) { '✅' } else { '❌' }
-          Write-Host "│ $portIcon Service Port:   $($port.PadRight(43)) │"
-          if (-not $portValid) {
-            [void]$errors.Add("Invalid service_port: $port (must be 1-65535)")
-          } elseif ($portNum -lt 1024) {
-            [void]$warnings.Add("Port $port is privileged (<1024)")
-          } elseif ($portNum -lt 49152) {
-            # Check for common conflicts
-            $commonPorts = @{ 8080='HTTP-Alt'; 3000='Dev Server'; 5000='Flask'; 8000='Django' }
-            if ($commonPorts.ContainsKey($portNum)) {
-              [void]$warnings.Add("Port $port commonly used by $($commonPorts[$portNum])")
-            }
-          }
-
-          Write-Host '├─────────────────────────────────────────────────────────────┤'
-          Write-Host '│                   FEATURE TOGGLES                           │'
-          Write-Host '├─────────────────────────────────────────────────────────────┤'
-
-          $features = @(
-            @{ name = 'Dietician'; value = "${{ inputs.enable_dietician }}" },
-            @{ name = 'Canary'; value = "${{ inputs.enable_canary }}" },
-            @{ name = 'Paparazzi'; value = "${{ inputs.enable_paparazzi }}" },
-            @{ name = 'Forensics'; value = "${{ inputs.enable_forensics }}" },
-            @{ name = 'Skip Tests'; value = "${{ inputs.skip_tests }}" }
-          )
-
-          foreach ($f in $features) {
-            $icon = if ($f.value -eq 'true') { '🟢' } else { '⚪' }
-            $status = if ($f.value -eq 'true') { 'ENABLED' } else { 'disabled' }
-            Write-Host "│ $icon $($f.name.PadRight(14)): $($status.PadRight(41)) │"
-          }
-
-          Write-Host '└─────────────────────────────────────────────────────────────┘'
-
-          # Report warnings and errors
-          if ($warnings.Count -gt 0) {
-            Write-Host "`n⚠️ WARNINGS ($($warnings.Count)):"
-            foreach ($w in $warnings) {
-              Write-Host "  • $w"
-              Write-Host "::warning::$w"
-            }
-          }
-
-          if ($errors.Count -gt 0) {
-            Write-Host "`n❌ ERRORS ($($errors.Count)):" -ForegroundColor Red
-            foreach ($e in $errors) {
-              Write-Host "  • $e" -ForegroundColor Red
-              Write-Host "::error::$e"
-            }
-            throw "Input validation failed with $($errors.Count) error(s)"
-          }
-
-          Write-Host "`n✅ All inputs validated successfully"
-          Write-Host '::endgroup::'
-
-      # -------------------------------------------------------
-      # TOOL CHAIN VERIFICATION
-      # -------------------------------------------------------
-      - name: 🔧 Tool Chain Verification
-        shell: pwsh
-        run: |
-          Write-Host '::group::🔧 Tool Chain Verification'
-
-          Write-Host '┌─────────────────────────────────────────────────────────────┐'
-          Write-Host '│                   INSTALLED TOOLS                           │'
-          Write-Host '├──────────────────┬──────────────────────────────────────────┤'
-          Write-Host '│ Tool             │ Version / Status                         │'
-          Write-Host '├──────────────────┼──────────────────────────────────────────┤'
-
-          $tools = @(
-            @{ name = 'git'; cmd = 'git --version'; parse = { $args[0] -replace 'git version ','' } },
-            @{ name = 'dotnet'; cmd = 'dotnet --version'; parse = { $args[0] } },
-            @{ name = 'msiexec'; cmd = 'msiexec /?'; parse = { 'Available (Windows Installer)' } },
-            @{ name = 'sc.exe'; cmd = 'sc.exe query type= service'; parse = { 'Available (Service Control)' } },
-            @{ name = 'PowerShell'; cmd = '$PSVersionTable.PSVersion.ToString()'; parse = { $args[0] } },
-            @{ name = 'Windows SDK'; cmd = 'if (Test-Path "C:\\Program Files (x86)\\Windows Kits\\10") { "Installed" } else { "Not Found" }'; parse = { $args[0] } }
-          )
-
-          $toolStatus = @{}
-          foreach ($tool in $tools) {
-            try {
-              $result = Invoke-Expression $tool.cmd 2>&1 | Select-Object -First 1
-              $version = & $tool.parse $result
-              $icon = '✅'
-              $toolStatus[$tool.name] = $true
-            } catch {
-              $version = 'NOT AVAILABLE'
-              $icon = '❌'
-              $toolStatus[$tool.name] = $false
-            }
-            Write-Host "│ $icon $($tool.name.PadRight(14)) │ $($version.ToString().PadRight(40)) │"
-          }
-
-          Write-Host '└──────────────────┴──────────────────────────────────────────┘'
-
-          # .NET SDKs detail
-          Write-Host "`n📦 .NET SDKs Installed:"
-          dotnet --list-sdks 2>$null | ForEach-Object { Write-Host "   $_" }
-
-          # Check for critical tool failures
-          $criticalTools = @('git', 'dotnet', 'msiexec')
-          $missingCritical = $criticalTools | Where-Object { -not $toolStatus[$_] }
-          if ($missingCritical) {
-            throw "Critical tools missing: $($missingCritical -join ', ')"
-          }
+          "build_id=$buildId" >> $env:GITHUB_OUTPUT
 
           Write-Host '::endgroup::'
 
@@ -341,112 +130,24 @@ jobs:
           # Ensure we have all tags
           git fetch --prune --unshallow --tags 2>$null
 
-          Write-Host '┌─────────────────────────────────────────────────────────────┐'
-          Write-Host '│                    GIT STATE                                │'
-          Write-Host '├─────────────────────────────────────────────────────────────┤'
-
-          $branch = git rev-parse --abbrev-ref HEAD 2>$null
-          $commit = git rev-parse HEAD 2>$null
-          $shortSha = git rev-parse --short HEAD 2>$null
-          $commitCount = git rev-list --count HEAD 2>$null
-          $lastCommitMsg = git log -1 --pretty=format:"%s" 2>$null
-          $lastCommitAuthor = git log -1 --pretty=format:"%an" 2>$null
-          $lastCommitDate = git log -1 --pretty=format:"%ci" 2>$null
-
-          Write-Host "│ Branch:      $($branch.PadRight(45)) │"
-          Write-Host "│ Commit:      $($shortSha.PadRight(45)) │"
-          Write-Host "│ Full SHA:    $($commit.Substring(0,40).PadRight(45)) │"
-          Write-Host "│ Total:       $("$commitCount commits").PadRight(45) │"
-          Write-Host '├─────────────────────────────────────────────────────────────┤'
-          Write-Host "│ Last Commit: $($lastCommitMsg.Substring(0, [Math]::Min(45, $lastCommitMsg.Length)).PadRight(45)) │"
-          Write-Host "│ Author:      $($lastCommitAuthor.PadRight(45)) │"
-          Write-Host "│ Date:        $($lastCommitDate.PadRight(45)) │"
-          Write-Host '└─────────────────────────────────────────────────────────────┘'
-
-          # Tag analysis
-          Write-Host "`n┌─────────────────────────────────────────────────────────────┐"
-          Write-Host '│                   TAG ANALYSIS                              │'
-          Write-Host '├─────────────────────────────────────────────────────────────┤'
-
-          $allTags = git tag --list 2>$null
-          $tagCount = if ($allTags) { ($allTags -split "`n" | Where-Object { $_ }).Count } else { 0 }
-
-          Write-Host "│ Total Tags: $($tagCount.ToString().PadRight(46)) │"
-
-          if ($tagCount -gt 0) {
-            Write-Host '├─────────────────────────────────────────────────────────────┤'
-            Write-Host '│ Recent Tags (newest first):                                 │'
-            $recentTags = git tag --list --sort=-version:refname 2>$null | Select-Object -First 5
-            foreach ($t in $recentTags) {
-              Write-Host "│   • $($t.PadRight(53)) │"
-            }
-          }
-          Write-Host '└─────────────────────────────────────────────────────────────┘'
-
           # Version detection
-          Write-Host "`n🔢 VERSION DETECTION:"
           $tag = git describe --tags --abbrev=0 2>$null
-          $descFull = git describe --tags --always 2>$null
-          $commitsAhead = 0
-
           if ([string]::IsNullOrEmpty($tag)) {
-            Write-Host "   ⚠️ No tags found in repository"
-            Write-Host "   📦 Using fallback version: v0.0.0"
-            Write-Host '::warning::No git tags found. Using default version v0.0.0'
             $tag = "v0.0.0"
-          } else {
-            Write-Host "   Latest Tag: $tag"
-            Write-Host "   Full Describe: $descFull"
-
-            # Check commits ahead of tag
-            $commitsAhead = git rev-list "$tag..HEAD" --count 2>$null
-            if ($commitsAhead -gt 0) {
-              Write-Host "   ⚠️ $commitsAhead commit(s) ahead of latest tag"
-            }
           }
 
           $semver = $tag -replace '^v',''
-
-          # Validate semver
-          if ($semver -match '^\\d+\\.\\d+\\.\\d+(-[a-zA-Z0-9.-]+)?(\\+[a-zA-Z0-9.-]+)?$') {
-            Write-Host "   ✅ Valid SemVer format"
-          } else {
-            Write-Host "   ⚠️ Non-standard version format: $semver"
-            Write-Host "::warning::Version `$semver` does not follow standard SemVer"
-          }
-
-          Write-Host ""
-          Write-Host "   ╔═══════════════════════════════════════╗"
-          Write-Host "   ║  📦 BUILD VERSION: $($semver.PadRight(18)) ║"
-          Write-Host "   ╚═══════════════════════════════════════╝"
-
           "semver=$semver" >> $env:GITHUB_OUTPUT
-
-          # Dirty state check
-          Write-Host "`n🧹 WORKING DIRECTORY STATUS:"
-          $status = git status --porcelain 2>$null
-          if ($status) {
-            $changedFiles = ($status -split "`n" | Where-Object { $_ }).Count
-            Write-Host "   ⚠️ $changedFiles uncommitted change(s) detected:"
-            $status -split "`n" | Select-Object -First 5 | ForEach-Object {
-              Write-Host "      $_"
-            }
-            if ($changedFiles -gt 5) {
-              Write-Host "      ... and $($changedFiles - 5) more"
-            }
-          } else {
-            Write-Host "   ✅ Working directory is clean"
-          }
 
           Write-Host '::endgroup::'
 
       - name: ✨ Runner Stabilization
-        shell: pwsh
+        shell: cmd
         run: |
-          Write-Host "════════════════════════════════════════════════════════════"
-          Write-Host "  Runner stabilization checkpoint - 2 second pause"
-          Write-Host "════════════════════════════════════════════════════════════"
-          Start-Sleep -Seconds 2
+          @echo ════════════════════════════════════════════════════════════
+          @echo  Runner stabilization checkpoint - preventing shell crash
+          @echo ════════════════════════════════════════════════════════════
+          timeout /t 2 /nobreak >nul
 
       # -------------------------------------------------------
       # CORE ASSET VERIFICATION (Always runs)
@@ -465,325 +166,14 @@ jobs:
             @{ path = "build_wix/Product_WithService.wxs"; desc = "WiX installer definition" }
           )
 
-          $optionalAssets = @(
-            @{ path = ".github/workflows"; desc = "GitHub Actions workflows" },
-            @{ path = "README.md"; desc = "Project documentation" },
-            @{ path = "LICENSE"; desc = "License file" },
-            @{ path = ".gitignore"; desc = "Git ignore rules" },
-            @{ path = "tests"; desc = "Test suite" }
-          )
-
-          $missing = @()
-
-          Write-Host '┌─────────────────────────────────────────────────────────────┐'
-          Write-Host '│                CRITICAL ASSETS                              │'
-          Write-Host '├─────────────────────────────────────────────────────────────┤'
-
           foreach ($asset in $criticalAssets) {
-            if (Test-Path $asset.path) {
-              $item = Get-Item $asset.path
-              if ($item.PSIsContainer) {
-                $size = "directory"
-                $files = (Get-ChildItem $asset.path -Recurse -File | Measure-Object).Count
-                $size = "$files files"
-              } else {
-                $bytes = $item.Length
-                $size = switch ($bytes) {
-                  { $_ -lt 1KB } { "$bytes B" }
-                  { $_ -lt 1MB } { "{0:N1} KB" -f ($_ / 1KB) }
-                  default { "{0:N1} MB" -f ($_ / 1MB) }
-                }
-              }
-              Write-Host "│ ✅ $($asset.path.PadRight(35)) ($size)"
-            } else {
-              Write-Host "│ ❌ $($asset.path.PadRight(35)) MISSING!" -ForegroundColor Red
-              $missing += $asset
+            if (-not (Test-Path $asset.path)) {
+              Write-Host "::error file=$($asset.path)::Missing critical asset: $($asset.desc)"
+              throw "Missing critical assets: $($asset.path)"
             }
-          }
-
-          Write-Host '├─────────────────────────────────────────────────────────────┤'
-          Write-Host '│                OPTIONAL ASSETS                              │'
-          Write-Host '├─────────────────────────────────────────────────────────────┤'
-
-          foreach ($asset in $optionalAssets) {
-            if (Test-Path $asset.path) {
-              Write-Host "│ ✅ $($asset.path.PadRight(35)) present"
-            } else {
-              Write-Host "│ ⚪ $($asset.path.PadRight(35)) not found" -ForegroundColor Gray
-            }
-          }
-
-          Write-Host '└─────────────────────────────────────────────────────────────┘'
-
-          if ($missing.Count -gt 0) {
-            Write-Host ""
-            Write-Host "╔═══════════════════════════════════════════════════════════════╗" -ForegroundColor Red
-            Write-Host "║  ❌ FATAL: Missing $($missing.Count) critical asset(s)!                        ║" -ForegroundColor Red
-            Write-Host "╠═══════════════════════════════════════════════════════════════╣" -ForegroundColor Red
-            foreach ($m in $missing) {
-              Write-Host "║  • $($m.path.PadRight(30)) - $($m.desc.PadRight(20)) ║" -ForegroundColor Red
-              Write-Host "::error file=$($m.path)::Missing critical asset: $($m.desc)"
-            }
-            Write-Host "╚═══════════════════════════════════════════════════════════════╝" -ForegroundColor Red
-            throw "Missing critical assets: $($missing.path -join ', ')"
           }
 
           Write-Host "`n✅ All critical assets verified"
-          Write-Host '::endgroup::'
-
-      # -------------------------------------------------------
-      # EXTENDED FORENSICS (Optional - Deep Analysis)
-      # -------------------------------------------------------
-      - name: 🔬 Extended Forensics
-        if: ${{ inputs.enable_forensics == true }}
-        shell: pwsh
-        run: |
-          Write-Host '::group::🔬 Extended Forensics Analysis'
-
-          # ======= ELECTRON PACKAGE ANALYSIS =======
-          Write-Host '┌─────────────────────────────────────────────────────────────┐'
-          Write-Host '│            ELECTRON PACKAGE ANALYSIS                        │'
-          Write-Host '└─────────────────────────────────────────────────────────────┘'
-
-          $pkg = Get-Content "electron/package.json" -Raw | ConvertFrom-Json
-
-          Write-Host "  Name:    $($pkg.name)"
-          Write-Host "  Version: $($pkg.version)"
-          Write-Host "  Main:    $($pkg.main)"
-
-          Write-Host "`n  📜 Available Scripts:"
-          if ($pkg.scripts) {
-            $pkg.scripts.PSObject.Properties | ForEach-Object {
-              $icon = if ($_.Name -eq 'build') { "⭐" } else { "  " }
-              Write-Host "     $icon $($_.Name): $($_.Value)"
-            }
-
-            if (-not $pkg.scripts.build) {
-              Write-Host "     ⚠️ WARNING: No 'build' script defined!" -ForegroundColor Yellow
-              Write-Host "::warning file=electron/package.json::No 'build' script defined in package.json"
-            }
-          }
-
-          Write-Host "`n  📦 Dependencies:"
-          if ($pkg.dependencies) {
-            $depCount = ($pkg.dependencies.PSObject.Properties | Measure-Object).Count
-            Write-Host "     Production: $depCount packages"
-            $pkg.dependencies.PSObject.Properties | Select-Object -First 10 | ForEach-Object {
-              Write-Host "       • $($_.Name)@$($_.Value)"
-            }
-          }
-          if ($pkg.devDependencies) {
-            $devCount = ($pkg.devDependencies.PSObject.Properties | Measure-Object).Count
-            Write-Host "     Development: $devCount packages"
-          }
-
-          # ======= PYTHON REQUIREMENTS ANALYSIS =======
-          Write-Host "`n┌─────────────────────────────────────────────────────────────┐"
-          Write-Host '│            PYTHON REQUIREMENTS ANALYSIS                     │'
-          Write-Host '└─────────────────────────────────────────────────────────────┘'
-
-          $reqs = Get-Content "web_service/backend/requirements.txt"
-          $packages = $reqs | Where-Object { $_ -notmatch '^\\s*(#|$)' }
-          $pkgCount = ($packages | Measure-Object).Count
-
-          Write-Host "  Total packages: $pkgCount"
-          Write-Host "`n  📦 Dependencies:"
-
-          # Categorize packages
-          $pinnedExact = $packages | Where-Object { $_ -match '==' }
-          $pinnedMin = $packages | Where-Object { $_ -match '>=' }
-          $unpinned = $packages | Where-Object { $_ -notmatch '[<>=]' }
-
-          Write-Host "     Pinned (exact): $($pinnedExact.Count)"
-          Write-Host "     Pinned (min):   $($pinnedMin.Count)"
-          Write-Host "     Unpinned:       $($unpinned.Count)"
-
-          if ($unpinned.Count -gt 0) {
-            Write-Host "`n     ⚠️ Unpinned packages (potential reproducibility issues):"
-            $unpinned | Select-Object -First 5 | ForEach-Object { Write-Host "        • $_" }
-          }
-
-          # Check for known problematic packages on Windows
-          $winProblematic = @("pywin32", "win32", "numpy", "pandas", "scipy")
-          $foundProblematic = $packages | Where-Object {
-            $pkg = $_
-            $winProblematic | Where-Object { $pkg -match $_ }
-          }
-          if ($foundProblematic) {
-            Write-Host "`n     📋 Windows-sensitive packages detected:"
-            $foundProblematic | ForEach-Object { Write-Host "        • $_" }
-          }
-
-          # ======= WIX CONFIGURATION ANALYSIS =======
-          Write-Host "`n┌─────────────────────────────────────────────────────────────┐"
-          Write-Host '│              WIX CONFIGURATION ANALYSIS                     │'
-          Write-Host '└─────────────────────────────────────────────────────────────┘'
-
-          $wxsPath = "build_wix/Product_WithService.wxs"
-          $wxs = Get-Content $wxsPath -Raw
-
-          $patterns = @{
-            "UpgradeCode" = 'UpgradeCode="([^\"]+)"'
-            "Product Name" = 'Name="([^\"]+)"'
-            "Manufacturer" = 'Manufacturer="([^\"]+)"'
-            "Version Variable" = 'Version="\\$\\(var\\.([^)]+)\\)"'
-          }
-
-          foreach ($item in $patterns.Keys) {
-            if ($wxs -match $patterns[$item]) {
-              Write-Host "  $item`: $($Matches[1])"
-            }
-          }
-
-          # Check for service configuration
-          if ($wxs -match 'ServiceInstall') {
-            Write-Host "  ✅ Windows Service installation configured"
-          } else {
-            Write-Host "  ⚠️ No ServiceInstall element found" -ForegroundColor Yellow
-          }
-
-          # ======= DIRECTORY STRUCTURE =======
-          Write-Host "`n┌─────────────────────────────────────────────────────────────┐"
-          Write-Host '│              PROJECT STRUCTURE                              │'
-          Write-Host '└─────────────────────────────────────────────────────────────┘'
-
-          function Show-Tree {
-            param([string]$Path, [int]$Indent = 0, [int]$MaxDepth = 2)
-            if ($Indent -ge $MaxDepth) { return }
-
-            Get-ChildItem $Path -ErrorAction SilentlyContinue | ForEach-Object {
-              $prefix = "  " * $Indent
-              if ($_.PSIsContainer) {
-                Write-Host "$prefix📁 $($_.Name)/"
-                Show-Tree $_.FullName ($Indent + 1) $MaxDepth
-              } else {
-                $size = switch ($_.Length) {
-                  { $_ -lt 1KB } { "$($_.Length)B" }
-                  { $_ -lt 1MB } { "{0:N0}KB" -f ($_ / 1KB) }
-                  default { "{0:N1}MB" -f ($_ / 1MB) }
-                }
-                Write-Host "$prefix📄 $($_.Name) ($size)"
-              }
-            }
-          }
-
-          Show-Tree "." 0 2
-
-          Write-Host '::endgroup::'
-
-      # -------------------------------------------------------
-      # SECRET & CREDENTIAL CHECK
-      # -------------------------------------------------------
-      - name: 🔐 Secret Availability Check
-        shell: pwsh
-        env:
-          HAS_API_KEY: ${{ secrets.API_KEY != '' }}
-          HAS_TVG_API_KEY: ${{ secrets.TVG_API_KEY != '' }}
-        run: |
-          Write-Host '::group::🔐 Secret Configuration'
-
-          Write-Host '┌─────────────────────────────────────────────────────────────┐'
-          Write-Host '│               SECRET AVAILABILITY                           │'
-          Write-Host '├──────────────────┬────────────────────────────────────────────┤'
-          Write-Host '│ Secret           │ Status                                     │'
-          Write-Host '├──────────────────┼────────────────────────────────────────────┤'
-
-          $secrets = @(
-            @{ name = "API_KEY"; configured = $env:HAS_API_KEY -eq 'true'; required = $false },
-            @{ name = "TVG_API_KEY"; configured = $env:HAS_TVG_API_KEY -eq 'true'; required = $false }
-          )
-
-          foreach ($s in $secrets) {
-            $status = if ($s.configured) {
-              "✅ Configured"
-            } elseif ($s.required) {
-              "❌ MISSING (Required!)"
-            } else {
-              "⚪ Not configured (Optional)"
-            }
-            Write-Host "│ $($s.name.PadRight(16)) │ $($status.PadRight(42)) │"
-          }
-
-          Write-Host '└──────────────────┴────────────────────────────────────────────┘'
-
-          $missingRequired = $secrets | Where-Object { $_.required -and -not $_.configured }
-          if ($missingRequired) {
-            throw "Missing required secrets: $($missingRequired.name -join ', ')"
-          }
-
-          Write-Host '::endgroup::'
-
-      # -------------------------------------------------------
-      # NETWORK DIAGNOSTICS
-      # -------------------------------------------------------
-      - name: 🌐 Network Diagnostics
-        shell: pwsh
-        run: |
-          Write-Host '::group::🌐 Network Diagnostics'
-
-          Write-Host '┌─────────────────────────────────────────────────────────────┐'
-          Write-Host '│              ENDPOINT CONNECTIVITY                          │'
-          Write-Host '├──────────────────┬──────────────────────────────────────────┤'
-          Write-Host '│ Endpoint         │ Status                                   │'
-          Write-Host '├──────────────────┼──────────────────────────────────────────┤'
-
-          $endpoints = @(
-            @{ name = "GitHub API"; url = "https://api.github.com"; critical = $true },
-            @{ name = "npm Registry"; url = "https://registry.npmjs.org"; critical = $true },
-            @{ name = "PyPI"; url = "https://pypi.org/simple/"; critical = $true },
-            @{ name = "NuGet"; url = "https://api.nuget.org/v3/index.json"; critical = $true }
-          )
-
-          $failures = @()
-
-          foreach ($ep in $endpoints) {
-            try {
-              $start = Get-Date
-              $null = Invoke-WebRequest -Uri $ep.url -Method Head -TimeoutSec 10 -UseBasicParsing
-              $latency = [math]::Round(((Get-Date) - $start).TotalMilliseconds)
-              $status = "✅ OK (${latency}ms)"
-            } catch {
-              $status = "❌ FAILED"
-              if ($ep.critical) { $failures += $ep.name }
-            }
-            Write-Host "│ $($ep.name.PadRight(16)) │ $($status.PadRight(40)) │"
-          }
-
-          Write-Host '└──────────────────┴──────────────────────────────────────────┘'
-
-          # Local port check
-          Write-Host "`n┌─────────────────────────────────────────────────────────────┐"
-          Write-Host '│              LOCAL PORT STATUS                              │'
-          Write-Host '└─────────────────────────────────────────────────────────────┘'
-
-          # FIX: Quoted the input to prevent type coercion errors
-          $port = "${{ inputs.service_port }}"
-          $connections = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue
-
-          if ($connections) {
-            Write-Host "  ⚠️ Port $port is currently IN USE:" -ForegroundColor Yellow
-            $connections | ForEach-Object {
-              $proc = Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue
-              Write-Host "     PID: $($_.OwningProcess) | Process: $($proc.ProcessName) | State: $($_.State)"
-            }
-            Write-Host "::warning::Port $port is already in use on the runner"
-          } else {
-            Write-Host "  ✅ Port $port is available"
-          }
-
-          # DNS resolution check
-          Write-Host "`n  🔍 DNS Resolution:"
-          try {
-            $dns = Resolve-DnsName "github.com" -Type A -DnsOnly -ErrorAction Stop
-            Write-Host "     ✅ github.com resolves to $($dns.IPAddress -join ', ')"
-          } catch {
-            Write-Host "     ❌ DNS resolution failed"
-          }
-
-          if ($failures.Count -gt 0) {
-            Write-Host "::warning::Failed to reach: $($failures -join ', ')"
-          }
-
           Write-Host '::endgroup::'
 
       # -------------------------------------------------------
@@ -793,65 +183,6 @@ jobs:
         id: summary
         shell: pwsh
         run: |
-          Write-Host ""
-          Write-Host "╔═════════════════════════════════════════════════════════════════╗" -ForegroundColor Green
-          Write-Host "║                                                                 ║" -ForegroundColor Green
-          Write-Host "║          ✅  PREFLIGHT DIAGNOSTICS COMPLETE                     ║" -ForegroundColor Green
-          Write-Host "║                                                                 ║" -ForegroundColor Green
-          Write-Host "╠═════════════════════════════════════════════════════════════════╣" -ForegroundColor Green
-          Write-Host "║                                                                 ║" -ForegroundColor Cyan
-          Write-Host "║  📦 VERSION:     $($("${{ steps.ver.outputs.semver }}").PadRight(44)) ║" -ForegroundColor Cyan
-          Write-Host "║  🔖 COMMIT:      $($("${{ steps.env.outputs.short_sha }}").PadRight(44)) ║" -ForegroundColor Cyan
-          Write-Host "║  🌿 BRANCH:      $($("${{ steps.env.outputs.branch }}").PadRight(44)) ║" -ForegroundColor Cyan
-          Write-Host "║  🏷️ IS TAG:      $($("${{ steps.env.outputs.is_tag }}").PadRight(44)) ║" -ForegroundColor Cyan
-          Write-Host "║                                                                 ║" -ForegroundColor Cyan
-          Write-Host "╠═════════════════════════════════════════════════════════════════╣" -ForegroundColor Green
-          Write-Host "║  TOOLCHAIN                                                      ║" -ForegroundColor Yellow
-          Write-Host "║  ├─ Node:   $($("${{ inputs.node_version }}").PadRight(49)) ║" -ForegroundColor White
-          Write-Host "║  ├─ Python: $($("${{ inputs.python_version }}").PadRight(49)) ║" -ForegroundColor White
-          Write-Host "║  └─ WiX:    $($("${{ inputs.wix_version }}").PadRight(49)) ║" -ForegroundColor White
-          Write-Host "║                                                                 ║" -ForegroundColor Cyan
-          Write-Host "║  CONFIGURATION                                                  ║" -ForegroundColor Yellow
-          Write-Host "║  └─ Service Port: $($("${{ inputs.service_port }}").PadRight(43)) ║" -ForegroundColor White
-          Write-Host "║                                                                 ║" -ForegroundColor Cyan
-          Write-Host "╚═════════════════════════════════════════════════════════════════╝" -ForegroundColor Green
-          Write-Host ""
-          Write-Host "🚀 Ready to proceed with build pipeline!" -ForegroundColor Green
-          Write-Host ""
-
-          # --- GitHub Job Summary ---
-          $summary = @"
-          ## 🔍 Preflight Diagnostics Complete
-
-          | Property | Value |
-          |----------|-------|
-          | 📦 **Version** | `${{ steps.ver.outputs.semver }}` |
-          | 🔖 **Commit** | `${{ steps.env.outputs.short_sha }}` |
-          | 🌿 **Branch** | `${{ steps.env.outputs.branch }}` |
-          | 🏷️ **Is Tag** | `${{ steps.env.outputs.is_tag }}` |
-          | ⏰ **Timestamp** | `${{ steps.env.outputs.build_timestamp }}` |
-
-          ### 🛠️ Toolchain
-          | Tool | Version |
-          |------|---------|
-          | Node.js | `${{ inputs.node_version }}` |
-          | Python | `${{ inputs.python_version }}` |
-          | WiX | `${{ inputs.wix_version }}` |
-
-          ### ⚙️ Feature Toggles
-          | Feature | Status |
-          |---------|--------|
-          | 🥗 Dietician | $(if ('${{ inputs.enable_dietician }}' -eq 'true') { '🟢 Enabled' } else { '⚪ Disabled' }) |
-          | 🦜 Canary | $(if ('${{ inputs.enable_canary }}' -eq 'true') { '🟢 Enabled' } else { '⚪ Disabled' }) |
-          | 📸 Paparazzi | $(if ('${{ inputs.enable_paparazzi }}' -eq 'true') { '🟢 Enabled' } else { '⚪ Disabled' }) |
-          | 🔬 Forensics | $(if ('${{ inputs.enable_forensics }}' -eq 'true') { '🟢 Enabled' } else { '⚪ Disabled' }) |
-
-          ---
-          ✅ **Ready to proceed with build pipeline**
-          "@
-
-          $summary >> $env:GITHUB_STEP_SUMMARY
-
           "passed=true" >> $env:GITHUB_OUTPUT
 
   # =========================================================
@@ -884,8 +215,9 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: frontend-dist
+          name: frontend-dist-${{ needs.preflight.outputs.build_id }}
           path: electron/out
+          retention-days: 7
 
   # =========================================================
   # 3. BUILD BACKEND
@@ -903,7 +235,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: frontend-dist
+          name: frontend-dist-${{ needs.preflight.outputs.build_id }}
           path: electron/out
 
       - uses: actions/setup-python@v5
@@ -936,15 +268,16 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: backend-${{ matrix.arch }}
+          name: backend-${{ matrix.arch }}-${{ needs.preflight.outputs.build_id }}
           path: dist/fortuna-backend
+          retention-days: 7
 
   # =========================================================
   # 4. PACKAGE MSI
   # =========================================================
   package-msi:
     name: 📦 MSI (${{ matrix.arch }})
-    needs: build-backend
+    needs: [preflight, build-backend]
     runs-on: windows-latest
     timeout-minutes: 20
     strategy:
@@ -954,7 +287,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: backend-${{ matrix.arch }}
+          name: backend-${{ matrix.arch }}-${{ needs.preflight.outputs.build_id }}
           path: staging/backend
 
       - name: 📝 Inject Restart Script
@@ -990,15 +323,16 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: msi-${{ matrix.arch }}
+          name: msi-${{ matrix.arch }}-${{ needs.preflight.outputs.build_id }}
           path: Fortuna-${{ matrix.arch }}.msi
+          retention-days: 7
 
   # =========================================================
   # 5. SMOKE TEST (Fast)
   # =========================================================
   smoke-test:
     name: 🚬 Smoke (${{ matrix.arch }})
-    needs: package-msi
+    needs: [preflight, package-msi]
     runs-on: windows-latest
     timeout-minutes: 15
     strategy:
@@ -1008,7 +342,7 @@ jobs:
       # NO CHECKOUT HERE - Pure Artifacts
       - uses: actions/download-artifact@v4
         with:
-          name: msi-${{ matrix.arch }}
+          name: msi-${{ matrix.arch }}-${{ needs.preflight.outputs.build_id }}
 
       - name: 🧹 Clean & Install
         shell: pwsh
@@ -1033,7 +367,7 @@ jobs:
   # =========================================================
   ui-proof:
     name: 📸 Paparazzi (${{ matrix.arch }})
-    needs: smoke-test
+    needs: [preflight, smoke-test]
     if: ${{ inputs.enable_paparazzi }}
     runs-on: windows-latest
     timeout-minutes: 15
@@ -1043,7 +377,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: msi-${{ matrix.arch }}
+          name: msi-${{ matrix.arch }}-${{ needs.preflight.outputs.build_id }}
 
       - name: 💿 Re-Install for UI
         shell: pwsh
