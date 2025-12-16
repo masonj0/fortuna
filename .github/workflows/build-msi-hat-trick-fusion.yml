@@ -182,13 +182,12 @@ jobs:
       - name: 📄 Ensure WiX License Exists
         shell: pwsh
         run: |
-          if (-not (Test-Path build_wix)) { New-Item -ItemType Directory -Path b
-uild_wix | Out-Null }
+          if (-not (Test-Path build_wix)) { New-Item -ItemType Directory -Path build_wix | Out-Null }
           $licensePath = 'build_wix/license.rtf'
           if (-not (Test-Path $licensePath)) {
             Write-Host '⚠️ License file missing. Generating placeholder...'
             # FIX: Use Base64 decoding to avoid RTF escape sequence issues in PowerShell/YAML
-            $rtfContent = [System.Text.Encoding]::ASCII.GetString([System.Convert]::FromBase64String("e1xydGYxXGFuc2lcZGVmZjB7XGZvbnR0Ymx7XGYwIEFyaWFsO319XGYwXGZzMjQgRU5EIFVTRVIgTElDRU5TRSBBR1JFRU1FTlRccGFyXHBhciBUaGlzIGlzIGEgcGxhY2Vob2xkZXIgGljZW5zZSBmb3IgRm9ydHVuYSBGYXVjZXQuIFBsZWFzZSByZXBsYWNlIHdpdGggYWN0dWFsIHRlcm1zLn0="))
+            $rtfContent = [System.Text.Encoding]::ASCII.GetString([System.Convert]::FromBase64String("e1xydGYxXGFuc2lcZGVmZjB7XGZvbnR0Ymx7XGYwIEFyaWFsO319XGYwXGZzMjQgRU5EIFVTRVIgTElDRU5TRSBBR1JFRU1FTlRccGFyXHBhciBUaGlzIGlzIGEgcGxhY2Vob2xkZXIgbGljZW5zZSBmb3IgRm9ydHVuYSBGYXVjZXQuIFBsZWFzZSByZXBsYWNlIHdpdGggYWN0dWFsIHRlcm1zLn0="))
             Set-Content -Path $licensePath -Value $rtfContent -Encoding Ascii
             Write-Host '✅ Placeholder license.rtf created.'
           } else {

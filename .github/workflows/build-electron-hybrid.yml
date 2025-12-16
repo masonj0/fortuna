@@ -38,10 +38,8 @@ jobs:
           pip install -r web_service/backend/requirements-dev.txt
           pytest web_service/backend/tests
   # ============================================================================
-======
   # JOB 1: BUILD CORE (The "HatTrick" Engine)
   # ============================================================================
-======
   build-core:
     name: '⚙️ Build Core Components (${{ matrix.arch }})'
     runs-on: windows-latest
@@ -142,10 +140,8 @@ jobs:
           retention-days: 1
 
   # ============================================================================
-======
   # JOB 2: PACKAGE ELECTRON (The "Ironclad" Chassis)
   # ============================================================================
-======
   package-electron:
     name: '⚡ Package Electron MSI (${{ matrix.arch }})'
     runs-on: windows-latest
@@ -232,8 +228,7 @@ h'."
 h {}
           $tempConfigPath = '${{ env.ELECTRON_DIR }}/temp-builder-config.yml'
           $config | ConvertTo-Yaml | Set-Content -Path $tempConfigPath
-          Write-Host "✅ Successfully created temporary config '$tempConfigPath'
-with corrected icon paths."
+          Write-Host "✅ Successfully created temporary config '$tempConfigPath' with corrected icon paths."
       - name: 📄 Ensure WiX License Exists for electron-builder
         shell: pwsh
         run: |
@@ -294,10 +289,8 @@ se | Select-Object FullName, Length
           retention-days: 1
 
   # ============================================================================
-======
   # JOB 3: SMOKE TEST (The "Robust" Verification)
   # ============================================================================
-======
   smoke-test:
     name: '🔬 Smoke Test (${{ matrix.arch }})'
     runs-on: windows-latest
@@ -375,10 +368,8 @@ se | Select-Object FullName, Length
         run: Stop-Process -Name "Fortuna Faucet", "fortuna-backend" -Force -ErrorAction SilentlyContinue
 
   # ============================================================================
-======
   # JOB 4: RELEASE (The "Triple-Tap" Staging)
   # ============================================================================
-======
   release:
     name: '📦 Release'
     runs-on: windows-latest
