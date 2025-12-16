@@ -147,7 +147,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: 'electron/package.json'
+          cache-dependency-path: 'electron/package-lock.json'
 
       - name: 📥 Install Frontend Dependencies
         shell: pwsh
@@ -183,7 +183,7 @@ jobs:
     name: '🚀 Build Electron MSI (${{ matrix.arch }})'
     runs-on: windows-latest
     timeout-minutes: 30
-    needs: [validate-environment, build-python-service, build-frontend, verify-assets]
+    needs: [build-python-service, build-frontend]
     strategy:
       matrix:
         arch: [x64, x86]
@@ -198,7 +198,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: 'electron/package.json'
+          cache-dependency-path: 'electron/package-lock.json'
 
       - name: 📥 Download Python Service
         uses: actions/download-artifact@v4

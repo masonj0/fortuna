@@ -70,20 +70,16 @@ jobs:
           # Test web_service path
           $web_service_main = Test-Path (Join-Path $web_service_path "main.py")
           $web_service_api = Test-Path (Join-Path $web_service_path "api.py")
-          $web_service_init = Test-Path (Join-Path $web_service_path "__init__.p
-y")
+          $web_service_init = Test-Path (Join-Path $web_service_path "__init__.py")
           Write-Host "Checking '$web_service_path':"
           Write-Host "  main.py -> $web_service_main"
           Write-Host "  api.py -> $web_service_api"
           Write-Host "  __init__.py -> $web_service_init"
 
           # Test python_service path
-          $python_service_main = Test-Path (Join-Path $python_service_path "main
-.py")
-          $python_service_api = Test-Path (Join-Path $python_service_path "api.p
-y")
-          $python_service_init = Test-Path (Join-Path $python_service_path "__in
-it__.py")
+          $python_service_main = Test-Path (Join-Path $python_service_path "main.py")
+          $python_service_api = Test-Path (Join-Path $python_service_path "api.py")
+          $python_service_init = Test-Path (Join-Path $python_service_path "__init__.py")
           Write-Host "Checking '$python_service_path':"
           Write-Host "  main.py -> $python_service_main"
           Write-Host "  api.py -> $python_service_api"
@@ -93,19 +89,14 @@ it__.py")
             $backend_dir = $web_service_path
             $backend_module_path = "web_service.backend"
             $spec_file = "jules.spec"
-            Write-Host "✅ Verdict: Detected 'web_service/backend' as the target.
-" -ForegroundColor Green
-          } elseif ($python_service_main -and $python_service_api -and $python_s
-ervice_init) {
+            Write-Host "✅ Verdict: Detected 'web_service/backend' as the target." -ForegroundColor Green
+          } elseif ($python_service_main -and $python_service_api -and $python_service_init) {
             $backend_dir = $python_service_path
             $backend_module_path = "python_service"
             $spec_file = "fortuna-backend-webservice.spec"
-            Write-Host "✅ Verdict: Detected 'python_service' as the target." -Fo
-regroundColor Green
+            Write-Host "✅ Verdict: Detected 'python_service' as the target." -ForegroundColor Green
           } else {
-            Write-Host "❌ FATAL: Could not determine a valid backend directory.
-Neither 'web_service/backend' nor 'python_service' contains the required files (
-main.py, api.py, __init__.py)." -ForegroundColor Red
+            Write-Host "❌ FATAL: Could not determine a valid backend directory. Neither 'web_service/backend' nor 'python_service' contains the required files (main.py, api.py, __init__.py)." -ForegroundColor Red
             exit 1
           }
 
@@ -114,12 +105,9 @@ main.py, api.py, __init__.py)." -ForegroundColor Red
           Write-Host "backend_module_path: $backend_module_path"
           Write-Host "spec_file: $spec_file"
 
-          "backend_dir=$backend_dir" | Out-File $env:GITHUB_OUTPUT -Encoding utf
-8 -Append
-          "backend_module_path=$backend_module_path" | Out-File $env:GITHUB_OUTP
-UT -Encoding utf8 -Append
-          "spec_file=$spec_file" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -A
-ppend
+          "backend_dir=$backend_dir" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "backend_module_path=$backend_module_path" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "spec_file=$spec_file" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
   system-check:
     name: '⚙️ System Prerequisites'
     runs-on: windows-latest
@@ -135,13 +123,11 @@ ppend
             Write-Host "Checking for $($tool)..."
             Get-Command $tool -ErrorAction SilentlyContinue
             if (-not $?) {
-              Write-Host "❌ FATAL: Build tool '$tool' not found in PATH." -Foreg
-roundColor Red
+              Write-Host "❌ FATAL: Build tool '$tool' not found in PATH." -ForegroundColor Red
               exit 1
             }
           }
-          Write-Host "✅ All critical build tools are present." -ForegroundColor
-Green
+          Write-Host "✅ All critical build tools are present." -ForegroundColor Green
       - name: Check Disk Space
         id: system
         run: |
@@ -149,11 +135,9 @@ Green
           $disk = Get-Volume | Where-Object { $_.DriveLetter -eq 'C' }
           $freeGB = [math]::Round($disk.SizeRemaining / 1GB, 2)
           if ($freeGB -lt 10) {
-            Write-Host "⚠️ WARNING: Low disk space. Only $freeGB GB free (10+ GB
- recommended)." -ForegroundColor Yellow
+            Write-Host "⚠️ WARNING: Low disk space. Only $freeGB GB free (10+ GB recommended)." -ForegroundColor Yellow
           } else {
-            Write-Host "✅ Disk space check passed ($freeGB GB free)." -Foregroun
-dColor Green
+            Write-Host "✅ Disk space check passed ($freeGB GB free)." -ForegroundColor Green
           }
           "disk_gb=$freeGB" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
@@ -164,8 +148,7 @@ dColor Green
     timeout-minutes: 5
     outputs:
       frontend_lock_hash: ${{ steps.hashes.outputs.frontend_lock_hash }}
-      backend_requirements_hash: ${{ steps.hashes.outputs.backend_requirements_h
-ash }}
+      backend_requirements_hash: ${{ steps.hashes.outputs.backend_requirements_hash }}
       wix_definition_hash: ${{ steps.hashes.outputs.wix_definition_hash }}
       semver: ${{ steps.meta.outputs.semver }}
       short_sha: ${{ steps.meta.outputs.short_sha }}
@@ -187,8 +170,7 @@ ash }}
           }
           $shortSha = "${{ github.sha }}".Substring(0,7)
           "semver=$semver" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "short_sha=$shortSha" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Ap
-pend
+          "short_sha=$shortSha" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
           Write-Host "🔖 Version: $semver ($shortSha)"
 
       - name: Validate Critical Files Exist
@@ -205,8 +187,7 @@ pend
           )
           foreach ($path in $paths) {
             if (-not (Test-Path $path)) {
-              Write-Host "❌ FATAL: Required path missing: $path" -ForegroundColo
-r Red
+              Write-Host "❌ FATAL: Required path missing: $path" -ForegroundColor Red
               exit 1
             }
           }
@@ -218,18 +199,12 @@ r Red
           BACKEND_DIR: ${{ needs.path-finder.outputs.backend_dir }}
         run: |
           Set-StrictMode -Version Latest
-          $frontend = (Get-FileHash "${{ env.FRONTEND_DIR }}/package-lock.json"
--Algorithm SHA256).Hash
-          $backend = (Get-FileHash (Join-Path $env:BACKEND_DIR "requirements.txt
-") -Algorithm SHA256).Hash
-          $wix = (Get-FileHash "${{ env.WIX_DIR }}/Product_WithService.wxs" -Alg
-orithm SHA256).Hash
-          "frontend_lock_hash=$frontend" | Out-File $env:GITHUB_OUTPUT -Encoding
- utf8 -Append
-          "backend_requirements_hash=$backend" | Out-File $env:GITHUB_OUTPUT -En
-coding utf8 -Append
-          "wix_definition_hash=$wix" | Out-File $env:GITHUB_OUTPUT -Encoding utf
-8 -Append
+          $frontend = (Get-FileHash "${{ env.FRONTEND_DIR }}/package-lock.json" -Algorithm SHA256).Hash
+          $backend = (Get-FileHash (Join-Path $env:BACKEND_DIR "requirements.txt") -Algorithm SHA256).Hash
+          $wix = (Get-FileHash "${{ env.WIX_DIR }}/Product_WithService.wxs" -Algorithm SHA256).Hash
+          "frontend_lock_hash=$frontend" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "backend_requirements_hash=$backend" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "wix_definition_hash=$wix" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Upload Integrity Snapshot
         uses: actions/upload-artifact@v4
@@ -262,8 +237,7 @@ coding utf8 -Append
         uses: actions/cache@v4
         with:
           path: ${{ env.FRONTEND_BUILD_DIR }}
-          key: ${{ runner.os }}-frontend-build-${{ hashFiles('${{ env.FRONTEND_D
-IR }}/**') }}
+          key: ${{ runner.os }}-frontend-build-${{ hashFiles('${{ env.FRONTEND_DIR }}/**') }}
 
       - name: Install Dependencies
         run: |
@@ -308,8 +282,7 @@ IR }}/**') }}
     timeout-minutes: 20
     needs: [path-finder, repo-preflight]
     env:
-      BACKEND_REQUIREMENTS_HASH: ${{ needs.repo-preflight.outputs.backend_requir
-ements_hash }}
+      BACKEND_REQUIREMENTS_HASH: ${{ needs.repo-preflight.outputs.backend_requirements_hash }}
       BACKEND_DIR: ${{ needs.path-finder.outputs.backend_dir }}
       BACKEND_SPEC: ${{ needs.path-finder.outputs.spec_file }}
     steps:
@@ -330,8 +303,7 @@ ements_hash }}
         uses: actions/cache@v4
         with:
           path: dist
-          key: ${{ runner.os }}-backend-build-${{ hashFiles(format('{0}/**', env
-.BACKEND_DIR), format('{0}', env.BACKEND_SPEC)) }}
+          key: ${{ runner.os }}-backend-build-${{ hashFiles(format('{0}/**', env.BACKEND_DIR), format('{0}', env.BACKEND_SPEC)) }}
 
       - name: Install Dependencies
         run: |
@@ -350,12 +322,10 @@ ements_hash }}
       - name: Run Pytest (if available)
         run: |
           Set-StrictMode -Version Latest
-          python -c 'import importlib.util, sys; sys.exit(0 if importlib.util.fi
-nd_spec("pytest") else 1)'
+          python -c 'import importlib.util, sys; sys.exit(0 if importlib.util.find_spec("pytest") else 1)'
           if ($LASTEXITCODE -eq 0) {
             Write-Host "🧪 pytest detected, running suite..."
-            python -m pytest "${{ env.BACKEND_DIR }}" --maxfail=1 --disable-warn
-ings
+            python -m pytest "${{ env.BACKEND_DIR }}" --maxfail=1 --disable-warnings
           } else {
             Write-Host "ℹ️ pytest not installed; skipping tests."
           }
@@ -412,8 +382,7 @@ ings
         uses: actions/cache@v4
         with:
           path: ${{ env.FRONTEND_BUILD_DIR }}
-          key: ${{ runner.os }}-frontend-build-${{ hashFiles('${{ env.FRONTEND_D
-IR }}/**') }}
+          key: ${{ runner.os }}-frontend-build-${{ hashFiles('${{ env.FRONTEND_DIR }}/**') }}
           restore-keys: |
             ${{ runner.os }}-frontend-build-
 
@@ -421,8 +390,7 @@ IR }}/**') }}
         uses: actions/cache@v4
         with:
           path: ~\AppData\Local\npm-cache
-          key: ${{ runner.os }}-npm-${{ env.NODE_VERSION }}-${{ env.FRONTEND_LOC
-K_HASH }}
+          key: ${{ runner.os }}-npm-${{ env.NODE_VERSION }}-${{ env.FRONTEND_LOCK_HASH }}
           restore-keys: |
             ${{ runner.os }}-npm-${{ env.NODE_VERSION }}-
 
@@ -444,11 +412,9 @@ K_HASH }}
       - name: Report Cache Status
         run: |
           if ('${{ steps.cache-frontend.outputs.cache-hit }}' -eq 'true') {
-            Write-Host "✅ Frontend build restored from cache." -ForegroundColor
-Green
+            Write-Host "✅ Frontend build restored from cache." -ForegroundColor Green
           } else {
-            Write-Host "ℹ️ No cache hit. A new build was performed." -Foreground
-Color Yellow
+            Write-Host "ℹ️ No cache hit. A new build was performed." -ForegroundColor Yellow
           }
 
       - name: Verify Build Output
@@ -456,8 +422,7 @@ Color Yellow
           Set-StrictMode -Version Latest
           $outDir = Resolve-Path "${{ env.FRONTEND_BUILD_DIR }}"
           if (-not (Test-Path $outDir)) {
-             Write-Host "❌ FATAL: Build directory not found" -ForegroundColor Re
-d
+             Write-Host "❌ FATAL: Build directory not found" -ForegroundColor Red
              exit 1
           }
           $files = Get-ChildItem -Path $outDir -Recurse -File
@@ -473,30 +438,23 @@ d
           Set-StrictMode -Version Latest
           $outDir = Resolve-Path "${{ env.FRONTEND_DIR }}/out"
           # Fallback for different env var names in different workflows
-          if (-not (Test-Path $outDir)) { $outDir = Resolve-Path "${{ env.FRONTE
-ND_BUILD_DIR }}" }
+          if (-not (Test-Path $outDir)) { $outDir = Resolve-Path "${{ env.FRONTEND_BUILD_DIR }}" }
 
-          if (-not (Test-Path $outDir)) { Write-Error "❌ Build failed: 'out' dir
- missing"; exit 1 }
+          if (-not (Test-Path $outDir)) { Write-Error "❌ Build failed: 'out' dir missing"; exit 1 }
 
           $manifestPath = "frontend-manifest.tsv"
-          "RelativePath`tSizeBytes`tSHA256" | Out-File $manifestPath -Encoding u
-tf8
+          "RelativePath`tSizeBytes`tSHA256" | Out-File $manifestPath -Encoding utf8
 
           $files = Get-ChildItem -Path $outDir -Recurse -File
-          if ($files.Count -eq 0) { Write-Error "❌ Build failed: 'out' dir empty
-"; exit 1 }
+          if ($files.Count -eq 0) { Write-Error "❌ Build failed: 'out' dir empty"; exit 1 }
 
           Write-Host "✅ Frontend built: $($files.Count) files."
 
           foreach ($f in $files) {
-            # FIX: Changed TrimStart('\\\\', '/') to TrimStart('\\', '/') to pre
-vent char conversion error
+            # FIX: Changed TrimStart('\\\\', '/') to TrimStart('\\', '/') to prevent char conversion error
             $rel = $f.FullName.Substring($outDir.Path.Length).TrimStart('\','/')
-            $hash = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.Substring(
-0,16)
-            "$rel`t$($f.Length)`t$hash" | Out-File $manifestPath -Encoding utf8
--Append
+            $hash = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.Substring(0,16)
+            "$rel`t$($f.Length)`t$hash" | Out-File $manifestPath -Encoding utf8 -Append
           }
 
       - name: Upload Frontend Artifact
@@ -522,8 +480,7 @@ vent char conversion error
       matrix:
         arch: [x64, x86]
     env:
-      BACKEND_REQUIREMENTS_HASH: ${{ needs.repo-preflight.outputs.backend_requir
-ements_hash }}
+      BACKEND_REQUIREMENTS_HASH: ${{ needs.repo-preflight.outputs.backend_requirements_hash }}
       BUILD_VERSION: ${{ needs.repo-preflight.outputs.semver }}
       BACKEND_DIR: ${{ needs.path-finder.outputs.backend_dir }}
       BACKEND_MODULE_PATH: ${{ needs.path-finder.outputs.backend_module_path }}
@@ -541,8 +498,7 @@ ements_hash }}
         uses: actions/cache@v4
         with:
           path: dist
-          key: ${{ runner.os }}-backend-build-${{ matrix.arch }}-${{ hashFiles(f
-ormat('{0}/**', env.BACKEND_DIR), format('{0}', env.BACKEND_SPEC)) }}
+          key: ${{ runner.os }}-backend-build-${{ matrix.arch }}-${{ hashFiles(format('{0}/**', env.BACKEND_DIR), format('{0}', env.BACKEND_SPEC)) }}
           restore-keys: |
             ${{ runner.os }}-backend-build-${{ matrix.arch }}-
       - name: Stage Frontend for PyInstaller
@@ -567,8 +523,7 @@ ormat('{0}/**', env.BACKEND_DIR), format('{0}', env.BACKEND_SPEC)) }}
         run: |
           $constraintDir = "temp-constraints"
           New-Item -ItemType Directory -Path $constraintDir -Force | Out-Null
-          $constraintFile = Join-Path $constraintDir "constraint-${{ matrix.arch
- }}.txt"
+          $constraintFile = Join-Path $constraintDir "constraint-${{ matrix.arch }}.txt"
           if ('${{ matrix.arch }}' -eq 'x86') {
             "numpy==1.23.5`npandas==1.5.3" | Set-Content $constraintFile
           } else { New-Item $constraintFile -ItemType File -Force }
@@ -580,16 +535,14 @@ ormat('{0}/**', env.BACKEND_DIR), format('{0}', env.BACKEND_SPEC)) }}
           $req_file = Join-Path $env:BACKEND_DIR "requirements.txt"
           pip install -r $req_file -c ${{ steps.constraints.outputs.file }}
           if (Test-Path (Join-Path $env:BACKEND_DIR "requirements-dev.txt")) {
-            pip install -r (Join-Path $env:BACKEND_DIR "requirements-dev.txt") -
-c ${{ steps.constraints.outputs.file }}
+            pip install -r (Join-Path $env:BACKEND_DIR "requirements-dev.txt") -c ${{ steps.constraints.outputs.file }}
           }
       - name: Create Dynamic webservice.spec for PyInstaller
         if: steps.cache-backend.outputs.cache-hit != 'true'
         shell: python
         env:
           BACKEND_DIR: ${{ needs.path-finder.outputs.backend_dir }}
-          BACKEND_MODULE_PATH: ${{ needs.path-finder.outputs.backend_module_path
- }}
+          BACKEND_MODULE_PATH: ${{ needs.path-finder.outputs.backend_module_path }}
           FRONTEND_OUT: ${{ env.FRONTEND_DIR }}/out
         run: |
           import os
@@ -601,17 +554,14 @@ c ${{ steps.constraints.outputs.file }}
           entry = f"{bk_dir}/service_entry.py"
           spec = f"""
           # -- mode: python ; coding: utf-8 --
-          from PyInstaller.utils.hooks import collect_data_files, collect_submod
-ules
+          from PyInstaller.utils.hooks import collect_data_files, collect_submodules
           block_cipher = None
           a = Analysis(
               ['{entry}'],
               pathex=[],
               binaries=[],
-              datas=collect_data_files('uvicorn') + collect_data_files('slowapi'
-) + [('{frontend_out}', 'ui')],
-              hiddenimports=collect_submodules('{mod_path}') + ['win32timezone']
-,
+              datas=collect_data_files('uvicorn') + collect_data_files('slowapi') + [('{frontend_out}', 'ui')],
+              hiddenimports=collect_submodules('{mod_path}') + ['win32timezone'],
               hookspath=[],
               runtime_hooks=[],
               excludes=['tests', 'pytest'],
@@ -623,8 +573,7 @@ ules
           pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
           exe = EXE(
               pyz, a.scripts, a.binaries, a.zipfiles, a.datas, [],
-              name='fortuna-backend', debug=False, bootloader_ignore_signals=Fal
-se, strip=False, upx=True, console=False
+              name='fortuna-backend', debug=False, bootloader_ignore_signals=False, strip=False, upx=True, console=False
           )
           """
           with open(spec_file, "w") as f: f.write(spec)
@@ -632,10 +581,8 @@ se, strip=False, upx=True, console=False
         if: steps.cache-backend.outputs.cache-hit != 'true'
         run: |
           Set-StrictMode -Version Latest
-          New-Item -ItemType Directory -Path (Join-Path $env:BACKEND_DIR "data")
- -Force | Out-Null
-          New-Item -ItemType Directory -Path (Join-Path $env:BACKEND_DIR "json")
- -Force | Out-Null
+          New-Item -ItemType Directory -Path (Join-Path $env:BACKEND_DIR "data") -Force | Out-Null
+          New-Item -ItemType Directory -Path (Join-Path $env:BACKEND_DIR "json") -Force | Out-Null
           Write-Host "✅ Created required backend directories for PyInstaller."
       - name: Build with PyInstaller
         if: steps.cache-backend.outputs.cache-hit != 'true'
@@ -643,17 +590,14 @@ se, strip=False, upx=True, console=False
           FORTUNA_VERSION: ${{ needs.repo-preflight.outputs.semver }}
         run: |
           Set-StrictMode -Version Latest
-          pyinstaller "${{ env.BACKEND_SPEC }}" --clean --log-level=WARN --nocon
-firm
+          pyinstaller "${{ env.BACKEND_SPEC }}" --clean --log-level=WARN --noconfirm
       - name: Verify Executable
         run: |
           Set-StrictMode -Version Latest
           $exePath = "dist/fortuna-backend.exe"
-          if (-not (Test-Path $exePath)) { throw "❌ FATAL: Executable not found"
- }
+          if (-not (Test-Path $exePath)) { throw "❌ FATAL: Executable not found" }
           $size = (Get-Item $exePath).Length / 1MB
-          if ($size -lt 10) { throw "❌ FATAL: Executable is suspiciously small:
-$($size) MB." }
+          if ($size -lt 10) { throw "❌ FATAL: Executable is suspiciously small: $($size) MB." }
           Write-Host "✅ Backend ready: $([math]::Round($size, 2)) MB"
       - name: Upload Backend Executable
         uses: actions/upload-artifact@v4
@@ -678,8 +622,7 @@ $($size) MB." }
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           backend-dir: ${{ needs.path-finder.outputs.backend_dir }}
-          backend-module-path: ${{ needs.path-finder.outputs.backend_module_path
- }}
+          backend-module-path: ${{ needs.path-finder.outputs.backend_module_path }}
   diagnose-runtime:
     name: '🔎 Diagnose PyInstaller Runtime'
     runs-on: windows-latest
@@ -714,16 +657,12 @@ $($size) MB." }
           if ($LASTEXITCODE -ne 0) { throw "Failed to analyze executable." }
           Write-Host "--- Archive Contents ---"
           $archiveContents | Out-Host
-          $expectedInitFile = ($env:BACKEND_MODULE_PATH.Replace('.', '/') + '/__
-init__.py')
-          $found = $archiveContents | ForEach-Object { $_.Replace('\', '/') } |
-Select-String -Pattern $expectedInitFile -SimpleMatch -Quiet
+          $expectedInitFile = ($env:BACKEND_MODULE_PATH.Replace('.', '/') + '/__init__.py')
+          $found = $archiveContents | ForEach-Object { $_.Replace('\', '/') } | Select-String -Pattern $expectedInitFile -SimpleMatch -Quiet
           if ($found) {
-            Write-Host "✅ SUCCESS: Key module file found." -ForegroundColor Gree
-n
+            Write-Host "✅ SUCCESS: Key module file found." -ForegroundColor Green
           } else {
-            Write-Error "❌ FAILURE: Key module file '$expectedInitFile' NOT foun
-d."
+            Write-Error "❌ FAILURE: Key module file '$expectedInitFile' NOT found."
             exit 1
           }
   smoke-test:
@@ -745,34 +684,26 @@ d."
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = "Stop"
-          $msiPath = (Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recur
-se | Select-Object -First 1).FullName
+          $msiPath = (Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse | Select-Object -First 1).FullName
           if (-not $msiPath) { throw "MSI not found!" }
           # 1. PRE-INSTALL CLEANUP
-          if (Get-Service -Name FortunaWebService -ErrorAction SilentlyContinue)
- {
+          if (Get-Service -Name FortunaWebService -ErrorAction SilentlyContinue) {
             sc.exe delete FortunaWebService 2>&1 | Out-Null
           }
           # 2. INSTALL
-          $proc = Start-Process msiexec.exe -ArgumentList "/i `"$msiPath`" /qn /
-L*v msi-install.log" -Wait -PassThru
+          $proc = Start-Process msiexec.exe -ArgumentList "/i `"$msiPath`" /qn /L*v msi-install.log" -Wait -PassThru
           if ($proc.ExitCode -ne 0 -and $proc.ExitCode -ne 3010) {
             Get-Content msi-install.log -Tail 50
             throw "MSI installation failed with exit code $($proc.ExitCode)."
           }
           # 3. VERIFY & RUN
           $progFiles = ${env:ProgramFiles}
-          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(
-x86)} }
+          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
           $installDir = Join-Path $progFiles "Fortuna Faucet Service"
-          if (-not (Test-Path $installDir)) { throw "Installation directory not
-found!" }
-          New-Item -ItemType Directory -Path (Join-Path $installDir "data") -For
-ce | Out-Null
-          New-Item -ItemType Directory -Path (Join-Path $installDir "json") -For
-ce | Out-Null
-          New-Item -ItemType Directory -Path (Join-Path $installDir "logs") -For
-ce | Out-Null
+          if (-not (Test-Path $installDir)) { throw "Installation directory not found!" }
+          New-Item -ItemType Directory -Path (Join-Path $installDir "data") -Force | Out-Null
+          New-Item -ItemType Directory -Path (Join-Path $installDir "json") -Force | Out-Null
+          New-Item -ItemType Directory -Path (Join-Path $installDir "logs") -Force | Out-Null
           Start-Service -Name "FortunaWebService"
           Start-Sleep -Seconds 10
           # 4. HEALTH CHECK
@@ -780,8 +711,7 @@ ce | Out-Null
           $delay = 5
           For ($i=0; $i -lt $maxRetries; $i++) {
             try {
-              $response = Invoke-WebRequest -Uri "http://localhost:${{ env.SERVI
-CE_PORT }}/health" -UseBasicParsing
+              $response = Invoke-WebRequest -Uri "http://localhost:${{ env.SERVICE_PORT }}/health" -UseBasicParsing
               if ($response.StatusCode -eq 200) {
                 Write-Host "✅ Health check PASSED."
                 Stop-Service -Name "FortunaWebService"
@@ -819,21 +749,15 @@ CE_PORT }}/health" -UseBasicParsing
           Set-StrictMode -Version Latest
           $staging = "${{ env.MSI_STAGING_DIR }}"
           New-Item -ItemType Directory -Path $staging -Force | Out-Null
-          Move-Item -Path "dist/fortuna-backend.exe" -Destination "$staging/fort
-una-webservice.exe" -Force
-          $msiName = "Fortuna-WebService-${{ matrix.arch }}-${{ env.BUILD_VERSIO
-N }}-${{ env.SHORT_SHA }}.msi".Replace('/', '-')
-          "msi_name=$msiName" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Appe
-nd
+          Move-Item -Path "dist/fortuna-backend.exe" -Destination "$staging/fortuna-webservice.exe" -Force
+          $msiName = "Fortuna-WebService-${{ matrix.arch }}-${{ env.BUILD_VERSION }}-${{ env.SHORT_SHA }}.msi".Replace('/', '-')
+          "msi_name=$msiName" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
           Write-Host "✅ Staged for MSI: $msiName"
       - name: Create Restart Service Batch Script
         shell: pwsh
         run: |
-          $scriptContent = "@echo off`r`necho Requesting Admin privileges to res
-tart FortunaWebService...`r`nnet stop FortunaWebService`r`nnet start FortunaWebS
-ervice`r`necho Service Restarted.`r`npause"
-          Set-Content -Path "${{ env.MSI_STAGING_DIR }}/restart_service.bat" -Va
-lue $scriptContent -Encoding Ascii
+          $scriptContent = "@echo off`r`necho Requesting Admin privileges to restart FortunaWebService...`r`nnet stop FortunaWebService`r`nnet start FortunaWebService`r`necho Service Restarted.`r`npause"
+          Set-Content -Path "${{ env.MSI_STAGING_DIR }}/restart_service.bat" -Value $scriptContent -Encoding Ascii
           Write-Host "✅ Created restart_service.bat script."
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
@@ -846,14 +770,11 @@ lue $scriptContent -Encoding Ascii
           key: ${{ runner.os }}-nuget-${{ env.WIX_HASH }}
       - name: 📄 Ensure WiX License Exists
         run: |
-          if (-not (Test-Path build_wix)) { New-Item -ItemType Directory -Path b
-uild_wix | Out-Null }
+          if (-not (Test-Path build_wix)) { New-Item -ItemType Directory -Path build_wix | Out-Null }
           $licensePath = 'build_wix/license.rtf'
           if (-not (Test-Path $licensePath)) {
             Write-Host '⚠️ License file missing. Generating placeholder...'
-            $rtfContent = '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\f0\fs24 END U
-SER LICENSE AGREEMENT\par\par This is a placeholder license for Fortuna Faucet.
-Please replace with actual terms.}'
+            $rtfContent = '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\f0\fs24 END USER LICENSE AGREEMENT\par\par This is a placeholder license for Fortuna Faucet. Please replace with actual terms.}'
             Set-Content -Path $licensePath -Value $rtfContent -Encoding Ascii
             Write-Host '✅ Placeholder license.rtf created.'
           } else {
@@ -862,32 +783,26 @@ Please replace with actual terms.}'
       - name: Prepare WiX Project
         run: |
           Set-StrictMode -Version Latest
-          Copy-Item "${{ env.WIX_DIR }}/Product_WithService.wxs" "${{ env.WIX_DI
-R }}/Product.wxs" -Force
+          Copy-Item "${{ env.WIX_DIR }}/Product_WithService.wxs" "${{ env.WIX_DIR }}/Product.wxs" -Force
           $proj = @(
             '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">',
             '  <PropertyGroup>',
             '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>',
             '    <OutputType>Package</OutputType>',
             '    <Platforms>x64;x86</Platforms>',
-            '    <DefineConstants>Version=$(Version);SourceDir=$(SourceDir);Serv
-icePort=$(ServicePort);Platform=$(Platform)</DefineConstants>',
+            '    <DefineConstants>Version=$(Version);SourceDir=$(SourceDir);ServicePort=$(ServicePort);Platform=$(Platform)</DefineConstants>',
             '  </PropertyGroup>',
             '  <ItemGroup>',
-            '    <PackageReference Include="WixToolset.UI.wixext" Version="${{ e
-nv.WIX_VERSION }}" />',
-            '    <PackageReference Include="WixToolset.Firewall.wixext" Version=
-"${{ env.WIX_VERSION }}" />',
-            '    <PackageReference Include="WixToolset.Util.wixext" Version="${{
- env.WIX_VERSION }}" />',
+            '    <PackageReference Include="WixToolset.UI.wixext" Version="${{ env.WIX_VERSION }}" />',
+            '    <PackageReference Include="WixToolset.Firewall.wixext" Version="${{ env.WIX_VERSION }}" />',
+            '    <PackageReference Include="WixToolset.Util.wixext" Version="${{ env.WIX_VERSION }}" />',
             '  </ItemGroup>',
             '  <ItemGroup>',
             '    <Compile Include="Product.wxs" />',
             '  </ItemGroup>',
             '</Project>'
           )
-          Set-Content "${{ env.WIX_DIR }}/Fortuna.wixproj" -Value ($proj -join "
-`r`n") -Encoding utf8
+          Set-Content "${{ env.WIX_DIR }}/Fortuna.wixproj" -Value ($proj -join "`r`n") -Encoding utf8
       - name: Build MSI
         working-directory: ${{ env.WIX_DIR }}
         run: |
@@ -971,8 +886,7 @@ nv.WIX_VERSION }}" />',
           robocopy $sourceDir $destDir /E
 
           if ($LASTEXITCODE -ge 8) {
-            Write-Error "Robocopy failed with exit code $LASTEXITCODE. This indi
-cates a serious error."
+            Write-Error "Robocopy failed with exit code $LASTEXITCODE. This indicates a serious error."
             exit 1
           }
 
