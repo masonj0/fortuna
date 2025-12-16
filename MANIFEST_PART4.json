@@ -1,6 +1,7 @@
 [
     ".github/scripts/generate_sbom.py",
-    ".github/workflows/build-electron-hybrid.yml",
+    ".github/workflows/build-electron-msi-gpt5.yml",
+    ".github/workflows/build-msi-unified.yml",
     "ARCHITECTURAL_MANDATE.md",
     "WISDOM.md",
     "electron/assets/.gitkeep",
