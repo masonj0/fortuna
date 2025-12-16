@@ -189,21 +189,21 @@ jobs:
 
           # Node version
           $nodeVer = "${{ inputs.node_version }}"
-          $nodeValid = $nodeVer -match '^\\d+(\\.\\d+)?(\\.\\d+)?$'
+          $nodeValid = $nodeVer -match '^\d+(\.\d+)?(\.\d+)?$'
           $nodeIcon = if ($nodeValid) { '✅' } else { '❌' }
           Write-Host "│ $nodeIcon Node Version:    $($nodeVer.PadRight(43)) │"
           if (-not $nodeValid) { [void]$errors.Add("Invalid node_version: $nodeVer") }
 
           # Python version
           $pyVer = "${{ inputs.python_version }}"
-          $pyValid = $pyVer -match '^\\d+\\.\\d+(\\.\\d+)?$'
+          $pyValid = $pyVer -match '^\d+\.\d+(\.\d+)?$'
           $pyIcon = if ($pyValid) { '✅' } else { '❌' }
           Write-Host "│ $pyIcon Python Version:  $($pyVer.PadRight(43)) │"
           if (-not $pyValid) { [void]$errors.Add("Invalid python_version: $pyVer") }
 
           # WiX version
           $wixVer = "${{ inputs.wix_version }}"
-          $wixValid = $wixVer -match '^\\d+\\.\\d+\\.\\d+$'
+          $wixValid = $wixVer -match '^\d+\.\d+\.\d+$'
           $wixIcon = if ($wixValid) { '✅' } else { '❌' }
           Write-Host "│ $wixIcon WiX Version:     $($wixVer.PadRight(43)) │"
           if (-not $wixValid) { [void]$errors.Add("Invalid wix_version: $wixVer") }
