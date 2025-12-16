@@ -1,0 +1,399 @@
+name: 🧬 Universal Core (MSI)
+
+on:
+  workflow_call:
+    inputs:
+      # --- VERSIONING ---
+      node_version:
+        description: 'Node.js version to use'
+        type: string
+        default: '20'
+      python_version:
+        description: 'Python version to use'
+        type: string
+        default: '3.11'
+      wix_version:
+        description: 'WiX Toolset version'
+        type: string
+        default: '4.0.5'
+
+      # --- FEATURE TOGGLES ---
+      enable_dietician:
+        description: 'Run pre-package size analysis'
+        type: boolean
+        default: false
+      enable_canary:
+        description: 'Run Windows Defender malware scan'
+        type: boolean
+        default: false
+      enable_paparazzi:
+        description: 'Run Playwright visual verification'
+        type: boolean
+        default: false
+      enable_forensics:
+        description: 'Run deep asset verification pre-flight'
+        type: boolean
+        default: false
+
+      # --- CONFIG ---
+      service_port:
+        description: 'Localhost port for the backend service'
+        type: string
+        default: '8102'
+      skip_tests:
+        description: 'Skip heavy unit tests'
+        type: boolean
+        default: false
+
+    secrets:
+      API_KEY:
+        required: false
+      TVG_API_KEY:
+        required: false
+
+# -------------------------------------------------------------------------
+# 2. GLOBAL PERMISSIONS & ENV
+# -------------------------------------------------------------------------
+permissions:
+  contents: read
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  FORTUNA_ENV: smoke-test
+
+# -------------------------------------------------------------------------
+# 3. JOBS DEFINITION
+# -------------------------------------------------------------------------
+jobs:
+  # =========================================================
+  # 1. PREFLIGHT DIAGNOSTICS
+  # =========================================================
+  preflight:
+    name: 🔍 Preflight Diagnostics
+    runs-on: windows-latest
+    timeout-minutes: 10
+    outputs:
+      semver: ${{ steps.ver.outputs.semver }}
+      build_timestamp: ${{ steps.env.outputs.build_timestamp }}
+      short_sha: ${{ steps.env.outputs.short_sha }}
+      is_tag: ${{ steps.env.outputs.is_tag }}
+      branch: ${{ steps.env.outputs.branch }}
+      diagnostics_passed: ${{ steps.summary.outputs.passed }}
+      # 🔥 FIX: Export stable build_id
+      build_id: ${{ steps.env.outputs.build_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # -------------------------------------------------------
+      # ENVIRONMENT DIAGNOSTICS
+      # -------------------------------------------------------
+      - name: 🖥️ Environment Diagnostics
+        id: env
+        shell: pwsh
+        run: |
+          Write-Host '::group::🖥️ Runner Environment'
+
+          # Outputs
+          $timestamp = Get-Date -Format 'yyyy-MM-ddTHH:mm:ssZ'
+          $shortSha = $env:GITHUB_SHA.Substring(0,7)
+          $buildId = "${{ github.run_id }}"
+
+          # FIX: Use single quotes to prevent JSON escaping issues
+          $isTag = 'false'
+          if ($env:GITHUB_REF -like 'refs/tags/*') { $isTag = 'true' }
+
+          $branch = $env:GITHUB_REF
+          if ($env:GITHUB_REF -match '^refs/heads/') { $branch = $env:GITHUB_REF -replace 'refs/heads/','' }
+          if ($env:GITHUB_REF -match '^refs/tags/') { $branch = $env:GITHUB_REF -replace 'refs/tags/','' }
+
+          "build_timestamp=$timestamp" >> $env:GITHUB_OUTPUT
+          "short_sha=$shortSha" >> $env:GITHUB_OUTPUT
+          "is_tag=$isTag" >> $env:GITHUB_OUTPUT
+          "branch=$branch" >> $env:GITHUB_OUTPUT
+          "build_id=$buildId" >> $env:GITHUB_OUTPUT
+
+          Write-Host '::endgroup::'
+
+      # -------------------------------------------------------
+      # GIT STATE & VERSIONING
+      # -------------------------------------------------------
+      - name: 🏷️ Git State & Versioning
+        id: ver
+        shell: pwsh
+        run: |
+          Write-Host '::group::🏷️ Git State & Versioning'
+
+          # Ensure we have all tags
+          git fetch --prune --unshallow --tags 2>$null
+
+          # Version detection
+          $tag = git describe --tags --abbrev=0 2>$null
+          if ([string]::IsNullOrEmpty($tag)) {
+            $tag = "v0.0.0"
+          }
+
+          $semver = $tag -replace '^v',''
+          "semver=$semver" >> $env:GITHUB_OUTPUT
+
+          Write-Host '::endgroup::'
+
+      - name: ✨ Runner Stabilization
+        shell: cmd
+        run: |
+          @echo ════════════════════════════════════════════════════════════
+          @echo  Runner stabilization checkpoint - preventing shell crash
+          @echo ════════════════════════════════════════════════════════════
+          timeout /t 2 /nobreak >nul
+
+      # -------------------------------------------------------
+      # CORE ASSET VERIFICATION (Always runs)
+      # -------------------------------------------------------
+      - name: 📂 Core Asset Verification
+        id: assets
+        shell: pwsh
+        run: |
+          Write-Host '::group::📂 Core Asset Verification'
+
+          $criticalAssets = @(
+            @{ path = "electron/package.json"; desc = "Electron package manifest" },
+            @{ path = "electron/package-lock.json"; desc = "Electron dependency lock" },
+            @{ path = "web_service/backend/requirements.txt"; desc = "Python dependencies" },
+            @{ path = "web_service/backend/service_entry.py"; desc = "Service entry point" },
+            @{ path = "build_wix/Product_WithService.wxs"; desc = "WiX installer definition" }
+          )
+
+          foreach ($asset in $criticalAssets) {
+            if (-not (Test-Path $asset.path)) {
+              Write-Host "::error file=$($asset.path)::Missing critical asset: $($asset.desc)"
+              throw "Missing critical assets: $($asset.path)"
+            }
+          }
+
+          Write-Host "`n✅ All critical assets verified"
+          Write-Host '::endgroup::'
+
+      # -------------------------------------------------------
+      # PREFLIGHT SUMMARY
+      # -------------------------------------------------------
+      - name: 📋 Preflight Summary
+        id: summary
+        shell: pwsh
+        run: |
+          "passed=true" >> $env:GITHUB_OUTPUT
+
+  # =========================================================
+  # 2. BUILD FRONTEND
+  # =========================================================
+  build-frontend:
+    name: ⚛️ Frontend
+    needs: preflight
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+          cache: 'npm'
+          cache-dependency-path: 'electron/package-lock.json'
+
+      - name: 🔍 Verify Build Script Exists
+        shell: pwsh
+        working-directory: electron
+        run: |
+          $pkg = Get-Content package.json | ConvertFrom-Json
+          if (-not $pkg.scripts.build) { throw "❌ package.json in electron/ is missing 'build' script!" }
+
+      - name: 🏗️ Build Frontend
+        working-directory: electron
+        run: |
+          npm ci && npm run build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist-${{ needs.preflight.outputs.build_id }}
+          path: electron/out
+          retention-days: 7
+
+  # =========================================================
+  # 3. BUILD BACKEND
+  # =========================================================
+  build-backend:
+    name: 🐍 Backend (${{ matrix.arch }})
+    needs: [preflight, build-frontend]
+    runs-on: windows-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        arch: [x64, x86]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist-${{ needs.preflight.outputs.build_id }}
+          path: electron/out
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+          architecture: ${{ matrix.arch }}
+          cache: 'pip'
+
+      - name: 🧾 Arch Constraints
+        shell: pwsh
+        run: |
+          if ('${{ matrix.arch }}' -eq 'x86') {
+            Set-Content constraints.txt 'numpy==1.23.5'
+            Add-Content constraints.txt 'pandas==1.5.3'
+          } else {
+            New-Item constraints.txt -Force
+          }
+
+      - name: 📦 Install Dependencies
+        run: |
+          pip install -r web_service/backend/requirements.txt -c constraints.txt && pip install pyinstaller
+
+      - name: 🏗️ PyInstaller
+        run: |
+          pyinstaller --noconfirm --onedir --clean --name fortuna-backend `
+            --hidden-import=win32timezone --hidden-import=win32serviceutil `
+            --add-data "web_service/backend;backend" `
+            --add-data "electron/out;ui" `
+            web_service/backend/service_entry.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backend-${{ matrix.arch }}-${{ needs.preflight.outputs.build_id }}
+          path: dist/fortuna-backend
+          retention-days: 7
+
+  # =========================================================
+  # 4. PACKAGE MSI
+  # =========================================================
+  package-msi:
+    name: 📦 MSI (${{ matrix.arch }})
+    needs: [preflight, build-backend]
+    runs-on: windows-latest
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        arch: [x64, x86]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: backend-${{ matrix.arch }}-${{ needs.preflight.outputs.build_id }}
+          path: staging/backend
+
+      - name: 📝 Inject Restart Script
+        shell: cmd
+        run: |
+          echo net stop FortunaWebService > staging\\backend\\restart_service.bat
+          echo net start FortunaWebService >> staging\\backend\\restart_service.bat
+
+      - name: ⚖️ The Dietician
+        if: ${{ inputs.enable_dietician }}
+        shell: pwsh
+        run: |
+          Write-Host "Payload: $((Get-ChildItem staging -Recurse | Measure-Object -Sum Length).Sum / 1MB) MB"
+
+      - name: 🔧 Setup WiX
+        run: |
+          dotnet tool install --global wix --version ${{ inputs.wix_version }}
+          echo "$env:USERPROFILE\\.dotnet\\tools" >> $env:GITHUB_PATH
+
+      - name: 🏗️ Build MSI
+        run: |
+          wix build build_wix/Product_WithService.wxs -arch ${{ matrix.arch }} -o Fortuna-${{ matrix.arch }}.msi -d Version="${{ needs.preflight.outputs.semver }}" -d SourceDir="staging"
+
+      - name: 🦜 The Canary
+        if: ${{ inputs.enable_canary }}
+        shell: pwsh
+        run: |
+          try {
+            if (Test-Path "C:\\Program Files\\Windows Defender\\MpCmdRun.exe") {
+               & "C:\\Program Files\\Windows Defender\\MpCmdRun.exe" -Scan -ScanType 3 -File "$pwd\\Fortuna-${{ matrix.arch }}.msi"
+            }
+          } catch { Write-Warning "Canary scan failed or skipped: $_" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: msi-${{ matrix.arch }}-${{ needs.preflight.outputs.build_id }}
+          path: Fortuna-${{ matrix.arch }}.msi
+          retention-days: 7
+
+  # =========================================================
+  # 5. SMOKE TEST (Fast)
+  # =========================================================
+  smoke-test:
+    name: 🚬 Smoke (${{ matrix.arch }})
+    needs: [preflight, package-msi]
+    runs-on: windows-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        arch: [x64, x86]
+    steps:
+      # NO CHECKOUT HERE - Pure Artifacts
+      - uses: actions/download-artifact@v4
+        with:
+          name: msi-${{ matrix.arch }}-${{ needs.preflight.outputs.build_id }}
+
+      - name: 🧹 Clean & Install
+        shell: pwsh
+        run: |
+          sc.exe delete "FortunaWebService" *>$null; Start-Sleep 2
+          Start-Process msiexec.exe -ArgumentList "/i Fortuna-${{ matrix.arch }}.msi /quiet /norestart" -Wait
+
+      - name: 🩺 Health Check
+        shell: pwsh
+        run: |
+          Start-Sleep 10
+          for($i=0;$i -lt 5;$i++) { try { if ((Invoke-RestMethod "http://127.0.0.1:${{ inputs.service_port }}/health").status -eq "ok") { return } } catch { Start-Sleep 5 } }
+          throw "Dead Service"
+
+      - name: 🧹 Cleanup
+        if: always()
+        run: |
+          sc.exe delete "FortunaWebService" *>$null
+
+  # =========================================================
+  # 6. UI PROOF (Heavy/Optional)
+  # =========================================================
+  ui-proof:
+    name: 📸 Paparazzi (${{ matrix.arch }})
+    needs: [preflight, smoke-test]
+    if: ${{ inputs.enable_paparazzi }}
+    runs-on: windows-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        arch: [x64, x86]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: msi-${{ matrix.arch }}-${{ needs.preflight.outputs.build_id }}
+
+      - name: 💿 Re-Install for UI
+        shell: pwsh
+        run: |
+          Start-Process msiexec.exe -ArgumentList "/i Fortuna-${{ matrix.arch }}.msi /quiet /norestart" -Wait
+
+      - name: 📸 Run Playwright
+        shell: pwsh
+        run: |
+          npm install playwright; npx playwright install chromium --with-deps
+          node -e "const { chromium } = require('playwright'); (async () => { const b = await chromium.launch(); const p = await b.newPage(); await p.goto('http://127.0.0.1:${{ inputs.service_port }}/docs'); await p.screenshot({path: 'proof.png'}); await b.close(); })();"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: proof-${{ matrix.arch }}
+          path: proof.png
+
+      - name: 🧹 Cleanup
+        if: always()
+        run: |
+          sc.exe delete "FortunaWebService" *>$null
