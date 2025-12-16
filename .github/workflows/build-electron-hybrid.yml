@@ -37,38 +37,13 @@ jobs:
       - run: |
           pip install -r web_service/backend/requirements-dev.txt
           pytest web_service/backend/tests
-  # ==================================================================================
-  # JOB 1A: BUILD FRONTEND (New, isolated job)
-  # ==================================================================================
-  build-frontend:
-    name: '🎨 Build Frontend'
-    runs-on: windows-latest
-    timeout-minutes: 20
-    needs: quality-gate
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: '${{ env.FRONTEND_DIR }}/package-lock.json'
-      - name: 🎨 Build Frontend
-        shell: pwsh
-        run: |
-          cd ${{ env.FRONTEND_DIR }}
-          npm ci --prefer-offline
-          npm run build
-      - name: 📤 Upload Frontend Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-dist
-          path: ${{ env.FRONTEND_DIR }}/out/
-          retention-days: 1
-  # ==================================================================================
-  # JOB 1B: BUILD BACKEND
-  # ==================================================================================
-  build-backend:
-    name: '🐍 Build Backend (${{ matrix.arch }})'
+  # ============================================================================
+======
+  # JOB 1: BUILD CORE (The "HatTrick" Engine)
+  # ============================================================================
+======
+  build-core:
+    name: '⚙️ Build Core Components (${{ matrix.arch }})'
     runs-on: windows-latest
     timeout-minutes: 30
     needs: quality-gate
@@ -87,6 +62,42 @@ jobs:
           $ver = if ("${{ github.ref }}" -match 'refs/tags/v(.*)') { $Matches[1] } else { "0.0.${{ github.run_number }}" }
           "semver=$ver" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "build_id=${{ github.run_id }}" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+      # --- FRONTEND (Standard) ---
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: '${{ env.FRONTEND_DIR }}/package-lock.json'
+      - name: Cache Build Output
+        id: cache-frontend
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.FRONTEND_DIR }}/out
+          key: ${{ runner.os }}-frontend-${{ hashFiles('**/package-lock.json', '${{ env.FRONTEND_DIR }}/**/*.js', '${{ env.FRONTEND_DIR }}/**/*.ts', '${{ env.FRONTEND_DIR }}/**/*.tsx', '${{ env.FRONTEND_DIR }}/**/*.css') }}
+          restore-keys: |
+            ${{ runner.os }}-frontend-
+      - name: 🎨 Build Frontend
+        if: steps.cache-frontend.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          cd ${{ env.FRONTEND_DIR }}
+          npm ci --prefer-offline
+          npm run build
+      - name: 📋 Generate Artifact Manifest
+        shell: pwsh
+        working-directory: ${{ env.FRONTEND_DIR }}
+        run: |
+          Set-StrictMode -Version Latest
+          $outDir = Resolve-Path "out"
+          $manifestPath = "frontend-manifest.tsv"
+          "RelativePath`tSizeBytes`tSHA256" | Out-File $manifestPath -Encoding utf8
+          $files = Get-ChildItem -Path $outDir -Recurse -File
+          foreach ($f in $files) {
+            $rel = $f.FullName.Substring($outDir.Path.Length).TrimStart('\','/')
+            $hash = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.Substring(0,16)
+            "$rel`t$($f.Length)`t$hash" | Out-File $manifestPath -Encoding utf8 -Append
+          }
+          Write-Host "✅ Generated frontend artifact manifest."
       # --- BACKEND (The "HatTrick" Upgrade) ---
       - uses: actions/setup-python@v5
         with:
@@ -121,13 +132,24 @@ jobs:
           path: dist/service/fortuna-backend/
           retention-days: 1
 
-  # ==================================================================================
+      - name: 📤 Upload Frontend Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build-${{ github.run_id }}
+          path: |
+            ${{ env.FRONTEND_DIR }}/out/
+            ${{ env.FRONTEND_DIR }}/frontend-manifest.tsv
+          retention-days: 1
+
+  # ============================================================================
+======
   # JOB 2: PACKAGE ELECTRON (The "Ironclad" Chassis)
-  # ==================================================================================
+  # ============================================================================
+======
   package-electron:
     name: '⚡ Package Electron MSI (${{ matrix.arch }})'
     runs-on: windows-latest
-    needs: [build-frontend, build-backend]
+    needs: build-core
     timeout-minutes: 30
     strategy:
       matrix:
@@ -151,12 +173,12 @@ jobs:
       - name: 📥 Download Backend Artifact
         uses: actions/download-artifact@v4
         with:
-          name: python-service-${{ matrix.arch }}-${{ needs.build-backend.outputs.build_id }}
+          name: python-service-${{ matrix.arch }}-${{ needs.build-core.outputs.build_id }}
           path: python-service-bin
       - name: 📥 Download Frontend Artifact
         uses: actions/download-artifact@v4
         with:
-          name: frontend-dist
+          name: frontend-build-${{ needs.build-core.outputs.build_id }}
           path: ${{ env.FRONTEND_DIR }}/out
       - name: 🚚 Stage Artifacts for Electron
         shell: pwsh
@@ -169,62 +191,68 @@ jobs:
           $target = "." # Analyze entire workspace staged for build
           $limitMB = 300
           Write-Host "--- 📊 Size Breakdown ---"
-          $files = Get-ChildItem -Path $target -Recurse -File -ErrorAction SilentlyContinue
+          $files = Get-ChildItem -Path $target -Recurse -File -ErrorAction Silen
+tlyContinue
           if (!$files) { Write-Warning "No files found to weigh."; exit 0 }
           $totalBytes = ($files | Measure-Object -Property Length -Sum).Sum
           $totalMB = [math]::Round($totalBytes / 1MB, 2)
           Write-Host "Total Payload Size: $totalMB MB"
           if ($totalMB -gt $limitMB) {
-              Write-Warning "⚠️ BLOAT ALERT: Build exceeds $limitMB MB limit! Check the heaviest files below."
+              Write-Warning "⚠️ BLOAT ALERT: Build exceeds $limitMB MB limit! Ch
+eck the heaviest files below."
           } else {
-              Write-Host "✅ Size within limits (< $limitMB MB)." -ForegroundColor Green
+              Write-Host "✅ Size within limits (< $limitMB MB)." -ForegroundColo
+r Green
           }
           Write-Host "`n--- 🐘 Top 10 Heaviest Files ---"
-          $files | Sort-Object Length -Descending | Select-Object -First 10 @{N='File';E={$_.FullName.Replace($pwd,'')}}, @{N='Size(MB)';E={"{0:N2}" -f ($_.Length/1MB)}} | Format-Table -AutoSize
+          $files | Sort-Object Length -Descending | Select-Object -First 10 @{N=
+'File';E={$_.FullName.Replace($pwd,'')}}, @{N='Size(MB)';E={"{0:N2}" -f ($_.Leng
+th/1MB)}} | Format-Table -AutoSize
       - name: '🧐 Forensically Guarantee Icon Paths'
         shell: pwsh
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = "Stop"
-          Install-Module -Name powershell-yaml -Force -Scope CurrentUser -ErrorAction Stop
+          Install-Module -Name powershell-yaml -Force -Scope CurrentUser -ErrorA
+ction Stop
           Import-Module powershell-yaml
           $configPath = '${{ env.ELECTRON_DIR }}/electron-builder-config.yml'
           $iconPath = "${{ env.ELECTRON_DIR }}/assets/icon.ico"
           if (-not (Test-Path -LiteralPath $iconPath)) {
-            Write-Error "CRITICAL: The primary icon file is missing at '$iconPath'."
+            Write-Error "CRITICAL: The primary icon file is missing at '$iconPat
+h'."
             exit 1
           }
           $absoluteIconPath = (Resolve-Path -LiteralPath $iconPath).Path
           $config = Get-Content $configPath | ConvertFrom-Yaml
           $config.win.icon = $absoluteIconPath.Replace('\\', '/')
-          try { $config.msi.PSObject.Properties.Remove('installerIcon') } catch {}
-          try { $config.msi.PSObject.Properties.Remove('uninstallerIcon') } catch {}
+          try { $config.msi.PSObject.Properties.Remove('installerIcon') } catch
+{}
+          try { $config.msi.PSObject.Properties.Remove('uninstallerIcon') } catc
+h {}
           $tempConfigPath = '${{ env.ELECTRON_DIR }}/temp-builder-config.yml'
           $config | ConvertTo-Yaml | Set-Content -Path $tempConfigPath
-          Write-Host "✅ Successfully created temporary config '$tempConfigPath' with corrected icon paths."
-      - name: 🛠️ Validate temp config before build
-        shell: pwsh
-        run: |
-          $cfg = 'electron/temp-builder-config.yml'
-          if (-not (Test-Path $cfg)) { throw "Missing electron builder config ($cfg)" }
+          Write-Host "✅ Successfully created temporary config '$tempConfigPath'
+with corrected icon paths."
       - name: 📄 Ensure WiX License Exists for electron-builder
         shell: pwsh
         run: |
           # electron-builder uses build_wix/license.rtf by convention
           $wixDir = 'build_wix'
-          if (-not (Test-Path $wixDir)) { New-Item -ItemType Directory -Path $wixDir | Out-Null }
+          if (-not (Test-Path $wixDir)) { New-Item -ItemType Directory -Path $wi
+xDir | Out-Null }
           $licensePath = Join-Path $wixDir 'license.rtf'
           if (-not (Test-Path $licensePath)) {
-            Write-Host '⚠️ License file missing. Generating placeholder for electron-builder...'
-            $rtfContent = '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\f0\fs24 END USER LICENSE AGREEMENT\par\par This is a placeholder license for Fortuna Faucet. Please replace with actual terms.}'
+            Write-Host '⚠️ License file missing. Generating placeholder for elec
+tron-builder...'
+            $rtfContent = '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\f0\fs24 END U
+SER LICENSE AGREEMENT\par\par This is a placeholder license for Fortuna Faucet.
+Please replace with actual terms.}'
             Set-Content -Path $licensePath -Value $rtfContent -Encoding Ascii
             Write-Host '✅ Placeholder license.rtf created.'
           } else {
             Write-Host '✅ Existing license.rtf found.'
           }
-      - name: 🏗️ Build Electron
-        working-directory: ${{ env.ELECTRON_DIR }}
-        run: npm run electron:build
       - name: 🏗️ Build MSI
         working-directory: ${{ env.ELECTRON_DIR }}
         env:
@@ -237,9 +265,11 @@ jobs:
       - name: 🔬 Forensic Packaging Analysis
         shell: pwsh
         run: |
-          $unpackedDir = if ('${{ matrix.arch }}' -eq 'x86') { 'win-ia32-unpacked' } else { 'win-unpacked' }
+          $unpackedDir = if ('${{ matrix.arch }}' -eq 'x86') { 'win-ia32-unpacke
+d' } else { 'win-unpacked' }
           Write-Host "=== HYBRID STAGING LAYOUT (${{ matrix.arch }}) ==="
-          Get-ChildItem -Path "${{ env.ELECTRON_DIR }}/dist/$unpackedDir" -Recurse | Select-Object FullName, Length
+          Get-ChildItem -Path "${{ env.ELECTRON_DIR }}/dist/$unpackedDir" -Recur
+se | Select-Object FullName, Length
       - name: Rename & Hash MSI
         id: name_msi
         shell: pwsh
@@ -263,9 +293,11 @@ jobs:
           path: ${{ env.ELECTRON_DIR }}/dist/*.msi
           retention-days: 1
 
-  # ==================================================================================
+  # ============================================================================
+======
   # JOB 3: SMOKE TEST (The "Robust" Verification)
-  # ==================================================================================
+  # ============================================================================
+======
   smoke-test:
     name: '🔬 Smoke Test (${{ matrix.arch }})'
     runs-on: windows-latest
@@ -338,15 +370,15 @@ jobs:
           }
           Write-Error "❌ LAYER 3 FAILED: Service Failed Health Check"
           exit 1
-      - name: 💥 Kill residual Electron after smoke
+      - name: Cleanup
         if: always()
-        shell: pwsh
-        run: |
-          Get-Process -Name "Fortuna Faucet", "fortuna-backend" -ErrorAction SilentlyContinue | Stop-Process -Force
+        run: Stop-Process -Name "Fortuna Faucet", "fortuna-backend" -Force -ErrorAction SilentlyContinue
 
-  # ==================================================================================
+  # ============================================================================
+======
   # JOB 4: RELEASE (The "Triple-Tap" Staging)
-  # ==================================================================================
+  # ============================================================================
+======
   release:
     name: '📦 Release'
     runs-on: windows-latest
