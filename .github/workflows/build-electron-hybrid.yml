@@ -38,10 +38,8 @@ jobs:
           pip install -r web_service/backend/requirements-dev.txt
           pytest web_service/backend/tests
   # ============================================================================
-======
   # JOB 1: BUILD CORE (The "HatTrick" Engine)
   # ============================================================================
-======
   build-core:
     name: '⚙️ Build Core Components (${{ matrix.arch }})'
     runs-on: windows-latest
@@ -59,11 +57,9 @@ jobs:
         id: meta
         shell: pwsh
         run: |
-          $ver = if ("${{ github.ref }}" -match 'refs/tags/v(.*)') { $Matches[1]
- } else { "0.0.${{ github.run_number }}" }
+          $ver = if ("${{ github.ref }}" -match 'refs/tags/v(.*)') { $Matches[1] } else { "0.0.${{ github.run_number }}" }
           "semver=$ver" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "build_id=${{ github.run_id }}" | Out-File $env:GITHUB_OUTPUT -Encodin
-g utf8 -Append
+          "build_id=${{ github.run_id }}" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
       # --- FRONTEND (Standard) ---
       - uses: actions/setup-node@v4
         with:
@@ -75,9 +71,7 @@ g utf8 -Append
         uses: actions/cache@v4
         with:
           path: ${{ env.FRONTEND_DIR }}/out
-          key: ${{ runner.os }}-frontend-${{ hashFiles('**/package-lock.json', '
-${{ env.FRONTEND_DIR }}/**/*.js', '${{ env.FRONTEND_DIR }}/**/*.ts', '${{ env.FR
-ONTEND_DIR }}/**/*.tsx', '${{ env.FRONTEND_DIR }}/**/*.css') }}
+          key: ${{ runner.os }}-frontend-${{ hashFiles('**/package-lock.json', '${{ env.FRONTEND_DIR }}/**/*.js', '${{ env.FRONTEND_DIR }}/**/*.ts', '${{ env.FRONTEND_DIR }}/**/*.tsx', '${{ env.FRONTEND_DIR }}/**/*.css') }}
           restore-keys: |
             ${{ runner.os }}-frontend-
       - name: 🎨 Build Frontend
@@ -94,15 +88,12 @@ ONTEND_DIR }}/**/*.tsx', '${{ env.FRONTEND_DIR }}/**/*.css') }}
           Set-StrictMode -Version Latest
           $outDir = Resolve-Path "out"
           $manifestPath = "frontend-manifest.tsv"
-          "RelativePath`tSizeBytes`tSHA256" | Out-File $manifestPath -Encoding u
-tf8
+          "RelativePath`tSizeBytes`tSHA256" | Out-File $manifestPath -Encoding utf8
           $files = Get-ChildItem -Path $outDir -Recurse -File
           foreach ($f in $files) {
             $rel = $f.FullName.Substring($outDir.Path.Length).TrimStart('\','/')
-            $hash = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.Substring(
-0,16)
-            "$rel`t$($f.Length)`t$hash" | Out-File $manifestPath -Encoding utf8
--Append
+            $hash = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.Substring(0,16)
+            "$rel`t$($f.Length)`t$hash" | Out-File $manifestPath -Encoding utf8 -Append
           }
           Write-Host "✅ Generated frontend artifact manifest."
       # --- BACKEND (The "HatTrick" Upgrade) ---
@@ -117,16 +108,14 @@ tf8
         run: |
           $constraintDir = "temp-constraints"
           New-Item -ItemType Directory -Path $constraintDir -Force | Out-Null
-          $constraintFile = Join-Path $constraintDir "constraint-${{ matrix.arch
- }}.txt"
+          $constraintFile = Join-Path $constraintDir "constraint-${{ matrix.arch }}.txt"
           if ('${{ matrix.arch }}' -eq 'x86') {
             "numpy==1.23.5`npandas==1.5.3" | Set-Content $constraintFile
           } else { New-Item $constraintFile -ItemType File -Force }
           "file=$constraintFile" | Out-File $env:GITHUB_OUTPUT -Append
       - name: 🐍 Install Python Dependencies
         run: |
-          pip install -r ${{ env.BACKEND_DIR }}/requirements-dev.txt -c ${{ step
-s.constraints.outputs.file }}
+          pip install -r ${{ env.BACKEND_DIR }}/requirements-dev.txt -c ${{ steps.constraints.outputs.file }}
           pip install pyinstaller==6.6.0
       - name: 📦 Build Python Backend
         shell: pwsh
@@ -151,10 +140,8 @@ s.constraints.outputs.file }}
           retention-days: 1
 
   # ============================================================================
-======
   # JOB 2: PACKAGE ELECTRON (The "Ironclad" Chassis)
   # ============================================================================
-======
   package-electron:
     name: '⚡ Package Electron MSI (${{ matrix.arch }})'
     runs-on: windows-latest
@@ -182,8 +169,7 @@ s.constraints.outputs.file }}
       - name: 📥 Download Backend Artifact
         uses: actions/download-artifact@v4
         with:
-          name: python-service-${{ matrix.arch }}-${{ needs.build-core.outputs.b
-uild_id }}
+          name: python-service-${{ matrix.arch }}-${{ needs.build-core.outputs.build_id }}
           path: python-service-bin
       - name: 📥 Download Frontend Artifact
         uses: actions/download-artifact@v4
@@ -193,8 +179,7 @@ uild_id }}
       - name: 🚚 Stage Artifacts for Electron
         shell: pwsh
         run: |
-          Move-Item -Path "python-service-bin" -Destination "${{ env.ELECTRON_DI
-R }}/resources/backend" -Force
+          Move-Item -Path "python-service-bin" -Destination "${{ env.ELECTRON_DIR }}/resources/backend" -Force
           Write-Host "✅ Staged backend artifacts for Electron."
       - name: '⚖️ The Dietician (Size Analysis)'
         shell: pwsh
@@ -202,63 +187,49 @@ R }}/resources/backend" -Force
           $target = "." # Analyze entire workspace staged for build
           $limitMB = 300
           Write-Host "--- 📊 Size Breakdown ---"
-          $files = Get-ChildItem -Path $target -Recurse -File -ErrorAction Silen
-tlyContinue
+          $files = Get-ChildItem -Path $target -Recurse -File -ErrorAction SilentlyContinue
           if (!$files) { Write-Warning "No files found to weigh."; exit 0 }
           $totalBytes = ($files | Measure-Object -Property Length -Sum).Sum
           $totalMB = [math]::Round($totalBytes / 1MB, 2)
           Write-Host "Total Payload Size: $totalMB MB"
           if ($totalMB -gt $limitMB) {
-              Write-Warning "⚠️ BLOAT ALERT: Build exceeds $limitMB MB limit! Ch
-eck the heaviest files below."
+              Write-Warning "⚠️ BLOAT ALERT: Build exceeds $limitMB MB limit! Check the heaviest files below."
           } else {
-              Write-Host "✅ Size within limits (< $limitMB MB)." -ForegroundColo
-r Green
+              Write-Host "✅ Size within limits (< $limitMB MB)." -ForegroundColor Green
           }
           Write-Host "`n--- 🐘 Top 10 Heaviest Files ---"
-          $files | Sort-Object Length -Descending | Select-Object -First 10 @{N=
-'File';E={$_.FullName.Replace($pwd,'')}}, @{N='Size(MB)';E={"{0:N2}" -f ($_.Leng
-th/1MB)}} | Format-Table -AutoSize
+          $files | Sort-Object Length -Descending | Select-Object -First 10 @{N='File';E={$_.FullName.Replace($pwd,'')}}, @{N='Size(MB)';E={"{0:N2}" -f ($_.Length/1MB)}} | Format-Table -AutoSize
       - name: '🧐 Forensically Guarantee Icon Paths'
         shell: pwsh
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = "Stop"
-          Install-Module -Name powershell-yaml -Force -Scope CurrentUser -ErrorA
-ction Stop
+          Install-Module -Name powershell-yaml -Force -Scope CurrentUser -ErrorAction Stop
           Import-Module powershell-yaml
           $configPath = '${{ env.ELECTRON_DIR }}/electron-builder-config.yml'
           $iconPath = "${{ env.ELECTRON_DIR }}/assets/icon.ico"
           if (-not (Test-Path -LiteralPath $iconPath)) {
-            Write-Error "CRITICAL: The primary icon file is missing at '$iconPat
-h'."
+            Write-Error "CRITICAL: The primary icon file is missing at '$iconPath'."
             exit 1
           }
           $absoluteIconPath = (Resolve-Path -LiteralPath $iconPath).Path
           $config = Get-Content $configPath | ConvertFrom-Yaml
           $config.win.icon = $absoluteIconPath.Replace('\\', '/')
-          try { $config.msi.PSObject.Properties.Remove('installerIcon') } catch
-{}
-          try { $config.msi.PSObject.Properties.Remove('uninstallerIcon') } catc
-h {}
+          try { $config.msi.PSObject.Properties.Remove('installerIcon') } catch {}
+          try { $config.msi.PSObject.Properties.Remove('uninstallerIcon') } catch {}
           $tempConfigPath = '${{ env.ELECTRON_DIR }}/temp-builder-config.yml'
           $config | ConvertTo-Yaml | Set-Content -Path $tempConfigPath
-          Write-Host "✅ Successfully created temporary config '$tempConfigPath'
-with corrected icon paths."
+          Write-Host "✅ Successfully created temporary config '$tempConfigPath' with corrected icon paths."
       - name: 📄 Ensure WiX License Exists for electron-builder
         shell: pwsh
         run: |
           # electron-builder uses build_wix/license.rtf by convention
           $wixDir = 'build_wix'
-          if (-not (Test-Path $wixDir)) { New-Item -ItemType Directory -Path $wi
-xDir | Out-Null }
+          if (-not (Test-Path $wixDir)) { New-Item -ItemType Directory -Path $wixDir | Out-Null }
           $licensePath = Join-Path $wixDir 'license.rtf'
           if (-not (Test-Path $licensePath)) {
-            Write-Host '⚠️ License file missing. Generating placeholder for elec
-tron-builder...'
-            $rtfContent = '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\f0\fs24 END U
-SER LICENSE AGREEMENT\par\par This is a placeholder license for Fortuna Faucet.
-Please replace with actual terms.}'
+            Write-Host '⚠️ License file missing. Generating placeholder for electron-builder...'
+            $rtfContent = '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\f0\fs24 END USER LICENSE AGREEMENT\par\par This is a placeholder license for Fortuna Faucet. Please replace with actual terms.}'
             Set-Content -Path $licensePath -Value $rtfContent -Encoding Ascii
             Write-Host '✅ Placeholder license.rtf created.'
           } else {
@@ -271,19 +242,14 @@ Please replace with actual terms.}'
         run: |
           npm ci --prefer-offline
           $ver = "${{ needs.build-core.outputs.semver }}"
-          $arch_flag = if ('${{ matrix.arch }}' -eq 'x86') { '--ia32' } else { '
---x64' }
-          npm run dist -- --win msi $arch_flag --config temp-builder-config.yml
---publish never --config.artifactName="Fortuna-Electron-${ver}-${{ matrix.arch }
-}.msi"
+          $arch_flag = if ('${{ matrix.arch }}' -eq 'x86') { '--ia32' } else { '--x64' }
+          npm run dist -- --win msi $arch_flag --config temp-builder-config.yml --publish never --config.artifactName="Fortuna-Electron-${ver}-${{ matrix.arch }}.msi"
       - name: 🔬 Forensic Packaging Analysis
         shell: pwsh
         run: |
-          $unpackedDir = if ('${{ matrix.arch }}' -eq 'x86') { 'win-ia32-unpacke
-d' } else { 'win-unpacked' }
+          $unpackedDir = if ('${{ matrix.arch }}' -eq 'x86') { 'win-ia32-unpacked' } else { 'win-unpacked' }
           Write-Host "=== HYBRID STAGING LAYOUT (${{ matrix.arch }}) ==="
-          Get-ChildItem -Path "${{ env.ELECTRON_DIR }}/dist/$unpackedDir" -Recur
-se | Select-Object FullName, Length
+          Get-ChildItem -Path "${{ env.ELECTRON_DIR }}/dist/$unpackedDir" -Recurse | Select-Object FullName, Length
       - name: Rename & Hash MSI
         id: name_msi
         shell: pwsh
@@ -291,14 +257,12 @@ se | Select-Object FullName, Length
           $ver = "${{ needs.build-core.outputs.semver }}"
           $sha = "${{ needs.build-core.outputs.short_sha }}"
           $releaseDir = "${{ env.ELECTRON_DIR }}/dist"
-          $msiFound = Get-ChildItem -Path $releaseDir -Filter "*.msi" | Select-O
-bject -First 1
+          $msiFound = Get-ChildItem -Path $releaseDir -Filter "*.msi" | Select-Object -First 1
           if (-not $msiFound) {
             Write-Error "❌ FATAL: No MSI file found in $releaseDir."
             exit 1
           }
-          $targetName = "Fortuna-Electron-Hybrid-${{ matrix.arch }}-${ver}-${sha
-}.msi"
+          $targetName = "Fortuna-Electron-Hybrid-${{ matrix.arch }}-${ver}-${sha}.msi"
           $newPath = Join-Path $releaseDir $targetName
           Move-Item -Path $msiFound.FullName -Destination $newPath -Force
           "msi_name=$targetName" | Out-File $env:GITHUB_OUTPUT -Append
@@ -310,10 +274,8 @@ bject -First 1
           retention-days: 1
 
   # ============================================================================
-======
   # JOB 3: SMOKE TEST (The "Robust" Verification)
   # ============================================================================
-======
   smoke-test:
     name: '🔬 Smoke Test (${{ matrix.arch }})'
     runs-on: windows-latest
@@ -331,11 +293,9 @@ bject -First 1
       - name: 🤫 Install MSI & Verify
         shell: pwsh
         run: |
-          $msi = Get-ChildItem "installer" -Filter "*.msi" -Recurse | Select -Fi
-rst 1
+          $msi = Get-ChildItem "installer" -Filter "*.msi" -Recurse | Select -First 1
           if (!$msi) { throw "No MSI found" }
-          $proc = Start-Process msiexec.exe -ArgumentList "/i `"$($msi.FullName)
-`" /qn /L*v install.log" -Wait -PassThru
+          $proc = Start-Process msiexec.exe -ArgumentList "/i `"$($msi.FullName)`" /qn /L*v install.log" -Wait -PassThru
           if ($proc.ExitCode -ne 0 -and $proc.ExitCode -ne 3010) {
             Get-Content install.log -Tail 50
             throw "Install failed with code $($proc.ExitCode)"
@@ -344,60 +304,44 @@ rst 1
         shell: pwsh
         run: |
           $progFiles = ${env:ProgramFiles}
-          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(
-x86)} }
+          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
           $installRoot = Join-Path $progFiles "Fortuna Faucet"
           if (! (Test-Path $installRoot)) {
             Write-Error "Installation directory not found at $installRoot."
             exit 1
           }
-          New-Item -Path "$installRoot\data" -ItemType Directory -Force | Out-Nu
-ll
-          New-Item -Path "$installRoot\json" -ItemType Directory -Force | Out-Nu
-ll
-          New-Item -Path "$installRoot\logs" -ItemType Directory -Force | Out-Nu
-ll
+          New-Item -Path "$installRoot\data" -ItemType Directory -Force | Out-Null
+          New-Item -Path "$installRoot\json" -ItemType Directory -Force | Out-Null
+          New-Item -Path "$installRoot\logs" -ItemType Directory -Force | Out-Null
       - name: '🔬 Complete Smoke Test (3-Layer Defense)'
         shell: pwsh
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = "Stop"
           $progFiles = ${env:ProgramFiles}
-          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(
-x86)} }
+          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
           $installRoot = Join-Path $progFiles "Fortuna Faucet"
           # --- LAYER 1: FILE VERIFICATION ---
-          $mainExe = Get-ChildItem -Path $installRoot -Filter "*.exe" -Recurse |
- Where-Object { $_.Name -notmatch 'uninstall' } | Select -First 1
-          $backendExe = Get-ChildItem -Path $installRoot -Filter "fortuna-backen
-d.exe" -Recurse | Select -First 1
-          if (-not $mainExe) { Write-Error "❌ LAYER 1 FAILED: Main 'Fortuna Fauc
-et.exe' not found."; exit 1 }
-          if (-not $backendExe) { Write-Error "❌ LAYER 1 FAILED: Backend 'fortun
-a-backend.exe' not found."; exit 1 }
+          $mainExe = Get-ChildItem -Path $installRoot -Filter "*.exe" -Recurse | Where-Object { $_.Name -notmatch 'uninstall' } | Select -First 1
+          $backendExe = Get-ChildItem -Path $installRoot -Filter "fortuna-backend.exe" -Recurse | Select -First 1
+          if (-not $mainExe) { Write-Error "❌ LAYER 1 FAILED: Main 'Fortuna Faucet.exe' not found."; exit 1 }
+          if (-not $backendExe) { Write-Error "❌ LAYER 1 FAILED: Backend 'fortuna-backend.exe' not found."; exit 1 }
           # --- LAYER 2: PROCESS VERIFICATION ---
-          $proc = Start-Process -FilePath $mainExe.FullName -ArgumentList "--no-
-sandbox" -PassThru
+          $proc = Start-Process -FilePath $mainExe.FullName -ArgumentList "--no-sandbox" -PassThru
           Start-Sleep -Seconds 10
-          $parentProcess = Get-Process -Name "Fortuna Faucet" -ErrorAction Silen
-tlyContinue
-          $childProcess = Get-Process -Name "fortuna-backend" -ErrorAction Silen
-tlyContinue
-          if (-not $parentProcess) { Write-Error "❌ LAYER 2 FAILED: Main 'Fortun
-a Faucet' process is not running."; exit 1 }
-          if (-not $childProcess) { Write-Error "❌ LAYER 2 FAILED: Child 'fortun
-a-backend' process is not running."; exit 1 }
+          $parentProcess = Get-Process -Name "Fortuna Faucet" -ErrorAction SilentlyContinue
+          $childProcess = Get-Process -Name "fortuna-backend" -ErrorAction SilentlyContinue
+          if (-not $parentProcess) { Write-Error "❌ LAYER 2 FAILED: Main 'Fortuna Faucet' process is not running."; exit 1 }
+          if (-not $childProcess) { Write-Error "❌ LAYER 2 FAILED: Child 'fortuna-backend' process is not running."; exit 1 }
           # --- LAYER 3: NETWORK VERIFICATION ---
           $maxAttempts = 10
           $healthUrl = "http://localhost:${{ env.FORTUNA_PORT }}/health"
           for ($i = 1; $i -le $maxAttempts; $i++) {
             try {
-              $response = Invoke-WebRequest -Uri $healthUrl -Method Get -UseBasi
-cParsing -ErrorAction Stop
+              $response = Invoke-WebRequest -Uri $healthUrl -Method Get -UseBasicParsing -ErrorAction Stop
               if ($response.StatusCode -eq 200) {
                 Write-Host "✅✅✅ SMOKE TEST PASSED ✅✅✅"
-                Stop-Process -Name "Fortuna Faucet", "fortuna-backend" -Force -E
-rrorAction SilentlyContinue
+                Stop-Process -Name "Fortuna Faucet", "fortuna-backend" -Force -ErrorAction SilentlyContinue
                 exit 0
               }
             } catch { Start-Sleep -Seconds 5 }
@@ -406,14 +350,11 @@ rrorAction SilentlyContinue
           exit 1
       - name: Cleanup
         if: always()
-        run: Stop-Process -Name "Fortuna Faucet", "fortuna-backend" -Force -Erro
-rAction SilentlyContinue
+        run: Stop-Process -Name "Fortuna Faucet", "fortuna-backend" -Force -ErrorAction SilentlyContinue
 
   # ============================================================================
-======
   # JOB 4: RELEASE (The "Triple-Tap" Staging)
   # ============================================================================
-======
   release:
     name: '📦 Release'
     runs-on: windows-latest
