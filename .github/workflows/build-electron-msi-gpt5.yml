@@ -613,6 +613,7 @@ jobs:
           $ErrorActionPreference = "Stop"
 
           # Install and import the required module for YAML parsing
+          Set-PSRepository -Name PSGallery -InstallationPolicy Untrusted
           Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force
           Install-Module -Name powershell-yaml -Force -Scope CurrentUser -ErrorAction Stop
           Import-Module powershell-yaml
