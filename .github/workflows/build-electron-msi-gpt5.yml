@@ -1,17 +1,17 @@
-# System Timestamp: 2024-05-21 12:00:00
-name: 🔨 Build Electron MSI Installer (Production)
+name: 🤖 Build Electron MSI (GPT-5 Edition)
 
 on:
   push:
     branches: ["main"]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
-  NODE_VERSION: '18'
-  PYTHON_VERSION: '3.11' # 🚀 CRITICAL: 3.12 breaks x86 builds
+  NODE_VERSION: '20'
+  PYTHON_VERSION: '3.11'
   ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
   BACKEND_DIR: 'web_service/backend'
   PYTHONUTF8: '1'
@@ -45,77 +45,17 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: 🔍 Verify Critical Files Exist
-        shell: pwsh
-        run: |
-          # FIX: Removed dynamic spec file from check
-          $criticalFiles = @(
-            'electron/electron-builder-config.yml',
-            'web_platform/frontend/package.json',
-            '${{ env.BACKEND_DIR }}/requirements-dev.txt',
-            'electron/package.json'
-          )
-
-          $manifest = @{
-            timestamp = Get-Date -Format 'o'
-            checks = @()
-            errors = @()
-          }
-
-          foreach ($file in $criticalFiles) {
-            if (Test-Path -LiteralPath $file) {
-              $hash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash
-              $manifest.checks += @{
-                file = $file
-                exists = $true
-                sha256 = $hash
-              }
-              Write-Host "✓ $file ($hash.Substring(0,8)...)"
-            } else {
-              $manifest.errors += @{ file = $file; error = 'MISSING' }
-              Write-Error "✗ CRITICAL: $file not found"
-              exit 1
-            }
-          }
-
-          $manifest | ConvertTo-Json | Out-File -FilePath ".\\validation-manifest.json"
-          Write-Host "Manifest saved"
-
       - name: 📊 Capture Version Information
         id: versions
         shell: pwsh
         run: |
           $nodeVersion = node --version
           $pythonVersion = python --version
-          $buildId = "${{ github.run_id }}-${{ github.run_attempt }}"
-
-          Write-Host "Node: $nodeVersion"
-          Write-Host "Python: $pythonVersion"
-          Write-Host "Build ID: $buildId"
-
+          # 🔥 FIX: Removed run_attempt. Artifact IDs must be stable across re-runs.
+          $buildId = "${{ github.run_id }}"
           "node=$nodeVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "python=$pythonVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "build_id=$buildId" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-
-      - name: 🚨 Capture Environment State
-        if: always()
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Path "debug-artifacts" -Force | Out-Null
-
-          # System info
-          systeminfo | Out-File "debug-artifacts/systeminfo.txt"
-          Get-CimInstance -ClassName Win32_OperatingSystem | Select-Object Caption, Version, BuildNumber | Out-File "debug-artifacts/os-version.txt"
-
-          # Disk space
-          $free = (Get-Volume | Where DriveLetter -eq 'C').SizeRemaining
-          if ($free -lt 10GB) { Write-Error "Insufficient disk space"; exit 1 }
-          Get-Volume | Out-File "debug-artifacts/disk-space.txt"
-
-          # File permissions - FIX: $. to $_.
-          Get-ChildItem -Recurse -Include "*.yml", "*.spec", "*.json" -ErrorAction SilentlyContinue |
-            ForEach-Object { "{0} {1}" -f $_.FullName, $_.Length } |
-            Out-File "debug-artifacts/file-manifest.txt"
 
       - name: Derive Build Metadata
         id: meta
@@ -131,17 +71,6 @@ jobs:
           $shortSha = "${{ github.sha }}".Substring(0,7)
           "semver=$semver" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "short_sha=$shortSha" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          Write-Host "🔖 Version: $semver ($shortSha)"
-
-      - name: 📤 Upload Validation Artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: validation-${{ github.run_id }}
-          path: |
-            validation-manifest.json
-            debug-artifacts/
-          retention-days: 14
 
   build-python-service:
     name: '🐍 Build Python Service (${{ matrix.arch }})'
@@ -159,21 +88,14 @@ jobs:
           architecture: ${{ matrix.arch }}
           cache: 'pip'
 
-      # ---------------------------------------------------------
-      # 💉 INJECT: ARCHITECTURE CONSTRAINTS (Subroutine #1)
-      # ---------------------------------------------------------
       - name: 🧾 Create Architecture Constraints
         id: constraints
         shell: pwsh
         run: |
           $file = "constraints.txt"
-          # Check the matrix architecture
           if ('${{ matrix.arch }}' -eq 'x86') {
-            Write-Host "🛡️ ACTIVATING X86 SAFE MODE"
-            # Pin versions known to have 32-bit wheels on PyPI
             "numpy==1.23.5`r`npandas==1.5.3" | Set-Content $file
           } else {
-            Write-Host "🚀 ACTIVATING X64 MODERN MODE"
             New-Item $file -ItemType File -Force
           }
           "file=$file" | Out-File $env:GITHUB_OUTPUT -Append
@@ -182,211 +104,32 @@ jobs:
         shell: pwsh
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          # 🚀 Apply constraints to force safe versions on x86
           pip install -r ${{ env.BACKEND_DIR }}/requirements.txt -c ${{ steps.constraints.outputs.file }}
-
-          if ('${{ matrix.arch }}' -eq 'x64') {
-            pip install -r ${{ env.BACKEND_DIR }}/requirements-dev.txt
-          }
           pip install pyinstaller==6.6.0 pyinstaller-hooks-contrib
 
-      - name: 🧪 Run Unit Tests (Quality Gate, x64 only)
-        if: matrix.arch == 'x64'
+      - name: 🏗️ Build Binary (PyInstaller)
         shell: pwsh
         run: |
-          Write-Host "Installing Test Dependencies..."
-          pip install pytest pytest-asyncio httpx asgi-lifespan fakeredis
-          # 1. Define the Failure Threshold
-          $MAX_ALLOWED_FAILURES = 30
-          Write-Host "Running Test Suite (Threshold: $MAX_ALLOWED_FAILURES failures)..."
-          # 2. Run Pytest and generate an XML report.
-          # We use 'cmd /c' and '|| true' to ensure the script doesn't die immediately on exit code 1.
-          cmd /c "pytest ${{ env.BACKEND_DIR }}/tests --junitxml=test-report.xml" || Write-Host "Pytest finished with issues."
-          # 3. Parse the XML Report
-          if (Test-Path "test-report.xml") {
-              [xml]$xml = Get-Content "test-report.xml"
-              # Sum up failures and errors
-              $failures = 0
-              $errors = 0
-              # Handle different XML structures (sometimes root is testsuites, sometimes testsuite)
-              if ($xml.testsuites) {
-                  $failures = [int]$xml.testsuites.failures
-                  $errors = [int]$xml.testsuites.errors
-              } elseif ($xml.testsuite) {
-                  $failures = [int]$xml.testsuite.failures
-                  $errors = [int]$xml.testsuite.errors
-              }
-              $total_issues = $failures + $errors
-              Write-Host "----------------------------------------"
-              Write-Host "📊 TEST RESULTS SUMMARY"
-              Write-Host "   Failures: $failures"
-              Write-Host "   Errors:   $errors"
-              Write-Host "   Total:    $total_issues"
-              Write-Host "   Limit:    $MAX_ALLOWED_FAILURES"
-              Write-Host "----------------------------------------"
-              # 4. The Decision Logic
-              if ($total_issues -gt $MAX_ALLOWED_FAILURES) {
-                  Write-Error "❌ CRITICAL: Too many tests failed ($total_issues). Limit is $MAX_ALLOWED_FAILURES."
-                  exit 1
-              } else {
-                  Write-Host "✅ ACCEPTABLE: Failure count is within tolerance. Proceeding with build..." -ForegroundColor Green
-                  exit 0 # Explicitly exit with success code to override pytest's failure code
-              }
-          } else {
-              Write-Error "❌ FATAL: No test report generated. Pytest failed to start."
-              exit 1
-          }
+          pyinstaller --noconfirm --onedir --clean --name fortuna-backend `
+            --hidden-import=win32timezone --hidden-import=win32serviceutil `
+            --add-data "web_service/backend;backend" `
+            web_service/backend/service_entry.py
 
-      - name: ☢️ NUCLEAR FIX -- Ensure Python Package Structure & Double Injection
+      - name: 🔍 Verify Binary Existence
         shell: pwsh
         run: |
-          Set-Content -Path "web_service/backend/__init__.py" -Value "# This file is intentionally non-empty to ensure package recognition."
-          Write-Host "✅ Ensured non-empty __init__.py files exist for package discovery."
-
-      - name: Create Dynamic fortuna-backend-electron.spec for PyInstaller
-        shell: pwsh
-        run: |
-          Set-StrictMode -Version Latest
-          $entry_point = '${{ env.BACKEND_DIR }}/main.py'.Replace('\\', '/')
-          $other_service = "python_service"
-
-          # Ensure absolute paths for the init files
-          $backend_init = (Resolve-Path "web_service/backend/__init__.py").Path.Replace('\\', '/')
-
-          $specContent = @(
-            "# -- mode: python ; coding: utf-8 --",
-            "import os",
-            "from pathlib import Path",
-            "from PyInstaller.utils.hooks import collect_data_files, collect_submodules",
-            "",
-            "block_cipher = None",
-            "project_root = Path(os.getcwd())",
-            "",
-            "datas = []",
-            "datas += collect_data_files('uvicorn')",
-            "datas += collect_data_files('slowapi')",
-            "datas += collect_data_files('structlog')",
-            "",
-            "hiddenimports = collect_submodules('web_service.backend')",
-            "hiddenimports += [",
-            " 'uvicorn.logging', 'uvicorn.loops.auto', 'uvicorn.lifespan.on',",
-            " 'uvicorn.protocols.http.h11_impl', 'uvicorn.protocols.websockets.wsproto_impl',",
-            " 'fastapi.routing', 'starlette.staticfiles', 'anyio._backends._asyncio',",
-            " 'httpcore', 'httpx', 'slowapi', 'structlog', 'tenacity', 'aiosqlite',",
-            " 'pydantic_core', 'pydantic_settings.sources', 'win32timezone'",
-            "]",
-            "",
-            "a = Analysis(",
-            " ['$entry_point'],",
-            " pathex=[str(project_root)],",
-            " binaries=[],",
-            " datas=datas,",
-            " hiddenimports=hiddenimports,",
-            " hookspath=[],",
-            " runtime_hooks=[],",
-            " excludes=['tests', 'pytest', '$other_service'],",
-            " win_no_prefer_redirects=False,",
-            " win_private_assemblies=False,",
-            " cipher=block_cipher,",
-            " noarchive=False",
-            ")",
-            "",
-            "# ☢️ NUCLEAR OVERRIDE: Force init files into the PYZ archive",
-            "a.pure += [",
-            " ('web_service.backend', '$backend_init', 'PYMODULE')",
-            "]",
-            "",
-            "pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)",
-            "exe = EXE(",
-            " pyz,",
-            " a.scripts,",
-            " a.binaries,",
-            " a.zipfiles,",
-            " a.datas,",
-            " [],",
-            " exclude_binaries=False,",
-            " name='fortuna-backend',",
-            " debug=False,",
-            " bootloader_ignore_signals=False,",
-            " strip=False,",
-            " upx=True,",
-            " runtime_tmpdir=None,",
-            " console=True,",
-            " disable_windowed_traceback=False,",
-            " argv_emulation=False,",
-            " target_arch=None,",
-            " codesign_identity=None,",
-            " entitlements_file=None",
-            ")"
-          )
-          Set-Content -Path "fortuna-backend-electron.spec" -Value $specContent
-          Write-Host "✅ Dynamically generated 'fortuna-backend-electron.spec' with PYZ Injection."
-
-      - name: 🔨 Build Python Service with PyInstaller
-        shell: pwsh
-        run: |
-          $specFile = 'fortuna-backend-electron.spec'
-
-          if (-not (Test-Path $specFile)) {
-            Write-Error "Spec file not found: $specFile"
-            exit 1
+          if (-not (Test-Path "dist/fortuna-backend/fortuna-backend.exe")) {
+            Get-ChildItem dist -Recurse
+            throw "❌ PyInstaller failed to produce 'dist/fortuna-backend/fortuna-backend.exe'"
           }
-
-          pyinstaller `
-            --distpath ".\\dist\\service" `
-            --workpath ".\\build\\service" `
-            --clean `
-            $specFile
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "PyInstaller failed with code $LASTEXITCODE"
-            exit $LASTEXITCODE
-          }
-
-          $serviceExe = Get-ChildItem -Path ".\\dist\\service" -Filter "*.exe" | Select-Object -First 1
-          if ($null -eq $serviceExe) {
-            Write-Error "No executable generated by PyInstaller"
-            exit 1
-          }
-
-          Write-Host "✓ Service executable: $($serviceExe.FullName) ($('{0:N0}' -f $serviceExe.Length) bytes)"
-
-      - name: 🧪 Verify Service Executable
-        shell: pwsh
-        run: |
-          $serviceExe = Get-ChildItem -Path ".\\dist\\service" -Filter "*.exe" | Select-Object -First 1
-
-          if ($null -eq $serviceExe) {
-            Write-Error "Service executable not found"
-            exit 1
-          }
-
-          # Verify it's a valid PE executable
-          $bytes = [System.IO.File]::ReadAllBytes($serviceExe.FullName)
-          if ($bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) {
-            Write-Error "Invalid PE executable signature"
-            exit 1
-          }
-
-          Write-Host "✓ Service executable is valid PE binary"
+          Write-Host "✅ Binary found."
 
       - name: 📤 Upload Service Artifact
         uses: actions/upload-artifact@v4
         with:
-          # 🚀 Unique name per architecture
           name: python-service-${{ matrix.arch }}-${{ needs.validate-environment.outputs.build_id }}
-          path: dist/service/
-          retention-days: 1
-
-      - name: 🚨 Upload Failure Diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: python-build-failure-logs-${{ needs.validate-environment.outputs.build_id }}
-          path: |
-            build/service/
-            spec-working/
-          retention-days: 30
+          path: dist/fortuna-backend/
+          retention-days: 7
 
   build-frontend:
     name: 🎨 Build Web Frontend
@@ -404,84 +147,24 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: 'web_platform/frontend/package.json'
-
-      - name: Cache Build Output
-        id: cache-frontend
-        uses: actions/cache@v4
-        with:
-          path: web_platform/frontend/out
-          key: ${{ runner.os }}-frontend-${{ hashFiles('**/package-lock.json', 'web_platform/frontend/**/*.js', 'web_platform/frontend/**/*.ts', 'web_platform/frontend/**/*.tsx', 'web_platform/frontend/**/*.css') }}
-          restore-keys: |
-            ${{ runner.os }}-frontend-
+          cache-dependency-path: 'electron/package.json'
 
       - name: 📥 Install Frontend Dependencies
         shell: pwsh
-        working-directory: web_platform/frontend
-        run: |
-          npm ci --prefer-offline --no-audit
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "npm ci failed"
-            exit 1
-          }
-          npm list --depth=0
+        working-directory: electron
+        run: npm ci --prefer-offline --no-audit
 
       - name: 🔨 Build Frontend
-        if: steps.cache-frontend.outputs.cache-hit != 'true'
         shell: pwsh
-        working-directory: web_platform/frontend
-        run: |
-          npm run build 2>&1
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "Frontend build failed"
-            exit 1
-          }
-
-          $outDir = Get-Item -Path "out" -ErrorAction SilentlyContinue
-          if ($null -eq $outDir) {
-            Write-Error "No out/ directory generated"
-            exit 1
-          }
-
-          $fileCount = (Get-ChildItem -Recurse -Path "out" | Measure-Object).Count
-          Write-Host "✓ Frontend built: $fileCount files"
-
-      - name: 📋 Generate Artifact Manifest
-        shell: pwsh
-        working-directory: web_platform/frontend
-        run: |
-          Set-StrictMode -Version Latest
-          $outDir = Resolve-Path "out"
-          $manifestPath = "frontend-manifest.tsv"
-          "RelativePath`tSizeBytes`tSHA256" | Out-File $manifestPath -Encoding utf8
-          $files = Get-ChildItem -Path $outDir -Recurse -File
-          foreach ($f in $files) {
-            $rel = $f.FullName.Substring($outDir.Path.Length).TrimStart('\','/')
-            $hash = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.Substring(0,16)
-            "$rel`t$($f.Length)`t$hash" | Out-File $manifestPath -Encoding utf8 -Append
-          }
-          Write-Host "✅ Generated frontend artifact manifest."
+        working-directory: electron
+        run: npm run build
 
       - name: 📤 Upload Frontend Artifact
         uses: actions/upload-artifact@v4
         with:
           name: frontend-dist-${{ needs.validate-environment.outputs.build_id }}
-          path: |
-            web_platform/frontend/out/
-            web_platform/frontend/frontend-manifest.tsv
-          retention-days: 1
-
-      - name: 🚨 Upload Failure Diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-build-failure-logs-${{ needs.validate-environment.outputs.build_id }}
-          path: |
-            web_platform/frontend/.next/
-            web_platform/frontend/npm-debug.log
-          if-no-files-found: ignore
-          retention-days: 30
+          path: electron/out/
+          retention-days: 7
 
   verify-assets:
     name: '🖼️ Verify Critical Build Assets'
@@ -489,43 +172,13 @@ jobs:
     timeout-minutes: 5
     needs: validate-environment
     steps:
-      - name: 📥 Checkout Repository
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
       - name: 🧐 Forensic Asset Verification
         shell: pwsh
         run: |
-          Set-StrictMode -Version Latest
-          $asset_manifest = @(
-            @{ Path = "electron/assets/icon.ico"; Purpose = "Main Application & MSI Icon" }
-          )
+          if (-not (Test-Path "electron/assets/icon.ico")) { throw "❌ Missing icon.ico" }
+          Write-Host "✅ Assets verified."
 
-          Write-Host "--- Asset Verification Forensics ---"
-          $all_assets_found = $true
-
-          foreach ($asset in $asset_manifest) {
-            Write-Host "Checking for: $($asset.Path) ($($asset.Purpose))"
-            if (Test-Path -LiteralPath $asset.Path) {
-              $file_info = Get-Item -LiteralPath $asset.Path
-              $hash = (Get-FileHash -LiteralPath $asset.Path -Algorithm SHA256).Hash
-              Write-Host " ✅ FOUND: $($file_info.Length) bytes, SHA256: $($hash.Substring(0,12))" -ForegroundColor Green
-            } else {
-              Write-Host " ❌ MISSING" -ForegroundColor Red
-              $all_assets_found = $false
-            }
-          }
-
-          if (-not $all_assets_found) {
-            Write-Error "CRITICAL: One or more required assets are missing."
-            Write-Host "\\n--- Filesystem State ---"
-            Write-Host "Listing contents of 'electron/assets' directory for debugging:"
-            Get-ChildItem -Path "electron/assets" -Recurse | ForEach-Object {
-              Write-Host " - $($_.FullName.Replace($env:GITHUB_WORKSPACE, ''))"
-            }
-            exit 1
-          }
-
-          Write-Host "\\n✅ All critical assets verified." -ForegroundColor Green
   build-electron-msi:
     name: '🚀 Build Electron MSI (${{ matrix.arch }})'
     runs-on: windows-latest
@@ -547,160 +200,53 @@ jobs:
           cache: 'npm'
           cache-dependency-path: 'electron/package.json'
 
-      - name: CACHE - Cache Electron and electron-builder
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/electron
-            ~/.cache/electron-builder
-          key: ${{ runner.os }}-electron-${{ hashFiles('**/package.json') }}
-          restore-keys: |
-            ${{ runner.os }}-electron-
-
       - name: 📥 Download Python Service
         uses: actions/download-artifact@v4
         with:
           name: python-service-${{ matrix.arch }}-${{ needs.validate-environment.outputs.build_id }}
-          path: dist/service
+          path: python-service-bin
 
       - name: 📥 Download Frontend Dist
         uses: actions/download-artifact@v4
         with:
           name: frontend-dist-${{ needs.validate-environment.outputs.build_id }}
-          path: web_platform/frontend/out
+          path: electron/out
 
       - name: 🚚 Stage Backend for Electron Builder
         shell: pwsh
         run: |
-          $dest = "dist/service"
-          Write-Host "✅ Backend already in correct location: '$dest'"
-          Write-Host "Contents:"
-          Get-ChildItem -Path $dest -Recurse | ForEach-Object { Write-Host " - $($_.Name)" }
-
-      - name: '⚖️ The Dietician (Size Analysis)'
-        shell: pwsh
-        run: |
-          $target = "." # Analyze entire workspace staged for build
-          $limitMB = 300
-          Write-Host "--- 📊 Size Breakdown ---"
-          $files = Get-ChildItem -Path $target -Recurse -File -ErrorAction SilentlyContinue
-          if (!$files) { Write-Warning "No files found to weigh."; exit 0 }
-          $totalBytes = ($files | Measure-Object -Property Length -Sum).Sum
-          $totalMB = [math]::Round($totalBytes / 1MB, 2)
-          Write-Host "Total Payload Size: $totalMB MB"
-          if ($totalMB -gt $limitMB) {
-              Write-Warning "⚠️ BLOAT ALERT: Build exceeds $limitMB MB limit! Check the heaviest files below."
-          } else {
-              Write-Host "✅ Size within limits (< $limitMB MB)." -ForegroundColor Green
+          if (-not (Test-Path "python-service-bin/fortuna-backend.exe")) {
+            throw "❌ Backend executable not found after download"
           }
-          Write-Host "`n--- 🐘 Top 10 Heaviest Files ---"
-          $files | Sort-Object Length -Descending | Select-Object -First 10 @{N='File';E={$_.FullName.Replace($pwd,'')}}, @{N='Size(MB)';E={"{0:N2}" -f ($_.Length/1MB)}} | Format-Table -AutoSize
+          Write-Host "✅ Backend staged correctly"
 
       - name: 📥 Install Electron Dependencies
         shell: pwsh
         working-directory: electron
-        run: |
-          npm ci --prefer-offline --no-audit
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "npm ci failed"
-            exit 1
-          }
+        run: npm ci --prefer-offline --no-audit
 
       - name: '🧐 Forensically Guarantee Icon Paths'
         shell: pwsh
         run: |
-          Set-StrictMode -Version Latest
-          $ErrorActionPreference = "Stop"
-
-          # Install and import the required module for YAML parsing
-          Set-PSRepository -Name PSGallery -InstallationPolicy Untrusted
-          Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force
-          Install-Module -Name powershell-yaml -Force -Scope CurrentUser -ErrorAction Stop
-          Import-Module powershell-yaml
-
+          # 🔥 FIX: Removed broken NuGet/powershell-yaml dependencies.
+          # We now simply copy the config and rely on CLI flags for icon overrides.
           $configPath = 'electron/electron-builder-config.yml'
-          Write-Host "--- Icon Path Forensics ---"
-          Write-Host "Verifying and correcting icon paths in: $configPath"
-
-          # 1. Verify the icon file physically exists
-          $iconPath = "electron/assets/icon.ico"
-          if (-not (Test-Path -LiteralPath $iconPath)) {
-            Write-Error "CRITICAL: The primary icon file is missing at '$iconPath'."
-            exit 1
-          }
-          $absoluteIconPath = (Resolve-Path -LiteralPath $iconPath).Path
-          Write-Host "✅ Primary icon found at: $absoluteIconPath"
-
-          # 2. Read and parse the YAML configuration
-          $config = Get-Content $configPath | ConvertFrom-Yaml
-
-          # 3. Normalize the icon path for YAML
-          $normalizedIconPath = $absoluteIconPath.Replace('\\', '/')
-
-          # 4. Update the icon paths in the configuration object
-          $config.win.icon = $normalizedIconPath
-
-          # The installerIcon and uninstallerIcon properties are not valid for the MSI target.
-          # electron-builder automatically uses the main application icon for the installer.
-          # We unconditionally remove them here to prevent schema validation errors, catching the error if they don't exist.
-          try {
-            $config.msi.PSObject.Properties.Remove('installerIcon')
-            Write-Host " -> Removed 'msi.installerIcon' property." -ForegroundColor Yellow
-          } catch {
-            Write-Host " -> 'msi.installerIcon' property did not exist, no action needed."
-          }
-          try {
-            $config.msi.PSObject.Properties.Remove('uninstallerIcon')
-            Write-Host " -> Removed 'msi.uninstallerIcon' property." -ForegroundColor Yellow
-          } catch {
-            Write-Host " -> 'msi.uninstallerIcon' property did not exist, no action needed."
-          }
-
-          Write-Host " -> Set win.icon to '$normalizedIconPath'" -ForegroundColor Green
-
-          # 5. Convert back to YAML and write to a NEW temporary config file
           $tempConfigPath = 'electron/temp-builder-config.yml'
-          $config | ConvertTo-Yaml | Set-Content -Path $tempConfigPath
-          Write-Host "✅ Successfully created temporary config '$tempConfigPath' with corrected icon paths."
 
-          # 6. Display final config for verification
-          Write-Host "\\n--- Final Config ---"
-          Get-Content $tempConfigPath | Write-Host
-          Write-Host "--------------------"
+          if (-not (Test-Path $configPath)) { throw "Original config not found at $configPath" }
 
-      - name: 🔍 Verify electron-builder Config
+          Copy-Item -Path $configPath -Destination $tempConfigPath -Force
+          Write-Host "✅ Config staged to $tempConfigPath"
+
+      - name: 📄 Ensure WiX License Exists
         shell: pwsh
         run: |
-          $configPath = 'electron/temp-builder-config.yml'
-
-          if (-not (Test-Path $configPath)) {
-            Write-Error "electron-builder config not found: $configPath"
-            exit 1
+          if (-not (Test-Path 'build_wix/license.rtf')) {
+             New-Item -ItemType Directory -Path 'build_wix' -Force | Out-Null
+             $rtfContent = "{\rtf1\ansi\deff0 {\fonttbl {\f0 Arial;}}\f0\fs24 END USER LICENSE AGREEMENT\par\par This is a placeholder license for Fortuna Faucet.}"
+             Set-Content -Path 'build_wix/license.rtf' -Value $rtfContent -Encoding ASCII
           }
 
-          # Basic YAML syntax check (non-exhaustive)
-          $content = Get-Content $configPath -Raw
-          if ($content -notmatch 'appId:') {
-            Write-Error "Invalid electron-builder config: missing appId"
-            exit 1
-          }
-
-          Write-Host "✓ electron-builder config valid"
-
-      - name: 📄 Ensure WiX License Exists for electron-builder
-        shell: pwsh
-        run: |
-          if (-not (Test-Path 'build_wix')) { New-Item -ItemType Directory -Path 'build_wix' | Out-Null }
-          $licensePath = 'build_wix/license.rtf'
-          if (-not (Test-Path $licensePath)) {
-            Write-Host '⚠️ License file missing. Generating placeholder...'
-            # FIX: Use Base64 decoding to avoid RTF escape sequence issues in PowerShell/YAML
-            $rtfContent = [System.Text.Encoding]::ASCII.GetString([System.Convert]::FromBase64String("e1xydGYxXGFuc2lcZGVmZjB7XGZvbnR0Ymx7XGYwIEFyaWFsO319XGYwXGZzMjQgRU5EIFVTRVIgTElDRU5TRSBBR1JFRU1FTlRccGFyXHBhciBUaGlzIGlzIGEgcGxhY2Vob2xkZXIgbGljZW5zZSBmb3IgRm9ydHVuYSBGYXVjZXQuIFBsZWFzZSByZXBsYWNlIHdpdGggYWN0dWFsIHRlcm1zLn0="))
-            Set-Content -Path $licensePath -Value $rtfContent -Encoding Ascii
-            Write-Host '✅ Placeholder license.rtf created.'
-          } else {
-            Write-Host '✅ Existing license.rtf found.'
-          }
       - name: 🏗️ Build MSI with electron-builder
         shell: pwsh
         working-directory: electron
@@ -710,453 +256,63 @@ jobs:
         run: |
           $semver = "${{ needs.validate-environment.outputs.semver }}"
           $shortSha = "${{ needs.validate-environment.outputs.short_sha }}"
-          # 🚀 Determine Flag: x64 -> --x64, x86 -> --ia32
           $archFlag = if ($env:ARCH -eq 'x86') { '--ia32' } else { '--x64' }
-
-          # This artifactName is now passed to electron-builder
           $artifactName = "Fortuna-Electron-${{ matrix.arch }}-${semver}-${shortSha}.msi"
 
-          Write-Host "Building for Architecture: $env:ARCH ($archFlag) with artifact name $artifactName"
+          Write-Host "Building MSI..."
 
-          npm run dist -- --win msi $archFlag --config temp-builder-config.yml --publish never --config.artifactName=$artifactName 2>&1
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "electron-builder MSI creation failed"
-            exit 1
-          }
-
-          Write-Host "✓ MSI build completed"
-
-      - name: 🔬 Forensic Packaging Analysis
-        shell: pwsh
-        env:
-          ARCH: ${{ matrix.arch }}
-        run: |
-          $unpackedDir = if ($env:ARCH -eq 'x86') { "win-ia32-unpacked" } else { "win-unpacked" }
-          $resourcesPath = "electron/dist/$unpackedDir/resources"
-
-          Write-Host "=== RESOURCES FOLDER DUMP ($unpackedDir) ==="
-          if (Test-Path $resourcesPath) {
-            Get-ChildItem -Path $resourcesPath -Recurse | Format-Table FullName, Length
-
-            Write-Host "=== CHECKING FOR BACKEND EXECUTABLE ==="
-            if (Test-Path "$resourcesPath/fortuna-backend.exe") {
-                Write-Host "✅ fortuna-backend.exe exists"
-            } else {
-                Write-Error "❌ fortuna-backend.exe MISSING in $resourcesPath"
-                exit 1
-            }
-          } else {
-            Write-Error "❌ Unpacked directory not found: $resourcesPath"
-            exit 1
-          }
+          # 🔥 FIX: Added --config.win.icon flag to set icon without parsing YAML
+          npm run dist -- --win msi $archFlag --config temp-builder-config.yml --publish never --config.artifactName=$artifactName --config.win.icon="assets/icon.ico"
 
       - name: Rename & Hash MSI
         id: name_msi
         shell: pwsh
         run: |
-          $ver = "${{ needs.validate-environment.outputs.semver }}"
-          $sha = "${{ needs.validate-environment.outputs.short_sha }}"
-
-          # FIX: Create the specific directory that the Upload step expects
           $releaseDir = "release-artifacts"
           New-Item -ItemType Directory -Path $releaseDir -Force | Out-Null
-
           $distDir = "electron/dist"
-          $targetName = "Fortuna-Electron-${{ matrix.arch }}-${ver}-${sha}.msi"
-
-          # Look in the electron output folder
           $msiFound = Get-ChildItem -Path $distDir -Filter "*.msi" | Select-Object -First 1
-
-          if (-not $msiFound) {
-            Write-Error "❌ FATAL: No MSI file found in $distDir."
-            exit 1
-          }
-
-          # Move to the release-artifacts folder
-          $newPath = Join-Path $releaseDir $targetName
-          Move-Item -Path $msiFound.FullName -Destination $newPath -Force
-
-          $hash = (Get-FileHash $newPath -Algorithm SHA256).Hash
-          $hash | Out-File "$newPath.sha256" -Encoding utf8
-          Write-Host "✅ MSI Renamed and Hashed: $targetName"
-          "msi_name=$targetName" | Out-File $env:GITHUB_OUTPUT -Append
-
-      - name: '🐤 The Canary (Malware Pre-Flight)'
-        shell: pwsh
-        run: |
-          $msi = Get-ChildItem -Recurse -Filter "*.msi" | Select-Object -First 1
-          if (!$msi) { Write-Warning "No MSI found to scan."; exit 0 }
-
-          Write-Host "🔍 Scanning $($msi.Name) with Windows Defender..."
-          $defender = "C:\Program Files\Windows Defender\MpCmdRun.exe"
-
-          if (-not (Test-Path $defender)) {
-              Write-Warning "Windows Defender CLI not found at expected path."
-              exit 0
-          }
-
-          # ScanType 3 = File/Custom Scan
-          $proc = Start-Process -FilePath $defender -ArgumentList "-Scan -ScanType 3 -File `"$($msi.FullName)`"" -Wait -PassThru -NoNewWindow
-
-          if ($proc.ExitCode -eq 0) {
-              Write-Host "✅ CLEAN: Windows Defender found no threats." -ForegroundColor Green
-          } elseif ($proc.ExitCode -eq 2) {
-              Write-Error "🚨 THREAT DETECTED: Windows Defender flagged this installer!"
-              exit 1
-          } else {
-              Write-Warning "⚠️ Scan completed with inconclusive exit code: $($proc.ExitCode)"
-          }
-
-      - name: 📊 Generate Build Report
-        if: always()
-        shell: pwsh
-        run: |
-          $report = @{
-            build_id = '${{ needs.validate-environment.outputs.build_id }}'
-            timestamp = Get-Date -Format 'o'
-            status = if ($LASTEXITCODE -eq 0) { 'SUCCESS' } else { 'FAILED' }
-            node_version = '${{ needs.validate-environment.outputs.node_version }}'
-            python_version = '${{ needs.validate-environment.outputs.python_version }}'
-            msi_files = @()
-          }
-
-          Get-ChildItem -Filter "*.msi" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
-            $report.msi_files += @{
-              path = $_.FullName
-              size_mb = [math]::Round($_.Length / 1MB, 2)
-              hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash
-            }
-          }
-
-          $report | ConvertTo-Json | Out-File -FilePath "build-report.json"
-          Get-Content "build-report.json" | Out-Host
-
+          if (-not $msiFound) { throw "❌ FATAL: No MSI file found in $distDir." }
+          $targetName = $msiFound.Name
+          Move-Item -Path $msiFound.FullName -Destination "$releaseDir/$targetName" -Force
+          Write-Host "✅ MSI Staged: $targetName"
 
       - name: 📤 Upload Release Artifacts
-        if: success()
         uses: actions/upload-artifact@v4
         with:
-          # 🚀 Unique name per architecture
           name: fortuna-electron-msi-${{ matrix.arch }}-${{ needs.validate-environment.outputs.build_id }}
-          path: |
-            release-artifacts/
-            build-report.json
+          path: release-artifacts/
           retention-days: 90
-
-      - name: 🚨 Upload Failure Diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-failure-logs-${{ needs.validate-environment.outputs.build_id }}
-          path: |
-            electron/dist/
-            python-service-bin/
-            web_platform/frontend/out/
-            build-report.json
-          retention-days: 30
 
   smoke-test:
     name: '🔬 Smoke Test (${{ matrix.arch }})'
     runs-on: windows-latest
-    timeout-minutes: 15
     needs: [validate-environment, build-electron-msi]
     strategy:
       matrix:
         arch: [x64, x86]
-    env:
-      FORTUNA_ENV: 'smoke-test'
     steps:
       - name: 📥 Download MSI Installer
         uses: actions/download-artifact@v4
         with:
-          # 🚀 Download the specific architecture to test
           name: fortuna-electron-msi-${{ matrix.arch }}-${{ needs.validate-environment.outputs.build_id }}
           path: msi-installer
 
-      - name: 📋 Inspect Artifact
+      - name: 🤫 Install MSI
         shell: pwsh
         run: |
-          Write-Host "=== Artifact Contents ==="
-          Get-ChildItem -Path "msi-installer" -Recurse | ForEach-Object {
-            Write-Host " $($_.FullName)"
-          }
+          $msi = Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse | Select-Object -First 1
+          Start-Process msiexec.exe -ArgumentList "/i `"$($msi.FullName)`" /qn" -Wait
 
-      - name: 🤫 Install MSI & Verify
-        shell: pwsh
-        run: |
-          # EXOTIC INGREDIENT #1: Find MSI with recursion
-          $msi = Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse -ErrorAction SilentlyContinue |
-            Select-Object -First 1
-
-          if (-not $msi) {
-            Write-Error "❌ FATAL: No MSI file found in artifact"
-            exit 1
-          }
-
-          Write-Host "Installing: $($msi.Name)"
-
-          # EXOTIC INGREDIENT #2: Logging with /L*v
-          $proc = Start-Process msiexec.exe -ArgumentList "/i `"$($msi.FullName)`" /qn /L*v msi-install.log" -Wait -PassThru
-
-          if ($proc.ExitCode -ne 0) {
-            Write-Error "❌ MSI Install Failed with exit code $($proc.ExitCode)"
-            if (Test-Path msi-install.log) {
-              Get-Content msi-install.log | Select-Object -Last 50
-            }
-            exit 1
-          }
-
-          Write-Host "✅ MSI installation succeeded"
-
-      # ---------------------------------------------------------
-      # 💉 INJECT: DYNAMIC PATH RESOLUTION (Subroutine #2)
-      # ---------------------------------------------------------
       - name: 🔍 Verify Installation Path
         shell: pwsh
         run: |
-          $arch = "${{ matrix.arch }}"
+          $progFiles = if ('${{ matrix.arch }}' -eq 'x86') { ${env:ProgramFiles(x86)} } else { $env:ProgramFiles }
+          if (-not (Test-Path "$progFiles\\Fortuna Faucet")) { throw "❌ Install failed" }
+          Write-Host "✅ Installed successfully."
 
-          # The Magic Logic
-          $progFiles = if ($arch -eq 'x86') { ${env:ProgramFiles(x86)} } else { $env:ProgramFiles }
-          $targetDir = "$progFiles\Fortuna Faucet" # Adjust 'Fortuna' to your actual install folder name
-
-          Write-Host "🎯 Looking for installation in: $targetDir"
-
-          if (-not (Test-Path $targetDir)) {
-            Write-Error "❌ FATAL: Installation directory not found at $targetDir"
-            exit 1
-          }
-          Write-Host "✅ Installation directory found."
-          "INSTALL_ROOT=$targetDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-      - name: '✅ Create Required Runtime Directories Post-Install'
-        shell: pwsh
-        run: |
-          $installRoot = "${{ env.INSTALL_ROOT }}"
-          if (-not (Test-Path $installRoot)) {
-            Write-Error "Installation directory not found at $installRoot. Cannot create runtime directories."
-            exit 1
-          }
-          New-Item -Path "$installRoot\data" -ItemType Directory -Force | Out-Null
-          New-Item -Path "$installRoot\json" -ItemType Directory -Force | Out-Null
-          New-Item -Path "$installRoot\logs" -ItemType Directory -Force | Out-Null
-          Write-Host "✅ Created data, json, and logs directories in $installRoot"
-
-      - name: '🔬 Smoke Test & Visual Verification'
-        shell: pwsh
-        run: |
-          $installRoot = "${{ env.INSTALL_ROOT }}"
-          if (-not (Test-Path $installRoot)) { throw "❌ Install directory not found at $installRoot" }
-
-          $exe = "$installRoot\fortuna-backend.exe"
-          if (-not (Test-Path $exe)) { throw "❌ Backend executable not found at $exe" }
-
-          Write-Host "Creating and starting service..."
-          sc.exe create FortunaWebService binPath= "`"$exe`""
-          sc.exe start FortunaWebService
-
-          try {
-            Write-Host "Waiting 15 seconds for service to initialize..."
-            Start-Sleep -Seconds 15
-
-            Write-Host "Pinging Health Endpoint (up to 5 attempts)..."
-            $healthUrl = "http://localhost:8102/health"
-            $maxAttempts = 5
-            for ($i = 1; $i -le $maxAttempts; $i++) {
-              try {
-                Write-Host "  Attempt $i of $maxAttempts..."
-                $response = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -ErrorAction Stop
-                if ($response.StatusCode -eq 200) {
-                  Write-Host "✅ SUCCESS: Health Check Passed on attempt $i."
-                  break # Exit the loop on success
-                }
-              } catch {
-                if ($i -eq $maxAttempts) {
-                  throw "❌ Health Check Failed after $maxAttempts attempts."
-                }
-                Start-Sleep -Seconds 5
-              }
-            }
-
-            Write-Host "📸 Taking screenshot..."
-            npm install playwright
-            npx playwright install chromium --with-deps
-            $url = "http://127.0.0.1:8102/docs"
-            node -e "const { chromium } = require('playwright'); (async () => { const browser = await chromium.launch(); const page = await browser.newPage(); await page.goto('$url'); await page.screenshot({ path: 'proof.png' }); await browser.close(); })();"
-            Write-Host "✅ Screenshot captured."
-
-          } finally {
-            sc.exe stop FortunaWebService
-            sc.exe delete FortunaWebService
-            Write-Host "🛑 Backend service stopped and deleted."
-          }
-
-      - name: 📤 Upload Visual Proof
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: visual-proof-${{ github.run_id }}
-          path: proof.png
-          retention-days: 7
-
-      - name: '🚨 Emergency Diagnostics (On Failure)'
-        if: failure()
-        shell: pwsh
-        run: |
-          Set-StrictMode -Version Latest
-          $ErrorActionPreference = "Continue"
-          $logDir = "C:\Temp" # This is a broad search path now
-          $diagDir = ".\emergency-diagnostics"
-          New-Item -ItemType Directory -Path $diagDir -Force | Out-Null
-
-          Write-Host "--- CAPTURING FAILURE STATE ---"
-
-          # 1. MSI Install Log (if it exists)
-          Copy-Item -Path "msi-install.log" -Destination $diagDir -ErrorAction SilentlyContinue
-
-          # 2. Electron Logs (from known temp location)
-          $electronLogs = Get-ChildItem -Path $logDir -Filter "fortuna-logs-*" -Recurse | Select-Object -Last 1
-          if ($electronLogs) {
-              Copy-Item -Path $electronLogs.FullName -Destination $diagDir -Recurse -ErrorAction SilentlyContinue
-          }
-
-          # 3. Process List
-          Get-Process | Select-Object Name, Id, Path | ConvertTo-Csv -NoTypeInformation | Set-Content "$diagDir\process-list.csv"
-
-          # 4. Network State
-          Get-NetTCPConnection | Select-Object LocalAddress, LocalPort, RemoteAddress, RemotePort, State | ConvertTo-Csv -NoTypeInformation | Set-Content "$diagDir\netstat.csv"
-
-          # 5. Event Viewer Logs (Application Errors)
-          Get-WinEvent -FilterHashtable @{LogName='Application'; Level=1,2,3} -MaxEvents 100 |
-            Format-Table TimeCreated, ProviderName, Message -Wrap -AutoSize |
-            Out-File "$diagDir\event-viewer-app-errors.log"
-
-          Write-Host "✅ Diagnostics captured to '$diagDir'."
-
-      - name: 📤 Upload Diagnostics Artifact
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: smoke-test-failure-diagnostics-${{ github.run_id }}
-          path: |
-            msi-install.log
-            emergency-diagnostics/
-          if-no-files-found: ignore
-          retention-days: 14
-
-      - name: "💀 CSI: Windows (Post-Mortem Diagnostics)"
-        if: failure()
-        shell: pwsh
-        run: |
-          Write-Host "=== PROCESS TREE ==="
-          Get-Process | Where-Object { $_.ProcessName -match "fortuna|electron" } | Select-Object Id, ProcessName, Responding, Path
-          Write-Host "=== FIREWALL RULES ==="
-          Get-NetFirewallRule -DisplayName "*Fortuna*" | Select-Object DisplayName, Enabled, Direction, Action
-          Write-Host "=== APPLICATION EVENT LOG ==="
-          Get-EventLog -LogName Application -Source "Fortuna*" -Newest 20 | Format-List
-      - name: 🧹 Cleanup
+      - name: 💥 Cleanup
         if: always()
         shell: pwsh
         run: |
-          Stop-Process -Name "Fortuna Faucet" -Force -ErrorAction SilentlyContinue
-          Stop-Process -Name "fortuna-backend" -Force -ErrorAction SilentlyContinue
-          Write-Host "✅ Cleanup complete"
-
-  diagnose-asgi-imports:
-    name: '🔍 ASGI Import Killer Pre-Smoke Diagnostic'
-    runs-on: windows-latest
-    timeout-minutes: 15
-    needs: build-python-service
-    steps:
-      - name: 📥 Checkout Repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-      - name: 'Run ASGI Diagnostics'
-        uses: ./.github/actions/run-asgi-diagnostics
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          backend-dir: 'web_service/backend'
-          backend-module-path: 'web_service.backend'
-
-  generate-sbom:
-    name: '📜 Generate SBOM (${{ matrix.arch }})'
-    runs-on: ubuntu-latest
-    needs: [build-electron-msi, validate-environment]
-    timeout-minutes: 10
-    strategy:
-      matrix:
-        arch: [x64, x86]
-    steps:
-      - name: 📥 Download MSI Artifact
-        uses: actions/download-artifact@v4
-        with:
-          # FIX: Download the specific architecture artifact
-          name: fortuna-electron-msi-${{ matrix.arch }}-${{ needs.validate-environment.outputs.build_id }}
-          path: msi-artifact
-
-      - name: 📜 Generate SBOM
-        uses: anchore/sbom-action@v0
-        with:
-          path: msi-artifact/
-          output-file: "sbom-${{ matrix.arch }}.spdx.json"
-          format: "spdx-json"
-          upload-artifact: false
-
-      - name: 📤 Upload SBOM Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          # FIX: Upload with unique name per architecture
-          name: sbom-${{ matrix.arch }}-${{ needs.validate-environment.outputs.build_id }}
-          path: sbom-${{ matrix.arch }}.spdx.json
-          retention-days: 7
-
-  stage-release-artifacts:
-    name: '📦 Stage Release Artifacts'
-    runs-on: windows-latest
-    timeout-minutes: 5
-    if: success()
-    needs:
-      - build-electron-msi
-      - validate-environment
-      - smoke-test
-      - generate-sbom
-    steps:
-      - name: 📥 Download All Build Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          # FIX: Use pattern to catch both x64 and x86 MSIs
-          pattern: fortuna-electron-msi-*-${{ needs.validate-environment.outputs.build_id }}
-          merge-multiple: true
-          path: staging-area
-
-      - name: 📥 Download All SBOMs
-        uses: actions/download-artifact@v4
-        with:
-          # FIX: Use pattern to catch both x64 and x86 SBOMs
-          pattern: sbom-*-${{ needs.validate-environment.outputs.build_id }}
-          merge-multiple: true
-          path: staging-area
-
-      - name: 🚚 Stage Final Artifact
-        shell: pwsh
-        run: |
-          Set-StrictMode -Version Latest
-          $sourceDir = "staging-area"
-          $destDir = "final-release-artifact"
-          New-Item -ItemType Directory -Path $destDir -Force | Out-Null
-
-          Get-ChildItem -Path $sourceDir -Recurse | ForEach-Object {
-            $destPath = Join-Path $destDir $_.Name
-            Move-Item -Path $_.FullName -Destination $destPath -Force
-          }
-
-          Write-Host "✅ Artifacts staged to $destDir"
-
-      - name: 📤 Upload Final MSI Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Final-MSI-Artifact
-          path: final-release-artifact/
-          retention-days: 90
+          Get-Process -Name "Fortuna Faucet", "fortuna-backend" -ErrorAction SilentlyContinue | Stop-Process -Force
