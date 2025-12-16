@@ -187,36 +187,45 @@ jobs:
           $target = "." # Analyze entire workspace staged for build
           $limitMB = 300
           Write-Host "--- 📊 Size Breakdown ---"
-          $files = Get-ChildItem -Path $target -Recurse -File -ErrorAction SilentlyContinue
+          $files = Get-ChildItem -Path $target -Recurse -File -ErrorAction Silen
+tlyContinue
           if (!$files) { Write-Warning "No files found to weigh."; exit 0 }
           $totalBytes = ($files | Measure-Object -Property Length -Sum).Sum
           $totalMB = [math]::Round($totalBytes / 1MB, 2)
           Write-Host "Total Payload Size: $totalMB MB"
           if ($totalMB -gt $limitMB) {
-              Write-Warning "⚠️ BLOAT ALERT: Build exceeds $limitMB MB limit! Check the heaviest files below."
+              Write-Warning "⚠️ BLOAT ALERT: Build exceeds $limitMB MB limit! Ch
+eck the heaviest files below."
           } else {
-              Write-Host "✅ Size within limits (< $limitMB MB)." -ForegroundColor Green
+              Write-Host "✅ Size within limits (< $limitMB MB)." -ForegroundColo
+r Green
           }
           Write-Host "`n--- 🐘 Top 10 Heaviest Files ---"
-          $files | Sort-Object Length -Descending | Select-Object -First 10 @{N='File';E={$_.FullName.Replace($pwd,'')}}, @{N='Size(MB)';E={"{0:N2}" -f ($_.Length/1MB)}} | Format-Table -AutoSize
+          $files | Sort-Object Length -Descending | Select-Object -First 10 @{N=
+'File';E={$_.FullName.Replace($pwd,'')}}, @{N='Size(MB)';E={"{0:N2}" -f ($_.Leng
+th/1MB)}} | Format-Table -AutoSize
       - name: '🧐 Forensically Guarantee Icon Paths'
         shell: pwsh
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = "Stop"
-          Install-Module -Name powershell-yaml -Force -Scope CurrentUser -ErrorAction Stop
+          Install-Module -Name powershell-yaml -Force -Scope CurrentUser -ErrorA
+ction Stop
           Import-Module powershell-yaml
           $configPath = '${{ env.ELECTRON_DIR }}/electron-builder-config.yml'
           $iconPath = "${{ env.ELECTRON_DIR }}/assets/icon.ico"
           if (-not (Test-Path -LiteralPath $iconPath)) {
-            Write-Error "CRITICAL: The primary icon file is missing at '$iconPath'."
+            Write-Error "CRITICAL: The primary icon file is missing at '$iconPat
+h'."
             exit 1
           }
           $absoluteIconPath = (Resolve-Path -LiteralPath $iconPath).Path
           $config = Get-Content $configPath | ConvertFrom-Yaml
           $config.win.icon = $absoluteIconPath.Replace('\\', '/')
-          try { $config.msi.PSObject.Properties.Remove('installerIcon') } catch {}
-          try { $config.msi.PSObject.Properties.Remove('uninstallerIcon') } catch {}
+          try { $config.msi.PSObject.Properties.Remove('installerIcon') } catch
+{}
+          try { $config.msi.PSObject.Properties.Remove('uninstallerIcon') } catc
+h {}
           $tempConfigPath = '${{ env.ELECTRON_DIR }}/temp-builder-config.yml'
           $config | ConvertTo-Yaml | Set-Content -Path $tempConfigPath
           Write-Host "✅ Successfully created temporary config '$tempConfigPath' with corrected icon paths."
@@ -225,11 +234,15 @@ jobs:
         run: |
           # electron-builder uses build_wix/license.rtf by convention
           $wixDir = 'build_wix'
-          if (-not (Test-Path $wixDir)) { New-Item -ItemType Directory -Path $wixDir | Out-Null }
+          if (-not (Test-Path $wixDir)) { New-Item -ItemType Directory -Path $wi
+xDir | Out-Null }
           $licensePath = Join-Path $wixDir 'license.rtf'
           if (-not (Test-Path $licensePath)) {
-            Write-Host '⚠️ License file missing. Generating placeholder for electron-builder...'
-            $rtfContent = '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\f0\fs24 END USER LICENSE AGREEMENT\par\par This is a placeholder license for Fortuna Faucet. Please replace with actual terms.}'
+            Write-Host '⚠️ License file missing. Generating placeholder for elec
+tron-builder...'
+            $rtfContent = '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\f0\fs24 END U
+SER LICENSE AGREEMENT\par\par This is a placeholder license for Fortuna Faucet.
+Please replace with actual terms.}'
             Set-Content -Path $licensePath -Value $rtfContent -Encoding Ascii
             Write-Host '✅ Placeholder license.rtf created.'
           } else {
@@ -247,9 +260,11 @@ jobs:
       - name: 🔬 Forensic Packaging Analysis
         shell: pwsh
         run: |
-          $unpackedDir = if ('${{ matrix.arch }}' -eq 'x86') { 'win-ia32-unpacked' } else { 'win-unpacked' }
+          $unpackedDir = if ('${{ matrix.arch }}' -eq 'x86') { 'win-ia32-unpacke
+d' } else { 'win-unpacked' }
           Write-Host "=== HYBRID STAGING LAYOUT (${{ matrix.arch }}) ==="
-          Get-ChildItem -Path "${{ env.ELECTRON_DIR }}/dist/$unpackedDir" -Recurse | Select-Object FullName, Length
+          Get-ChildItem -Path "${{ env.ELECTRON_DIR }}/dist/$unpackedDir" -Recur
+se | Select-Object FullName, Length
       - name: Rename & Hash MSI
         id: name_msi
         shell: pwsh
