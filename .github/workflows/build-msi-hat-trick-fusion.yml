@@ -44,9 +44,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: web_platform/frontend/out
-          key: ${{ runner.os }}-frontend-${{ hashFiles('**/package-lock.json', '
-web_platform/frontend/**/*.js', 'web_platform/frontend/**/*.ts', 'web_platform/f
-rontend/**/*.tsx', 'web_platform/frontend/**/*.css') }}
+          key: ${{ runner.os }}-frontend-${{ hashFiles('**/package-lock.json', 'web_platform/frontend/**/*.js', 'web_platform/frontend/**/*.ts', 'web_platform/frontend/**/*.tsx', 'web_platform/frontend/**/*.css') }}
           restore-keys: |
             ${{ runner.os }}-frontend-
       - name: Install and Build
@@ -62,15 +60,12 @@ rontend/**/*.tsx', 'web_platform/frontend/**/*.css') }}
           Set-StrictMode -Version Latest
           $outDir = Resolve-Path "out"
           $manifestPath = "frontend-manifest.tsv"
-          "RelativePath`tSizeBytes`tSHA256" | Out-File $manifestPath -Encoding u
-tf8
+          "RelativePath`tSizeBytes`tSHA256" | Out-File $manifestPath -Encoding utf8
           $files = Get-ChildItem -Path $outDir -Recurse -File
           foreach ($f in $files) {
             $rel = $f.FullName.Substring($outDir.Path.Length).TrimStart('\','/')
-            $hash = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.Substring(
-0,16)
-            "$rel`t$($f.Length)`t$hash" | Out-File $manifestPath -Encoding utf8
--Append
+            $hash = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.Substring(0,16)
+            "$rel`t$($f.Length)`t$hash" | Out-File $manifestPath -Encoding utf8 -Append
           }
           Write-Host "✅ Generated frontend artifact manifest."
       - name: Upload Frontend
@@ -102,17 +97,12 @@ tf8
       - id: meta
         shell: pwsh
         run: |
-          $ver = if ("${{ github.ref }}" -match 'refs/tags/v(.*)') { $Matches[1]
- } else { "0.0.${{ github.run_number }}" }
-          "semver=$ver" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -
-Append
+          $ver = if ("${{ github.ref }}" -match 'refs/tags/v(.*)') { $Matches[1] } else { "0.0.${{ github.run_number }}" }
+          "semver=$ver" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           $shortSha = "${{ github.sha }}".Substring(0,7)
-          "short_sha=$shortSha" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Ap
-pend
-          "backend_dir=web_service/backend" | Out-File -FilePath $env:GITHUB_OUT
-PUT -Encoding utf8 -Append
-          "module_path=web_service.backend" | Out-File -FilePath $env:GITHUB_ENV
- -Encoding utf8 -Append
+          "short_sha=$shortSha" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "backend_dir=web_service/backend" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "module_path=web_service.backend" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -124,8 +114,7 @@ PUT -Encoding utf8 -Append
         run: |
           $constraintDir = "temp-constraints"
           New-Item -ItemType Directory -Path $constraintDir -Force | Out-Null
-          $constraintFile = Join-Path $constraintDir "constraint-${{ matrix.arch
- }}.txt"
+          $constraintFile = Join-Path $constraintDir "constraint-${{ matrix.arch }}.txt"
           if ('${{ matrix.arch }}' -eq 'x86') {
             # 🚀 GPT-5 SAFE MODE
             "numpy==1.23.5`r`npandas==1.5.3" | Set-Content $constraintFile
@@ -134,14 +123,11 @@ PUT -Encoding utf8 -Append
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r web_service/backend/requirements.txt -c ${{ steps.const
-raints.outputs.file }}
+          pip install -r web_service/backend/requirements.txt -c ${{ steps.constraints.outputs.file }}
           pip install pyinstaller==6.6.0 pywin32
       - name: Build Backend (PyInstaller)
         run: |
-          pyinstaller --noconfirm --onedir --clean --name fortuna-backend --hidd
-en-import=win32timezone --hidden-import=win32serviceutil --add-data "web_service
-/backend;backend" web_service/backend/service_entry.py
+          pyinstaller --noconfirm --onedir --clean --name fortuna-backend --hidden-import=win32timezone --hidden-import=win32serviceutil --add-data "web_service/backend;backend" web_service/backend/service_entry.py
       - name: Upload Backend
         uses: actions/upload-artifact@v4
         with:
@@ -169,32 +155,24 @@ en-import=win32timezone --hidden-import=win32serviceutil --add-data "web_service
           $target = "staging"
           $limitMB = 300
           Write-Host "--- 📊 Size Breakdown ---"
-          $files = Get-ChildItem -Path $target -Recurse -File -ErrorAction Silen
-tlyContinue
+          $files = Get-ChildItem -Path $target -Recurse -File -ErrorAction SilentlyContinue
           if (!$files) { Write-Warning "No files found to weigh."; exit 0 }
           $totalBytes = ($files | Measure-Object -Property Length -Sum).Sum
           $totalMB = [math]::Round($totalBytes / 1MB, 2)
           Write-Host "Total Payload Size: $totalMB MB"
           if ($totalMB -gt $limitMB) {
-              Write-Warning "⚠️ BLOAT ALERT: Build exceeds $limitMB MB limit! Ch
-eck the heaviest files below."
+              Write-Warning "⚠️ BLOAT ALERT: Build exceeds $limitMB MB limit! Check the heaviest files below."
           } else {
-              Write-Host "✅ Size within limits (< $limitMB MB)." -ForegroundColo
-r Green
+              Write-Host "✅ Size within limits (< $limitMB MB)." -ForegroundColor Green
           }
           Write-Host "`n--- 🐘 Top 10 Heaviest Files ---"
-          $files | Sort-Object Length -Descending | Select-Object -First 10 @{N=
-'File';E={$_.FullName.Replace($pwd,'')}}, @{N='Size(MB)';E={"{0:N2}" -f ($_.Leng
-th/1MB)}} | Format-Table -AutoSize
+          $files | Sort-Object Length -Descending | Select-Object -First 10 @{N='File';E={$_.FullName.Replace($pwd,'')}}, @{N='Size(MB)';E={"{0:N2}" -f ($_.Length/1MB)}} | Format-Table -AutoSize
 
       - name: Create Restart Service Batch Script
         shell: pwsh
         run: |
-          $scriptContent = "@echo off`r`necho Requesting Admin privileges to res
-tart FortunaWebService...`r`nnet stop FortunaWebService`r`nnet start FortunaWebS
-ervice`r`necho Service Restarted.`r`npause"
-          Set-Content -Path "staging/backend/restart_service.bat" -Value $script
-Content -Encoding Ascii
+          $scriptContent = "@echo off`r`necho Requesting Admin privileges to restart FortunaWebService...`r`nnet stop FortunaWebService`r`nnet start FortunaWebService`r`necho Service Restarted.`r`npause"
+          Set-Content -Path "staging/backend/restart_service.bat" -Value $scriptContent -Encoding Ascii
           Write-Host "✅ Created restart_service.bat script."
 
       - uses: actions/setup-dotnet@v4
@@ -204,18 +182,12 @@ Content -Encoding Ascii
       - name: 📄 Ensure WiX License Exists
         shell: pwsh
         run: |
-          if (-not (Test-Path build_wix)) { New-Item -ItemType Directory -Path b
-uild_wix | Out-Null }
+          if (-not (Test-Path build_wix)) { New-Item -ItemType Directory -Path build_wix | Out-Null }
           $licensePath = 'build_wix/license.rtf'
           if (-not (Test-Path $licensePath)) {
             Write-Host '⚠️ License file missing. Generating placeholder...'
-            # FIX: Use Base64 decoding to avoid RTF escape sequence issues in Po
-werShell/YAML
-            $rtfContent = [System.Text.Encoding]::ASCII.GetString([System.Conver
-t]::FromBase64String("e1xydGYxXGFuc2lcZGVmZjB7XGZvbnR0Ymx7XGYwIEFyaWFsO319XGYwXG
-ZzMjQgRU5EIFVTRVIgTElDRU5TRSBBR1JFRU1FTlRccGFyXHBhciBUaGlzIGlzIGEgcGxhY2Vob2xkZX
-IgbGljZW5zZSBmb3IgRm9ydHVuYSBGYXVjZXQuIFBsZWFzZSByZXBsYWNlIHdpdGggYWN0dWFsIHRlcm
-1zLn0="))
+            # FIX: Use Base64 decoding to avoid RTF escape sequence issues in PowerShell/YAML
+            $rtfContent = [System.Text.Encoding]::ASCII.GetString([System.Convert]::FromBase64String("e1xydGYxXGFuc2lcZGVmZjB7XGZvbnR0Ymx7XGYwIEFyaWFsO319XGYwXGZzMjQgRU5EIFVTRVIgTElDRU5TRSBBR1JFRU1FTlRccGFyXHBhciBUaGlzIGlzIGEgcGxhY2Vob2xkZXIgbGljZW5zZSBmb3IgRm9ydHVuYSBGYXVjZXQuIFBsZWFzZSByZXBsYWNlIHdpdGggYWN0dWFsIHRlcm1zLn0="))
             Set-Content -Path $licensePath -Value $rtfContent -Encoding Ascii
             Write-Host '✅ Placeholder license.rtf created.'
           } else {
@@ -225,23 +197,18 @@ IgbGljZW5zZSBmb3IgRm9ydHVuYSBGYXVjZXQuIFBsZWFzZSByZXBsYWNlIHdpdGggYWN0dWFsIHRlcm
         shell: pwsh
         run: |
           Set-StrictMode -Version Latest
-          if (-not (Test-Path build_wix)) { New-Item -ItemType Directory -Path b
-uild_wix | Out-Null }
-          Copy-Item build_wix/Product_WithService.wxs build_wix/Product.wxs -For
-ce
+          if (-not (Test-Path build_wix)) { New-Item -ItemType Directory -Path build_wix | Out-Null }
+          Copy-Item build_wix/Product_WithService.wxs build_wix/Product.wxs -Force
           $wxsPath = 'build_wix/Product.wxs'
           $wxsContent = [xml](Get-Content $wxsPath -Raw)
-          $serviceControl = $wxsContent.SelectSingleNode("//*[local-name()='Serv
-iceControl']")
+          $serviceControl = $wxsContent.SelectSingleNode("//*[local-name()='ServiceControl']")
           if ($serviceControl -and $serviceControl.HasAttribute("Start")) {
               $serviceControl.RemoveAttribute("Start")
               $wxsContent.Save($wxsPath)
-              Write-Host "✅ Dynamically removed 'Start=install' attribute from W
-iX template."
+              Write-Host "✅ Dynamically removed 'Start=install' attribute from WiX template."
           }
           if (Test-Path staging/backend/fortuna-backend.exe) {
-            Move-Item staging/backend/fortuna-backend.exe staging/backend/fortun
-a-webservice.exe -Force
+            Move-Item staging/backend/fortuna-backend.exe staging/backend/fortuna-webservice.exe -Force
           }
           $proj = @(
             '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">',
@@ -249,37 +216,29 @@ a-webservice.exe -Force
             '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>',
             '    <OutputType>Package</OutputType>',
             '    <Platforms>x64;x86</Platforms>',
-            '    <DefineConstants>Version=$(Version);SourceDir=$(SourceDir);Serv
-icePort=$(ServicePort)</DefineConstants>',
+            '    <DefineConstants>Version=$(Version);SourceDir=$(SourceDir);ServicePort=$(ServicePort)</DefineConstants>',
             '  </PropertyGroup>',
             '  <ItemGroup>',
-            '    <PackageReference Include="WixToolset.UI.wixext" Version="${{ e
-nv.WIX_VERSION }}" />',
-            '    <PackageReference Include="WixToolset.Firewall.wixext" Version=
-"${{ env.WIX_VERSION }}" />',
-            '    <PackageReference Include="WixToolset.Util.wixext" Version="${{
- env.WIX_VERSION }}" />',
+            '    <PackageReference Include="WixToolset.UI.wixext" Version="${{ env.WIX_VERSION }}" />',
+            '    <PackageReference Include="WixToolset.Firewall.wixext" Version="${{ env.WIX_VERSION }}" />',
+            '    <PackageReference Include="WixToolset.Util.wixext" Version="${{ env.WIX_VERSION }}" />',
             '  </ItemGroup>',
             '  <ItemGroup>',
             '    <Compile Include="Product.wxs" />',
             '  </ItemGroup>',
             '</Project>'
           )
-          Set-Content build_wix/Fortuna.wixproj ($proj -join "`r`n") -Encoding u
-tf8
+          Set-Content build_wix/Fortuna.wixproj ($proj -join "`r`n") -Encoding utf8
       - name: Build MSI
         working-directory: build_wix
         run: |
-          dotnet build Fortuna.wixproj -c Release -p:Platform=${{ matrix.arch }}
- -p:Version="${{ needs.build-backend.outputs.semver }}" -p:SourceDir="../staging
-/backend" -p:ServicePort="${{ env.SERVICE_PORT }}"
+          dotnet build Fortuna.wixproj -c Release -p:Platform=${{ matrix.arch }} -p:Version="${{ needs.build-backend.outputs.semver }}" -p:SourceDir="../staging/backend" -p:ServicePort="${{ env.SERVICE_PORT }}"
       - name: Rename & Hash MSI
         run: |
           $ver = "${{ needs.build-backend.outputs.semver }}"
           $sha = "${{ needs.build-backend.outputs.short_sha }}"
           $releaseDir = "build_wix/bin/${{ matrix.arch }}/Release"
-          $msiFound = Get-ChildItem -Path $releaseDir -Filter "*.msi" | Select-O
-bject -First 1
+          $msiFound = Get-ChildItem -Path $releaseDir -Filter "*.msi" | Select-Object -First 1
           if (-not $msiFound) { throw "MSI not found in $releaseDir" }
           $targetName = "HatTrickFusion-${{ matrix.arch }}-${ver}-${sha}.msi"
           $newPath = Join-Path $releaseDir $targetName
@@ -308,15 +267,13 @@ bject -First 1
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = "Stop"
-          $msiPath = (Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recur
-se | Select-Object -First 1).FullName
+          $msiPath = (Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse | Select-Object -First 1).FullName
           if (-not $msiPath) { throw "MSI not found!" }
           Write-Host "Found MSI at $msiPath"
 
           # 1. PRE-INSTALL CLEANUP
           Write-Host "Attempting pre-emptive service removal..."
-          $service = Get-Service -Name "FortunaWebService" -ErrorAction Silently
-Continue
+          $service = Get-Service -Name "FortunaWebService" -ErrorAction SilentlyContinue
           if ($service) {
             sc.exe delete "FortunaWebService"
             Start-Sleep -Seconds 5
@@ -326,8 +283,7 @@ Continue
           $logFile = "msi-install.log"
           $msiArgs = "/i `"$msiPath`" /qn /L*v `"$logFile`""
           Write-Host "Running: msiexec.exe $msiArgs"
-          $proc = Start-Process msiexec.exe -ArgumentList $msiArgs -Wait -PassTh
-ru
+          $proc = Start-Process msiexec.exe -ArgumentList $msiArgs -Wait -PassThru
           if ($proc.ExitCode -ne 0 -and $proc.ExitCode -ne 3010) {
             Get-Content $logFile -Tail 50
             throw "MSI installation failed with exit code $($proc.ExitCode)."
@@ -336,17 +292,12 @@ ru
 
           # 3. VERIFY & RUN
           $progFiles = ${env:ProgramFiles}
-          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(
-x86)} }
+          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
           $installDir = Join-Path $progFiles "Fortuna Faucet Service"
-          if (-not (Test-Path $installDir)) { throw "Installation directory not
-found!" }
-          New-Item -ItemType Directory -Path (Join-Path $installDir "data") -For
-ce | Out-Null
-          New-Item -ItemType Directory -Path (Join-Path $installDir "json") -For
-ce | Out-Null
-          New-Item -ItemType Directory -Path (Join-Path $installDir "logs") -For
-ce | Out-Null
+          if (-not (Test-Path $installDir)) { throw "Installation directory not found!" }
+          New-Item -ItemType Directory -Path (Join-Path $installDir "data") -Force | Out-Null
+          New-Item -ItemType Directory -Path (Join-Path $installDir "json") -Force | Out-Null
+          New-Item -ItemType Directory -Path (Join-Path $installDir "logs") -Force | Out-Null
           Start-Service -Name "FortunaWebService"
           Start-Sleep -Seconds 10
 
@@ -355,15 +306,13 @@ ce | Out-Null
           $delay = 5
           For ($i=0; $i -lt $maxRetries; $i++) {
             try {
-              $response = Invoke-WebRequest -Uri "http://localhost:${{ env.SERVI
-CE_PORT }}/health" -UseBasicParsing
+              $response = Invoke-WebRequest -Uri "http://localhost:${{ env.SERVICE_PORT }}/health" -UseBasicParsing
               if ($response.StatusCode -eq 200) {
                 Write-Host "✅ Health check PASSED."
                 Stop-Service -Name "FortunaWebService"
                 exit 0
               }
-            } catch { Write-Host "Attempt $($i+1) failed. Retrying in $delay sec
-onds..." }
+            } catch { Write-Host "Attempt $($i+1) failed. Retrying in $delay seconds..." }
             Start-Sleep -Seconds $delay
           }
           throw "Health check failed after $maxRetries attempts."
