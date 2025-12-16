@@ -441,12 +441,12 @@ jobs:
           Write-Host '::endgroup::'
 
       - name: ✨ Runner Stabilization
-        shell: cmd
+        shell: pwsh
         run: |
-          @echo ════════════════════════════════════════════════════════════
-          @echo  Runner stabilization checkpoint - preventing shell crash
-          @echo ════════════════════════════════════════════════════════════
-          timeout /t 2 /nobreak
+          Write-Host "════════════════════════════════════════════════════════════"
+          Write-Host "  Runner stabilization checkpoint - 2 second pause"
+          Write-Host "════════════════════════════════════════════════════════════"
+          Start-Sleep -Seconds 2
 
       # -------------------------------------------------------
       # CORE ASSET VERIFICATION (Always runs)
