@@ -338,7 +338,7 @@ jobs:
   ui-proof:
     name: 📸 Paparazzi (${{ matrix.arch }})
     needs: [preflight, smoke-test]
-    if: env.ENABLE_PAPARAZZI == 'true'
+    if: github.event.inputs.enable_paparazzi == 'true'
     runs-on: windows-latest
     timeout-minutes: 15
     strategy:

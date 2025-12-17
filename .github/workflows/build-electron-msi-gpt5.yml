@@ -152,7 +152,10 @@ jobs:
       - name: 📥 Install Frontend Dependencies
         shell: pwsh
         working-directory: electron
-        run: npm ci --prefer-offline --no-audit
+        run: |
+          # NOTE: This step can be prone to intermittent network failures (e.g., 502 Bad Gateway).
+          # If this step fails, a simple re-run of the workflow may be all that is needed.
+          npm ci --prefer-offline --no-audit
 
       - name: 🔨 Build Frontend
         shell: pwsh
