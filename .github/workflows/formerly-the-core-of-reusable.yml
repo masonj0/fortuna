@@ -348,7 +348,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: msi-${{ matrix.arch }}-${{ needs.preflight.outputs.build_id }}
+          name: msi-${{ matrix.arch }}
 
       - name: 💿 Install for UI Test
         shell: pwsh
@@ -421,4 +421,4 @@ jobs:
           Write-Host "║  WiX:         ${{ env.WIX_VERSION }}"
           Write-Host "╚════════════════════════════════════════════════════════╝"
           Write-Host ""
-          Write-Host "Artifacts: msi-{x64,x86}-${{ needs.preflight.outputs.build_id }}"
+          Write-Host "Artifacts: msi-{x64,x86}"
