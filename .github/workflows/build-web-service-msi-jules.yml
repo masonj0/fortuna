@@ -555,7 +555,7 @@ jobs:
         env:
           BACKEND_DIR: ${{ needs.path-finder.outputs.backend_dir }}
           BACKEND_MODULE_PATH: ${{ needs.path-finder.outputs.backend_module_path }}
-          FRONTEND_OUT: ${{ env.FRONTEND_DIR }}/out
+          FRONTEND_OUT: 'staging/ui'
         run: |
           import os
           from pathlib import Path
