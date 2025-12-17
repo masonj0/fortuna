@@ -157,7 +157,7 @@ jobs:
           # If this step fails, a simple re-run of the workflow may be all that is needed.
           npm ci --prefer-offline --no-audit
 
-      - name:  Cache Frontend Build
+      - name: Cache Frontend Build
         id: cache-frontend
         uses: actions/cache@v4
         with:
@@ -176,17 +176,21 @@ jobs:
         shell: pwsh
         working-directory: electron
         run: |
-          Set-StrictMode -Version Latest
-          $outDir = Resolve-Path "out"
+          if (Test-Path "out") {
+              $outDir = Resolve-Path "out"
+              Write-Output "Build directory found: $outDir"
+          } else {
+              Write-Error "Build directory 'out' not found. Did 'npm run build' succeed?"
+              exit 1
+          }
           $manifestPath = "frontend-manifest.tsv"
           "RelativePath`tSizeBytes`tSHA256" | Out-File $manifestPath -Encoding utf8
           $files = Get-ChildItem -Path $outDir -Recurse -File
           foreach ($f in $files) {
             $rel = $f.FullName.Substring($outDir.Path.Length).TrimStart('\\','/')
-            $hash = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.Substring(0,16)
+            $hash = (Get-FileHash $f.FullName -Algorithm SHA256).Hash
             "$rel`t$($f.Length)`t$hash" | Out-File $manifestPath -Encoding utf8 -Append
           }
-          Write-Host "✅ Generated frontend artifact manifest."
 
       - name: 📤 Upload Frontend Artifact
         uses: actions/upload-artifact@v4
@@ -275,6 +279,13 @@ jobs:
         working-directory: electron
         run: npm ci --prefer-offline --no-audit
 
+      - name: Generate SBOM (Software Bill of Materials)
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: spdx-json
+          artifact-name: sbom-${{ github.job }}-${{ github.sha }}
+
       - name: '🧐 Forensically Guarantee Icon Paths'
         shell: pwsh
         run: |
@@ -314,7 +325,7 @@ jobs:
           # 🔥 FIX: Added --config.win.icon flag to set icon without parsing YAML
           npm run dist -- --win msi $archFlag --config temp-builder-config.yml --publish never --config.artifactName=$artifactName --config.win.icon="assets/icon.ico"
 
-      - name: Stage MSI for Upload
+      - name: Smart MSI Renaming
         id: name_msi
         shell: pwsh
         run: |
@@ -323,8 +334,10 @@ jobs:
           $distDir = "electron/dist"
           $msiFound = Get-ChildItem -Path $distDir -Filter "*.msi" | Select-Object -First 1
           if (-not $msiFound) { throw "❌ FATAL: No MSI file found in $distDir." }
-          $targetName = $msiFound.Name
-          Move-Item -Path $msiFound.FullName -Destination "$releaseDir/$targetName" -Force
+          $semver = "${{ needs.validate-environment.outputs.semver }}"
+          $shortSha = "${{ needs.validate-environment.outputs.short_sha }}"
+          $targetName = "Fortuna-Electron-${{ matrix.arch }}-${semver}-${shortSha}.msi"
+          Move-Item -Path $msiFound.FullName -Destination (Join-Path $releaseDir $targetName) -Force
           Write-Host "✅ MSI Staged: $targetName"
 
       - name: 📤 Upload Release Artifacts
@@ -333,6 +346,7 @@ jobs:
           name: fortuna-electron-msi-${{ matrix.arch }}
           path: release-artifacts/
           retention-days: 90
+
 
   smoke-test:
     name: '🔬 Smoke Test (${{ matrix.arch }})'
