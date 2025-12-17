@@ -63,7 +63,7 @@ jobs:
           "RelativePath`tSizeBytes`tSHA256" | Out-File $manifestPath -Encoding utf8
           $files = Get-ChildItem -Path $outDir -Recurse -File
           foreach ($f in $files) {
-            $rel = $f.FullName.Substring($outDir.Path.Length).TrimStart('\','/')
+            $rel = $f.FullName.Substring($outDir.Path.Length) -replace '^[\\\/]', ''
             $hash = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.Substring(0,16)
             "$rel`t$($f.Length)`t$hash" | Out-File $manifestPath -Encoding utf8 -Append
           }
@@ -148,6 +148,17 @@ jobs:
         with:
           name: backend-dist-${{ matrix.arch }}
           path: staging/backend
+
+      - name: '🔐 Verify Backend Executable Hash'
+        shell: pwsh
+        run: |
+          $exePath = "staging/backend/fortuna-backend.exe"
+          if (Test-Path $exePath) {
+            $hash = (Get-FileHash $exePath -Algorithm SHA256).Hash
+            Write-Host "✅ SHA-256 of fortuna-backend.exe: $hash"
+          } else {
+            throw "❌ Backend executable not found at $exePath"
+          }
 
       - name: '⚖️ The Dietician (Size Analysis)'
         shell: pwsh
@@ -298,7 +309,8 @@ jobs:
           New-Item -ItemType Directory -Path (Join-Path $installDir "data") -Force | Out-Null
           New-Item -ItemType Directory -Path (Join-Path $installDir "json") -Force | Out-Null
           New-Item -ItemType Directory -Path (Join-Path $installDir "logs") -Force | Out-Null
-          Start-Service -Name "FortunaWebService"
+          Get-Service | Where-Object { $_.DisplayName -like "*Fortuna*" } | Format-Table -AutoSize
+          Start-Service -Name "FortunaWebService" -ErrorAction Stop
           Start-Sleep -Seconds 10
 
           # 4. HEALTH CHECK

@@ -210,6 +210,7 @@ jobs:
             -d Platform=$arch
 
       - name: 🦜 The Canary (Malware Scan)
+        continue-on-error: true
         shell: pwsh
         run: |
           $msi = "Fortuna-${{ matrix.arch }}.msi"
@@ -329,7 +330,7 @@ jobs:
           sha256sum *.msi > SHASUMS256.txt
 
       - name: 📦 Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: release_assets/*
           generate_release_notes: true

@@ -1,7 +1,7 @@
 [
-    ".github/actions/run-smoke-test/action.yml",
+    ".github/actions/setup/action.yml",
     ".github/workflows/build-msi-revived.yml",
-    ".github/workflows/codeql.yml",
+    ".github/workflows/formerly-the-core-of-reusable.yml",
     "README.md",
     "electron/main.js",
     "electron/resources/.gitkeep",
@@ -20,12 +20,13 @@
     "python_service/requirements_minimal.txt",
     "python_service/run_api.py",
     "python_service/utils/__init__.py",
-    "scripts/generate_spec_electron.py",
+    "scripts/generate_spec_ultimate.py",
     "scripts/repair_fortuna.bat",
     "web_platform/api_gateway/package-lock.json",
     "web_platform/frontend/app/Providers.tsx",
     "web_platform/frontend/postcss.config.js",
     "web_platform/frontend/public/manifest.json",
+    "web_platform/frontend/public/workbox-4754cb34.js",
     "web_platform/frontend/src/components/LiveModeToggle.tsx",
     "web_platform/frontend/src/components/RaceFilters.tsx",
     "web_platform/frontend/src/components/TrifectaFactors.tsx",
@@ -51,7 +52,6 @@
     "web_service/frontend/app/globals.css",
     "web_service/frontend/app/page.tsx",
     "web_service/frontend/postcss.config.js",
-    "web_service/frontend/public/workbox-4754cb34.js",
     "web_service/frontend/tsconfig.json",
     "wix/product.wxs"
 ]
