@@ -147,7 +147,7 @@ jobs:
 
   build-backend:
     name: 🐍 Backend (${{ matrix.arch }})
-    needs: [preflight]
+    needs: [preflight, build-frontend]
     runs-on: windows-latest
     timeout-minutes: 30
     strategy:
