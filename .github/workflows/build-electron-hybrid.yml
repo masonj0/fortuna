@@ -33,7 +33,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: ${{ env.PYTHON_VERSION }}
       - run: |
           pip install -r web_service/backend/requirements-dev.txt
           pytest web_service/backend/tests
@@ -91,7 +91,7 @@ jobs:
           "RelativePath`tSizeBytes`tSHA256" | Out-File $manifestPath -Encoding utf8
           $files = Get-ChildItem -Path $outDir -Recurse -File
           foreach ($f in $files) {
-            $rel = $f.FullName.Substring($outDir.Path.Length).TrimStart('\','/')
+            $rel = $f.FullName.Substring($outDir.Path.Length) -replace '^[\\\/]', ''
             $hash = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.Substring(0,16)
             "$rel`t$($f.Length)`t$hash" | Out-File $manifestPath -Encoding utf8 -Append
           }

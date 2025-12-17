@@ -193,7 +193,7 @@ jobs:
           "RelativePath`tSizeBytes`tSHA256" | Out-File $manifestPath -Encoding utf8
           $files = Get-ChildItem -Path $outDir -Recurse -File
           foreach ($f in $files) {
-            $rel = $f.FullName.Substring($outDir.Path.Length).TrimStart('\','/')
+            $rel = $f.FullName.Substring($outDir.Path.Length) -replace '^[\\\/]', ''
             $hash = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.Substring(0,16)
             "$rel`t$($f.Length)`t$hash" | Out-File $manifestPath -Encoding utf8 -Append
           }

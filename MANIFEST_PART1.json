@@ -1,7 +1,7 @@
 [
-    ".github/actions/run-asgi-diagnostics/action.yml",
+    ".github/actions/run-smoke-test/action.yml",
     ".github/workflows/build-msi-hattrickfusion-ultimate.yml",
-    ".github/workflows/build-web-service-msi-jules.yml",
+    ".github/workflows/codeql.yml",
     "PSEUDOCODE.MD",
     "electron/electron-builder-config.yml",
     "electron/install-dependencies.js",
@@ -21,7 +21,7 @@
     "python_service/port_check.py",
     "python_service/requirements.txt",
     "python_service/user_friendly_errors.py",
-    "scripts/convert_to_json.py",
+    "scripts/generate_spec_electron.py",
     "scripts/install_fortuna_silent.bat",
     "web_platform/api_gateway/src/services/DatabaseService.ts",
     "web_platform/frontend/next-env.d.ts",

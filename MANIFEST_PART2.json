@@ -1,7 +1,7 @@
 [
-    ".github/actions/run-smoke-test/action.yml",
+    ".github/actions/setup/action.yml",
     ".github/workflows/build-msi-revived.yml",
-    ".github/workflows/codeql.yml",
+    ".github/workflows/formerly-the-core-of-reusable.yml",
     "README.md",
     "electron/main.js",
     "electron/resources/.gitkeep",
@@ -20,7 +20,7 @@
     "python_service/requirements_minimal.txt",
     "python_service/run_api.py",
     "python_service/utils/__init__.py",
-    "scripts/generate_spec_electron.py",
+    "scripts/generate_spec_ultimate.py",
     "scripts/repair_fortuna.bat",
     "web_platform/api_gateway/package-lock.json",
     "web_platform/frontend/app/Providers.tsx",

@@ -1,5 +1,4 @@
 [
-    ".github/scripts/generate_sbom.py",
     ".github/workflows/build-electron-msi-gpt5.yml",
     ".github/workflows/build-msi-unified.yml",
     "ARCHITECTURAL_MANDATE.md",
@@ -23,8 +22,9 @@
     "python_service/security.py",
     "python_service/utils/text.py",
     "requirements.txt",
+    "scripts/audit_rebranding.py",
     "scripts/fortuna-quick-start.ps1",
-    "scripts/get_api_key.py",
+    "scripts/prepare_minimal_build.py",
     "web_platform/api_gateway/tsconfig.json",
     "web_platform/frontend/.gitignore",
     "web_platform/frontend/app/layout.tsx",
