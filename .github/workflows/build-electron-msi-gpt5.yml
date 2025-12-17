@@ -235,6 +235,14 @@ jobs:
           cache: 'npm'
           cache-dependency-path: 'electron/package-lock.json'
 
+      - name: Cache Electron
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/electron
+          key: ${{ runner.os }}-electron-${{ hashFiles('electron/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-
+
       - name: 📥 Download Python Service
         uses: actions/download-artifact@v4
         with:

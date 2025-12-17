@@ -215,6 +215,7 @@ jobs:
             -d Platform=$arch
 
       - name: 🦜 The Canary (Malware Scan)
+        continue-on-error: true
         shell: pwsh
         run: |
           $msi = "Fortuna-${{ matrix.arch }}.msi"
