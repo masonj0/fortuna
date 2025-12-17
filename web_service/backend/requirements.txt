@@ -88,7 +88,7 @@ more-itertools==10.8.0
     #   jaraco-functools
 mypy-extensions==1.1.0
     # via black
-numpy==2.3.4
+numpy
     # via
     #   -r python_service/requirements.in
     #   pandas

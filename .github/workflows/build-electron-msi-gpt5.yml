@@ -127,7 +127,7 @@ jobs:
       - name: 📤 Upload Service Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: python-service-${{ matrix.arch }}-${{ needs.validate-environment.outputs.build_id }}
+          name: python-service-${{ matrix.arch }}
           path: dist/fortuna-backend/
           retention-days: 7
 
@@ -152,7 +152,10 @@ jobs:
       - name: 📥 Install Frontend Dependencies
         shell: pwsh
         working-directory: electron
-        run: npm ci --prefer-offline --no-audit
+        run: |
+          # NOTE: This step can be prone to intermittent network failures (e.g., 502 Bad Gateway).
+          # If this step fails, a simple re-run of the workflow may be all that is needed.
+          npm ci --prefer-offline --no-audit
 
       - name: 🔨 Build Frontend
         shell: pwsh
@@ -162,7 +165,7 @@ jobs:
       - name: 📤 Upload Frontend Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: frontend-dist-${{ needs.validate-environment.outputs.build_id }}
+          name: frontend-dist
           path: electron/out/
           retention-days: 7
 
@@ -203,13 +206,13 @@ jobs:
       - name: 📥 Download Python Service
         uses: actions/download-artifact@v4
         with:
-          name: python-service-${{ matrix.arch }}-${{ needs.validate-environment.outputs.build_id }}
+          name: python-service-${{ matrix.arch }}
           path: python-service-bin
 
       - name: 📥 Download Frontend Dist
         uses: actions/download-artifact@v4
         with:
-          name: frontend-dist-${{ needs.validate-environment.outputs.build_id }}
+          name: frontend-dist
           path: electron/out
 
       - name: 🚚 Stage Backend for Electron Builder
@@ -280,7 +283,7 @@ jobs:
       - name: 📤 Upload Release Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: fortuna-electron-msi-${{ matrix.arch }}-${{ needs.validate-environment.outputs.build_id }}
+          name: fortuna-electron-msi-${{ matrix.arch }}
           path: release-artifacts/
           retention-days: 90
 
@@ -295,7 +298,7 @@ jobs:
       - name: 📥 Download MSI Installer
         uses: actions/download-artifact@v4
         with:
-          name: fortuna-electron-msi-${{ matrix.arch }}-${{ needs.validate-environment.outputs.build_id }}
+          name: fortuna-electron-msi-${{ matrix.arch }}
           path: msi-installer
 
       - name: 🤫 Install MSI
