@@ -147,11 +147,11 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: 'electron/package-lock.json'
+          cache-dependency-path: 'web_platform/frontend/package-lock.json'
 
       - name: 📥 Install Frontend Dependencies
         shell: pwsh
-        working-directory: electron
+        working-directory: web_platform/frontend
         run: |
           # NOTE: This step can be prone to intermittent network failures (e.g., 502 Bad Gateway).
           # If this step fails, a simple re-run of the workflow may be all that is needed.
@@ -161,20 +161,20 @@ jobs:
         id: cache-frontend
         uses: actions/cache@v4
         with:
-          path: electron/out
-          key: ${{ runner.os }}-frontend-${{ hashFiles('electron/package-lock.json', 'electron/src/**/*.js', 'electron/src/**/*.ts', 'electron/src/**/*.tsx', 'electron/src/**/*.css') }}
+          path: web_platform/frontend/out
+          key: ${{ runner.os }}-frontend-${{ hashFiles('web_platform/frontend/package-lock.json', 'web_platform/frontend/**/*.js', 'web_platform/frontend/**/*.ts', 'web_platform/frontend/**/*.tsx', 'web_platform/frontend/**/*.css') }}
           restore-keys: |
             ${{ runner.os }}-frontend-
 
       - name: 🔨 Build Frontend
         if: steps.cache-frontend.outputs.cache-hit != 'true'
         shell: pwsh
-        working-directory: electron
+        working-directory: web_platform/frontend
         run: npm run build
 
       - name: 📝 Generate Artifact Manifest
         shell: pwsh
-        working-directory: electron
+        working-directory: web_platform/frontend
         run: |
           if (Test-Path "out") {
               $outDir = Resolve-Path "out"
@@ -197,8 +197,8 @@ jobs:
         with:
           name: frontend-dist
           path: |
-            electron/out/
-            electron/frontend-manifest.tsv
+            web_platform/frontend/out/
+            web_platform/frontend/frontend-manifest.tsv
           retention-days: 7
 
   verify-assets:
