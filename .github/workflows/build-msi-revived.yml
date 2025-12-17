@@ -139,7 +139,6 @@ jobs:
 
       - name: Prepare WiX Project
         shell: pwsh
-        working-directory: ${{ env.WIX_DIR }}
         run: |
           if (-not (Test-Path build_wix)) { New-Item -ItemType Directory -Path build_wix | Out-Null }
           $proj = @(
