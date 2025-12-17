@@ -1,6 +1,6 @@
 [
     ".github/workflows/build-msi-hat-trick-fusion.yml",
-    ".github/workflows/build-supreme.yml",
+    ".github/workflows/build-msi-supreme-combo.yml",
     "HISTORY.md",
     "electron/assets/license.rtf",
     "electron/package.json",
