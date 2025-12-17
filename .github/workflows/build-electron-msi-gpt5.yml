@@ -147,26 +147,58 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: 'electron/package-lock.json'
+          cache-dependency-path: 'web_platform/frontend/package-lock.json'
 
       - name: 📥 Install Frontend Dependencies
         shell: pwsh
-        working-directory: electron
+        working-directory: web_platform/frontend
         run: |
           # NOTE: This step can be prone to intermittent network failures (e.g., 502 Bad Gateway).
           # If this step fails, a simple re-run of the workflow may be all that is needed.
           npm ci --prefer-offline --no-audit
 
+      - name: Cache Frontend Build
+        id: cache-frontend
+        uses: actions/cache@v4
+        with:
+          path: web_platform/frontend/out
+          key: ${{ runner.os }}-frontend-${{ hashFiles('web_platform/frontend/package-lock.json', 'web_platform/frontend/**/*.js', 'web_platform/frontend/**/*.ts', 'web_platform/frontend/**/*.tsx', 'web_platform/frontend/**/*.css') }}
+          restore-keys: |
+            ${{ runner.os }}-frontend-
+
       - name: 🔨 Build Frontend
+        if: steps.cache-frontend.outputs.cache-hit != 'true'
         shell: pwsh
-        working-directory: electron
+        working-directory: web_platform/frontend
         run: npm run build
+
+      - name: 📝 Generate Artifact Manifest
+        shell: pwsh
+        working-directory: web_platform/frontend
+        run: |
+          if (Test-Path "out") {
+              $outDir = Resolve-Path "out"
+              Write-Output "Build directory found: $outDir"
+          } else {
+              Write-Error "Build directory 'out' not found. Did 'npm run build' succeed?"
+              exit 1
+          }
+          $manifestPath = "frontend-manifest.tsv"
+          "RelativePath`tSizeBytes`tSHA256" | Out-File $manifestPath -Encoding utf8
+          $files = Get-ChildItem -Path $outDir -Recurse -File
+          foreach ($f in $files) {
+            $rel = $f.FullName.Substring($outDir.Path.Length).TrimStart('\\','/')
+            $hash = (Get-FileHash $f.FullName -Algorithm SHA256).Hash
+            "$rel`t$($f.Length)`t$hash" | Out-File $manifestPath -Encoding utf8 -Append
+          }
 
       - name: 📤 Upload Frontend Artifact
         uses: actions/upload-artifact@v4
         with:
           name: frontend-dist
-          path: electron/out/
+          path: |
+            web_platform/frontend/out/
+            web_platform/frontend/frontend-manifest.tsv
           retention-days: 7
 
   verify-assets:
@@ -203,6 +235,14 @@ jobs:
           cache: 'npm'
           cache-dependency-path: 'electron/package-lock.json'
 
+      - name: Cache Electron
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/electron
+          key: ${{ runner.os }}-electron-${{ hashFiles('electron/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-
+
       - name: 📥 Download Python Service
         uses: actions/download-artifact@v4
         with:
@@ -223,10 +263,36 @@ jobs:
           }
           Write-Host "✅ Backend staged correctly"
 
+      - name: '🧐 The Dietician (Size Analysis)'
+        shell: pwsh
+        run: |
+          $target = "."
+          $limitMB = 450
+          Write-Host "--- 📊 Size Breakdown ---"
+          $files = Get-ChildItem -Path $target -Recurse -File -ErrorAction SilentlyContinue
+          if (!$files) { Write-Warning "No files found to weigh."; exit 0 }
+          $totalBytes = ($files | Measure-Object -Property Length -Sum).Sum
+          $totalMB = [math]::Round($totalBytes / 1MB, 2)
+          Write-Host "Total Payload Size: $totalMB MB"
+          if ($totalMB -gt $limitMB) {
+              Write-Warning " overweight: Build exceeds $limitMB MB limit!"
+          } else {
+              Write-Host "✅ Size within limits (< $limitMB MB)." -ForegroundColor Green
+          }
+          Write-Host "`n--- 🐘 Top 10 Heaviest Files ---"
+          $files | Sort-Object Length -Descending | Select-Object -First 10 @{N='File';E={$_.FullName.Replace($pwd,'')}}, @{N='Size(MB)';E={"_"{0:N2}_" -f ($_.Length/1MB)}} | Format-Table -AutoSize
+
       - name: 📥 Install Electron Dependencies
         shell: pwsh
         working-directory: electron
         run: npm ci --prefer-offline --no-audit
+
+      - name: Generate SBOM (Software Bill of Materials)
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: spdx-json
+          artifact-name: sbom-${{ github.job }}-${{ github.sha }}
 
       - name: '🧐 Forensically Guarantee Icon Paths'
         shell: pwsh
@@ -267,7 +333,7 @@ jobs:
           # 🔥 FIX: Added --config.win.icon flag to set icon without parsing YAML
           npm run dist -- --win msi $archFlag --config temp-builder-config.yml --publish never --config.artifactName=$artifactName --config.win.icon="assets/icon.ico"
 
-      - name: Rename & Hash MSI
+      - name: Smart MSI Renaming
         id: name_msi
         shell: pwsh
         run: |
@@ -276,8 +342,10 @@ jobs:
           $distDir = "electron/dist"
           $msiFound = Get-ChildItem -Path $distDir -Filter "*.msi" | Select-Object -First 1
           if (-not $msiFound) { throw "❌ FATAL: No MSI file found in $distDir." }
-          $targetName = $msiFound.Name
-          Move-Item -Path $msiFound.FullName -Destination "$releaseDir/$targetName" -Force
+          $semver = "${{ needs.validate-environment.outputs.semver }}"
+          $shortSha = "${{ needs.validate-environment.outputs.short_sha }}"
+          $targetName = "Fortuna-Electron-${{ matrix.arch }}-${semver}-${shortSha}.msi"
+          Move-Item -Path $msiFound.FullName -Destination (Join-Path $releaseDir $targetName) -Force
           Write-Host "✅ MSI Staged: $targetName"
 
       - name: 📤 Upload Release Artifacts
@@ -286,6 +354,7 @@ jobs:
           name: fortuna-electron-msi-${{ matrix.arch }}
           path: release-artifacts/
           retention-days: 90
+
 
   smoke-test:
     name: '🔬 Smoke Test (${{ matrix.arch }})'

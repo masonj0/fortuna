@@ -34,11 +34,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: '**/package-lock.json'
+      - uses: ./.github/actions/setup
       - name: Cache Build Output
         id: cache-frontend
         uses: actions/cache@v4
@@ -83,14 +79,8 @@ jobs:
     timeout-minutes: 20
     needs: build-frontend
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
-          cache-dependency-path: web_service/backend/requirements-dev.txt
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
       - name: Install Dependencies
         run: |
           pip install -r web_service/backend/requirements-dev.txt
@@ -110,6 +100,9 @@ jobs:
       short_sha: ${{ steps.meta.outputs.short_sha }}
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          architecture: ${{ matrix.arch }}
       - uses: actions/download-artifact@v4
         with:
           name: frontend-build
@@ -123,11 +116,6 @@ jobs:
           "short_sha=$shortSha" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "backend_dir=web_service/backend" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "module_path=web_service.backend" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          architecture: ${{ matrix.arch }}
-          cache: 'pip'
       - name: 🧾 Create Architecture Constraints
         id: constraints
         shell: pwsh
@@ -376,13 +364,13 @@ jobs:
         uses: anchore/sbom-action@v0
         with:
           path: backend
-          output-file: "sbom-${{ matrix.arch }}.spdx.json"
+          output-file: "sbom-${{ matrix.arch }}-${{ github.run_id }}.spdx.json"
           format: spdx-json
       - name: Upload SBOM
         uses: actions/upload-artifact@v4
         with:
-          name: sbom-${{ matrix.arch }}
-          path: "sbom-${{ matrix.arch }}.spdx.json"
+          name: sbom-${{ matrix.arch }}-${{ github.run_id }}
+          path: "sbom-${{ matrix.arch }}-${{ github.run_id }}.spdx.json"
 
   release:
     name: '🚀 Create Release'
