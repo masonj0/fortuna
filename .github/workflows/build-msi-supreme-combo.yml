@@ -195,6 +195,11 @@ jobs:
           Write-Host "📊 Total Payload: $([math]::Round($size, 2)) MB"
           if ($size -gt 300) { Write-Warning "⚠️ BLOAT ALERT: Payload exceeds 300MB!" }
 
+      - name: 🧐 Pre-Build Forensic File Audit
+        shell: pwsh
+        run: |
+          Get-ChildItem -Path "staging" -Recurse | Select-Object FullName, Length
+
       - name: 🔧 Setup WiX
         run: dotnet tool install --global wix --version ${{ env.WIX_VERSION }}
 
@@ -246,7 +251,9 @@ jobs:
       - name: 🧹 Pre-Install Cleanup
         shell: pwsh
         run: |
-          sc.exe delete "FortunaWebService" *>$null; Start-Sleep 2
+          # The '*' is a wildcard that tells PowerShell to ignore any errors if the service doesn't exist.
+          sc.exe delete "FortunaWebService" *>$null
+          Start-Sleep -Seconds 2
 
       - name: 💿 Install MSI
         shell: pwsh
@@ -269,14 +276,26 @@ jobs:
       - name: 🩺 Health Check
         shell: pwsh
         run: |
-          for ($i=0; $i -lt 5; $i++) {
+          $maxRetries = 6
+          $delaySeconds = 10
+          for ($i=1; $i -le $maxRetries; $i++) {
             try {
-              $resp = Invoke-RestMethod "http://127.0.0.1:${{ env.SERVICE_PORT }}/health" -ErrorAction Stop
-              if ($resp.status -eq "ok") { Write-Host "✅ Service Healthy"; return }
-            } catch { Write-Host "⏳ Waiting for service..." }
-            Start-Sleep 5
+              $response = Invoke-WebRequest -Uri "http://127.0.0.1:${{ env.SERVICE_PORT }}/health" -UseBasicParsing
+              if ($response.StatusCode -eq 200) {
+                Write-Host "✅ Health check PASSED on attempt $i."
+                return 0
+              } else {
+                Write-Warning "Attempt $i: Received status code $($response.StatusCode)"
+              }
+            } catch {
+              Write-Warning "Attempt $i: Health check failed. Error: $($_.Exception.Message)"
+            }
+            if ($i -lt $maxRetries) {
+              Write-Host "Waiting for $delaySeconds seconds before retry..."
+              Start-Sleep -Seconds $delaySeconds
+            }
           }
-          throw "❌ Service failed to respond"
+          throw "❌ Service health check failed after $maxRetries attempts."
 
       - name: 📸 Paparazzi (Visual Proof)
         shell: pwsh
