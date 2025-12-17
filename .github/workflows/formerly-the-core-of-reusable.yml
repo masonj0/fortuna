@@ -138,7 +138,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: frontend-dist-${{ needs.preflight.outputs.build_id }}
+          name: frontend-dist
           path: electron/out
           retention-days: 7
 
@@ -155,7 +155,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: frontend-dist-${{ needs.preflight.outputs.build_id }}
+          name: frontend-dist
           path: electron/out
 
       - uses: actions/setup-python@v5
@@ -190,7 +190,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: backend-${{ matrix.arch }}-${{ needs.preflight.outputs.build_id }}
+          name: backend-${{ matrix.arch }}
           path: dist/fortuna-backend
           retention-days: 7
 
@@ -207,7 +207,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: backend-${{ matrix.arch }}-${{ needs.preflight.outputs.build_id }}
+          name: backend-${{ matrix.arch }}
           path: staging/backend
 
       - name: 📝 Generate Service Scripts
@@ -260,7 +260,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: msi-${{ matrix.arch }}-${{ needs.preflight.outputs.build_id }}
+          name: msi-${{ matrix.arch }}
           path: Fortuna-${{ needs.preflight.outputs.semver }}-${{ matrix.arch }}.msi
           retention-days: 30
 
@@ -276,7 +276,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: msi-${{ matrix.arch }}-${{ needs.preflight.outputs.build_id }}
+          name: msi-${{ matrix.arch }}
 
       - name: 🧹 Clean Environment
         shell: pwsh
@@ -389,7 +389,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ui-proof-${{ matrix.arch }}-${{ needs.preflight.outputs.build_id }}
+          name: ui-proof-${{ matrix.arch }}
           path: ui-proof-${{ matrix.arch }}.png
           retention-days: 14
 
