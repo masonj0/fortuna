@@ -213,10 +213,11 @@ jobs:
       - name: 📝 Generate Service Scripts
         shell: pwsh
         run: |
-          @"
-net stop ${{ env.SERVICE_NAME }}
-net start ${{ env.SERVICE_NAME }}
-"@ | Out-File -FilePath staging/backend/restart_service.bat -Encoding ASCII
+          $scriptContent = @(
+            "net stop ${{ env.SERVICE_NAME }}",
+            "net start ${{ env.SERVICE_NAME }}"
+          )
+          $scriptContent | Out-File -FilePath staging/backend/restart_service.bat -Encoding ASCII
 
       - name: ⚖️ The Dietician
         if: env.ENABLE_DIETICIAN == 'true'
@@ -367,21 +368,21 @@ net start ${{ env.SERVICE_NAME }}
           npm install playwright
           npx playwright install chromium --with-deps
 
-          $script = @"
-          const { chromium } = require('playwright');
-          (async () => {
-            const browser = await chromium.launch();
-            const page = await browser.newPage();
-            await page.goto('http://127.0.0.1:${{ env.SERVICE_PORT }}/docs');
-            await page.waitForTimeout(2000);
-            await page.screenshot({
-              path: 'ui-proof-${{ matrix.arch }}.png',
-              fullPage: true
-            });
-            await browser.close();
-            console.log('✅ Screenshot captured');
-          })();
-"@
+          $script = @(
+            "const { chromium } = require('playwright');",
+            "(async () => {",
+            "  const browser = await chromium.launch();",
+            "  const page = await browser.newPage();",
+            "  await page.goto('http://127.0.0.1:${{ env.SERVICE_PORT }}/docs');",
+            "  await page.waitForTimeout(2000);",
+            "  await page.screenshot({",
+            "    path: 'ui-proof-${{ matrix.arch }}.png',",
+            "    fullPage: true",
+            "  });",
+            "  await browser.close();",
+            "  console.log('✅ Screenshot captured');",
+            "})();"
+          )
 
           $script | Out-File screenshot.js -Encoding UTF8
           node screenshot.js
@@ -407,19 +408,17 @@ net start ${{ env.SERVICE_NAME }}
       - name: 📊 Build Report
         shell: pwsh
         run: |
-          Write-Host @"
-
-╔════════════════════════════════════════════════════════╗
-║         🧬 FormerlyTheCoreOfReusable                   ║
-╠════════════════════════════════════════════════════════╣
-║  Version:     ${{ needs.preflight.outputs.semver }}
-║  Build ID:    ${{ needs.preflight.outputs.build_id }}
-║  Commit:      ${{ needs.preflight.outputs.short_sha }}
-║  Status:      ${{ needs.smoke-test.result }}
-║  Node:        ${{ env.NODE_VERSION }}
-║  Python:      ${{ env.PYTHON_VERSION }}
-║  WiX:         ${{ env.WIX_VERSION }}
-╚════════════════════════════════════════════════════════╝
-
-Artifacts: msi-{x64,x86}-${{ needs.preflight.outputs.build_id }}
-"@
+          Write-Host ""
+          Write-Host "╔════════════════════════════════════════════════════════╗"
+          Write-Host "║         🧬 FormerlyTheCoreOfReusable                   ║"
+          Write-Host "╠════════════════════════════════════════════════════════╣"
+          Write-Host "║  Version:     ${{ needs.preflight.outputs.semver }}"
+          Write-Host "║  Build ID:    ${{ needs.preflight.outputs.build_id }}"
+          Write-Host "║  Commit:      ${{ needs.preflight.outputs.short_sha }}"
+          Write-Host "║  Status:      ${{ needs.smoke-test.result }}"
+          Write-Host "║  Node:        ${{ env.NODE_VERSION }}"
+          Write-Host "║  Python:      ${{ env.PYTHON_VERSION }}"
+          Write-Host "║  WiX:         ${{ env.WIX_VERSION }}"
+          Write-Host "╚════════════════════════════════════════════════════════╝"
+          Write-Host ""
+          Write-Host "Artifacts: msi-{x64,x86}-${{ needs.preflight.outputs.build_id }}"
