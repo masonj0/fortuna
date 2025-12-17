@@ -115,6 +115,14 @@ jobs:
         arch: [x64, x86]
     steps:
       - uses: actions/checkout@v4
+      - name: 🏷️ Derive SemVer & Build ID
+        id: git_version
+        shell: pwsh
+        run: |
+          $tag = git describe --tags --abbrev=0 2>$null
+          if (-not $tag) { Write-Host "No tags found, defaulting to v0.0.0"; $tag = "v0.0.${{ github.run_number }}" }
+          echo "Build Version: $tag"
+          "semver=$tag" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
       - uses: actions/download-artifact@v4
         with:
           name: backend-dist-${{ matrix.arch }}
@@ -137,41 +145,18 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Prepare WiX Project
-        shell: pwsh
-        run: |
-          if (-not (Test-Path build_wix)) { New-Item -ItemType Directory -Path build_wix | Out-Null }
-          $proj = @(
-            '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">',
-            '  <PropertyGroup>',
-            '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>',
-            '    <OutputType>Package</OutputType>',
-            '    <Platforms>x64;x86</Platforms>',
-            '    <DefineConstants>Version=$(Version);SourceDir=$(SourceDir);ServicePort=$(ServicePort);Platform=$(Platform)</DefineConstants>',
-            '  </PropertyGroup>',
-            '  <ItemGroup>',
-            '    <PackageReference Include="WixToolset.UI.wixext" Version="${{ env.WIX_VERSION }}" />',
-            '    <PackageReference Include="WixToolset.Firewall.wixext" Version="${{ env.WIX_VERSION }}" />',
-            '    <PackageReference Include="WixToolset.Util.wixext" Version="${{ env.WIX_VERSION }}" />',
-            '  </ItemGroup>',
-            '  <ItemGroup>',
-            '    <Compile Include="Product_WithService.wxs" />',
-            '  </ItemGroup>',
-            '</Project>'
-          )
-          Set-Content build_wix/Fortuna.wixproj ($proj -join "`r`n") -Encoding utf8
 
       - name: Build MSI
         working-directory: ${{ env.WIX_DIR }}
         run: |
           # 🚀 Pass Matrix Arch to WiX
-          dotnet build Fortuna.wixproj -c Release -p:Platform=${{ matrix.arch }} -p:Version="0.0.${{ github.run_number }}" -p:SourceDir="../staging/backend" -p:ServicePort="${{ env.FORTUNA_PORT }}"
+          dotnet build Fortuna.wixproj -c Release -p:Platform=${{ matrix.arch }} -p:Version="${{ steps.git_version.outputs.semver }}" -p:SourceDir="../staging/backend" -p:ServicePort="${{ env.FORTUNA_PORT }}"
 
       - name: Rename & Hash
         run: |
           $releaseDir = "${{ env.WIX_DIR }}/bin/${{ matrix.arch }}/Release"
           $msi = Get-ChildItem -Path $releaseDir -Filter "*.msi" | Select -First 1
-          $target = "FortunaService-${{ matrix.arch }}-${{ github.run_number }}.msi"
+          $target = "FortunaService-${{ matrix.arch }}-${{ steps.git_version.outputs.semver }}.msi"
           Move-Item $msi.FullName -Destination "$releaseDir/$target" -Force
           Write-Host "✅ MSI Ready: $target"
 

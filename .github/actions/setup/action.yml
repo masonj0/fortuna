@@ -1,0 +1,26 @@
+name: 'Composite Setup Action'
+description: 'Checks out repo, sets up Node.js and Python'
+inputs:
+  architecture:
+    description: 'The architecture to set up Python for (x86, x64)'
+    required: false
+    default: 'x64'
+runs:
+  using: "composite"
+  steps:
+    - name: 📥 Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: 📦 Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: '**/package-lock.json'
+
+    - name: 🐍 Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        architecture: ${{ inputs.architecture }}
+        cache: 'pip'

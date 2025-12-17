@@ -537,6 +537,19 @@ jobs:
           if (Test-Path (Join-Path $env:BACKEND_DIR "requirements-dev.txt")) {
             pip install -r (Join-Path $env:BACKEND_DIR "requirements-dev.txt") -c ${{ steps.constraints.outputs.file }}
           }
+
+      - name: Generate SBOM (Software Bill of Materials)
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: spdx-json
+          artifact-name: sbom-${{ github.job }}-${{ github.sha }}
+
+      - name: 🔐 pip-audit
+        continue-on-error: true
+        run: |
+          pip install pip-audit
+          pip-audit -r (Join-Path $env:BACKEND_DIR "requirements.txt")
       - name: Create Dynamic webservice.spec for PyInstaller
         if: steps.cache-backend.outputs.cache-hit != 'true'
         shell: python
