@@ -125,7 +125,7 @@ jobs:
           $constraintFile = Join-Path $constraintDir "constraint-${{ matrix.arch }}.txt"
           if ('${{ matrix.arch }}' -eq 'x86') {
             # 🚀 GPT-5 SAFE MODE
-            "numpy==1.23.5`r`npandas==1.5.3" | Set-Content $constraintFile
+            "numpy==1.23.5" | Set-Content $constraintFile
           } else { New-Item $constraintFile -ItemType File -Force }
           "file=$constraintFile" | Out-File $env:GITHUB_OUTPUT -Append
       - name: Install Dependencies

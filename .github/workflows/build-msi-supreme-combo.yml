@@ -48,13 +48,11 @@ jobs:
         id: git_version
         shell: pwsh
         run: |
-          $tag = git describe --tags --abbrev=0 2>$null
-          if (-not $tag) { $tag = "0.0.0" }
-          $tag = $tag -replace "^v", ""
+          $semver = "0.0.${{ github.run_number }}"
           $run = "${{ github.run_number }}"
-          echo "semver=$tag" >> $env:GITHUB_OUTPUT
+          echo "semver=$semver" >> $env:GITHUB_OUTPUT
           echo "build_id=$run" >> $env:GITHUB_OUTPUT
-          Write-Host "Build Version: $tag.$run"
+          Write-Host "Build Version: $semver"
 
       - name: 🔎 Forensic Asset Verification (GPT5)
         shell: pwsh
