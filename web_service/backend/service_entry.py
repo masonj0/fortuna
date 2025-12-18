@@ -37,6 +37,12 @@ class FortunaSvc(win32serviceutil.ServiceFramework):
             self.server.should_exit = True
 
     def SvcDoRun(self):
+        # When running as a Windows Service, the default working directory is System32,
+        # which can cause issues with relative paths. This fix changes the working
+        # directory to the location of the executable.
+        if getattr(sys, 'frozen', False):
+            os.chdir(os.path.dirname(sys.executable))
+
         servicemanager.LogMsg(servicemanager.EVENTLOG_INFORMATION_TYPE,
                               servicemanager.PYS_SERVICE_STARTED,
                               (self._svc_name_, ''))

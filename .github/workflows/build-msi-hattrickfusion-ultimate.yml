@@ -272,7 +272,7 @@ jobs:
         with:
           name: hat-trick-msi-${{ matrix.arch }}
           path: msi-installer
-      - name: 🔥 Smoke Test
+      - name: 🔥 Install & Verify
         shell: pwsh
         run: |
           Set-StrictMode -Version Latest
@@ -297,7 +297,7 @@ jobs:
             throw "MSI installation failed with exit code $($proc.ExitCode)."
           }
           Write-Host "✅ MSI Installation successful."
-          # 3. VERIFY & RUN
+          # 3. VERIFY
           $progFiles = ${env:ProgramFiles}
           if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
           $installDir = Join-Path $progFiles "Fortuna Faucet Service"
@@ -305,9 +305,23 @@ jobs:
           New-Item -ItemType Directory -Path (Join-Path $installDir "data") -Force | Out-Null
           New-Item -ItemType Directory -Path (Join-Path $installDir "json") -Force | Out-Null
           New-Item -ItemType Directory -Path (Join-Path $installDir "logs") -Force | Out-Null
+
+          # 🚀 CRITICAL FIX: Grant LocalSystem write access to runtime dirs
+          icacls (Join-Path $installDir "data") /grant "NT AUTHORITY\SYSTEM:(OI)(CI)F" /T
+          icacls (Join-Path $installDir "json") /grant "NT AUTHORITY\SYSTEM:(OI)(CI)F" /T
+          icacls (Join-Path $installDir "logs") /grant "NT AUTHORITY\SYSTEM:(OI)(CI)F" /T
+
+          Write-Host "✅ Installation verified and permissions granted."
+
+      - name: 🚀 Start Service
+        shell: pwsh
+        run: |
           Start-Service -Name "FortunaWebService"
           Start-Sleep -Seconds 10
-          # 4. HEALTH CHECK
+
+      - name: 🩺 Health Check
+        shell: pwsh
+        run: |
           $maxRetries = 5
           $delay = 5
           $success = $false
