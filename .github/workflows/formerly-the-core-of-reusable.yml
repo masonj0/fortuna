@@ -317,6 +317,43 @@ jobs:
           Start-Process msiexec.exe -ArgumentList "/i `"$msi`" /quiet /norestart /l*v install.log" -Wait
           Start-Sleep 10
 
+      - name: '✅ Create Required Runtime Directories & Start Service'
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "Stop"
+
+          # Determine install path based on architecture
+          $progFiles = ${env:ProgramFiles}
+          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
+          $installDir = Join-Path $progFiles "Fortuna Faucet Service"
+
+          if (-not (Test-Path $installDir)) {
+            throw "❌ Installation directory not found at $installDir"
+          }
+
+          # CRITICAL: Create runtime directories that service needs
+          $dirs = @('data', 'json', 'logs')
+          foreach ($dir in $dirs) {
+            $fullPath = Join-Path $installDir $dir
+            New-Item -ItemType Directory -Path $fullPath -Force | Out-Null
+            # Grant LocalSystem (the service account) full control
+            icacls $fullPath /grant "NT AUTHORITY\SYSTEM:(OI)(CI)F" /T 2>&1 | Out-Null
+          }
+          Write-Host "✅ Created runtime directories with proper permissions"
+
+          # CRITICAL: Explicitly start the service (WiX removed auto-start)
+          Write-Host "Starting FortunaWebService..."
+          Start-Service -Name "FortunaWebService" -ErrorAction Stop
+          Start-Sleep -Seconds 10
+
+          # Verify service is running
+          $svc = Get-Service -Name "FortunaWebService"
+          if ($svc.Status -ne 'Running') {
+            throw "❌ Service failed to start. Status: $($svc.Status)"
+          }
+          Write-Host "✅ Service started successfully"
+
       - name: 🩺 Health Check
         shell: pwsh
         run: |
