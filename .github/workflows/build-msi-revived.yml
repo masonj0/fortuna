@@ -119,10 +119,9 @@ jobs:
         id: git_version
         shell: pwsh
         run: |
-          $tag = git describe --tags --abbrev=0 2>$null
-          if (-not $tag) { Write-Host "No tags found, defaulting to v0.0.0"; $tag = "v0.0.${{ github.run_number }}" }
-          echo "Build Version: $tag"
-          "semver=$tag" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          $semver = "0.0.${{ github.run_number }}"
+          Write-Host "Build Version: $semver"
+          "semver=$semver" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
       - uses: actions/download-artifact@v4
         with:
           name: backend-dist-${{ matrix.arch }}

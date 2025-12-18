@@ -212,6 +212,7 @@ jobs:
         shell: pwsh
         run: |
           if (-not (Test-Path "electron/assets/icon.ico")) { throw "❌ Missing icon.ico" }
+          if (-not (Test-Path "electron/electron-builder-config.yml")) { throw "❌ Missing electron/electron-builder-config.yml" }
           Write-Host "✅ Assets verified."
 
   build-electron-msi:
@@ -258,10 +259,22 @@ jobs:
       - name: 🚚 Stage Backend for Electron Builder
         shell: pwsh
         run: |
-          if (-not (Test-Path "python-service-bin/fortuna-backend.exe")) {
-            throw "❌ Backend executable not found after download"
+          $sourceDir = "python-service-bin"
+          $targetDir = "electron/resources"
+          if (-not (Test-Path "$sourceDir/fortuna-backend.exe")) {
+            Write-Host "Contents of $sourceDir:"
+            Get-ChildItem -Path $sourceDir -Recurse
+            throw "❌ Backend executable not found in '$sourceDir' after download."
           }
-          Write-Host "✅ Backend staged correctly"
+          New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+          Write-Host "Copying backend from '$sourceDir' to '$targetDir'..."
+          Copy-Item -Path "$sourceDir/*" -Destination $targetDir -Recurse -Force
+          if (-not (Test-Path "$targetDir/fortuna-backend.exe")) {
+            Write-Host "Contents of $targetDir:"
+            Get-ChildItem -Path $targetDir -Recurse
+            throw "❌ Backend executable failed to copy to '$targetDir'."
+          }
+          Write-Host "✅ Backend executable successfully staged in '$targetDir'."
 
       - name: '🧐 The Dietician (Size Analysis)'
         shell: pwsh
@@ -280,7 +293,7 @@ jobs:
               Write-Host "✅ Size within limits (< $limitMB MB)." -ForegroundColor Green
           }
           Write-Host "`n--- 🐘 Top 10 Heaviest Files ---"
-          $files | Sort-Object Length -Descending | Select-Object -First 10 @{N='File';E={$_.FullName.Replace($pwd,'')}}, @{N='Size(MB)';E={"_"{0:N2}_" -f ($_.Length/1MB)}} | Format-Table -AutoSize
+          $files | Sort-Object Length -Descending | Select-Object -First 10 @{N='File';E={$_.FullName.Replace($pwd,'')}}, @{N='Size(MB)';E={"{0:N2}" -f ($_.Length/1MB)}} | Format-Table -AutoSize
 
       - name: 📥 Install Electron Dependencies
         shell: pwsh
@@ -333,6 +346,18 @@ jobs:
           # 🔥 FIX: Added --config.win.icon flag to set icon without parsing YAML
           npm run dist -- --win msi $archFlag --config temp-builder-config.yml --publish never --config.artifactName=$artifactName --config.win.icon="assets/icon.ico"
 
+      - name: '🕵️ Post-Build Forensic Analysis'
+        shell: pwsh
+        run: |
+          $unpackedDir = "electron/dist/win-unpacked"
+          $backendExePath = Join-Path $unpackedDir "resources/fortuna-backend.exe"
+          if (-not (Test-Path $backendExePath)) {
+            Write-Host "Contents of '$unpackedDir/resources':"
+            Get-ChildItem -Path (Join-Path $unpackedDir "resources") -Recurse
+            throw "❌ Post-build verification failed: fortuna-backend.exe not found in the unpacked application."
+          }
+          Write-Host "✅ Post-build verification passed: fortuna-backend.exe found."
+
       - name: Smart MSI Renaming
         id: name_msi
         shell: pwsh
@@ -376,12 +401,23 @@ jobs:
           $msi = Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse | Select-Object -First 1
           Start-Process msiexec.exe -ArgumentList "/i `"$($msi.FullName)`" /qn" -Wait
 
-      - name: 🔍 Verify Installation Path
+      - name: 🔍 Verify Installation Path & Backend Executable
         shell: pwsh
         run: |
           $progFiles = if ('${{ matrix.arch }}' -eq 'x86') { ${env:ProgramFiles(x86)} } else { $env:ProgramFiles }
-          if (-not (Test-Path "$progFiles\\Fortuna Faucet")) { throw "❌ Install failed" }
-          Write-Host "✅ Installed successfully."
+          $installDir = Join-Path $progFiles "Fortuna Faucet"
+          if (-not (Test-Path $installDir)) {
+            throw "❌ Installation failed: Directory '$installDir' not found."
+          }
+          Write-Host "✅ Application directory found at '$installDir'."
+
+          $backendExePath = Join-Path $installDir "resources/fortuna-backend.exe"
+          if (-not (Test-Path $backendExePath)) {
+            Write-Host "Contents of '$installDir/resources':"
+            Get-ChildItem -Path (Join-Path $installDir "resources") -Recurse -ErrorAction SilentlyContinue
+            throw "❌ Smoke test failed: fortuna-backend.exe not found in the final installation directory."
+          }
+          Write-Host "✅ Backend executable found in installation directory."
 
       - name: 💥 Cleanup
         if: always()

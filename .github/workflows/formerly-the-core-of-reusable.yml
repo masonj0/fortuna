@@ -147,7 +147,7 @@ jobs:
 
   build-backend:
     name: 🐍 Backend (${{ matrix.arch }})
-    needs: [preflight]
+    needs: [preflight, build-frontend]
     runs-on: windows-latest
     timeout-minutes: 30
     strategy:
@@ -171,7 +171,7 @@ jobs:
         shell: pwsh
         run: |
           if ('${{ matrix.arch }}' -eq 'x86') {
-            @("numpy==1.23.5", "pandas==1.5.3") | Set-Content constraints.txt
+            @("numpy==1.23.5") | Set-Content constraints.txt
             Write-Host "⚠️  x86 constraints applied"
           } else {
             New-Item constraints.txt -Force | Out-Null
