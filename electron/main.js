@@ -57,11 +57,9 @@ class FortunaDesktopApp {
   }
 
 async startBackend() {
-    // ... existing port checks ...
-
     const isDev = !app.isPackaged;
     let backendCommand;
-    let backendCwd = process.cwd();
+    let backendCwd;
 
     if (isDev) {
         console.log('[DEV MODE] Configuring backend...');
@@ -69,14 +67,8 @@ async startBackend() {
         backendCwd = path.join(__dirname, '..', 'python_service');
     } else {
         console.log('[PROD MODE] Resolving backend via resourcesPath...');
-        // Standard location for extraResources in a production MSI
-        backendCommand = path.join(process.resourcesPath, 'resources', 'fortuna-backend.exe');
-
-        // Failsafe check for flattened directory structures
-        if (!fs.existsSync(backendCommand)) {
-            backendCommand = path.join(process.resourcesPath, 'fortuna-backend.exe');
-        }
-        backendCwd = path.dirname(backendCommand);
+        backendCwd = path.join(process.resourcesPath, 'fortuna-backend');
+        backendCommand = path.join(backendCwd, 'fortuna-backend.exe');
     }
 
     if (!fs.existsSync(backendCommand)) {
@@ -85,13 +77,45 @@ async startBackend() {
     }
 
     this.backendProcess = spawn(backendCommand, [], { cwd: backendCwd });
-    // ... remaining stdout/stderr logic ...
+
+    this.backendProcess.stdout.on('data', (data) => {
+      const output = data.toString().trim();
+      console.log(`[Backend] ${output}`);
+      this.backendLogs.push(output);
+      if (this.backendState !== 'running' && output.includes('Application startup complete')) {
+        console.log('✅ Backend is ready!');
+        this.backendState = 'running';
+        this.isBackendStarting = false;
+      }
+      this.sendBackendStatusUpdate();
+    });
+
+    this.backendProcess.stderr.on('data', (data) => {
+      const errorOutput = data.toString().trim();
+      console.error(`[Backend ERROR] ${errorOutput}`);
+      this.backendLogs.push(`ERROR: ${errorOutput}`);
+      this.backendState = 'error';
+      this.isBackendStarting = false;
+      this.sendBackendStatusUpdate();
+    });
+
+    this.backendProcess.on('exit', (code) => {
+      if (code !== 0 && this.backendState !== 'stopped') {
+        const errorMsg = `Backend process exited unexpectedly with code ${code}`;
+        console.error(errorMsg);
+        this.backendLogs.push(errorMsg);
+        this.backendState = 'error';
+        this.isBackendStarting = false;
+        this.sendBackendStatusUpdate();
+      }
+    });
 }
 
 getFrontendPath() {
-    if (!app.isPackaged) return 'http://localhost:3000';
+    if (!app.isPackaged) {
+        return 'http://localhost:3000';
+    }
 
-    // Ensure the path points to 'out' folder inside the app package
     const indexPath = path.join(app.getAppPath(), 'out', 'index.html');
     const { pathToFileURL } = require('url');
     return pathToFileURL(indexPath).toString();

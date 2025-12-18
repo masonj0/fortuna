@@ -31,13 +31,14 @@
     "extraResources": [
       {
         "from": "resources",
-        "to": "resources",
+        "to": ".",
         "filter": ["**/*"]
       }
     ],
     "files": [
       "**/*",
-      "!resources${/*}"
+      "out/**/*",
+      "!resources/**"
     ]
   }
 }
