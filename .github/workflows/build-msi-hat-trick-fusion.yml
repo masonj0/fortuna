@@ -261,6 +261,26 @@ jobs:
           name: hat-trick-msi-${{ matrix.arch }}
           path: build_wix/bin/${{ matrix.arch }}/Release/*
 
+  generate-sbom:
+    name: '📜 Generate SBOM (${{ matrix.arch }})'
+    runs-on: ubuntu-latest
+    needs: [build-backend]
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        arch: [x64, x86]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: backend-dist-${{ matrix.arch }}
+          path: backend
+      - name: Create SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: backend
+          artifact-name: sbom-${{ matrix.arch }}-${{ github.run_id }}
+          format: spdx-json
+
   smoke-test:
     name: '🔬 Smoke Test (${{ matrix.arch }})'
     runs-on: windows-latest
@@ -327,3 +347,9 @@ jobs:
             Start-Sleep -Seconds $delay
           }
           throw "Health check failed after $maxRetries attempts."
+      - name: '🕵️ CSI: Windows Post-Mortem (On Failure)'
+        if: failure()
+        shell: pwsh
+        run: |
+          Get-Process | Where-Object { $_.ProcessName -match "fortuna" }
+          Get-EventLog -LogName Application -Newest 50 -EntryType Error,Warning

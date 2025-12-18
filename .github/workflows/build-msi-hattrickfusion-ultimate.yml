@@ -341,6 +341,12 @@ jobs:
         with:
           name: visual-proof-${{ matrix.arch || 'x64' }}
           path: proof-of-life.png
+      - name: '🕵️ CSI: Windows Post-Mortem (On Failure)'
+        if: failure()
+        shell: pwsh
+        run: |
+          Get-Process | Where-Object { $_.ProcessName -match "fortuna" }
+          Get-EventLog -LogName Application -Newest 50 -EntryType Error,Warning
       - name: 🧹 Stop Service
         if: always()
         shell: pwsh
@@ -364,13 +370,8 @@ jobs:
         uses: anchore/sbom-action@v0
         with:
           path: backend
-          output-file: "sbom-${{ matrix.arch }}-${{ github.run_id }}.spdx.json"
+          artifact-name: sbom-${{ matrix.arch }}-${{ github.run_id }}
           format: spdx-json
-      - name: Upload SBOM
-        uses: actions/upload-artifact@v4
-        with:
-          name: sbom-${{ matrix.arch }}-${{ github.run_id }}
-          path: "sbom-${{ matrix.arch }}-${{ github.run_id }}.spdx.json"
 
   release:
     name: '🚀 Create Release'
