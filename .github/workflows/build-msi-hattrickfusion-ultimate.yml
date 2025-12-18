@@ -125,7 +125,7 @@ jobs:
           $constraintFile = Join-Path $constraintDir "constraint-${{ matrix.arch }}.txt"
           if ('${{ matrix.arch }}' -eq 'x86') {
             # 🚀 GPT-5 SAFE MODE
-            "numpy==1.23.5`r`npandas==1.5.3" | Set-Content $constraintFile
+            "numpy==1.23.5" | Set-Content $constraintFile
           } else { New-Item $constraintFile -ItemType File -Force }
           "file=$constraintFile" | Out-File $env:GITHUB_OUTPUT -Append
       - name: Install Dependencies
@@ -135,7 +135,7 @@ jobs:
           pip install pyinstaller==6.6.0 pywin32
       - name: Build Backend (PyInstaller)
         run: |
-          pyinstaller --noconfirm --onedir --clean --name fortuna-backend --hidden-import=win32timezone --hidden-import=win32serviceutil --add-data "web_service/backend;backend" --add-data "web_platform/frontend/out;ui" web_service/backend/service_entry.py
+          python -m PyInstaller --noconfirm --onedir --clean --name fortuna-backend --hidden-import=win32timezone --hidden-import=win32serviceutil --add-data "web_service/backend;backend" --add-data "web_platform/frontend/out;ui" web_service/backend/service_entry.py
       - name: Upload Backend
         uses: actions/upload-artifact@v4
         with:
@@ -299,7 +299,7 @@ jobs:
           New-Item -ItemType Directory -Path (Join-Path $installDir "data") -Force | Out-Null
           New-Item -ItemType Directory -Path (Join-Path $installDir "json") -Force | Out-Null
           New-Item -ItemType Directory -Path (Join-Path $installDir "logs") -Force | Out-Null
-          Start-Service -Name "Fortuna Faucet Service"
+          Start-Service -Name "FortunaWebService"
           Start-Sleep -Seconds 10
           # 4. HEALTH CHECK
           $maxRetries = 5
@@ -341,6 +341,12 @@ jobs:
         with:
           name: visual-proof-${{ matrix.arch || 'x64' }}
           path: proof-of-life.png
+      - name: '🕵️ CSI: Windows Post-Mortem (On Failure)'
+        if: failure()
+        shell: pwsh
+        run: |
+          Get-Process | Where-Object { $_.ProcessName -match "fortuna" }
+          Get-EventLog -LogName Application -Newest 50 -EntryType Error,Warning
       - name: 🧹 Stop Service
         if: always()
         shell: pwsh
@@ -364,13 +370,8 @@ jobs:
         uses: anchore/sbom-action@v0
         with:
           path: backend
-          output-file: "sbom-${{ matrix.arch }}-${{ github.run_id }}.spdx.json"
+          artifact-name: sbom-${{ matrix.arch }}-${{ github.run_id }}
           format: spdx-json
-      - name: Upload SBOM
-        uses: actions/upload-artifact@v4
-        with:
-          name: sbom-${{ matrix.arch }}-${{ github.run_id }}
-          path: "sbom-${{ matrix.arch }}-${{ github.run_id }}.spdx.json"
 
   release:
     name: '🚀 Create Release'
