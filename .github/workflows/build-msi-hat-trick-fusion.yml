@@ -218,8 +218,24 @@ jobs:
               $wxsContent.Save($wxsPath)
               Write-Host "✅ Dynamically removed 'Start=install' attribute from WiX template."
           }
-          if (Test-Path staging/backend/fortuna-backend.exe) {
-            Move-Item staging/backend/fortuna-backend.exe staging/backend/fortuna-webservice.exe -Force
+          $sourceDir = "staging/backend"
+          $distDir = "staging/backend/fortuna-backend" # PyInstaller one-dir output
+          $targetExe = "fortuna-webservice.exe"
+
+          if (Test-Path $distDir) {
+            Write-Host "PyInstaller 'onedir' output found. Staging entire directory..."
+            # Copy all files from the 'dist' folder up one level
+            Copy-Item -Path (Join-Path $distDir "*") -Destination $sourceDir -Recurse -Force
+            # Clean up the now-empty dist directory
+            Remove-Item $distDir -Recurse -Force
+            # Rename the main executable for WiX
+            Rename-Item -Path (Join-Path $sourceDir "fortuna-backend.exe") -NewName $targetExe -Force
+            Write-Host "✅ Staging complete for WiX."
+          } else {
+            Write-Host "##[error]Could not find fortuna-backend.exe in expected locations."
+            Write-Host "Listing contents of staging directory for forensics:"
+            Get-ChildItem -Path "staging" -Recurse
+            exit 1
           }
           $proj = @(
             '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">',
