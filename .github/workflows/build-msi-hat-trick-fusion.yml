@@ -218,8 +218,21 @@ jobs:
               $wxsContent.Save($wxsPath)
               Write-Host "✅ Dynamically removed 'Start=install' attribute from WiX template."
           }
-          if (Test-Path staging/backend/fortuna-backend.exe) {
-            Move-Item staging/backend/fortuna-backend.exe staging/backend/fortuna-webservice.exe -Force
+          $nestedExePath = "staging/backend/fortuna-backend/fortuna-backend.exe"
+          $flatExePath = "staging/backend/fortuna-backend.exe"
+          $targetExePath = "staging/backend/fortuna-webservice.exe"
+
+          if (Test-Path $nestedExePath) {
+            Write-Host "Found nested executable at $nestedExePath. Moving to $targetExePath"
+            Move-Item $nestedExePath $targetExePath -Force
+          } elseif (Test-Path $flatExePath) {
+            Write-Host "Found executable at $flatExePath. Moving to $targetExePath"
+            Move-Item $flatExePath $targetExePath -Force
+          } else {
+            Write-Host "##[error]Could not find fortuna-backend.exe in expected locations."
+            Write-Host "Listing contents of staging directory for forensics:"
+            Get-ChildItem -Path "staging" -Recurse
+            exit 1
           }
           $proj = @(
             '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">',
