@@ -261,6 +261,18 @@ jobs:
           name: hat-trick-msi-${{ matrix.arch }}
           path: build_wix/bin/${{ matrix.arch }}/Release/*
 
+      - name: 📝 Generate Job Summary
+        shell: pwsh
+        run: |
+          $ver = "${{ needs.build-backend.outputs.semver }}"
+          $sha = "${{ needs.build-backend.outputs.short_sha }}"
+          $targetName = "HatTrickFusion-${{ matrix.arch }}-${ver}-${sha}.msi"
+          $hash = (Get-FileHash "build_wix/bin/${{ matrix.arch }}/Release/$targetName").Hash
+          echo "### 📦 Build Summary (`${{ matrix.arch }}`)" >> $env:GITHUB_STEP_SUMMARY
+          echo "| File | Version | SHA-256 |" >> $env:GITHUB_STEP_SUMMARY
+          echo "|---|---|---|" >> $env:GITHUB_STEP_SUMMARY
+          echo "| `$targetName` | `$ver` | `$hash` |" >> $env:GITHUB_STEP_SUMMARY
+
   generate-sbom:
     name: '📜 Generate SBOM (${{ matrix.arch }})'
     runs-on: ubuntu-latest

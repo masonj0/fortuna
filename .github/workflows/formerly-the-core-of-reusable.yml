@@ -103,6 +103,24 @@ jobs:
           if (-not "${{ env.PYTHON_VERSION }}" -match '^\d+\.\d+$') { throw "Invalid PYTHON_VERSION" }
           Write-Host "✅ Configuration valid"
 
+      - name: 🧪 Version Sanity Check
+        shell: pwsh
+        run: |
+          $testedNode = @("18", "20")
+          $testedPython = @("3.10", "3.11")
+
+          if ("${{ env.NODE_VERSION }}" -notin $testedNode) {
+            Write-Warning "Untested Node.js version ('${{ env.NODE_VERSION }}') selected. Expected one of: $($testedNode -join ', ')"
+          } else {
+            Write-Host "✅ Node.js version is on the tested list."
+          }
+
+          if ("${{ env.PYTHON_VERSION }}" -notin $testedPython) {
+            Write-Warning "Untested Python version ('${{ env.PYTHON_VERSION }}') selected. Expected one of: $($testedPython -join ', ')"
+          } else {
+            Write-Host "✅ Python version is on the tested list."
+          }
+
       - name: 🔎 Forensic Assets
         if: env.ENABLE_FORENSICS == 'true'
         shell: pwsh

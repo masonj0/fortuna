@@ -611,6 +611,10 @@ jobs:
           $size = (Get-Item $exePath).Length / 1MB
           if ($size -lt 10) { throw "❌ FATAL: Executable is suspiciously small: $($size) MB." }
           Write-Host "✅ Backend ready: $([math]::Round($size, 2)) MB"
+
+      - name: 🌳 Tree Command for Debugging
+        run: |
+          tree /F dist
       - name: Upload Backend Executable
         uses: actions/upload-artifact@v4
         with:

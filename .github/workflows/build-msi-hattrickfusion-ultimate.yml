@@ -2,6 +2,12 @@
 name: 🎩 HatTrick Fusion (Ultimate)
 on:
   workflow_dispatch:
+    inputs:
+      cache-bust:
+        description: 'Force a clean build by ignoring all caches'
+        required: false
+        type: boolean
+        default: false
   push:
     branches: ["main"]
 
@@ -40,7 +46,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: web_platform/frontend/out
-          key: ${{ runner.os }}-frontend-${{ hashFiles('**/package-lock.json', 'web_platform/frontend/**/*.js', 'web_platform/frontend/**/*.ts', 'web_platform/frontend/**/*.tsx', 'web_platform/frontend/**/*.css') }}
+          key: ${{ runner.os }}-frontend-${{ hashFiles('**/package-lock.json', 'web_platform/frontend/**/*.js', 'web_platform/frontend/**/*.ts', 'web_platform/frontend/**/*.tsx', 'web_platform/frontend/**/*.css') }}${{ inputs.cache-bust && format('-{0}', github.run_id) || '' }}
           restore-keys: |
             ${{ runner.os }}-frontend-
       - name: Install and Build
