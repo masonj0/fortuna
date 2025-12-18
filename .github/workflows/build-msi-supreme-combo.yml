@@ -48,13 +48,11 @@ jobs:
         id: git_version
         shell: pwsh
         run: |
-          $tag = git describe --tags --abbrev=0 2>$null
-          if (-not $tag) { $tag = "0.0.0" }
-          $tag = $tag -replace "^v", ""
+          $semver = "0.0.${{ github.run_number }}"
           $run = "${{ github.run_number }}"
-          echo "semver=$tag" >> $env:GITHUB_OUTPUT
+          echo "semver=$semver" >> $env:GITHUB_OUTPUT
           echo "build_id=$run" >> $env:GITHUB_OUTPUT
-          Write-Host "Build Version: $tag.$run"
+          Write-Host "Build Version: $semver"
 
       - name: 🔎 Forensic Asset Verification (GPT5)
         shell: pwsh
@@ -277,14 +275,14 @@ jobs:
       - name: 🩺 Health Check
         shell: pwsh
         run: |
-          $maxRetries = 6
-          $delaySeconds = 10
+          $maxRetries = 5
+          $delay = 2 # Initial delay in seconds
           for ($i=1; $i -le $maxRetries; $i++) {
             try {
-              $response = Invoke-WebRequest -Uri "http://127.0.0.1:${{ env.SERVICE_PORT }}/health" -UseBasicParsing
+              $response = Invoke-WebRequest -Uri "http://127.0.0.1:${{ env.SERVICE_PORT }}/health" -UseBasicParsing -TimeoutSec 5
               if ($response.StatusCode -eq 200) {
                 Write-Host "✅ Health check PASSED on attempt $i."
-                return 0
+                exit 0
               } else {
                 Write-Warning "Attempt $i: Received status code $($response.StatusCode)"
               }
@@ -292,8 +290,9 @@ jobs:
               Write-Warning "Attempt $i: Health check failed. Error: $($_.Exception.Message)"
             }
             if ($i -lt $maxRetries) {
-              Write-Host "Waiting for $delaySeconds seconds before retry..."
-              Start-Sleep -Seconds $delaySeconds
+              $currentDelay = [math]::Pow($delay, $i)
+              Write-Host "Waiting for $currentDelay seconds before retry..."
+              Start-Sleep -Seconds $currentDelay
             }
           }
           throw "❌ Service health check failed after $maxRetries attempts."

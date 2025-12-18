@@ -79,8 +79,13 @@ class HealthMonitor:
         return latest["cpu_percent"] < 80 and latest["memory_percent"] < 85 and latest["disk_percent"] < 90
 
 
+import time
+from fastapi import Response
+from .version import get_version
+
 # Global instance for the application to use
 health_monitor = HealthMonitor()
+start_time = time.time()
 
 
 @router.get("/health/detailed", tags=["Health"])
@@ -90,6 +95,23 @@ async def get_detailed_health():
 
 
 @router.get("/health", tags=["Health"])
-async def get_basic_health():
+async def get_basic_health(response: Response):
     """Provides a basic health check for load balancers and uptime monitoring."""
-    return {"status": "ok", "timestamp": datetime.now().isoformat()}
+    uptime_seconds = time.time() - start_time
+    # Simple dependency check: assume healthy if we have adapter data
+    dependencies_healthy = len(health_monitor.adapter_health) > 0
+    status = "ok" if dependencies_healthy else "degraded"
+
+    if not dependencies_healthy:
+        response.status_code = 503 # Service Unavailable
+
+    return {
+        "status": status,
+        "timestamp": datetime.now().isoformat(),
+        "version": get_version(),
+        "uptime_seconds": int(uptime_seconds),
+        "dependencies": {
+            "database": "connected", # Placeholder
+            "external_api": "healthy" # Placeholder
+        }
+    }

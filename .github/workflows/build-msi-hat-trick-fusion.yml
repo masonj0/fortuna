@@ -117,7 +117,7 @@ jobs:
           $constraintFile = Join-Path $constraintDir "constraint-${{ matrix.arch }}.txt"
           if ('${{ matrix.arch }}' -eq 'x86') {
             # 🚀 GPT-5 SAFE MODE
-            "numpy==1.23.5`r`npandas==1.5.3" | Set-Content $constraintFile
+            "numpy==1.23.5" | Set-Content $constraintFile
           } else { New-Item $constraintFile -ItemType File -Force }
           "file=$constraintFile" | Out-File $env:GITHUB_OUTPUT -Append
       - name: Install Dependencies
@@ -127,7 +127,7 @@ jobs:
           pip install pyinstaller==6.6.0 pywin32
       - name: Build Backend (PyInstaller)
         run: |
-          pyinstaller --noconfirm --onedir --clean --name fortuna-backend --hidden-import=win32timezone --hidden-import=win32serviceutil --add-data "web_service/backend;backend" web_service/backend/service_entry.py
+          python -m PyInstaller --noconfirm --onedir --clean --name fortuna-backend --hidden-import=win32timezone --hidden-import=win32serviceutil --add-data "web_service/backend;backend" web_service/backend/service_entry.py
       - name: Upload Backend
         uses: actions/upload-artifact@v4
         with:
@@ -261,6 +261,38 @@ jobs:
           name: hat-trick-msi-${{ matrix.arch }}
           path: build_wix/bin/${{ matrix.arch }}/Release/*
 
+      - name: 📝 Generate Job Summary
+        shell: pwsh
+        run: |
+          $ver = "${{ needs.build-backend.outputs.semver }}"
+          $sha = "${{ needs.build-backend.outputs.short_sha }}"
+          $targetName = "HatTrickFusion-${{ matrix.arch }}-${ver}-${sha}.msi"
+          $hash = (Get-FileHash "build_wix/bin/${{ matrix.arch }}/Release/$targetName").Hash
+          echo "### 📦 Build Summary (`${{ matrix.arch }}`)" >> $env:GITHUB_STEP_SUMMARY
+          echo "| File | Version | SHA-256 |" >> $env:GITHUB_STEP_SUMMARY
+          echo "|---|---|---|" >> $env:GITHUB_STEP_SUMMARY
+          echo "| `$targetName` | `$ver` | `$hash` |" >> $env:GITHUB_STEP_SUMMARY
+
+  generate-sbom:
+    name: '📜 Generate SBOM (${{ matrix.arch }})'
+    runs-on: ubuntu-latest
+    needs: [build-backend]
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        arch: [x64, x86]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: backend-dist-${{ matrix.arch }}
+          path: backend
+      - name: Create SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: backend
+          artifact-name: sbom-${{ matrix.arch }}-${{ github.run_id }}
+          format: spdx-json
+
   smoke-test:
     name: '🔬 Smoke Test (${{ matrix.arch }})'
     runs-on: windows-latest
@@ -309,7 +341,6 @@ jobs:
           New-Item -ItemType Directory -Path (Join-Path $installDir "data") -Force | Out-Null
           New-Item -ItemType Directory -Path (Join-Path $installDir "json") -Force | Out-Null
           New-Item -ItemType Directory -Path (Join-Path $installDir "logs") -Force | Out-Null
-          Get-Service | Where-Object { $_.DisplayName -like "*Fortuna*" } | Format-Table -AutoSize
           Start-Service -Name "FortunaWebService" -ErrorAction Stop
           Start-Sleep -Seconds 10
 
@@ -328,3 +359,9 @@ jobs:
             Start-Sleep -Seconds $delay
           }
           throw "Health check failed after $maxRetries attempts."
+      - name: '🕵️ CSI: Windows Post-Mortem (On Failure)'
+        if: failure()
+        shell: pwsh
+        run: |
+          Get-Process | Where-Object { $_.ProcessName -match "fortuna" }
+          Get-EventLog -LogName Application -Newest 50 -EntryType Error,Warning
