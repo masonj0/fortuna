@@ -299,7 +299,7 @@ jobs:
           New-Item -ItemType Directory -Path (Join-Path $installDir "data") -Force | Out-Null
           New-Item -ItemType Directory -Path (Join-Path $installDir "json") -Force | Out-Null
           New-Item -ItemType Directory -Path (Join-Path $installDir "logs") -Force | Out-Null
-          Start-Service -Name "Fortuna Faucet Service"
+          Start-Service -Name "FortunaWebService"
           Start-Sleep -Seconds 10
           # 4. HEALTH CHECK
           $maxRetries = 5
