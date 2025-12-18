@@ -144,6 +144,33 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
+      - name: Prepare WiX Project
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          Copy-Item "${{ env.WIX_DIR }}/Product_WithService.wxs" "${{ env.WIX_DIR }}/Product.wxs" -Force
+          if (Test-Path "staging/backend/fortuna-backend.exe") {
+            Move-Item "staging/backend/fortuna-backend.exe" "staging/backend/fortuna-webservice.exe" -Force
+          }
+          $proj = @(
+            '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">',
+            '  <PropertyGroup>',
+            '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>',
+            '    <OutputType>Package</OutputType>',
+            '    <Platforms>x64;x86</Platforms>',
+            '    <DefineConstants>Version=$(Version);SourceDir=$(SourceDir);ServicePort=$(ServicePort)</DefineConstants>',
+            '  </PropertyGroup>',
+            '  <ItemGroup>',
+            '    <PackageReference Include="WixToolset.UI.wixext" Version="${{ env.WIX_VERSION }}" />',
+            '    <PackageReference Include="WixToolset.Firewall.wixext" Version="${{ env.WIX_VERSION }}" />',
+            '    <PackageReference Include="WixToolset.Util.wixext" Version="${{ env.WIX_VERSION }}" />',
+            '  </ItemGroup>',
+            '  <ItemGroup>',
+            '    <Compile Include="Product.wxs" />',
+            '  </ItemGroup>',
+            '</Project>'
+          )
+          Set-Content "${{ env.WIX_DIR }}/Fortuna.wixproj" -Value ($proj -join "`r`n") -Encoding utf8
 
       - name: Build MSI
         working-directory: ${{ env.WIX_DIR }}
