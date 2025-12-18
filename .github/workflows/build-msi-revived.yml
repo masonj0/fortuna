@@ -119,10 +119,9 @@ jobs:
         id: git_version
         shell: pwsh
         run: |
-          $tag = git describe --tags --abbrev=0 2>$null
-          if (-not $tag) { Write-Host "No tags found, defaulting to v0.0.0"; $tag = "v0.0.${{ github.run_number }}" }
-          echo "Build Version: $tag"
-          "semver=$tag" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          $semver = "0.0.${{ github.run_number }}"
+          Write-Host "Build Version: $semver"
+          "semver=$semver" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
       - uses: actions/download-artifact@v4
         with:
           name: backend-dist-${{ matrix.arch }}
@@ -159,11 +158,16 @@ jobs:
           $target = "FortunaService-${{ matrix.arch }}-${{ steps.git_version.outputs.semver }}.msi"
           Move-Item $msi.FullName -Destination "$releaseDir/$target" -Force
           Write-Host "✅ MSI Ready: $target"
+          $hash = (Get-FileHash "$releaseDir/$target" -Algorithm SHA256).Hash
+          Set-Content -Path "$releaseDir/$target.sha256" -Value $hash
+          Write-Host "✅ SHA-256: $hash"
 
       - uses: actions/upload-artifact@v4
         with:
           name: msi-${{ matrix.arch }}
-          path: ${{ env.WIX_DIR }}/bin/${{ matrix.arch }}/Release/*.msi
+          path: |
+            ${{ env.WIX_DIR }}/bin/${{ matrix.arch }}/Release/*.msi
+            ${{ env.WIX_DIR }}/bin/${{ matrix.arch }}/Release/*.sha256
 
   # 4. SMOKE TEST (Matrix: x64 & x86)
   smoke-test:

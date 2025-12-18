@@ -279,8 +279,53 @@ class FortunaDesktopApp {
 let fortunaApp;
 
 app.whenReady().then(() => {
- fortunaApp = new FortunaDesktopApp();
- fortunaApp.initialize();
+  // Harden the session for security
+  const { session } = require('electron');
+  const ses = session.defaultSession;
+
+  // 1. Content-Security-Policy
+  ses.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' http://127.0.0.1:*"
+        ]
+      }
+    });
+  });
+
+  // 2. Permission Request Handler
+  ses.setPermissionRequestHandler((webContents, permission, callback) => {
+    const allowedPermissions = ['clipboard-read', 'clipboard-sanitized-write'];
+    if (allowedPermissions.includes(permission)) {
+      callback(true); // Grant allowed permissions
+    } else {
+      console.warn(`[SECURITY] Denied permission request for: ${permission}`);
+      callback(false); // Deny all others by default
+    }
+  });
+
+  // 3. Certificate Pinning (TODO)
+  // Certificate pinning would be implemented here. It is commented out
+  // because it requires a known certificate hash and would break local dev.
+  // ses.setCertificateVerifyProc((request, callback) => {
+  //   const { hostname, certificate, verificationResult } = request;
+  //   if (hostname === 'api.fortuna.faucet') {
+  //     // TODO: Replace with actual certificate fingerprint
+  //     const expectedFingerprint = '...';
+  //     if (certificate.fingerprint === expectedFingerprint) {
+  //       callback(0); // 0 means success
+  //     } else {
+  //       callback(-2); // -2 means failure
+  //     }
+  //   } else {
+  //     callback(0); // Allow other domains
+  //   }
+  // });
+
+  fortunaApp = new FortunaDesktopApp();
+  fortunaApp.initialize();
 });
 
 app.on('window-all-closed', () => {
