@@ -8,15 +8,15 @@
      xmlns:fire="http://wixtoolset.org/schemas/v4/wxs/firewall">
 
   <!-- 🔧 CRITICAL FIX: Define defaults for preprocessor variables -->
-  <?if !$(var.ServicePort) ?>
+  <?if not defined(ServicePort) ?>
     <?define ServicePort = 8102 ?>
   <?endif?>
 
-  <?if !$(var.Version) ?>
+  <?if not defined(Version) ?>
     <?define Version = 0.0.0 ?>
   <?endif?>
 
-  <?if !$(var.SourceDir) ?>
+  <?if not defined(SourceDir) ?>
     <?define SourceDir = staging/backend ?>
   <?endif?>
 

@@ -218,16 +218,19 @@ jobs:
               $wxsContent.Save($wxsPath)
               Write-Host "✅ Dynamically removed 'Start=install' attribute from WiX template."
           }
-          $nestedExePath = "staging/backend/fortuna-backend/fortuna-backend.exe"
-          $flatExePath = "staging/backend/fortuna-backend.exe"
-          $targetExePath = "staging/backend/fortuna-webservice.exe"
+          $sourceDir = "staging/backend"
+          $distDir = "staging/backend/fortuna-backend" # PyInstaller one-dir output
+          $targetExe = "fortuna-webservice.exe"
 
-          if (Test-Path $nestedExePath) {
-            Write-Host "Found nested executable at $nestedExePath. Moving to $targetExePath"
-            Move-Item $nestedExePath $targetExePath -Force
-          } elseif (Test-Path $flatExePath) {
-            Write-Host "Found executable at $flatExePath. Moving to $targetExePath"
-            Move-Item $flatExePath $targetExePath -Force
+          if (Test-Path $distDir) {
+            Write-Host "PyInstaller 'onedir' output found. Staging entire directory..."
+            # Copy all files from the 'dist' folder up one level
+            Copy-Item -Path (Join-Path $distDir "*") -Destination $sourceDir -Recurse -Force
+            # Clean up the now-empty dist directory
+            Remove-Item $distDir -Recurse -Force
+            # Rename the main executable for WiX
+            Rename-Item -Path (Join-Path $sourceDir "fortuna-backend.exe") -NewName $targetExe -Force
+            Write-Host "✅ Staging complete for WiX."
           } else {
             Write-Host "##[error]Could not find fortuna-backend.exe in expected locations."
             Write-Host "Listing contents of staging directory for forensics:"

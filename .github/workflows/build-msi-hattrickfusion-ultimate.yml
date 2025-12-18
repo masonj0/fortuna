@@ -305,7 +305,13 @@ jobs:
           New-Item -ItemType Directory -Path (Join-Path $installDir "data") -Force | Out-Null
           New-Item -ItemType Directory -Path (Join-Path $installDir "json") -Force | Out-Null
           New-Item -ItemType Directory -Path (Join-Path $installDir "logs") -Force | Out-Null
-          Write-Host "✅ Installation verified."
+
+          # 🚀 CRITICAL FIX: Grant LocalSystem write access to runtime dirs
+          icacls (Join-Path $installDir "data") /grant "NT AUTHORITY\SYSTEM:(OI)(CI)F" /T
+          icacls (Join-Path $installDir "json") /grant "NT AUTHORITY\SYSTEM:(OI)(CI)F" /T
+          icacls (Join-Path $installDir "logs") /grant "NT AUTHORITY\SYSTEM:(OI)(CI)F" /T
+
+          Write-Host "✅ Installation verified and permissions granted."
 
       - name: 🚀 Start Service
         shell: pwsh
