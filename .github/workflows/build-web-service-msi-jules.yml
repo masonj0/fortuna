@@ -516,6 +516,7 @@ jobs:
           cache-dependency-path: |
             ${{ env.BACKEND_DIR }}/requirements.txt
             ${{ env.BACKEND_DIR }}/requirements-dev.txt
+
       - name: 🧾 Create Architecture Constraints
         id: constraints
         shell: pwsh
@@ -524,9 +525,12 @@ jobs:
           New-Item -ItemType Directory -Path $constraintDir -Force | Out-Null
           $constraintFile = Join-Path $constraintDir "constraint-${{ matrix.arch }}.txt"
           if ('${{ matrix.arch }}' -eq 'x86') {
-            "numpy==1.23.5" | Set-Content $constraintFile
-          } else { New-Item $constraintFile -ItemType File -Force }
+            "numpy==1.23.5`r`npandas==1.5.3`r`n--only-binary=:all:" | Set-Content $constraintFile
+          } else {
+            New-Item $constraintFile -ItemType File -Force
+          }
           "file=$constraintFile" | Out-File $env:GITHUB_OUTPUT -Append
+
       - name: Install Dependencies
         run: |
           Set-StrictMode -Version Latest
