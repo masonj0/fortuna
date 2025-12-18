@@ -184,11 +184,19 @@ jobs:
         with:
           name: frontend-build-${{ needs.build-core.outputs.build_id }}
           path: ${{ env.FRONTEND_DIR }}/out
+      - name: 🎨 Stage Frontend for Electron Builder
+        shell: pwsh
+        run: |
+          $sourceDir = "${{ env.FRONTEND_DIR }}/out"
+          $targetDir = "${{ env.ELECTRON_DIR }}/out"
+          New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+          Copy-Item -Path "$sourceDir/*" -Destination $targetDir -Recurse -Force
+          Write-Host "✅ Frontend successfully staged in '$targetDir'."
       - name: 🚚 Stage Backend for Electron Builder
         shell: pwsh
         run: |
           $sourceDir = "python-service-bin"
-          $targetDir = "${{ env.ELECTRON_DIR }}/resources"
+          $targetDir = "${{ env.ELECTRON_DIR }}/resources/fortuna-backend"
           if (-not (Test-Path "$sourceDir/fortuna-backend.exe")) {
             Write-Host "Contents of $sourceDir:"
             Get-ChildItem -Path $sourceDir -Recurse
