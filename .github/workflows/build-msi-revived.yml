@@ -149,8 +149,21 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
           Copy-Item "${{ env.WIX_DIR }}/Product_WithService.wxs" "${{ env.WIX_DIR }}/Product.wxs" -Force
-          if (Test-Path "staging/backend/fortuna-backend.exe") {
-            Move-Item "staging/backend/fortuna-backend.exe" "staging/backend/fortuna-webservice.exe" -Force
+          $sourceDir = "staging/backend"
+          $distDir = "staging/backend/fortuna-backend" # PyInstaller one-dir output, but the artifact download places it directly in backend
+          $targetExe = "fortuna-webservice.exe"
+
+          if (Test-Path (Join-Path $sourceDir "fortuna-backend.exe")) {
+              Write-Host "PyInstaller 'onedir' output found. Staging entire directory..."
+              # In this workflow, the onedir contents are already at the root of staging/backend
+              # Just need to rename the executable for WiX
+              Rename-Item -Path (Join-Path $sourceDir "fortuna-backend.exe") -NewName (Join-Path $sourceDir $targetExe) -Force
+              Write-Host "✅ Staging complete for WiX."
+          } else {
+              Write-Host "##[error]Could not find fortuna-backend.exe in the staging directory."
+              Write-Host "Listing contents for forensics:"
+              Get-ChildItem -Path $sourceDir -Recurse
+              exit 1
           }
           $proj = @(
             '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">',
