@@ -158,11 +158,16 @@ jobs:
           $target = "FortunaService-${{ matrix.arch }}-${{ steps.git_version.outputs.semver }}.msi"
           Move-Item $msi.FullName -Destination "$releaseDir/$target" -Force
           Write-Host "✅ MSI Ready: $target"
+          $hash = (Get-FileHash "$releaseDir/$target" -Algorithm SHA256).Hash
+          Set-Content -Path "$releaseDir/$target.sha256" -Value $hash
+          Write-Host "✅ SHA-256: $hash"
 
       - uses: actions/upload-artifact@v4
         with:
           name: msi-${{ matrix.arch }}
-          path: ${{ env.WIX_DIR }}/bin/${{ matrix.arch }}/Release/*.msi
+          path: |
+            ${{ env.WIX_DIR }}/bin/${{ matrix.arch }}/Release/*.msi
+            ${{ env.WIX_DIR }}/bin/${{ matrix.arch }}/Release/*.sha256
 
   # 4. SMOKE TEST (Matrix: x64 & x86)
   smoke-test:
