@@ -176,11 +176,25 @@ jobs:
         with:
           name: frontend-build-${{ needs.build-core.outputs.build_id }}
           path: ${{ env.FRONTEND_DIR }}/out
-      - name: 🚚 Stage Artifacts for Electron
+      - name: 🚚 Stage Backend for Electron Builder
         shell: pwsh
         run: |
-          Move-Item -Path "python-service-bin" -Destination "${{ env.ELECTRON_DIR }}/resources/backend" -Force
-          Write-Host "✅ Staged backend artifacts for Electron."
+          $sourceDir = "python-service-bin"
+          $targetDir = "${{ env.ELECTRON_DIR }}/resources"
+          if (-not (Test-Path "$sourceDir/fortuna-backend.exe")) {
+            Write-Host "Contents of $sourceDir:"
+            Get-ChildItem -Path $sourceDir -Recurse
+            throw "❌ Backend executable not found in '$sourceDir' after download."
+          }
+          New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+          Write-Host "Copying backend from '$sourceDir' to '$targetDir'..."
+          Copy-Item -Path "$sourceDir/*" -Destination $targetDir -Recurse -Force
+          if (-not (Test-Path "$targetDir/fortuna-backend.exe")) {
+            Write-Host "Contents of $targetDir:"
+            Get-ChildItem -Path $targetDir -Recurse
+            throw "❌ Backend executable failed to copy to '$targetDir'."
+          }
+          Write-Host "✅ Backend executable successfully staged in '$targetDir'."
       - name: '⚖️ The Dietician (Size Analysis)'
         shell: pwsh
         run: |
@@ -244,12 +258,17 @@ jobs:
           $ver = "${{ needs.build-core.outputs.semver }}"
           $arch_flag = if ('${{ matrix.arch }}' -eq 'x86') { '--ia32' } else { '--x64' }
           npm run dist -- --win msi $arch_flag --config temp-builder-config.yml --publish never --config.artifactName="Fortuna-Electron-${ver}-${{ matrix.arch }}.msi"
-      - name: 🔬 Forensic Packaging Analysis
+      - name: '🕵️ Post-Build Forensic Analysis'
         shell: pwsh
         run: |
-          $unpackedDir = if ('${{ matrix.arch }}' -eq 'x86') { 'win-ia32-unpacked' } else { 'win-unpacked' }
-          Write-Host "=== HYBRID STAGING LAYOUT (${{ matrix.arch }}) ==="
-          Get-ChildItem -Path "${{ env.ELECTRON_DIR }}/dist/$unpackedDir" -Recurse | Select-Object FullName, Length
+          $unpackedDir = "electron/dist/" + (if ('${{ matrix.arch }}' -eq 'x86') { 'win-ia32-unpacked' } else { 'win-unpacked' })
+          $backendExePath = Join-Path $unpackedDir "resources/fortuna-backend.exe"
+          if (-not (Test-Path $backendExePath)) {
+            Write-Host "Contents of '$unpackedDir/resources':"
+            Get-ChildItem -Path (Join-Path $unpackedDir "resources") -Recurse
+            throw "❌ Post-build verification failed: fortuna-backend.exe not found in the unpacked application."
+          }
+          Write-Host "✅ Post-build verification passed: fortuna-backend.exe found."
       - name: Rename & Hash MSI
         id: name_msi
         shell: pwsh
