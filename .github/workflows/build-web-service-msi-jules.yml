@@ -524,7 +524,7 @@ jobs:
           New-Item -ItemType Directory -Path $constraintDir -Force | Out-Null
           $constraintFile = Join-Path $constraintDir "constraint-${{ matrix.arch }}.txt"
           if ('${{ matrix.arch }}' -eq 'x86') {
-            "numpy==1.23.5`npandas==1.5.3" | Set-Content $constraintFile
+            "numpy==1.23.5" | Set-Content $constraintFile
           } else { New-Item $constraintFile -ItemType File -Force }
           "file=$constraintFile" | Out-File $env:GITHUB_OUTPUT -Append
       - name: Install Dependencies
@@ -555,7 +555,7 @@ jobs:
         env:
           BACKEND_DIR: ${{ needs.path-finder.outputs.backend_dir }}
           BACKEND_MODULE_PATH: ${{ needs.path-finder.outputs.backend_module_path }}
-          FRONTEND_OUT: ${{ env.FRONTEND_DIR }}/out
+          FRONTEND_OUT: 'staging/ui'
         run: |
           import os
           from pathlib import Path
@@ -611,6 +611,10 @@ jobs:
           $size = (Get-Item $exePath).Length / 1MB
           if ($size -lt 10) { throw "❌ FATAL: Executable is suspiciously small: $($size) MB." }
           Write-Host "✅ Backend ready: $([math]::Round($size, 2)) MB"
+
+      - name: 🌳 Tree Command for Debugging
+        run: |
+          tree /F dist
       - name: Upload Backend Executable
         uses: actions/upload-artifact@v4
         with:
