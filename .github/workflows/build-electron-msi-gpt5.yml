@@ -123,8 +123,9 @@ jobs:
       - name: 🚚 Stage Backend
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Path "electron/resources" -Force
-          Copy-Item -Path "temp_backend/*" -Destination "electron/resources" -Recurse -Force
+          $dest = "electron/resources/fortuna-backend"
+          New-Item -ItemType Directory -Path $dest -Force
+          Copy-Item -Path "temp_backend/*" -Destination $dest -Recurse -Force
       - name: 🏗️ Build MSI
         working-directory: electron
         shell: pwsh
