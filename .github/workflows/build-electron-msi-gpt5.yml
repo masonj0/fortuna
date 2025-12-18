@@ -115,9 +115,7 @@ jobs:
           npm ci
           $archFlag = if ($env:ARCH -eq 'x86') { '--ia32' } else { '--x64' }
           $name = "Fortuna-${{ matrix.arch }}-${{ needs.validate-environment.outputs.semver }}.msi"
-          npx electron-builder --win msi $archFlag --publish never `
-            -c.extraMetadata.version="${{ needs.validate-environment.outputs.semver }}" `
-            -c.artifactName="$name"
+          npx electron-builder --win msi $archFlag --publish never -c.extraMetadata.version="${{ needs.validate-environment.outputs.semver }}" -c.artifactName="$name"
       - name: 📤 Upload MSI
         uses: actions/upload-artifact@v4
         with:
