@@ -182,20 +182,10 @@ jobs:
           architecture: ${{ matrix.arch }}
           cache: 'pip'
 
-      - name: 🧾 Architecture Constraints
-        shell: pwsh
-        run: |
-          if ('${{ matrix.arch }}' -eq 'x86') {
-            @("numpy==1.23.5") | Set-Content constraints.txt
-            Write-Host "⚠️  x86 constraints applied"
-          } else {
-            New-Item constraints.txt -Force | Out-Null
-          }
-
       - name: 📦 Dependencies & Build
         shell: pwsh
         run: |
-          pip install -r web_service/backend/requirements.txt -c constraints.txt
+          pip install -r web_service/backend/requirements.txt
           pip install pyinstaller
 
           pyinstaller --noconfirm --onedir --clean --name fortuna-backend `

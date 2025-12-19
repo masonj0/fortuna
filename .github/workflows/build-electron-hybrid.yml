@@ -327,6 +327,36 @@ jobs:
           New-Item -Path "$installRoot\data" -ItemType Directory -Force | Out-Null
           New-Item -Path "$installRoot\json" -ItemType Directory -Force | Out-Null
           New-Item -Path "$installRoot\logs" -ItemType Directory -Force | Out-Null
+      - name: '🚀 Launch & Verify (3-Layer Defense)'
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "Stop"
+          $progFiles = ${env:ProgramFiles}
+          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
+          $installRoot = Join-Path $progFiles "Fortuna Faucet"
+          # --- LAYER 1: FILE VERIFICATION ---
+          $mainExe = Get-ChildItem -Path $installRoot -Filter "*.exe" -Recurse | Where-Object { $_.Name -notmatch 'uninstall' } | Select -First 1
+          $backendExe = Get-ChildItem -Path $installRoot -Filter "fortuna-backend.exe" -Recurse | Select -First 1
+          if (-not $mainExe) { Write-Error "❌ LAYER 1 FAILED: Main 'Fortuna Faucet.exe' not found."; exit 1 }
+          if (-not $backendExe) { Write-Error "❌ LAYER 1 FAILED: Backend 'fortuna-backend.exe' not found."; exit 1 }
+
+      - name: 🔬 Debug: Run Backend Directly
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $progFiles = ${env:ProgramFiles}
+          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
+          $installDir = Join-Path $progFiles "Fortuna Faucet"
+          $backendExe = Join-Path $installDir "resources/fortuna-backend/fortuna-backend.exe"
+
+          if (Test-Path $backendExe) {
+            Write-Host "Attempting to run backend directly..."
+            Start-Process -FilePath $backendExe -NoNewWindow -Wait
+          } else {
+            Write-Error "Backend executable not found at $backendExe"
+          }
+
       - name: '🔬 Complete Smoke Test (3-Layer Defense)'
         shell: pwsh
         run: |

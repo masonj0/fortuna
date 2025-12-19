@@ -167,6 +167,29 @@ jobs:
           if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
           $installDir = Join-Path $progFiles "Fortuna Faucet"
 
+      - name: 🔬 Debug: Run Backend Directly
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $progFiles = ${env:ProgramFiles}
+          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
+          $installDir = Join-Path $progFiles "Fortuna Faucet"
+          $backendExe = Join-Path $installDir "resources/fortuna-backend/fortuna-backend.exe"
+
+          if (Test-Path $backendExe) {
+            Write-Host "Attempting to run backend directly..."
+            Start-Process -FilePath $backendExe -NoNewWindow -Wait
+          } else {
+            Write-Error "Backend executable not found at $backendExe"
+          }
+
+      - name: 🚀 Launch & Verify
+        shell: pwsh
+        run: |
+          $progFiles = ${env:ProgramFiles}
+          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
+          $installDir = Join-Path $progFiles "Fortuna Faucet"
+
           Start-Process -FilePath "$installDir\\Fortuna Faucet.exe"
           Start-Sleep -Seconds 15
 
