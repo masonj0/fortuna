@@ -282,7 +282,6 @@ jobs:
             '  <PropertyGroup>',
             '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>',
             '    <OutputType>Package</OutputType>',
-            '    <Platforms>x64;x86</Platforms>',
             '    <DefineConstants>Version=$(Version);SourceDir=$(SourceDir);ServicePort=$(ServicePort)</DefineConstants>',
             '  </PropertyGroup>',
             '  <ItemGroup>',
