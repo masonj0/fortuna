@@ -167,7 +167,7 @@ jobs:
           )
           $spec_script | Out-File -FilePath "hat-trick-fusion.spec" -Encoding utf8
 
-          python -m PyInstaller --noconfirm --onedir --clean hat-trick-fusion.spec
+          python -m PyInstaller --noconfirm --clean hat-trick-fusion.spec
       - name: Upload Backend
         uses: actions/upload-artifact@v4
         with:
