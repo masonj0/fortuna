@@ -157,7 +157,7 @@ jobs:
               Write-Host "PyInstaller 'onedir' output found. Staging entire directory..."
               # In this workflow, the onedir contents are already at the root of staging/backend
               # Just need to rename the executable for WiX
-              Rename-Item -Path (Join-Path $sourceDir "fortuna-backend.exe") -NewName (Join-Path $sourceDir $targetExe) -Force
+              Rename-Item -Path (Join-Path $sourceDir "fortuna-backend.exe") -NewName $targetExe -Force
               Write-Host "✅ Staging complete for WiX."
           } else {
               Write-Host "##[error]Could not find fortuna-backend.exe in the staging directory."

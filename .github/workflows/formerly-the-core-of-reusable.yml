@@ -131,12 +131,9 @@ jobs:
           Write-Host "✅ Assets verified"
 
   build-frontend:
-    name: ⚛️ Frontend (${{ matrix.os }})
+    name: ⚛️ Frontend
     needs: preflight
-    strategy:
-      matrix:
-        os: [windows-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: windows-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -159,7 +156,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: frontend-dist-${{ matrix.os }}
+          name: frontend-dist-windows-latest
           path: electron/out
           retention-days: 7
 
@@ -185,20 +182,10 @@ jobs:
           architecture: ${{ matrix.arch }}
           cache: 'pip'
 
-      - name: 🧾 Architecture Constraints
-        shell: pwsh
-        run: |
-          if ('${{ matrix.arch }}' -eq 'x86') {
-            @("numpy==1.23.5") | Set-Content constraints.txt
-            Write-Host "⚠️  x86 constraints applied"
-          } else {
-            New-Item constraints.txt -Force | Out-Null
-          }
-
       - name: 📦 Dependencies & Build
         shell: pwsh
         run: |
-          pip install -r web_service/backend/requirements.txt -c constraints.txt
+          pip install -r web_service/backend/requirements.txt
           pip install pyinstaller
 
           pyinstaller --noconfirm --onedir --clean --name fortuna-backend `
