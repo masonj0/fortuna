@@ -181,7 +181,7 @@ jobs:
           )
           $spec_script | Out-File -FilePath "hat-trick-ultimate.spec" -Encoding utf8
 
-          python -m PyInstaller --noconfirm --onedir --clean hat-trick-ultimate.spec
+          python -m PyInstaller --noconfirm --clean hat-trick-ultimate.spec
       - name: Upload Backend
         uses: actions/upload-artifact@v4
         with:
@@ -265,7 +265,6 @@ jobs:
             '  <PropertyGroup>',
             '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>',
             '    <OutputType>Package</OutputType>',
-            '    <Platforms>x64;x86</Platforms>',
             '    <DefineConstants>Version=$(Version);SourceDir=$(SourceDir);ServicePort=$(ServicePort)</DefineConstants>',
             '  </PropertyGroup>',
             '  <ItemGroup>',
