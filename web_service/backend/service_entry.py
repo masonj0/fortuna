@@ -10,14 +10,43 @@ import multiprocessing
 import threading
 from pathlib import Path
 
-# FIX: Ensure the current directory is in sys.path for relative imports in frozen state
-sys.path.insert(0, str(Path(__file__).parent))
+# --- Resilient Import Block ---
+# This block is designed to robustly locate the `main` module and its `app` object,
+# whether running from source, as a PyInstaller bundle, or as a Windows Service.
+
+def _bootstrap_path():
+    """
+    Ensures the application's root directories are on the Python path.
+    This is critical for PyInstaller's frozen executables to find modules.
+    """
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        # We are running in a PyInstaller bundle.
+        # The `_MEIPASS` directory is the root of our bundled files.
+        # In our `--onedir` build, this is where `main.py`'s content is.
+        sys.path.insert(0, sys._MEIPASS)
+    else:
+        # We are running from source.
+        # The entry point is in `web_service/backend`, so we need to add the project root.
+        project_root = str(Path(__file__).parent.parent.parent)
+        sys.path.insert(0, project_root)
+
+_bootstrap_path()
 
 try:
+    # This is the most direct import path and should work when the CWD
+    # is correctly set to the directory containing the executable.
+    print(f"[service_entry] Attempting direct import of 'main:app'...")
     from main import app
-except ImportError:
-    # Fallback for different packaging structures
-    from web_service.backend.main import app
+    print(f"[service_entry] Direct import successful.")
+except (ImportError, ModuleNotFoundError) as e:
+    print(f"[service_entry] Direct import failed: {e}. Attempting namespace import...")
+    try:
+        # This is a fallback for environments where the `web_service` namespace is preserved.
+        from web_service.backend.main import app
+        print(f"[service_entry] Namespace import successful.")
+    except (ImportError, ModuleNotFoundError) as e2:
+        print(f"[service_entry] All import attempts failed: {e2}. Cannot start service.")
+        sys.exit(1) # Exit if the app cannot be imported, to prevent service start failure.
 
 class FortunaSvc(win32serviceutil.ServiceFramework):
     _svc_name_ = 'FortunaWebService'
