@@ -30,8 +30,8 @@
     },
     "extraResources": [
       {
-        "from": "resources",
-        "to": ".",
+        "from": "resources/fortuna-backend",
+        "to": "fortuna-backend",
         "filter": ["**/*"]
       }
     ],
