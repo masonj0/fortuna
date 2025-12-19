@@ -123,8 +123,9 @@ jobs:
       - name: 🚚 Stage Backend
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Path "electron/resources" -Force
-          Copy-Item -Path "temp_backend/*" -Destination "electron/resources" -Recurse -Force
+          $dest = "electron/resources/fortuna-backend"
+          New-Item -ItemType Directory -Path $dest -Force
+          Copy-Item -Path "temp_backend/*" -Destination $dest -Recurse -Force
       - name: 🏗️ Build MSI
         working-directory: electron
         shell: pwsh
@@ -134,7 +135,7 @@ jobs:
           npm ci
           $archFlag = if ($env:ARCH -eq 'x86') { '--ia32' } else { '--x64' }
           $name = "Fortuna-${{ matrix.arch }}-${{ needs.validate-environment.outputs.semver }}.msi"
-          npx electron-builder --win msi $archFlag --publish never -c.extraMetadata.version="${{ needs.validate-environment.outputs.semver }}" -c.artifactName="$name"
+          npx electron-builder --win msi $archFlag --publish never --config.extraMetadata.version="${{ needs.validate-environment.outputs.semver }}" --config.artifactName="$name"
       - name: 📤 Upload MSI
         uses: actions/upload-artifact@v4
         with:
@@ -162,6 +163,29 @@ jobs:
 
           Start-Process msiexec.exe -ArgumentList "/i `"$($msi.FullName)`" /qn /L*v install.log" -Wait
 
+          $progFiles = ${env:ProgramFiles}
+          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
+          $installDir = Join-Path $progFiles "Fortuna Faucet"
+
+      - name: 🔬 Debug: Run Backend Directly
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $progFiles = ${env:ProgramFiles}
+          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
+          $installDir = Join-Path $progFiles "Fortuna Faucet"
+          $backendExe = Join-Path $installDir "resources/fortuna-backend/fortuna-backend.exe"
+
+          if (Test-Path $backendExe) {
+            Write-Host "Attempting to run backend directly..."
+            Start-Process -FilePath $backendExe -NoNewWindow -Wait
+          } else {
+            Write-Error "Backend executable not found at $backendExe"
+          }
+
+      - name: 🚀 Launch & Verify
+        shell: pwsh
+        run: |
           $progFiles = ${env:ProgramFiles}
           if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
           $installDir = Join-Path $progFiles "Fortuna Faucet"
