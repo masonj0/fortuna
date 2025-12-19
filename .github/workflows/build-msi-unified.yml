@@ -157,11 +157,11 @@ jobs:
           block_cipher = None
           a = Analysis(
               ['{entry}'],
-              pathex=[],
+              pathex=['{bk_dir}'],
               binaries=[],
-              datas=collect_data_files('uvicorn') + collect_data_files('slowapi') + [('{frontend_out}', 'ui')],
+              datas=collect_data_files('uvicorn') + collect_data_files('slowapi') + [('{frontend_out}', 'ui'), ('{bk_dir}', '.')],
               # FIX: Added win32timezone to prevent Error 1053
-              hiddenimports=collect_submodules('{mod_path}') + ['win32timezone'],
+              hiddenimports=collect_submodules('{mod_path}') + ['win32timezone', 'uvicorn'],
               hookspath=[],
               runtime_hooks=[],
               excludes=['tests', 'pytest'],
