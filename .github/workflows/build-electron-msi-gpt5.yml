@@ -66,13 +66,17 @@ jobs:
           pip install -r ${{ env.BACKEND_DIR }}/requirements.txt -c ${{ steps.constraints.outputs.file }}
           pip install pyinstaller==6.6.0 pywin32
 
+          # We add the BACKEND_DIR to the PYTHONPATH during build
+          # and tell PyInstaller to look there for imports.
           pyinstaller --noconfirm --onedir --clean `
             --name fortuna-backend `
+            --paths "${{ env.BACKEND_DIR }}" `
             --hidden-import=win32timezone `
             --hidden-import=win32serviceutil `
             --hidden-import=win32service `
             --hidden-import=win32event `
-            --add-data "${{ env.BACKEND_DIR }};backend" `
+            --collect-submodules web_service `
+            --add-data "${{ env.BACKEND_DIR }};." `
             ${{ env.BACKEND_DIR }}/service_entry.py
 
       - name: 📤 Upload
