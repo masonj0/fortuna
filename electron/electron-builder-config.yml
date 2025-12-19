@@ -9,15 +9,6 @@ files:
   - filter:
       - "**/*"
 
-extraResources:
-  - from: "../python-service-bin"
-    to: "python-service-bin"
-    filter:
-      - "**/*"
-  - from: "../web_platform/frontend/out"
-    to: "resources/frontend"
-    filter:
-      - "**/*"
 
 win:
   target: msi

@@ -120,12 +120,13 @@ jobs:
         with:
           name: frontend-dist
           path: electron/out
-      - name: 🚚 Stage Backend
+      - name: '🚚 Stage Backend'
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Path "electron/resources" -Force
-          Copy-Item -Path "temp_backend/*" -Destination "electron/resources" -Recurse -Force
-      - name: 🏗️ Build MSI
+          $dest = "electron/resources/fortuna-backend"
+          New-Item -ItemType Directory -Path $dest -Force
+          Copy-Item -Path "temp_backend/*" -Destination $dest -Recurse -Force
+      - name: '🏗️ Build MSI'
         working-directory: electron
         shell: pwsh
         env:
@@ -134,8 +135,8 @@ jobs:
           npm ci
           $archFlag = if ($env:ARCH -eq 'x86') { '--ia32' } else { '--x64' }
           $name = "Fortuna-${{ matrix.arch }}-${{ needs.validate-environment.outputs.semver }}.msi"
-          npx electron-builder --win msi $archFlag --publish never -c.extraMetadata.version="${{ needs.validate-environment.outputs.semver }}" -c.artifactName="$name"
-      - name: 📤 Upload MSI
+          npx electron-builder --win msi $archFlag --publish never --config.extraMetadata.version="${{ needs.validate-environment.outputs.semver }}" --config.artifactName="$name"
+      - name: '📤 Upload MSI'
         uses: actions/upload-artifact@v4
         with:
           name: fortuna-msi-${{ matrix.arch }}
@@ -149,12 +150,12 @@ jobs:
       matrix:
         arch: [x64, x86]
     steps:
-      - name: 📥 Download MSI
+      - name: '📥 Download MSI'
         uses: actions/download-artifact@v4
         with:
           name: fortuna-msi-${{ matrix.arch }}
           path: msi-installer
-      - name: 🔥 Install & Verify
+      - name: '🔥 Install & Verify'
         shell: pwsh
         run: |
           $msi = Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse | Select-Object -First 1
@@ -162,6 +163,29 @@ jobs:
 
           Start-Process msiexec.exe -ArgumentList "/i `"$($msi.FullName)`" /qn /L*v install.log" -Wait
 
+          $progFiles = ${env:ProgramFiles}
+          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
+          $installDir = Join-Path $progFiles "Fortuna Faucet"
+
+      - name: '🔬 Debug: Run Backend Directly'
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $progFiles = ${env:ProgramFiles}
+          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
+          $installDir = Join-Path $progFiles "Fortuna Faucet"
+          $backendExe = Join-Path $installDir "resources/fortuna-backend/fortuna-backend.exe"
+
+          if (Test-Path $backendExe) {
+            Write-Host "Attempting to run backend directly..."
+            Start-Process -FilePath $backendExe -NoNewWindow -Wait
+          } else {
+            Write-Error "Backend executable not found at $backendExe"
+          }
+
+      - name: '🚀 Launch & Verify'
+        shell: pwsh
+        run: |
           $progFiles = ${env:ProgramFiles}
           if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
           $installDir = Join-Path $progFiles "Fortuna Faucet"
