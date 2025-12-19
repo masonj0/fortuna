@@ -53,7 +53,7 @@ jobs:
       build_id: ${{ steps.meta.outputs.build_id }}
     steps:
       - uses: actions/checkout@v4
-      - name: 🔖 Metadata
+      - name: '🔖 Metadata'
         id: meta
         shell: pwsh
         run: |
@@ -66,7 +66,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
           cache-dependency-path: '${{ env.FRONTEND_DIR }}/package-lock.json'
-      - name: Cache Build Output
+      - name: 'Cache Build Output'
         id: cache-frontend
         uses: actions/cache@v4
         with:
@@ -74,14 +74,14 @@ jobs:
           key: ${{ runner.os }}-frontend-${{ hashFiles('**/package-lock.json', '${{ env.FRONTEND_DIR }}/**/*.js', '${{ env.FRONTEND_DIR }}/**/*.ts', '${{ env.FRONTEND_DIR }}/**/*.tsx', '${{ env.FRONTEND_DIR }}/**/*.css') }}
           restore-keys: |
             ${{ runner.os }}-frontend-
-      - name: 🎨 Build Frontend
+      - name: '🎨 Build Frontend'
         if: steps.cache-frontend.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
           cd ${{ env.FRONTEND_DIR }}
           npm ci --prefer-offline
           npm run build
-      - name: 📋 Generate Artifact Manifest
+      - name: '📋 Generate Artifact Manifest'
         shell: pwsh
         working-directory: ${{ env.FRONTEND_DIR }}
         run: |
@@ -102,7 +102,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: ${{ matrix.arch }}
           cache: 'pip'
-      - name: 🧾 Create Architecture Constraints
+      - name: '🧾 Create Architecture Constraints'
         id: constraints
         shell: pwsh
         run: |
@@ -113,28 +113,28 @@ jobs:
             "numpy==1.23.5`r`npandas==1.5.3" | Set-Content $constraintFile
           } else { New-Item $constraintFile -ItemType File -Force }
           "file=$constraintFile" | Out-File $env:GITHUB_OUTPUT -Append
-      - name: 🐍 Install Python Dependencies
+      - name: '🐍 Install Python Dependencies'
         run: |
           pip install -r ${{ env.BACKEND_DIR }}/requirements-dev.txt -c ${{ steps.constraints.outputs.file }}
           pip install pyinstaller==6.6.0
-      - name: 📦 Build Python Backend
+      - name: '📦 Build Python Backend'
         shell: pwsh
         env:
           BACKEND_DIR: ${{ env.BACKEND_DIR }}
           PYTHONUTF8: '1'
         run: python scripts/generate_spec_electron.py
-      - name: Compress Backend Artifact
+      - name: 'Compress Backend Artifact'
         shell: pwsh
         run: |
           Compress-Archive -Path dist/service/fortuna-backend/* -DestinationPath dist/service/fortuna-backend.tar.gz
-      - name: 📤 Upload Backend Artifact
+      - name: '📤 Upload Backend Artifact'
         uses: actions/upload-artifact@v4
         with:
           name: python-service-${{ matrix.arch }}-${{ github.run_id }}
           path: dist/service/fortuna-backend.tar.gz
           retention-days: 1
 
-      - name: 📤 Upload Frontend Artifact
+      - name: '📤 Upload Frontend Artifact'
         uses: actions/upload-artifact@v4
         with:
           name: frontend-build-${{ github.run_id }}
@@ -161,7 +161,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
           cache-dependency-path: '${{ env.ELECTRON_DIR }}/package-lock.json'
-      - name: CACHE - Cache Electron and electron-builder
+      - name: 'CACHE - Cache Electron and electron-builder'
         uses: actions/cache@v4
         with:
           path: |
@@ -170,21 +170,21 @@ jobs:
           key: ${{ runner.os }}-electron-${{ hashFiles('**/package.json') }}
           restore-keys: |
             ${{ runner.os }}-electron-
-      - name: 📥 Download Backend Artifact
+      - name: '📥 Download Backend Artifact'
         uses: actions/download-artifact@v4
         with:
           name: python-service-${{ matrix.arch }}-${{ needs.build-core.outputs.build_id }}
           path: python-service-bin
-      - name: Decompress Backend Artifact
+      - name: 'Decompress Backend Artifact'
         shell: pwsh
         run: |
           Expand-Archive -Path python-service-bin/fortuna-backend.tar.gz -DestinationPath python-service-bin
-      - name: 📥 Download Frontend Artifact
+      - name: '📥 Download Frontend Artifact'
         uses: actions/download-artifact@v4
         with:
           name: frontend-build-${{ needs.build-core.outputs.build_id }}
           path: ${{ env.FRONTEND_DIR }}/out
-      - name: 🎨 Stage Frontend for Electron Builder
+      - name: '🎨 Stage Frontend for Electron Builder'
         shell: pwsh
         run: |
           $sourceDir = "${{ env.FRONTEND_DIR }}/out"
@@ -192,7 +192,7 @@ jobs:
           New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
           Copy-Item -Path "$sourceDir/*" -Destination $targetDir -Recurse -Force
           Write-Host "✅ Frontend successfully staged in '$targetDir'."
-      - name: 🚚 Stage Backend for Electron Builder
+      - name: '🚚 Stage Backend for Electron Builder'
         shell: pwsh
         run: |
           $sourceDir = "python-service-bin"
@@ -229,7 +229,7 @@ jobs:
           }
           Write-Host "`n--- 🐘 Top 10 Heaviest Files ---"
           $files | Sort-Object Length -Descending | Select-Object -First 10 @{N='File';E={$_.FullName.Replace($pwd,'')}}, @{N='Size(MB)';E={"{0:N2}" -f ($_.Length/1MB)}} | Format-Table -AutoSize
-      - name: 📄 Ensure WiX License Exists for electron-builder
+      - name: '📄 Ensure WiX License Exists for electron-builder'
         shell: pwsh
         run: |
           # electron-builder uses build_wix/license.rtf by convention
@@ -244,7 +244,7 @@ jobs:
           } else {
             Write-Host '✅ Existing license.rtf found.'
           }
-      - name: 🏗️ Build MSI
+      - name: '🏗️ Build MSI'
         working-directory: ${{ env.ELECTRON_DIR }}
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
@@ -264,7 +264,7 @@ jobs:
             throw "❌ Post-build verification failed: fortuna-backend.exe not found in the unpacked application."
           }
           Write-Host "✅ Post-build verification passed: fortuna-backend.exe found."
-      - name: Rename & Hash MSI
+      - name: 'Rename & Hash MSI'
         id: name_msi
         shell: pwsh
         run: |
@@ -280,7 +280,7 @@ jobs:
           $newPath = Join-Path $releaseDir $targetName
           Move-Item -Path $msiFound.FullName -Destination $newPath -Force
           "msi_name=$targetName" | Out-File $env:GITHUB_OUTPUT -Append
-      - name: 📤 Upload MSI
+      - name: '📤 Upload MSI'
         uses: actions/upload-artifact@v4
         with:
           name: electron-msi-${{ matrix.arch }}-${{ github.run_id }}
@@ -299,12 +299,12 @@ jobs:
       matrix:
         arch: [x64, x86]
     steps:
-      - name: 📥 Download MSI
+      - name: '📥 Download MSI'
         uses: actions/download-artifact@v4
         with:
           name: electron-msi-${{ matrix.arch }}-${{ github.run_id }}
           path: installer
-      - name: 🤫 Install MSI & Verify
+      - name: '🤫 Install MSI & Verify'
         shell: pwsh
         run: |
           $msi = Get-ChildItem "installer" -Filter "*.msi" -Recurse | Select -First 1
@@ -341,7 +341,7 @@ jobs:
           if (-not $mainExe) { Write-Error "❌ LAYER 1 FAILED: Main 'Fortuna Faucet.exe' not found."; exit 1 }
           if (-not $backendExe) { Write-Error "❌ LAYER 1 FAILED: Backend 'fortuna-backend.exe' not found."; exit 1 }
 
-      - name: 🔬 Debug: Run Backend Directly
+      - name: '🔬 Debug: Run Backend Directly'
         shell: pwsh
         continue-on-error: true
         run: |
@@ -405,17 +405,17 @@ jobs:
     needs: smoke-test
     timeout-minutes: 30
     steps:
-      - name: 📥 Download MSI (x64)
+      - name: '📥 Download MSI (x64)'
         uses: actions/download-artifact@v4
         with:
           name: electron-msi-x64-${{ github.run_id }}
           path: staging/x64
-      - name: 📥 Download MSI (x86)
+      - name: '📥 Download MSI (x86)'
         uses: actions/download-artifact@v4
         with:
           name: electron-msi-x86-${{ github.run_id }}
           path: staging/x86
-      - name: 🚚 Robocopy Safe-Stage
+      - name: '🚚 Robocopy Safe-Stage'
         shell: pwsh
         run: |
           $dest = "final-artifact"
@@ -427,7 +427,7 @@ jobs:
           } else {
             throw "Robocopy failed with code $LASTEXITCODE"
           }
-      - name: 📤 Upload Final
+      - name: '📤 Upload Final'
         uses: actions/upload-artifact@v4
         with:
           name: Final-Electron-MSI
