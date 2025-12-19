@@ -126,16 +126,55 @@ jobs:
           pip install -r web_service/backend/requirements.txt -c ${{ steps.constraints.outputs.file }}
           pip install pyinstaller==6.6.0 pywin32
       - name: Build Backend (PyInstaller)
+        shell: python
         run: |
-          python -m PyInstaller --noconfirm --onedir --clean `
-            --name fortuna-backend `
-            --paths "web_service/backend" `
-            --hidden-import=uvicorn `
-            --hidden-import=win32timezone `
-            --hidden-import=win32serviceutil `
-            --collect-submodules web_service `
-            --add-data "web_service/backend;." `
-            web_service/backend/service_entry.py
+          import os
+          import subprocess
+
+          backend_dir = "web_service/backend"
+
+          spec_content = f\"\"\"
+          # -*- mode: python ; coding: utf-8 -*-
+          from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+
+          a = Analysis(['{backend_dir}/service_entry.py'],
+                       pathex=['{backend_dir}'],
+                       datas=collect_data_files('uvicorn') + [('{backend_dir}', '.'), ('web_platform/frontend/out', 'ui')],
+                       hiddenimports=['uvicorn', 'win32timezone', 'win32serviceutil'] + collect_submodules('web_service'),
+                       hookspath=[],
+                       runtime_hooks=[],
+                       excludes=[],
+                       win_no_prefer_redirects=False,
+                       win_private_assemblies=False,
+                       cipher=None)
+          pyz = PYZ(a.pure, a.zipped_data, cipher=None)
+          exe = EXE(pyz,
+                    a.scripts,
+                    a.binaries,
+                    a.zipfiles,
+                    a.datas,
+                    [],
+                    name='fortuna-backend',
+                    debug=False,
+                    bootloader_ignore_signals=False,
+                    strip=False,
+                    upx=True,
+                    runtime_tmpdir=None,
+                    console=True)
+          coll = COLLECT(exe,
+                         a.binaries,
+                         a.zipfiles,
+                         a.datas,
+                         strip=False,
+                         upx=True,
+                         upx_exclude=[],
+                         name='fortuna-backend')
+          \"\"\"
+
+          with open('hat-trick-fusion.spec', 'w') as f:
+              f.write(spec_content)
+
+          subprocess.run(f"pyinstaller --noconfirm --onedir --clean hat-trick-fusion.spec", shell=True, check=True)
       - name: Upload Backend
         uses: actions/upload-artifact@v4
         with:
