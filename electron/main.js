@@ -64,11 +64,12 @@ async startBackend() {
     if (isDev) {
         console.log('[DEV MODE] Configuring backend...');
         backendCommand = path.join(__dirname, '..', '.venv', 'Scripts', 'python.exe');
-        backendCwd = path.join(__dirname, '..', 'python_service');
+        backendCwd = path.join(__dirname, '..', 'web_service', 'backend');
     } else {
-        console.log('[PROD MODE] Resolving backend via resourcesPath...');
-        backendCwd = path.join(process.resourcesPath, 'fortuna-backend');
-        backendCommand = path.join(backendCwd, 'fortuna-backend.exe');
+        // This matches the structure: resources/fortuna-backend/fortuna-backend.exe
+        const backendFolder = path.join(process.resourcesPath, 'fortuna-backend');
+        backendCommand = path.join(backendFolder, 'fortuna-backend.exe');
+        backendCwd = backendFolder;
     }
 
     if (!fs.existsSync(backendCommand)) {
@@ -76,7 +77,13 @@ async startBackend() {
         return;
     }
 
-    this.backendProcess = spawn(backendCommand, [], { cwd: backendCwd });
+    this.backendProcess = spawn(backendCommand, [], {
+        cwd: backendCwd, // CRITICAL: This allows the EXE to find the '_internal' folder
+        env: {
+            ...process.env,
+            PYTHONPATH: backendCwd // Force python to look at the root of the extract dir
+        }
+    });
 
     this.backendProcess.stdout.on('data', (data) => {
       const output = data.toString().trim();

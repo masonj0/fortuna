@@ -60,20 +60,64 @@ jobs:
           "file=$file" | Out-File $env:GITHUB_OUTPUT -Append
 
       - name: 📦 Build Binary
-        shell: pwsh
+        shell: python
         run: |
-          pip install --upgrade pip setuptools wheel
-          pip install -r ${{ env.BACKEND_DIR }}/requirements.txt -c ${{ steps.constraints.outputs.file }}
-          pip install pyinstaller==6.6.0 pywin32
+          import os
+          import subprocess
 
-          pyinstaller --noconfirm --onedir --clean `
-            --name fortuna-backend `
-            --hidden-import=win32timezone `
-            --hidden-import=win32serviceutil `
-            --hidden-import=win32service `
-            --hidden-import=win32event `
-            --add-data "${{ env.BACKEND_DIR }};backend" `
-            ${{ env.BACKEND_DIR }}/service_entry.py
+          backend_dir = os.environ['BACKEND_DIR']
+          constraints_file = os.environ['CONSTRAINTS_FILE']
+
+          # Install dependencies
+          subprocess.run(f"pip install --upgrade pip setuptools wheel", shell=True, check=True)
+          subprocess.run(f"pip install -r {backend_dir}/requirements.txt -c {constraints_file}", shell=True, check=True)
+          subprocess.run(f"pip install pyinstaller==6.6.0 pywin32", shell=True, check=True)
+
+          spec_content = f\"\"\"
+          # -*- mode: python ; coding: utf-8 -*-
+          from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+
+          a = Analysis(['{backend_dir}/service_entry.py'],
+                       pathex=['{backend_dir}'],
+                       datas=collect_data_files('uvicorn') + [('{backend_dir}', '.')],
+                       hiddenimports=['uvicorn', 'win32timezone', 'win32serviceutil', 'win32service', 'win32event'] + collect_submodules('web_service'),
+                       hookspath=[],
+                       runtime_hooks=[],
+                       excludes=[],
+                       win_no_prefer_redirects=False,
+                       win_private_assemblies=False,
+                       cipher=None)
+          pyz = PYZ(a.pure, a.zipped_data, cipher=None)
+          exe = EXE(pyz,
+                    a.scripts,
+                    a.binaries,
+                    a.zipfiles,
+                    a.datas,
+                    [],
+                    name='fortuna-backend',
+                    debug=False,
+                    bootloader_ignore_signals=False,
+                    strip=False,
+                    upx=True,
+                    runtime_tmpdir=None,
+                    console=True)
+          coll = COLLECT(exe,
+                         a.binaries,
+                         a.zipfiles,
+                         a.datas,
+                         strip=False,
+                         upx=True,
+                         upx_exclude=[],
+                         name='fortuna-backend')
+          \"\"\"
+
+          with open('electron.spec', 'w') as f:
+              f.write(spec_content)
+
+          subprocess.run(f"pyinstaller --noconfirm --onedir --clean electron.spec", shell=True, check=True)
+        env:
+          BACKEND_DIR: ${{ env.BACKEND_DIR }}
+          CONSTRAINTS_FILE: ${{ steps.constraints.outputs.file }}
 
       - name: 📤 Upload
         uses: actions/upload-artifact@v4
