@@ -132,56 +132,36 @@ jobs:
           "file=$file" | Out-File $env:GITHUB_OUTPUT -Append
 
       - name: Build Backend (PyInstaller)
-        shell: python
+        shell: pwsh
         env:
           BACKEND_DIR: ${{ env.BACKEND_DIR }}
           MODULE_PATH: ${{ env.BACKEND_MODULE_PATH }}
           FRONTEND_OUT: ${{ env.FRONTEND_DIR }}/out
-          CONSTRAINTS_FILE: ${{ steps.constraints.outputs.file }}
         run: |
-          import os
-          from pathlib import Path
+          pip install -r ${{ env.BACKEND_DIR }}/requirements.txt -c ${{ steps.constraints.outputs.file }}
+          pip install pyinstaller==6.6.0 pywin32
 
-          # Install deps with constraints
-          os.system("pip install -r " + os.environ['BACKEND_DIR'] + "/requirements.txt -c " + os.environ['CONSTRAINTS_FILE'])
-          os.system("pip install pyinstaller==6.6.0 pywin32")
+          $spec_script = @(
+            '# -*- mode: python ; coding: utf-8 -*-',
+            'from PyInstaller.utils.hooks import collect_data_files, collect_submodules',
+            '',
+            "a = Analysis(['${{ env.BACKEND_DIR }}/service_entry.py'],",
+            "             pathex=['${{ env.BACKEND_DIR }}'],",
+            "             datas=collect_data_files('uvicorn') + collect_data_files('slowapi') + [('${{ env.FRONTEND_OUT }}', 'ui'), ('${{ env.BACKEND_DIR }}', '.')],",
+            "             hiddenimports=collect_submodules('${{ env.MODULE_PATH }}') + ['win32timezone', 'uvicorn'],",
+            "             hookspath=[],",
+            "             runtime_hooks=[],",
+            "             excludes=['tests', 'pytest'],",
+            "             win_no_prefer_redirects=False,",
+            "             win_private_assemblies=False,",
+            "             cipher=None)",
+            "pyz = PYZ(a.pure, a.zipped_data, cipher=None)",
+            "exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name='fortuna-backend', debug=False, bootloader_ignore_signals=False, strip=False, upx=True, console=False)",
+            "coll = COLLECT(exe, a.binaries, a.zipfiles, a.datas, strip=False, upx=True, upx_exclude=[], name='fortuna-backend')"
+          )
+          $spec_script | Out-File -FilePath "unified.spec" -Encoding utf8
 
-          bk_dir = os.environ['BACKEND_DIR'].replace('\\', '/')
-          mod_path = os.environ['MODULE_PATH']
-          frontend_out = os.environ['FRONTEND_OUT'].replace('\\', '/')
-          entry = f"{bk_dir}/service_entry.py"
-
-          spec = f"""
-          # -- mode: python ; coding: utf-8 --
-          from PyInstaller.utils.hooks import collect_data_files, collect_submodules
-          block_cipher = None
-          a = Analysis(
-              ['{entry}'],
-              pathex=['{bk_dir}'],
-              binaries=[],
-              datas=collect_data_files('uvicorn') + collect_data_files('slowapi') + [('{frontend_out}', 'ui'), ('{bk_dir}', '.')],
-              # FIX: Added win32timezone to prevent Error 1053
-              hiddenimports=collect_submodules('{mod_path}') + ['win32timezone', 'uvicorn'],
-              hookspath=[],
-              runtime_hooks=[],
-              excludes=['tests', 'pytest'],
-              win_no_prefer_redirects=False,
-              win_private_assemblies=False,
-              cipher=block_cipher,
-              noarchive=False,
-          )
-          pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
-          exe = EXE(
-              pyz, a.scripts, [],
-              exclude_binaries=True, name='fortuna-backend', debug=False, bootloader_ignore_signals=False, strip=False, upx=True, console=False
-          )
-          coll = COLLECT(
-              exe, a.binaries, a.zipfiles, a.datas,
-              strip=False, upx=True, upx_exclude=[], name='fortuna-backend'
-          )
-          """
-          with open("unified.spec", "w") as f: f.write(spec)
-          os.system("pyinstaller unified.spec --clean --noconfirm")
+          pyinstaller unified.spec --clean --noconfirm
 
       - name: Generate Artifact Manifest
         shell: pwsh
