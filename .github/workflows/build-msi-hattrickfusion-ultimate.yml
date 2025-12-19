@@ -141,7 +141,16 @@ jobs:
           pip install pyinstaller==6.6.0 pywin32
       - name: Build Backend (PyInstaller)
         run: |
-          python -m PyInstaller --noconfirm --onedir --clean --name fortuna-backend --hidden-import=win32timezone --hidden-import=win32serviceutil --add-data "web_service/backend;backend" --add-data "web_platform/frontend/out;ui" web_service/backend/service_entry.py
+          python -m PyInstaller --noconfirm --onedir --clean `
+            --name fortuna-backend `
+            --paths "web_service/backend" `
+            --hidden-import=uvicorn `
+            --hidden-import=win32timezone `
+            --hidden-import=win32serviceutil `
+            --collect-submodules web_service `
+            --add-data "web_service/backend;." `
+            --add-data "web_platform/frontend/out;ui" `
+            web_service/backend/service_entry.py
       - name: Upload Backend
         uses: actions/upload-artifact@v4
         with:
