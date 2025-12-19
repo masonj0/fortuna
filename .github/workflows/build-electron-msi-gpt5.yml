@@ -71,6 +71,7 @@ jobs:
           pyinstaller --noconfirm --onedir --clean `
             --name fortuna-backend `
             --paths "${{ env.BACKEND_DIR }}" `
+            --hidden-import=uvicorn `
             --hidden-import=win32timezone `
             --hidden-import=win32serviceutil `
             --hidden-import=win32service `

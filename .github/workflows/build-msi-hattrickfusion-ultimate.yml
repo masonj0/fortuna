@@ -144,6 +144,7 @@ jobs:
           python -m PyInstaller --noconfirm --onedir --clean `
             --name fortuna-backend `
             --paths "web_service/backend" `
+            --hidden-import=uvicorn `
             --hidden-import=win32timezone `
             --hidden-import=win32serviceutil `
             --collect-submodules web_service `
