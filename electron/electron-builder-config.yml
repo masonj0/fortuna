@@ -6,8 +6,8 @@ directories:
   buildResources: assets
 
 files:
-  - filter:
-      - "**/*"
+  - "**/*"
+  - "!build_wix/**/*"
 
 
 win:
@@ -21,3 +21,4 @@ msi:
   # Explicitly pointing to the file ensures WiX picks it up
   shortcutName: "Fortuna Faucet"
   warningsAsErrors: false
+  template: "build_wix/Product_Electron.wxs"
