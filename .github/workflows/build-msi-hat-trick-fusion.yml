@@ -116,8 +116,13 @@ jobs:
           New-Item -ItemType Directory -Path $constraintDir -Force | Out-Null
           $constraintFile = Join-Path $constraintDir "constraint-${{ matrix.arch }}.txt"
           if ('${{ matrix.arch }}' -eq 'x86') {
-            # 🚀 GPT-5 SAFE MODE
-            "numpy==1.23.5" | Set-Content $constraintFile
+            Write-Host "🛡️ ACTIVATING X86 SAFE MODE"
+            @(
+              "numpy==1.23.5",
+              "pandas==1.5.3",
+              "--only-binary=:all:"
+            ) | Set-Content $constraintFile
+            Write-Host "✅ x86 constraints: numpy 1.23.5, pandas 1.5.3, wheel-only"
           } else { New-Item $constraintFile -ItemType File -Force }
           "file=$constraintFile" | Out-File $env:GITHUB_OUTPUT -Append
       - name: Install Dependencies
@@ -282,6 +287,8 @@ jobs:
             '  <PropertyGroup>',
             '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>',
             '    <OutputType>Package</OutputType>',
+            '    <Platforms>x64;x86</Platforms>',
+            '    <!-- Platform is set via -p:Platform in build command, NOT in DefineConstants -->',
             '    <DefineConstants>Version=$(Version);SourceDir=$(SourceDir);ServicePort=$(ServicePort)</DefineConstants>',
             '  </PropertyGroup>',
             '  <ItemGroup>',
