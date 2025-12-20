@@ -57,7 +57,7 @@ jobs:
       - name: 🔎 Forensic Asset Verification (GPT5)
         shell: pwsh
         run: |
-          $critical = @("web_platform/frontend/package.json", "web_service/backend/requirements.txt", "build_wix/Product_WithService.wxs")
+          $critical = @("web_platform/frontend/package.json", "web_service/backend/requirements.txt", "build_wix/Product_WebService.wxs")
           foreach ($file in $critical) {
             if (-not (Test-Path $file)) {
               Write-Error "❌ FATAL: Missing critical asset: $file"; exit 1
@@ -205,7 +205,7 @@ jobs:
         shell: pwsh
         run: |
           $arch = "${{ matrix.arch }}"
-          wix build build_wix/Product_WithService.wxs `
+          wix build build_wix/Product_WebService.wxs `
             -arch $arch `
             -o "Fortuna-${arch}.msi" `
             -d Version="${{ needs.preflight-check.outputs.semver }}" `
