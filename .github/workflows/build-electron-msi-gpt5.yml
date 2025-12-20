@@ -65,6 +65,13 @@ jobs:
           }
           "file=$file" | Out-File $env:GITHUB_OUTPUT -Append
 
+      - name: 💾 Create required directories
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path "python_service/data" -Force
+          New-Item -ItemType Directory -Path "python_service/json" -Force
+          New-Item -ItemType Directory -Path "python_service/adapters" -Force
+
       - name: 📦 Build Binary
         shell: pwsh
         run: |
@@ -79,13 +86,13 @@ jobs:
       - name: 🔍 Sanity Check Executable
         shell: pwsh
         run: |
-          dist/fortuna-backend/fortuna-backend.exe --help
+          dist/fortuna-backend.exe --help
 
       - name: 📤 Upload
         uses: actions/upload-artifact@v4
         with:
           name: python-service-${{ matrix.arch }}
-          path: dist/fortuna-backend/
+          path: dist/fortuna-backend.exe
 
   build-frontend:
     name: 🎨 Build Web Frontend
