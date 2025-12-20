@@ -4,8 +4,8 @@ on:
   push:
     branches: [main, develop]
     tags: ['v*']
-  pull_request:
-    branches: [main]
+  #pull_request:
+  #  branches: [main]
   workflow_dispatch:
     inputs:
       # --- RUNTIME VERSION CONTROL (GPT-5 Pattern) ---
@@ -125,7 +125,7 @@ jobs:
         if: env.ENABLE_FORENSICS == 'true'
         shell: pwsh
         run: |
-          $files = @("electron/package.json", "web_service/backend/requirements.txt", "build_wix/Product_WithService.wxs")
+          $files = @("electron/package.json", "web_service/backend/requirements.txt", "build_wix/Product_WebService.wxs")
           $missing = $files | Where-Object { -not (Test-Path $_) }
           if ($missing) { throw "Missing: $($missing -join ', ')" }
           Write-Host "✅ Assets verified"
@@ -141,23 +141,23 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: 'electron/package-lock.json'
+          cache-dependency-path: 'web_platform/frontend/package-lock.json'
 
       - name: 🔍 Verify Build Script
         shell: pwsh
-        working-directory: electron
+        working-directory: web_platform/frontend
         run: |
           $pkg = Get-Content package.json | ConvertFrom-Json
           if (-not $pkg.scripts.build) { throw "Missing 'build' script" }
 
       - name: 🏗️ Build
-        working-directory: electron
+        working-directory: web_platform/frontend
         run: npm ci && npm run build
 
       - uses: actions/upload-artifact@v4
         with:
           name: frontend-dist-windows-latest
-          path: electron/out
+          path: web_platform/frontend/out
           retention-days: 7
 
   build-backend:
@@ -245,7 +245,7 @@ jobs:
         shell: pwsh
         run: |
           $msiName = "Fortuna-${{ needs.preflight.outputs.semver }}-${{ matrix.arch }}.msi"
-          wix build build_wix/Product_WithService.wxs `
+          wix build build_wix/Product_WebService.wxs `
             -arch ${{ matrix.arch }} -o $msiName `
             -d Version="${{ needs.preflight.outputs.semver }}" -d SourceDir="staging"
           Write-Host "✅ Built: $msiName"
