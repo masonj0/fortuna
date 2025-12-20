@@ -7,7 +7,7 @@
   <Package Name="Fortuna Faucet"
            Manufacturer="Fortuna Engineering"
            Version="$(var.Version)"
-           UpgradeCode="FA689549-366B-4C5C-A482-1132F9A34B10"
+           UpgradeCode="B1E9748D-842C-4A2B-893C-854746A1456A"
            Scope="perMachine"
            Compressed="yes">
 

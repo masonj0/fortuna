@@ -14,11 +14,11 @@
     <Chain>
       <MsiPackage
         Id="WebService"
-        SourceFile="path/to/your/WebService.msi"
+        SourceFile="$(var.WebServiceMsiPath)"
         Vital="yes" />
       <MsiPackage
         Id="ElectronApp"
-        SourceFile="path/to/your/ElectronApp.msi"
+        SourceFile="$(var.ElectronAppMsiPath)"
         Vital="yes" />
     </Chain>
   </Bundle>
