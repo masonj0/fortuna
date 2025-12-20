@@ -175,6 +175,10 @@ jobs:
           $dest = "electron/resources/fortuna-backend"
           New-Item -ItemType Directory -Path $dest -Force
           Copy-Item -Path "temp_backend/*" -Destination $dest -Recurse -Force
+      - name: ✅ Verify backend staged for Electron
+        shell: pwsh
+        run: |
+          Test-Path electron/resources/fortuna-backend/fortuna-backend.exe
       - name: '🏗️ Build MSI'
         working-directory: electron
         shell: pwsh
