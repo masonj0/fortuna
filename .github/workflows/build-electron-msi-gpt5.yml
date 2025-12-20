@@ -4,6 +4,7 @@ on:
   push:
     branches: ["main"]
   workflow_dispatch:
+  workflow_call:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -13,7 +14,7 @@ env:
   NODE_VERSION: '20'
   PYTHON_VERSION: '3.11'
   ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
-  BACKEND_DIR: 'web_service/backend'
+  BACKEND_DIR: 'python_service'
   PYTHONUTF8: '1'
 
 jobs:
