@@ -76,10 +76,16 @@ jobs:
             '# -*- mode: python ; coding: utf-8 -*-',
             'from PyInstaller.utils.hooks import collect_data_files, collect_submodules',
             '',
+            "uvicorn_datas = collect_data_files('uvicorn')",
+            "uvicorn_hidden = collect_submodules('uvicorn')",
+            "fastapi_hidden = collect_submodules('fastapi')",
+            "starlette_hidden = collect_submodules('starlette')",
+            "anyio_hidden = collect_submodules('anyio')",
+            '',
             "a = Analysis(['${{ env.BACKEND_DIR }}/service_entry.py'],",
             "             pathex=['${{ env.BACKEND_DIR }}'],",
-            "             datas=collect_data_files('uvicorn') + [('${{ env.BACKEND_DIR }}', '.')],",
-            "             hiddenimports=['uvicorn', 'win32timezone', 'win32serviceutil', 'win32service', 'win32event'] + collect_submodules('web_service'),",
+            "             datas=uvicorn_datas + [('${{ env.BACKEND_DIR }}', '.')],",
+            "             hiddenimports=['win32timezone', 'win32serviceutil', 'win32service', 'win32event'] + uvicorn_hidden + fastapi_hidden + starlette_hidden + anyio_hidden + collect_submodules('web_service'),",
             "             hookspath=[],",
             "             runtime_hooks=[],",
             "             excludes=[],",
@@ -112,6 +118,11 @@ jobs:
           $spec_script | Out-File -FilePath "electron.spec" -Encoding utf8
 
           pyinstaller --noconfirm --clean electron.spec
+
+      - name: 🔍 Sanity Check Executable
+        shell: pwsh
+        run: |
+          dist/fortuna-backend/fortuna-backend.exe --help
 
       - name: 📤 Upload
         uses: actions/upload-artifact@v4
