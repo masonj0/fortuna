@@ -145,7 +145,7 @@ jobs:
             '',
             "a = Analysis(['web_service/backend/service_entry.py'],",
             "             pathex=['web_service/backend'],",
-            "             datas=uvicorn_datas + [('web_service/backend', 'backend'), ('web_platform/frontend/out', 'ui')],",
+            "             datas=uvicorn_datas + [('web_service/backend', '.'), ('web_platform/frontend/out', 'ui')],",
             "             hiddenimports=['win32timezone', 'win32serviceutil', 'win32service', 'win32event'] + uvicorn_hidden + fastapi_hidden + starlette_hidden + anyio_hidden + collect_submodules('web_service'),",
             "             hookspath=[],",
             "             runtime_hooks=[],",
@@ -179,6 +179,10 @@ jobs:
           $spec_script | Out-File -FilePath "hat-trick-fusion.spec" -Encoding utf8
 
           python -m PyInstaller --noconfirm --clean hat-trick-fusion.spec
+      - name: 🔍 Sanity Check Executable
+        shell: pwsh
+        run: |
+          dist/fortuna-backend/fortuna-backend.exe --help
       - name: Upload Backend
         uses: actions/upload-artifact@v4
         with:

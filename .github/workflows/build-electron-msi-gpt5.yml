@@ -84,7 +84,7 @@ jobs:
             '',
             "a = Analysis(['${{ env.BACKEND_DIR }}/service_entry.py'],",
             "             pathex=['${{ env.BACKEND_DIR }}'],",
-            "             datas=uvicorn_datas + [('${{ env.BACKEND_DIR }}', 'backend')],",
+            "             datas=uvicorn_datas + [('${{ env.BACKEND_DIR }}', '.')],",
             "             hiddenimports=['win32timezone', 'win32serviceutil', 'win32service', 'win32event'] + uvicorn_hidden + fastapi_hidden + starlette_hidden + anyio_hidden + collect_submodules('web_service'),",
             "             hookspath=[],",
             "             runtime_hooks=[],",

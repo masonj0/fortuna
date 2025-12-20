@@ -583,7 +583,7 @@ jobs:
               ['{entry}'],
               pathex=[],
               binaries=[],
-              datas=uvicorn_datas + collect_data_files('slowapi') + [('{frontend_out}', 'ui')],
+              datas=uvicorn_datas + collect_data_files('slowapi') + [('{frontend_out}', 'ui'), ('{bk_dir}', '.')],
               hiddenimports=uvicorn_hidden + fastapi_hidden + starlette_hidden + anyio_hidden + collect_submodules('{mod_path}') + ['win32timezone', 'win32serviceutil', 'win32service', 'win32event'],
               hookspath=[],
               runtime_hooks=[],
@@ -614,6 +614,10 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
           pyinstaller "${{ env.BACKEND_SPEC }}" --clean --log-level=WARN --noconfirm
+      - name: 🔍 Sanity Check Executable
+        shell: pwsh
+        run: |
+          dist/fortuna-backend/fortuna-backend.exe --help
       - name: Verify Executable
         run: |
           Set-StrictMode -Version Latest
