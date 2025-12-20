@@ -79,6 +79,7 @@ async startBackend() {
 
     this.backendProcess = spawn(backendCommand, [], {
         cwd: backendCwd, // CRITICAL: This allows the EXE to find the '_internal' folder
+        windowsHide: true,
         env: {
             ...process.env,
             PYTHONPATH: backendCwd // Force python to look at the root of the extract dir
