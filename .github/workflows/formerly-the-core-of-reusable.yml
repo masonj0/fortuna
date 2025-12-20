@@ -4,8 +4,8 @@ on:
   push:
     branches: [main, develop]
     tags: ['v*']
-  pull_request:
-    branches: [main]
+  #pull_request:
+  #  branches: [main]
   workflow_dispatch:
     inputs:
       # --- RUNTIME VERSION CONTROL (GPT-5 Pattern) ---
@@ -141,23 +141,23 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: 'electron/package-lock.json'
+          cache-dependency-path: 'web_platform/frontend/package-lock.json'
 
       - name: 🔍 Verify Build Script
         shell: pwsh
-        working-directory: electron
+        working-directory: web_platform/frontend
         run: |
           $pkg = Get-Content package.json | ConvertFrom-Json
           if (-not $pkg.scripts.build) { throw "Missing 'build' script" }
 
       - name: 🏗️ Build
-        working-directory: electron
+        working-directory: web_platform/frontend
         run: npm ci && npm run build
 
       - uses: actions/upload-artifact@v4
         with:
           name: frontend-dist-windows-latest
-          path: electron/out
+          path: web_platform/frontend/out
           retention-days: 7
 
   build-backend:
