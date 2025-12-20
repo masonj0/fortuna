@@ -60,7 +60,7 @@ jobs:
           "file=$file" | Out-File $env:GITHUB_OUTPUT -Append
 
       - name: 📦 Build Binary
-        shell: python
+        shell: pwsh
         run: |
           pip install --upgrade pip setuptools wheel
           pip install -r ${{ env.BACKEND_DIR }}/requirements.txt -c ${{ steps.constraints.outputs.file }}
@@ -105,7 +105,7 @@ jobs:
           )
           $spec_script | Out-File -FilePath "electron.spec" -Encoding utf8
 
-          pyinstaller --noconfirm --onedir --clean electron.spec
+          pyinstaller --noconfirm --clean electron.spec
 
       - name: 📤 Upload
         uses: actions/upload-artifact@v4
