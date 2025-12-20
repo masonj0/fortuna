@@ -44,44 +44,24 @@ To get a build, simply push a commit to the `main` branch and retrieve the MSI a
 
 ## 🔬 Local Development Environment
 
-While production builds are handled by CI/CD, you can run the services locally for development and testing.
+While production builds are handled by CI/CD, the easiest way to run the application locally for development is to use the new quick-start script.
 
-### Backend (`web_service/backend/`)
+```powershell
+# From the project root
+./scripts/fortuna-quick-start.ps1
+```
 
-1.  Navigate to the backend directory:
-    ```bash
-    cd web_service/backend
-    ```
-2.  Create and activate a Python virtual environment:
-    ```bash
-    python -m venv .venv
-    .venv\Scripts\activate
-    ```
-3.  Install development dependencies:
-    ```bash
-    pip install -r requirements-dev.txt
-    ```
-4.  Run the development server:
-    ```bash
-    python main.py
-    ```
-    The API will be available at `http://localhost:8102` by default.
+This interactive script will:
+*   Check for all required dependencies (Python, Node.js, etc.).
+*   Install any missing Python or Node packages automatically.
+*   Clear the required network ports (8000 and 3000).
+*   Launch the backend and frontend services in separate, managed terminal windows.
+*   Provide a clean shutdown process.
 
-### Frontend (`web_platform/frontend/`)
-
-1.  Navigate to the frontend directory:
-    ```bash
-    cd web_platform/frontend
-    ```
-2.  Install dependencies:
-    ```bash
-    npm install
-    ```
-3.  Run the development server:
-    ```bash
-    npm run dev
-    ```
-    The frontend will be available at `http://localhost:3000`.
+For detailed options and first-time setup guidance, run the script with the `-Help` flag:
+```powershell
+./scripts/fortuna-quick-start.ps1 -Help
+```
 
 ---
 ## 📦 Key Tooling & Scripts
