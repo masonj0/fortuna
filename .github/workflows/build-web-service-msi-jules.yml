@@ -825,7 +825,7 @@ jobs:
       - name: Prepare WiX Project
         run: |
           Set-StrictMode -Version Latest
-          Copy-Item "${{ env.WIX_DIR }}/Product_WithService.wxs" "${{ env.WIX_DIR }}/Product.wxs" -Force
+          Copy-Item "${{ env.WIX_DIR }}/Product_WebService.wxs" "${{ env.WIX_DIR }}/Product.wxs" -Force
           $proj = @(
             '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">',
             '  <PropertyGroup>',
