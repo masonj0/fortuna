@@ -37,13 +37,14 @@
     </StandardDirectory>
 
     <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
-      <Component Id="ElectronExe" Guid="*">
+      <!-- Statically setting GUIDs is best practice for component stability -->
+      <Component Id="ElectronExe" Guid="C0661163-1B39-4E1B-A63A-2566E3A543E4">
         <File Source="$(var.SourceDir)\Fortuna Faucet.exe" KeyPath="yes" />
       </Component>
     </ComponentGroup>
 
     <ComponentGroup Id="Shortcuts">
-      <Component Id="StartMenuShortcut" Guid="*" Directory="ApplicationProgramsFolder">
+      <Component Id="StartMenuShortcut" Guid="D1D5B6A8-65E7-4581-992F-4613B821A85A" Directory="ApplicationProgramsFolder">
         <Shortcut Name="Fortuna Faucet"
                   Target="[INSTALLFOLDER]Fortuna Faucet.exe" />
         <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall" />

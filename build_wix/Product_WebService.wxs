@@ -66,9 +66,9 @@
     <StandardDirectory Id="DesktopFolder" />
 
     <ComponentGroup Id="ServiceComponents" Directory="INSTALLFOLDER">
-      <!-- FIX: Changed Guid from placeholder to '*' for auto-generation -->
-      <Component Id="ServiceExecutable" Guid="*">
-        <File Id="FortunaEXE" Source="$(var.SourceDir)/fortuna-webservice.exe" KeyPath="yes" />
+      <!-- Statically setting GUIDs is best practice for component stability -->
+      <Component Id="ServiceExecutable" Guid="E4B9C2C2-5B4E-4B02-A2DA-820152433E72">
+        <File Id="FortunaEXE" Source="$(var.SourceDir)/fortuna-backend.exe" KeyPath="yes" />
         <ServiceInstall Id="ServiceInstaller" Type="ownProcess" Name="FortunaWebService" DisplayName="Fortuna Faucet Web Service" Description="Background service for Fortuna Faucet" Start="auto" Account="LocalSystem" ErrorControl="normal" Vital="yes" />
         <ServiceControl Id="StartService" Stop="both" Remove="uninstall" Name="FortunaWebService" Wait="no" />
         <fire:FirewallException Id="FirewallRule" Name="Fortuna Faucet" Port="$(var.ServicePort)" Protocol="tcp" Scope="any" />
@@ -76,28 +76,28 @@
     </ComponentGroup>
 
     <ComponentGroup Id="ScriptComponents" Directory="INSTALLFOLDER">
-      <Component Id="RestartScriptComponent" Guid="*">
+      <Component Id="RestartScriptComponent" Guid="F8A2D7B1-6E9A-4E1D-9B6C-7264871E9D5B">
         <File Id="RestartScript" Source="$(var.SourceDir)/restart_service.bat" KeyPath="yes" />
       </Component>
     </ComponentGroup>
 
     <ComponentGroup Id="RuntimeDirectoryComponents" Directory="INSTALLFOLDER">
-        <Component Id="DataDirectoryComponent" Guid="*">
+        <Component Id="DataDirectoryComponent" Guid="BA521E2F-4752-4C82-9658-3E2A40E5E0B3">
             <CreateFolder Directory="Dir_Data" />
             <RegistryValue Root="HKCU" Key="Software\Fortuna Faucet\Directories" Name="Data" Type="string" Value="1" KeyPath="yes" />
         </Component>
-        <Component Id="JsonDirectoryComponent" Guid="*">
+        <Component Id="JsonDirectoryComponent" Guid="C38E22D1-5B9C-4E7B-8B41-2A1B16F4A8E4">
             <CreateFolder Directory="Dir_Json" />
             <RegistryValue Root="HKCU" Key="Software\Fortuna Faucet\Directories" Name="Json" Type="string" Value="1" KeyPath="yes" />
         </Component>
-        <Component Id="LogsDirectoryComponent" Guid="*">
+        <Component Id="LogsDirectoryComponent" Guid="D9A7C5F3-8E2D-4C6A-A9F2-3B4C5D6E7F89">
             <CreateFolder Directory="Dir_Logs" />
             <RegistryValue Root="HKCU" Key="Software\Fortuna Faucet\Directories" Name="Logs" Type="string" Value="1" KeyPath="yes" />
         </Component>
     </ComponentGroup>
 
     <ComponentGroup Id="ShortcutComponents">
-        <Component Id="StartMenuShortcuts" Guid="*" Directory="ApplicationProgramsFolder">
+        <Component Id="StartMenuShortcuts" Guid="E5D8F1A2-7C3B-4A9F-B8E2-4C5D6E7F8A1B" Directory="ApplicationProgramsFolder">
             <util:InternetShortcut Id="DashboardShortcut" Name="Fortuna Dashboard" Target="http://localhost:$(var.ServicePort)" />
             <Shortcut Id="RestartShortcut" Name="Restart Service" Description="Restarts the background service (Run as Admin)" Target="[INSTALLFOLDER]restart_service.bat" />
             <Shortcut Id="LogsShortcut" Name="View Logs" Description="Opens the log file directory" Target="[System64Folder]explorer.exe" Arguments="[Dir_Logs]" />

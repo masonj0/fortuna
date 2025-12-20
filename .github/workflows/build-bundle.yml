@@ -47,7 +47,8 @@ jobs:
             -replace 'path/to/your/ElectronApp.msi', $electronMsi |
             Set-Content build_wix/Bundle.wxs
 
-          dotnet build build_wix/Bundle.wxs -c Release -o dist
+          # Use the WiX CLI to build the bundle
+          wix build -o dist/FortunaFaucet-Setup.exe build_wix/Bundle.wxs
 
       - name: '📤 Upload Bundle'
         uses: actions/upload-artifact@v4

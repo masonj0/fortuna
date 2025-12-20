@@ -4,12 +4,11 @@
   <Bundle Name="Fortuna Faucet"
           Version="1.0.0.0"
           Manufacturer="Fortuna Engineering"
-          UpgradeCode="YOUR-UNIQUE-GUID-HERE">
+          UpgradeCode="BC22B455-7B27-42A5-9274-13231362A572">
 
     <BootstrapperApplication>
       <bal:WixStandardBootstrapperApplication
-        Theme="hyperlink"
-        LocalizationFile="path/to/your/custom/localization.wxl" />
+        Theme="hyperlink" />
     </BootstrapperApplication>
 
     <Chain>

@@ -6,9 +6,8 @@ directories:
   buildResources: assets
 
 files:
-  - filter:
-      - "**/*"
-      - "build_wix"
+  - "**/*"
+  - "!build_wix/**/*"
 
 
 win:
