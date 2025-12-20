@@ -53,12 +53,9 @@ jobs:
 
   # 2. BUILD BACKEND (Matrix: x64 & x86)
   build-backend:
-    name: '🐍 Build Backend (${{ matrix.arch }})'
+    name: '🐍 Build Backend (x86)'
     runs-on: windows-latest
     needs: build-frontend
-    strategy:
-      matrix:
-        arch: [x64, x86]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -66,10 +63,11 @@ jobs:
           name: frontend-dist
           path: ${{ env.FRONTEND_DIR }}/out
 
-      - uses: actions/setup-python@v5
+      - name: 🐍 Setup Python (x86 Safe Mode)
+        uses: actions/setup-python@v5
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          architecture: ${{ matrix.arch }}
+          python-version: '3.11'
+          architecture: 'x86' # FIXED: Force 32-bit Python to match the 'Safe Mode' MSI target
           cache: 'pip'
 
       - name: 🧾 Create Architecture Constraints
@@ -77,14 +75,9 @@ jobs:
         shell: pwsh
         run: |
           $file = "constraints.txt"
-          if ('${{ matrix.arch }}' -eq 'x86') {
-            # 🚀 SAFE MODE: Pin versions with known 32-bit wheels
-            "numpy==1.23.5`r`npandas==1.5.3" | Set-Content $file
-            Write-Host "✅ Created x86 constraints (Safe Mode)"
-          } else {
-            New-Item $file -ItemType File -Force
-            Write-Host "✅ Created x64 constraints (Modern Mode)"
-          }
+          # 🚀 SAFE MODE: Pin versions with known 32-bit wheels
+          "numpy==1.23.5`r`npandas==1.5.3" | Set-Content $file
+          Write-Host "✅ Created x86 constraints (Safe Mode)"
           "file=$file" | Out-File $env:GITHUB_OUTPUT -Append
 
       - name: Install Dependencies
@@ -102,17 +95,14 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: backend-dist-${{ matrix.arch }}
+          name: backend-dist-x86
           path: dist/fortuna-backend/
 
-  # 3. PACKAGE MSI (Matrix: x64 & x86)
+  # 3. PACKAGE MSI (x86)
   package-msi:
-    name: '💿 Package MSI (${{ matrix.arch }})'
+    name: '💿 Package MSI (x86)'
     runs-on: windows-latest
     needs: build-backend
-    strategy:
-      matrix:
-        arch: [x64, x86]
     steps:
       - uses: actions/checkout@v4
       - name: 🏷️ Derive SemVer & Build ID
@@ -124,7 +114,7 @@ jobs:
           "semver=$semver" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
       - uses: actions/download-artifact@v4
         with:
-          name: backend-dist-${{ matrix.arch }}
+          name: backend-dist-x86
           path: staging/backend
 
       - name: Create Restart Service Batch Script
@@ -189,13 +179,13 @@ jobs:
         working-directory: ${{ env.WIX_DIR }}
         run: |
           # 🚀 Pass Matrix Arch to WiX
-          dotnet build Fortuna.wixproj -c Release -p:Platform=${{ matrix.arch }} -p:Version="${{ steps.git_version.outputs.semver }}" -p:SourceDir="../staging/backend" -p:ServicePort="${{ env.FORTUNA_PORT }}"
+          dotnet build Fortuna.wixproj -c Release -p:Platform=x86 -p:Version="${{ steps.git_version.outputs.semver }}" -p:SourceDir="../staging/backend" -p:ServicePort="${{ env.FORTUNA_PORT }}"
 
       - name: Rename & Hash
         run: |
-          $releaseDir = "${{ env.WIX_DIR }}/bin/${{ matrix.arch }}/Release"
+          $releaseDir = "${{ env.WIX_DIR }}/bin/x86/Release"
           $msi = Get-ChildItem -Path $releaseDir -Filter "*.msi" | Select -First 1
-          $target = "FortunaService-${{ matrix.arch }}-${{ steps.git_version.outputs.semver }}.msi"
+          $target = "FortunaService-x86-${{ steps.git_version.outputs.semver }}.msi"
           Move-Item $msi.FullName -Destination "$releaseDir/$target" -Force
           Write-Host "✅ MSI Ready: $target"
           $hash = (Get-FileHash "$releaseDir/$target" -Algorithm SHA256).Hash
@@ -204,23 +194,20 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: msi-${{ matrix.arch }}
+          name: msi-x86
           path: |
-            ${{ env.WIX_DIR }}/bin/${{ matrix.arch }}/Release/*.msi
-            ${{ env.WIX_DIR }}/bin/${{ matrix.arch }}/Release/*.sha256
+            ${{ env.WIX_DIR }}/bin/x86/Release/*.msi
+            ${{ env.WIX_DIR }}/bin/x86/Release/*.sha256
 
-  # 4. SMOKE TEST (Matrix: x64 & x86)
+  # 4. SMOKE TEST (x86)
   smoke-test:
-    name: '🔬 Smoke Test (${{ matrix.arch }})'
+    name: '🔬 Smoke Test (x86)'
     runs-on: windows-latest
     needs: package-msi
-    strategy:
-      matrix:
-        arch: [x64, x86]
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: msi-${{ matrix.arch }}
+          name: msi-x86
           path: installer
 
       - name: Install MSI
@@ -230,11 +217,9 @@ jobs:
 
       - name: Verify Service & Port
         shell: pwsh
-        env:
-          ARCH: ${{ matrix.arch }}
         run: |
           # 🚀 DYNAMIC PATH LOGIC
-          $progFiles = if ($env:ARCH -eq 'x86') { ${env:ProgramFiles(x86)} } else { $env:ProgramFiles }
+          $progFiles = ${env:ProgramFiles(x86)}
           $installRoot = "$progFiles\FortunaWeb"
 
           if (-not (Test-Path $installRoot)) { throw "❌ Install dir not found at $installRoot" }
