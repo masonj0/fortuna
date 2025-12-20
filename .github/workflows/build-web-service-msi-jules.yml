@@ -571,13 +571,20 @@ jobs:
           spec = f"""
           # -- mode: python ; coding: utf-8 --
           from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+
+          uvicorn_datas = collect_data_files('uvicorn')
+          uvicorn_hidden = collect_submodules('uvicorn')
+          fastapi_hidden = collect_submodules('fastapi')
+          starlette_hidden = collect_submodules('starlette')
+          anyio_hidden = collect_submodules('anyio')
+
           block_cipher = None
           a = Analysis(
               ['{entry}'],
               pathex=[],
               binaries=[],
-              datas=collect_data_files('uvicorn') + collect_data_files('slowapi') + [('{frontend_out}', 'ui')],
-              hiddenimports=collect_submodules('{mod_path}') + ['win32timezone'],
+              datas=uvicorn_datas + collect_data_files('slowapi') + [('{frontend_out}', 'ui'), ('{bk_dir}', '.')],
+              hiddenimports=uvicorn_hidden + fastapi_hidden + starlette_hidden + anyio_hidden + collect_submodules('{mod_path}') + ['win32timezone', 'win32serviceutil', 'win32service', 'win32event'],
               hookspath=[],
               runtime_hooks=[],
               excludes=['tests', 'pytest'],
@@ -607,6 +614,10 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
           pyinstaller "${{ env.BACKEND_SPEC }}" --clean --log-level=WARN --noconfirm
+      - name: 🔍 Sanity Check Executable
+        shell: pwsh
+        run: |
+          dist/fortuna-backend/fortuna-backend.exe --help
       - name: Verify Executable
         run: |
           Set-StrictMode -Version Latest
@@ -814,7 +825,7 @@ jobs:
       - name: Prepare WiX Project
         run: |
           Set-StrictMode -Version Latest
-          Copy-Item "${{ env.WIX_DIR }}/Product_WithService.wxs" "${{ env.WIX_DIR }}/Product.wxs" -Force
+          Copy-Item "${{ env.WIX_DIR }}/Product_WebService.wxs" "${{ env.WIX_DIR }}/Product.wxs" -Force
           $proj = @(
             '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">',
             '  <PropertyGroup>',
