@@ -125,7 +125,7 @@ jobs:
         if: env.ENABLE_FORENSICS == 'true'
         shell: pwsh
         run: |
-          $files = @("electron/package.json", "web_service/backend/requirements.txt", "build_wix/Product_WithService.wxs")
+          $files = @("electron/package.json", "web_service/backend/requirements.txt", "build_wix/Product_WebService.wxs")
           $missing = $files | Where-Object { -not (Test-Path $_) }
           if ($missing) { throw "Missing: $($missing -join ', ')" }
           Write-Host "✅ Assets verified"
@@ -245,7 +245,7 @@ jobs:
         shell: pwsh
         run: |
           $msiName = "Fortuna-${{ needs.preflight.outputs.semver }}-${{ matrix.arch }}.msi"
-          wix build build_wix/Product_WithService.wxs `
+          wix build build_wix/Product_WebService.wxs `
             -arch ${{ matrix.arch }} -o $msiName `
             -d Version="${{ needs.preflight.outputs.semver }}" -d SourceDir="staging"
           Write-Host "✅ Built: $msiName"
