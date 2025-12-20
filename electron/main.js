@@ -82,6 +82,7 @@ async startBackend() {
         windowsHide: true,
         env: {
             ...process.env,
+            FORTUNA_MODE: 'electron', // Let the backend know its execution context
             PYTHONPATH: backendCwd // Force python to look at the root of the extract dir
         }
     });

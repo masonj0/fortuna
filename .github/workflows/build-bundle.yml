@@ -1,0 +1,57 @@
+name: 🚀 Build Fortuna Faucet Bundle
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-electron-msi:
+    uses: ./.github/workflows/build-electron-msi-gpt5.yml
+    secrets: inherit
+
+  build-web-service-msi:
+    uses: ./.github/workflows/build-msi-hat-trick-fusion.yml
+    secrets: inherit
+
+  package-bundle:
+    name: '🎁 Package Final Bundle'
+    runs-on: windows-latest
+    needs: [build-electron-msi, build-web-service-msi]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: '📥 Download Electron MSI'
+        uses: actions/download-artifact@v4
+        with:
+          name: fortuna-msi-x64
+          path: staging/electron
+
+      - name: '📥 Download Web Service MSI'
+        uses: actions/download-artifact@v4
+        with:
+          name: hat-trick-msi-x64
+          path: staging/service
+
+      - name: '🏗️ Build Bundle'
+        shell: pwsh
+        run: |
+          $electronMsi = (Get-ChildItem -Path "staging/electron" -Filter "*.msi" -Recurse | Select-Object -First 1).FullName
+          $serviceMsi = (Get-ChildItem -Path "staging/service" -Filter "*.msi" -Recurse | Select-Object -First 1).FullName
+
+          (Get-Content build_wix/Bundle.wxs) `
+            -replace 'path/to/your/WebService.msi', $serviceMsi `
+            -replace 'path/to/your/ElectronApp.msi', $electronMsi |
+            Set-Content build_wix/Bundle.wxs
+
+          # Use the WiX CLI to build the bundle
+          wix build -o dist/FortunaFaucet-Setup.exe build_wix/Bundle.wxs
+
+      - name: '📤 Upload Bundle'
+        uses: actions/upload-artifact@v4
+        with:
+          name: fortuna-bundle
+          path: dist/FortunaFaucet-Setup.exe

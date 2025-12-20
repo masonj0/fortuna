@@ -1,0 +1,25 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal">
+
+  <Bundle Name="Fortuna Faucet"
+          Version="1.0.0.0"
+          Manufacturer="Fortuna Engineering"
+          UpgradeCode="BC22B455-7B27-42A5-9274-13231362A572">
+
+    <BootstrapperApplication>
+      <bal:WixStandardBootstrapperApplication
+        Theme="hyperlink" />
+    </BootstrapperApplication>
+
+    <Chain>
+      <MsiPackage
+        Id="WebService"
+        SourceFile="path/to/your/WebService.msi"
+        Vital="yes" />
+      <MsiPackage
+        Id="ElectronApp"
+        SourceFile="path/to/your/ElectronApp.msi"
+        Vital="yes" />
+    </Chain>
+  </Bundle>
+</Wix>
