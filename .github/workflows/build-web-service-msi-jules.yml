@@ -773,6 +773,9 @@ jobs:
           $proj = @(
             '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">',
             '  <PropertyGroup>',
+            '    <Version Condition="''$(Version)'' == ''''">0.0.1</Version>',
+            '    <ServicePort Condition="''$(ServicePort)'' == ''''">8102</ServicePort>',
+            '    <SourceDir Condition="''$(SourceDir)'' == ''''">staging/backend</SourceDir>',
             '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>',
             '    <OutputType>Package</OutputType>',
             '    <Platforms>x64;x86</Platforms>',

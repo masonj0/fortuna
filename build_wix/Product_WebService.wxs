@@ -3,10 +3,6 @@
      xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
      xmlns:fire="http://wixtoolset.org/schemas/v4/wxs/firewall">
 
-  <?ifndef ServicePort ?><?define ServicePort = "8102" ?><?endif?>
-  <?ifndef Version ?><?define Version = "1.0.0" ?><?endif?>
-  <?ifndef SourceDir ?><?define SourceDir = "staging/backend" ?><?endif?>
-
   <Package Name="Fortuna Faucet Web Service"
            Manufacturer="Fortuna Engineering"
            Version="$(var.Version)"
