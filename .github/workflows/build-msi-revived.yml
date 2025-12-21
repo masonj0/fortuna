@@ -138,7 +138,7 @@ jobs:
         shell: pwsh
         run: |
           Set-StrictMode -Version Latest
-          Copy-Item "${{ env.WIX_DIR }}/Product_WithService.wxs" "${{ env.WIX_DIR }}/Product.wxs" -Force
+          Copy-Item "${{ env.WIX_DIR }}/Product_WebService.wxs" "${{ env.WIX_DIR }}/Product.wxs" -Force
           $sourceDir = "staging/backend"
           $distDir = "staging/backend/fortuna-backend" # PyInstaller one-dir output, but the artifact download places it directly in backend
           $targetExe = "fortuna-webservice.exe"

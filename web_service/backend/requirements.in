@@ -21,6 +21,7 @@ numpy
 scipy
 aiosqlite
 SQLAlchemy
+greenlet==3.0.3
 psycopg2-binary
 structlog
 certifi
