@@ -1,4 +1,4 @@
-# System Timestamp: 2025-12-13 13:01:00
+# System Timestamp: 2025-12-21 14:04:35
 name: 🧟 🏛️ Fortuna Web Service MSI (The Veteran Reborn)
 
 on:
@@ -98,20 +98,29 @@ jobs:
           name: backend-dist-x86
           path: dist/fortuna-core-service/
 
-  # 3. PACKAGE MSI (x86)
-  package-msi:
-    name: '💿 Package MSI (x86)'
+  # 3. PREFLIGHT CHECK
+  preflight-check:
+    name: '🔍 Preflight Check'
     runs-on: windows-latest
-    needs: build-backend
+    outputs:
+      semver: ${{ steps.git_version.outputs.semver }}
     steps:
       - uses: actions/checkout@v4
-      - name: 🏷️ Derive SemVer & Build ID
+      - name: '🏷️ Derive SemVer'
         id: git_version
         shell: pwsh
         run: |
           $semver = "0.0.${{ github.run_number }}"
           Write-Host "Build Version: $semver"
           "semver=$semver" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+  # 4. PACKAGE MSI (x86)
+  package-msi:
+    name: '💿 Package MSI (x86)'
+    runs-on: windows-latest
+    needs: [build-backend, preflight-check]
+    steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: backend-dist-x86
@@ -179,13 +188,13 @@ jobs:
         working-directory: ${{ env.WIX_DIR }}
         run: |
           # 🚀 Pass Matrix Arch to WiX
-          dotnet build Fortuna.wixproj -c Release -p:Platform=x86 -p:Version="${{ steps.git_version.outputs.semver }}" -p:SourceDir="../staging/backend" -p:ServicePort="${{ env.FORTUNA_PORT }}"
+          dotnet build Fortuna.wixproj -c Release -p:Platform=x86 -p:Version="${{ needs.preflight-check.outputs.semver }}" -p:SourceDir="../staging/backend" -p:ServicePort="${{ env.FORTUNA_PORT }}"
 
       - name: Rename & Hash
         run: |
           $releaseDir = "${{ env.WIX_DIR }}/bin/x86/Release"
           $msi = Get-ChildItem -Path $releaseDir -Filter "*.msi" | Select -First 1
-          $target = "FortunaService-x86-${{ steps.git_version.outputs.semver }}.msi"
+          $target = "FortunaService-x86-${{ needs.preflight-check.outputs.semver }}.msi"
           Move-Item $msi.FullName -Destination "$releaseDir/$target" -Force
           Write-Host "✅ MSI Ready: $target"
           $hash = (Get-FileHash "$releaseDir/$target" -Algorithm SHA256).Hash
@@ -199,11 +208,11 @@ jobs:
             ${{ env.WIX_DIR }}/bin/x86/Release/*.msi
             ${{ env.WIX_DIR }}/bin/x86/Release/*.sha256
 
-  # 4. SMOKE TEST (x86)
+  # 5. SMOKE TEST (x86)
   smoke-test:
     name: '🔬 Smoke Test (x86)'
     runs-on: windows-latest
-    needs: package-msi
+    needs: [package-msi, preflight-check]
     steps:
       - uses: actions/download-artifact@v4
         with:

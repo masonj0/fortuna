@@ -173,7 +173,7 @@ jobs:
       - name: '📥 Download Backend Artifact'
         uses: actions/download-artifact@v4
         with:
-          name: python-ui-bridge-${{ matrix.arch }}-${{ needs.build-core.outputs.build_id }}
+          name: python-ui-bridge-${{ matrix.arch }}-${{ github.run_id }}
           path: python-service-bin
       - name: 'Decompress Backend Artifact'
         shell: pwsh
@@ -186,7 +186,7 @@ jobs:
       - name: '📥 Download Frontend Artifact'
         uses: actions/download-artifact@v4
         with:
-          name: frontend-build-${{ needs.build-core.outputs.build_id }}
+          name: frontend-build-${{ github.run_id }}
           path: ${{ env.FRONTEND_DIR }}/out
       - name: '🎨 Stage Frontend for Electron Builder'
         shell: pwsh

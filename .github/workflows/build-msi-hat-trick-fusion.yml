@@ -1,4 +1,4 @@
-# System Timestamp: 2024-05-21 12:00:00
+# System Timestamp: 2025-12-21 14:04:35
 name: 🎩 HatTrick Fusion (Standard)
 on:
   workflow_dispatch:
@@ -144,7 +144,7 @@ jobs:
       - name: Upload Backend
         uses: actions/upload-artifact@v4
         with:
-          name: backend-dist-${{ matrix.arch }}
+          name: backend-dist-${{ matrix.arch }}-${{ github.run_id }}
           path: dist/fortuna-core-service/
 
   package-msi:
@@ -159,7 +159,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: backend-dist-${{ matrix.arch }}
+          name: backend-dist-${{ matrix.arch }}-${{ github.run_id }}
           path: staging/backend
 
       - name: '🔐 Verify Backend Executable Hash'
@@ -277,26 +277,24 @@ jobs:
       - name: Rename & Hash MSI
         run: |
           $ver = "${{ needs.build-backend.outputs.semver }}"
-          $sha = "${{ needs.build-backend.outputs.short_sha }}"
           $releaseDir = "build_wix/bin/${{ matrix.arch }}/Release"
           $msiFound = Get-ChildItem -Path $releaseDir -Filter "*.msi" | Select-Object -First 1
           if (-not $msiFound) { throw "MSI not found in $releaseDir" }
-          $targetName = "HatTrickFusion-${{ matrix.arch }}-${ver}-${sha}.msi"
+          $targetName = "HatTrickFusion-${{ matrix.arch }}-${ver}.msi"
           $newPath = Join-Path $releaseDir $targetName
           Move-Item -Path $msiFound.FullName -Destination $newPath -Force
           Write-Host "✅ MSI Ready: $targetName"
       - name: Upload MSI
         uses: actions/upload-artifact@v4
         with:
-          name: hat-trick-msi-${{ matrix.arch }}
+          name: hat-trick-msi-${{ matrix.arch }}-${{ github.run_id }}
           path: build_wix/bin/${{ matrix.arch }}/Release/*
 
       - name: 📝 Generate Job Summary
         shell: pwsh
         run: |
           $ver = "${{ needs.build-backend.outputs.semver }}"
-          $sha = "${{ needs.build-backend.outputs.short_sha }}"
-          $targetName = "HatTrickFusion-${{ matrix.arch }}-${ver}-${sha}.msi"
+          $targetName = "HatTrickFusion-${{ matrix.arch }}-${ver}.msi"
           $hash = (Get-FileHash "build_wix/bin/${{ matrix.arch }}/Release/$targetName").Hash
           echo "### 📦 Build Summary (`${{ matrix.arch }}`)" >> $env:GITHUB_STEP_SUMMARY
           echo "| File | Version | SHA-256 |" >> $env:GITHUB_STEP_SUMMARY
@@ -314,7 +312,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: backend-dist-${{ matrix.arch }}
+          name: backend-dist-${{ matrix.arch }}-${{ github.run_id }}
           path: backend
       - name: Create SBOM
         uses: anchore/sbom-action@v0
@@ -333,7 +331,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: hat-trick-msi-${{ matrix.arch }}
+          name: hat-trick-msi-${{ matrix.arch }}-${{ github.run_id }}
           path: msi-installer
       - name: 🔥 Smoke Test
         shell: pwsh
