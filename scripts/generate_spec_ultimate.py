@@ -9,7 +9,7 @@ def main():
     Generates a PyInstaller spec file for the "Ultimate" workflow,
     ensures __init__.py files exist, and runs the PyInstaller build.
     """
-    print("--- 🐍 Ultimate Spec Generator ---")
+    print("--- Ultimate Spec Generator ---")
 
     # 1. Get environment variables
     try:
