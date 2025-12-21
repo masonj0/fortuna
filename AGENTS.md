@@ -20,7 +20,7 @@ This document outlines the operational protocols and evolved team structure for 
 ## CRITICAL Operational Protocols (0-23)
 
 -   **Protocol 0: The ReviewableJSON Mandate:** The mandatory protocol for all code reviews. The agent's final act for any mission is to create a lossless JSON backup of all modified files. This is the single source of truth for code review.
--   **Protocol 1: The Handcuffed Branch:** Jules cannot switch branches. An entire session lives on a single `session/jules...` branch.
+-   **Protocol 1: The Handcuffed Branch:** Jules cannot switch branches. An entire session lives on a single branch, specified by the Project Lead at the start of the mission.
 -   **Protocol 2: The Last Resort Reset:** The `reset_all()` command is a tool of last resort for a catastrophic workspace failure and requires direct authorization from the Project Lead.
 -   **Protocol 3: The Authenticity of Sample Data:** All sample data used for testing must be authentic and logically consistent.
 -   **Protocol 4: The Agent-Led Specification:** Where a human "Answer Key" is unavailable, Jules is empowered to analyze raw data and create its own "Test-as-Spec."
