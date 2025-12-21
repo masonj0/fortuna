@@ -115,23 +115,16 @@ jobs:
 
       - name: 🏗️ Build Binary (PyInstaller)
         shell: pwsh
+        env:
+          PYTHONUTF8: '1'
         run: |
-          # CRITICAL: Hidden imports for Windows Service (Subroutine #6)
-          pyinstaller --noconfirm --onedir --clean `
-            --name fortuna-backend `
-            --hidden-import=win32timezone `
-            --hidden-import=win32serviceutil `
-            --hidden-import=win32service `
-            --hidden-import=win32event `
-            --add-data "web_service/backend;backend" `
-            --add-data "web_platform/frontend/out;ui" `
-            web_service/backend/service_entry.py
+          python scripts/generate_spec_dual.py --mode svc
 
       - name: 📤 Upload Backend Artifact
         uses: actions/upload-artifact@v4
         with:
           name: backend-dist-${{ matrix.arch }}
-          path: dist/fortuna-backend
+          path: dist/fortuna-core-service
           retention-days: 1
 
   build-frontend:
@@ -183,8 +176,8 @@ jobs:
         shell: cmd
         run: |
           echo @echo off > staging\\backend\\restart_service.bat
-          echo net stop FortunaWebService >> staging\\backend\\restart_service.bat
-          echo net start FortunaWebService >> staging\\backend\\restart_service.bat
+          echo net stop fortuna-core-service >> staging\\backend\\restart_service.bat
+          echo net start fortuna-core-service >> staging\\backend\\restart_service.bat
 
       - name: ⚖️ The Dietician (Size Analysis)
         shell: pwsh
@@ -251,7 +244,7 @@ jobs:
         shell: pwsh
         run: |
           # The '*' is a wildcard that tells PowerShell to ignore any errors if the service doesn't exist.
-          sc.exe delete "FortunaWebService" *>$null
+          sc.exe delete "fortuna-core-service" *>$null
           Start-Sleep -Seconds 2
 
       - name: 💿 Install MSI
@@ -269,7 +262,7 @@ jobs:
           if (-not (Test-Path $installRoot)) { throw "❌ Install dir not found at $installRoot" }
           Write-Host "✅ Found install at $installRoot"
           New-Item -Path "$installRoot\data", "$installRoot\json", "$installRoot\logs" -ItemType Directory -Force | Out-Null
-          Start-Service "FortunaWebService"
+          Start-Service "fortuna-core-service"
           Start-Sleep 10
 
       - name: 🩺 Health Check
