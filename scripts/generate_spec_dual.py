@@ -22,10 +22,6 @@ if sys.platform == 'win32':
         sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
         sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
 
-# Force stdout to handle UTF-8 characters for logging in GitHub Actions.
-if hasattr(sys.stdout, 'reconfigure'):
-    sys.stdout.reconfigure(encoding='utf-8')
-
 def generate_spec(mode: str):
     """
     Generates a PyInstaller spec file based on the specified mode ('ui' or 'svc').

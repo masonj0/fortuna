@@ -58,7 +58,9 @@ jobs:
         shell: pwsh
         run: |
           $ver = if ("${{ github.ref }}" -match 'refs/tags/v(.*)') { $Matches[1] } else { "0.0.${{ github.run_number }}" }
+          $shortSha = "${{ github.sha }}".Substring(0,7)
           "semver=$ver" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "short_sha=$shortSha" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "build_id=${{ github.run_id }}" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
       # --- FRONTEND (Standard) ---
       - uses: actions/setup-node@v4
@@ -387,7 +389,7 @@ jobs:
               $response = Invoke-WebRequest -Uri $healthUrl -Method Get -UseBasicParsing -ErrorAction Stop
               if ($response.StatusCode -eq 200) {
                 Write-Host "✅✅✅ SMOKE TEST PASSED ✅✅✅"
-                Stop-Process -Name "Fortuna Faucet", "fortuna-backend" -Force -ErrorAction SilentlyContinue
+                Stop-Process -Name "Fortuna Faucet", "fortuna-ui-bridge" -Force -ErrorAction SilentlyContinue
                 exit 0
               }
             } catch { Start-Sleep -Seconds 5 }
@@ -396,7 +398,7 @@ jobs:
           exit 1
       - name: Cleanup
         if: always()
-        run: Stop-Process -Name "Fortuna Faucet", "fortuna-backend" -Force -ErrorAction SilentlyContinue
+        run: Stop-Process -Name "Fortuna Faucet", "fortuna-ui-bridge" -Force -ErrorAction SilentlyContinue
 
   # ============================================================================
   # JOB 4: RELEASE (The "Triple-Tap" Staging)

@@ -158,7 +158,7 @@ jobs:
   package-msi:
     name: '💿 Package MSI (${{ matrix.arch }})'
     runs-on: windows-latest
-    needs: build-backend
+    needs: [build-backend]
     timeout-minutes: 30
     strategy:
       matrix:

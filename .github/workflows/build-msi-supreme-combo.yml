@@ -210,7 +210,7 @@ jobs:
         continue-on-error: true
         shell: pwsh
         run: |
-          $msi = "Fortuna-${{ matrix.arch }}.msi"
+          $msi = "Fortuna-${{ needs.preflight-check.outputs.semver }}-${{ matrix.arch }}.msi"
           if (Test-Path "C:\\Program Files\\Windows Defender\\MpCmdRun.exe") {
             Write-Host "🛡️ Scanning $msi with Windows Defender..."
             & "C:\\Program Files\\Windows Defender\\MpCmdRun.exe" -Scan -ScanType 3 -File "$pwd\\$msi"
@@ -221,7 +221,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: msi-${{ matrix.arch }}
-          path: Fortuna-${{ matrix.arch }}.msi
+          path: Fortuna-${{ needs.preflight-check.outputs.semver }}-${{ matrix.arch }}.msi
+
+      - name: '🧪 Basic Integrity Check'
+        shell: pwsh
+        run: |
+            Get-ChildItem -Path "." -Recurse
 
   # =========================================================
   # PHASE 4: SMOKE TEST (Paparazzi & CSI)
@@ -240,6 +245,12 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: msi-${{ matrix.arch }}
+          path: msi-installer
+
+      - name: '🧪 Basic Integrity Check'
+        shell: pwsh
+        run: |
+            Get-ChildItem -Path "msi-installer" -Recurse
 
       - name: 🧹 Pre-Install Cleanup
         shell: pwsh
@@ -251,8 +262,9 @@ jobs:
       - name: 💿 Install MSI
         shell: pwsh
         run: |
-          $msi = "Fortuna-${{ matrix.arch }}.msi"
-          Start-Process msiexec.exe -ArgumentList "/i $msi /quiet /norestart" -Wait
+          $msi = Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse | Select-Object -First 1
+          if (-not $msi) { throw "MSI not found in msi-installer directory!" }
+          Start-Process msiexec.exe -ArgumentList "/i `"$($msi.FullName)`" /quiet /norestart" -Wait
           Start-Sleep 10 # Give service time to register
 
       - name: 🔍 Dynamic Path Verification (Revived)
