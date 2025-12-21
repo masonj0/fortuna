@@ -26,24 +26,16 @@ datas += collect_data_files('uvicorn')
 datas += collect_data_files('fastapi')
 datas += collect_data_files('starlette')
 hiddenimports.update(collect_submodules('python_service'))
+hiddenimports.update(collect_submodules('uvicorn'))
+hiddenimports.update(collect_submodules('fastapi'))
+hiddenimports.update(collect_submodules('starlette'))
+hiddenimports.update(collect_submodules('anyio'))
 hiddenimports.update([
     'asyncio',
     'asyncio.windows_events',
     'asyncio.selector_events',
-    'uvicorn.logging',
-    'uvicorn.loops.auto',
-    'uvicorn.protocols.http.h11_impl',
-    'uvicorn.protocols.http.httptools_impl',
-    'uvicorn.protocols.websockets.websockets_impl',
-    'uvicorn.protocols.websockets.wsproto_impl',
-    'uvicorn.lifespan.on',
-    'fastapi.routing',
-    'fastapi.middleware.cors',
-    'starlette.staticfiles',
-    'starlette.middleware.cors',
     'pydantic_core',
     'pydantic_settings.sources',
-    'anyio._backends._asyncio',
     'httpcore',
     'httpx',
     'python_multipart',
