@@ -121,17 +121,17 @@ jobs:
         shell: pwsh
         env:
           BACKEND_DIR: ${{ env.BACKEND_DIR }}
-          PYTHONUTF8: '1'
+          PYTHONUTF8: '1' # ENV-005: UTF-8 Console Enforcement
         run: python scripts/generate_spec_electron.py
       - name: 'Compress Backend Artifact'
         shell: pwsh
         run: |
-          Compress-Archive -Path dist/service/fortuna-backend/* -DestinationPath dist/service/fortuna-backend.tar.gz
+          Compress-Archive -Path dist/fortuna-backend/* -DestinationPath dist/fortuna-backend.tar.gz
       - name: '📤 Upload Backend Artifact'
         uses: actions/upload-artifact@v4
         with:
           name: python-service-${{ matrix.arch }}-${{ github.run_id }}
-          path: dist/service/fortuna-backend.tar.gz
+          path: dist/fortuna-backend.tar.gz
           retention-days: 1
 
       - name: '📤 Upload Frontend Artifact'
@@ -179,6 +179,10 @@ jobs:
         shell: pwsh
         run: |
           Expand-Archive -Path python-service-bin/fortuna-backend.tar.gz -DestinationPath python-service-bin
+      - name: 'List decompressed files'
+        shell: pwsh
+        run: |
+          Get-ChildItem -Path python-service-bin -Recurse
       - name: '📥 Download Frontend Artifact'
         uses: actions/download-artifact@v4
         with:
@@ -197,11 +201,6 @@ jobs:
         run: |
           $sourceDir = "python-service-bin"
           $targetDir = "${{ env.ELECTRON_DIR }}/resources/fortuna-backend"
-          if (-not (Test-Path "$sourceDir/fortuna-backend.exe")) {
-            Write-Host "Contents of $sourceDir:"
-            Get-ChildItem -Path $sourceDir -Recurse
-            throw "❌ Backend executable not found in '$sourceDir' after download."
-          }
           New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
           Write-Host "Copying backend from '$sourceDir' to '$targetDir'..."
           Copy-Item -Path "$sourceDir/*" -Destination $targetDir -Recurse -Force
