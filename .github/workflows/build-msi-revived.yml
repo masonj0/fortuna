@@ -88,15 +88,15 @@ jobs:
           pip install pyinstaller==6.6.0 pywin32
 
       - name: Build Backend (PyInstaller)
+        env:
+          PYTHONUTF8: '1'
         run: |
-          # CRITICAL: Target service_entry.py for Windows Service
-          # CRITICAL: Add win32timezone to prevent Error 1053
-          pyinstaller --noconfirm --onedir --clean --name fortuna-backend --hidden-import=win32timezone --hidden-import=win32serviceutil --add-data "web_service/backend;backend" --add-data "web_platform/frontend/out;ui" web_service/backend/service_entry.py
+          python scripts/generate_spec_dual.py --mode svc
 
       - uses: actions/upload-artifact@v4
         with:
           name: backend-dist-x86
-          path: dist/fortuna-backend/
+          path: dist/fortuna-core-service/
 
   # 3. PACKAGE MSI (x86)
   package-msi:
@@ -121,8 +121,8 @@ jobs:
         shell: cmd
         run: |
           echo @echo off > staging\backend\restart_service.bat
-          echo net stop FortunaService >> staging\backend\restart_service.bat
-          echo net start FortunaService >> staging\backend\restart_service.bat
+          echo net stop fortuna-core-service >> staging\backend\restart_service.bat
+          echo net start fortuna-core-service >> staging\backend\restart_service.bat
 
       - name: '⚖️ The Dietician (Size Analysis)'
         shell: pwsh
@@ -140,17 +140,17 @@ jobs:
           Set-StrictMode -Version Latest
           Copy-Item "${{ env.WIX_DIR }}/Product_WebService.wxs" "${{ env.WIX_DIR }}/Product.wxs" -Force
           $sourceDir = "staging/backend"
-          $distDir = "staging/backend/fortuna-backend" # PyInstaller one-dir output, but the artifact download places it directly in backend
+          $distDir = "staging/backend/fortuna-core-service" # PyInstaller one-dir output, but the artifact download places it directly in backend
           $targetExe = "fortuna-webservice.exe"
 
-          if (Test-Path (Join-Path $sourceDir "fortuna-backend.exe")) {
+          if (Test-Path (Join-Path $sourceDir "fortuna-core-service.exe")) {
               Write-Host "PyInstaller 'onedir' output found. Staging entire directory..."
               # In this workflow, the onedir contents are already at the root of staging/backend
               # Just need to rename the executable for WiX
-              Rename-Item -Path (Join-Path $sourceDir "fortuna-backend.exe") -NewName $targetExe -Force
+              Rename-Item -Path (Join-Path $sourceDir "fortuna-core-service.exe") -NewName $targetExe -Force
               Write-Host "✅ Staging complete for WiX."
           } else {
-              Write-Host "##[error]Could not find fortuna-backend.exe in the staging directory."
+              Write-Host "##[error]Could not find fortuna-core-service.exe in the staging directory."
               Write-Host "Listing contents for forensics:"
               Get-ChildItem -Path $sourceDir -Recurse
               exit 1
