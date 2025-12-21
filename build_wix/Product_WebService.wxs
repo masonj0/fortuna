@@ -12,7 +12,7 @@
     <?define Version = 0.0.0 ?>
   <?endif?>
 
-  <?if not (defined(SourceDir)) ?>
+  <?if not defined(SourceDir)?>
     <?define SourceDir = staging/backend ?>
   <?endif?>
 
