@@ -147,30 +147,28 @@ jobs:
         shell: pwsh
         run: |
           Set-StrictMode -Version Latest
-          Copy-Item "${{ env.WIX_DIR }}/Product_WebService.wxs" "${{ env.WIX_DIR }}/Product.wxs" -Force
           $sourceDir = "staging/backend"
-          $distDir = "staging/backend/fortuna-core-service" # PyInstaller one-dir output, but the artifact download places it directly in backend
           $targetExe = "fortuna-webservice.exe"
 
           if (Test-Path (Join-Path $sourceDir "fortuna-core-service.exe")) {
-              Write-Host "PyInstaller 'onedir' output found. Staging entire directory..."
-              # In this workflow, the onedir contents are already at the root of staging/backend
-              # Just need to rename the executable for WiX
+              Write-Host "PyInstaller 'onedir' output found. Renaming for WiX..."
               Rename-Item -Path (Join-Path $sourceDir "fortuna-core-service.exe") -NewName $targetExe -Force
               Write-Host "✅ Staging complete for WiX."
           } else {
               Write-Host "##[error]Could not find fortuna-core-service.exe in the staging directory."
-              Write-Host "Listing contents for forensics:"
               Get-ChildItem -Path $sourceDir -Recurse
               exit 1
           }
           $proj = @(
             '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">',
             '  <PropertyGroup>',
+            '    <Version Condition="''$(Version)'' == ''''">0.0.1</Version>',
+            '    <ServicePort Condition="''$(ServicePort)'' == ''''">8102</ServicePort>',
+            '    <SourceDir Condition="''$(SourceDir)'' == ''''">staging/backend</SourceDir>',
             '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>',
             '    <OutputType>Package</OutputType>',
             '    <Platforms>x64;x86</Platforms>',
-            '    <DefineConstants>Version=$(Version);SourceDir=$(SourceDir);ServicePort=$(ServicePort)</DefineConstants>',
+            '    <DefineConstants>Version=$(Version);SourceDir=$(SourceDir);ServicePort=$(ServicePort);Platform=$(Platform)</DefineConstants>',
             '  </PropertyGroup>',
             '  <ItemGroup>',
             '    <PackageReference Include="WixToolset.UI.wixext" Version="${{ env.WIX_VERSION }}" />',
@@ -178,7 +176,7 @@ jobs:
             '    <PackageReference Include="WixToolset.Util.wixext" Version="${{ env.WIX_VERSION }}" />',
             '  </ItemGroup>',
             '  <ItemGroup>',
-            '    <Compile Include="Product.wxs" />',
+            '    <Compile Include="Product_WebService.wxs" />',
             '  </ItemGroup>',
             '</Project>'
           )
@@ -187,7 +185,6 @@ jobs:
       - name: Build MSI
         working-directory: ${{ env.WIX_DIR }}
         run: |
-          # 🚀 Pass Matrix Arch to WiX
           dotnet build Fortuna.wixproj -c Release -p:Platform=x86 -p:Version="${{ needs.preflight-check.outputs.semver }}" -p:SourceDir="../staging/backend" -p:ServicePort="${{ env.FORTUNA_PORT }}"
 
       - name: Rename & Hash
