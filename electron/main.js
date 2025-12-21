@@ -66,9 +66,9 @@ async startBackend() {
         backendCommand = path.join(__dirname, '..', '.venv', 'Scripts', 'python.exe');
         backendCwd = path.join(__dirname, '..', 'web_service', 'backend');
     } else {
-        // This matches the structure: resources/fortuna-backend/fortuna-backend.exe
-        const backendFolder = path.join(process.resourcesPath, 'fortuna-backend');
-        backendCommand = path.join(backendFolder, 'fortuna-backend.exe');
+        // This matches the structure: resources/bin/fortuna-ui-bridge.exe
+        const backendFolder = path.join(process.resourcesPath, 'bin');
+        backendCommand = path.join(backendFolder, 'fortuna-ui-bridge.exe');
         backendCwd = backendFolder;
     }
 
