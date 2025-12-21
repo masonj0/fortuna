@@ -4,15 +4,15 @@
      xmlns:fire="http://wixtoolset.org/schemas/v4/wxs/firewall">
 
   <!-- 🔧 CRITICAL FIX: Define defaults for preprocessor variables -->
-  <?if not defined(ServicePort) ?>
+  <?if !defined(ServicePort) ?>
     <?define ServicePort = 8102 ?>
   <?endif?>
 
-  <?if not defined(Version) ?>
+  <?if !defined(Version) ?>
     <?define Version = 0.0.0 ?>
   <?endif?>
 
-  <?if not defined(SourceDir) ?>
+  <?if !defined(SourceDir) ?>
     <?define SourceDir = staging/backend ?>
   <?endif?>
 
@@ -68,8 +68,8 @@
     <ComponentGroup Id="ServiceComponents" Directory="INSTALLFOLDER">
       <!-- Statically setting GUIDs is best practice for component stability -->
       <Component Id="ServiceExecutable" Guid="E4B9C2C2-5B4E-4B02-A2DA-820152433E72">
-        <File Id="FortunaEXE" Source="$(var.SourceDir)/fortuna-backend.exe" KeyPath="yes" />
-        <ServiceInstall Id="ServiceInstaller" Type="ownProcess" Name="FortunaWebService" DisplayName="Fortuna Faucet Web Service" Description="Background service for Fortuna Faucet" Start="auto" Account="LocalSystem" ErrorControl="normal" Vital="yes" />
+        <File Id="FortunaEXE" Source="$(var.SourceDir)/fortuna-webservice.exe" KeyPath="yes" />
+        <ServiceInstall Id="ServiceInstaller" Type="ownProcess" Name="FortunaWebService" DisplayName="Fortuna Web Service" Description="Background service for Fortuna Faucet" Start="auto" Account="LocalSystem" ErrorControl="normal" Vital="yes" />
         <ServiceControl Id="StartService" Stop="both" Remove="uninstall" Name="FortunaWebService" Wait="no" />
         <fire:FirewallException Id="FirewallRule" Name="Fortuna Faucet" Port="$(var.ServicePort)" Protocol="tcp" Scope="any" />
       </Component>

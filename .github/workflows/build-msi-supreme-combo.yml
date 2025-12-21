@@ -1,3 +1,4 @@
+# System Timestamp: 2025-12-21 14:04:35
 name: 🚀 Supreme Combo Build (MSI)
 
 on:
@@ -80,7 +81,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: frontend-dist
+          name: frontend-dist-${{ github.run_id }}
           path: web_platform/frontend/out
 
       - name: 🐍 Set up Python
@@ -115,23 +116,16 @@ jobs:
 
       - name: 🏗️ Build Binary (PyInstaller)
         shell: pwsh
+        env:
+          PYTHONUTF8: '1'
         run: |
-          # CRITICAL: Hidden imports for Windows Service (Subroutine #6)
-          pyinstaller --noconfirm --onedir --clean `
-            --name fortuna-backend `
-            --hidden-import=win32timezone `
-            --hidden-import=win32serviceutil `
-            --hidden-import=win32service `
-            --hidden-import=win32event `
-            --add-data "web_service/backend;backend" `
-            --add-data "web_platform/frontend/out;ui" `
-            web_service/backend/service_entry.py
+          python scripts/generate_spec_dual.py --mode svc
 
       - name: 📤 Upload Backend Artifact
         uses: actions/upload-artifact@v4
         with:
           name: backend-dist-${{ matrix.arch }}
-          path: dist/fortuna-backend
+          path: dist/fortuna-core-service
           retention-days: 1
 
   build-frontend:
@@ -156,7 +150,7 @@ jobs:
       - name: 📤 Upload Frontend Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: frontend-dist
+          name: frontend-dist-${{ github.run_id }}
           path: web_platform/frontend/out
           retention-days: 1
 
@@ -207,7 +201,7 @@ jobs:
           $arch = "${{ matrix.arch }}"
           wix build build_wix/Product_WebService.wxs `
             -arch $arch `
-            -o "Fortuna-${arch}.msi" `
+            -o "Fortuna-${{ needs.preflight-check.outputs.semver }}-${arch}.msi" `
             -d Version="${{ needs.preflight-check.outputs.semver }}" `
             -d SourceDir="staging/backend" `
             -d Platform=$arch
