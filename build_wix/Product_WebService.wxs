@@ -4,7 +4,7 @@
      xmlns:fire="http://wixtoolset.org/schemas/v4/wxs/firewall">
 
   <!-- 🔧 CRITICAL FIX: Define defaults for preprocessor variables -->
-  <?if not defined(ServicePort)?>
+  <?if not defined(ServicePort) ?>
     <?define ServicePort = 8102 ?>
   <?endif?>
 
