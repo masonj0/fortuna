@@ -68,9 +68,9 @@
     <ComponentGroup Id="ServiceComponents" Directory="INSTALLFOLDER">
       <!-- Statically setting GUIDs is best practice for component stability -->
       <Component Id="ServiceExecutable" Guid="E4B9C2C2-5B4E-4B02-A2DA-820152433E72">
-        <File Id="FortunaEXE" Source="$(var.SourceDir)/fortuna-backend.exe" KeyPath="yes" />
-        <ServiceInstall Id="ServiceInstaller" Type="ownProcess" Name="FortunaWebService" DisplayName="Fortuna Faucet Web Service" Description="Background service for Fortuna Faucet" Start="auto" Account="LocalSystem" ErrorControl="normal" Vital="yes" />
-        <ServiceControl Id="StartService" Stop="both" Remove="uninstall" Name="FortunaWebService" Wait="no" />
+        <File Id="FortunaEXE" Source="$(var.SourceDir)/fortuna-core-service.exe" KeyPath="yes" />
+        <ServiceInstall Id="ServiceInstaller" Type="ownProcess" Name="fortuna-core-service" DisplayName="Fortuna Core Service" Description="Background service for Fortuna Faucet" Start="auto" Account="LocalSystem" ErrorControl="normal" Vital="yes" />
+        <ServiceControl Id="StartService" Stop="both" Remove="uninstall" Name="fortuna-core-service" Wait="no" />
         <fire:FirewallException Id="FirewallRule" Name="Fortuna Faucet" Port="$(var.ServicePort)" Protocol="tcp" Scope="any" />
       </Component>
     </ComponentGroup>

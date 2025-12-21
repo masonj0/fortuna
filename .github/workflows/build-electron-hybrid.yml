@@ -117,21 +117,21 @@ jobs:
         run: |
           pip install -r ${{ env.BACKEND_DIR }}/requirements-dev.txt -c ${{ steps.constraints.outputs.file }}
           pip install pyinstaller==6.6.0
-      - name: '📦 Build Python Backend'
+      - name: '📦 Build Python Backend (UI Bridge)'
         shell: pwsh
         env:
           BACKEND_DIR: ${{ env.BACKEND_DIR }}
           PYTHONUTF8: '1' # ENV-005: UTF-8 Console Enforcement
-        run: python scripts/generate_spec_electron.py
+        run: python scripts/generate_spec_dual.py --mode ui
       - name: 'Compress Backend Artifact'
         shell: pwsh
         run: |
-          Compress-Archive -Path dist/fortuna-backend/* -DestinationPath dist/fortuna-backend.tar.gz
+          Compress-Archive -Path dist/fortuna-ui-bridge/* -DestinationPath dist/fortuna-ui-bridge.tar.gz
       - name: '📤 Upload Backend Artifact'
         uses: actions/upload-artifact@v4
         with:
-          name: python-service-${{ matrix.arch }}-${{ github.run_id }}
-          path: dist/fortuna-backend.tar.gz
+          name: python-ui-bridge-${{ matrix.arch }}-${{ github.run_id }}
+          path: dist/fortuna-ui-bridge.tar.gz
           retention-days: 1
 
       - name: '📤 Upload Frontend Artifact'
@@ -173,12 +173,12 @@ jobs:
       - name: '📥 Download Backend Artifact'
         uses: actions/download-artifact@v4
         with:
-          name: python-service-${{ matrix.arch }}-${{ needs.build-core.outputs.build_id }}
+          name: python-ui-bridge-${{ matrix.arch }}-${{ needs.build-core.outputs.build_id }}
           path: python-service-bin
       - name: 'Decompress Backend Artifact'
         shell: pwsh
         run: |
-          Expand-Archive -Path python-service-bin/fortuna-backend.tar.gz -DestinationPath python-service-bin
+          Expand-Archive -Path python-service-bin/fortuna-ui-bridge.tar.gz -DestinationPath python-service-bin
       - name: 'List decompressed files'
         shell: pwsh
         run: |
@@ -200,11 +200,11 @@ jobs:
         shell: pwsh
         run: |
           $sourceDir = "python-service-bin"
-          $targetDir = "${{ env.ELECTRON_DIR }}/resources/fortuna-backend"
+          $targetDir = "${{ env.ELECTRON_DIR }}/resources/bin"
           New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
           Write-Host "Copying backend from '$sourceDir' to '$targetDir'..."
           Copy-Item -Path "$sourceDir/*" -Destination $targetDir -Recurse -Force
-          if (-not (Test-Path "$targetDir/fortuna-backend.exe")) {
+          if (-not (Test-Path "$targetDir/fortuna-ui-bridge.exe")) {
             Write-Host "Contents of $targetDir:"
             Get-ChildItem -Path $targetDir -Recurse
             throw "❌ Backend executable failed to copy to '$targetDir'."
@@ -256,13 +256,13 @@ jobs:
         shell: pwsh
         run: |
           $unpackedDir = "electron/dist/" + (if ('${{ matrix.arch }}' -eq 'x86') { 'win-ia32-unpacked' } else { 'win-unpacked' })
-          $backendExePath = Join-Path $unpackedDir "resources/fortuna-backend.exe"
+          $backendExePath = Join-Path $unpackedDir "resources/bin/fortuna-ui-bridge.exe"
           if (-not (Test-Path $backendExePath)) {
-            Write-Host "Contents of '$unpackedDir/resources':"
-            Get-ChildItem -Path (Join-Path $unpackedDir "resources") -Recurse
-            throw "❌ Post-build verification failed: fortuna-backend.exe not found in the unpacked application."
+            Write-Host "Contents of '$unpackedDir/resources/bin':"
+            Get-ChildItem -Path (Join-Path $unpackedDir "resources/bin") -Recurse
+            throw "❌ Post-build verification failed: fortuna-ui-bridge.exe not found in the unpacked application."
           }
-          Write-Host "✅ Post-build verification passed: fortuna-backend.exe found."
+          Write-Host "✅ Post-build verification passed: fortuna-ui-bridge.exe found."
       - name: 'Rename & Hash MSI'
         id: name_msi
         shell: pwsh
@@ -336,9 +336,9 @@ jobs:
           $installRoot = Join-Path $progFiles "Fortuna Faucet"
           # --- LAYER 1: FILE VERIFICATION ---
           $mainExe = Get-ChildItem -Path $installRoot -Filter "*.exe" -Recurse | Where-Object { $_.Name -notmatch 'uninstall' } | Select -First 1
-          $backendExe = Get-ChildItem -Path $installRoot -Filter "fortuna-backend.exe" -Recurse | Select -First 1
+          $backendExe = Get-ChildItem -Path $installRoot -Filter "fortuna-ui-bridge.exe" -Recurse | Select -First 1
           if (-not $mainExe) { Write-Error "❌ LAYER 1 FAILED: Main 'Fortuna Faucet.exe' not found."; exit 1 }
-          if (-not $backendExe) { Write-Error "❌ LAYER 1 FAILED: Backend 'fortuna-backend.exe' not found."; exit 1 }
+          if (-not $backendExe) { Write-Error "❌ LAYER 1 FAILED: Backend 'fortuna-ui-bridge.exe' not found."; exit 1 }
 
       - name: '🔬 Debug: Run Backend Directly'
         shell: pwsh
@@ -347,7 +347,7 @@ jobs:
           $progFiles = ${env:ProgramFiles}
           if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
           $installDir = Join-Path $progFiles "Fortuna Faucet"
-          $backendExe = Join-Path $installDir "resources/fortuna-backend/fortuna-backend.exe"
+          $backendExe = Join-Path $installDir "resources/bin/fortuna-ui-bridge.exe"
 
           if (Test-Path $backendExe) {
             Write-Host "Attempting to run backend directly for 10 seconds..."
@@ -369,16 +369,16 @@ jobs:
           $installRoot = Join-Path $progFiles "Fortuna Faucet"
           # --- LAYER 1: FILE VERIFICATION ---
           $mainExe = Get-ChildItem -Path $installRoot -Filter "*.exe" -Recurse | Where-Object { $_.Name -notmatch 'uninstall' } | Select -First 1
-          $backendExe = Get-ChildItem -Path $installRoot -Filter "fortuna-backend.exe" -Recurse | Select -First 1
+          $backendExe = Get-ChildItem -Path $installRoot -Filter "fortuna-ui-bridge.exe" -Recurse | Select -First 1
           if (-not $mainExe) { Write-Error "❌ LAYER 1 FAILED: Main 'Fortuna Faucet.exe' not found."; exit 1 }
-          if (-not $backendExe) { Write-Error "❌ LAYER 1 FAILED: Backend 'fortuna-backend.exe' not found."; exit 1 }
+          if (-not $backendExe) { Write-Error "❌ LAYER 1 FAILED: Backend 'fortuna-ui-bridge.exe' not found."; exit 1 }
           # --- LAYER 2: PROCESS VERIFICATION ---
           $proc = Start-Process -FilePath $mainExe.FullName -ArgumentList "--no-sandbox" -PassThru
           Start-Sleep -Seconds 10
           $parentProcess = Get-Process -Name "Fortuna Faucet" -ErrorAction SilentlyContinue
-          $childProcess = Get-Process -Name "fortuna-backend" -ErrorAction SilentlyContinue
+          $childProcess = Get-Process -Name "fortuna-ui-bridge" -ErrorAction SilentlyContinue
           if (-not $parentProcess) { Write-Error "❌ LAYER 2 FAILED: Main 'Fortuna Faucet' process is not running."; exit 1 }
-          if (-not $childProcess) { Write-Error "❌ LAYER 2 FAILED: Child 'fortuna-backend' process is not running."; exit 1 }
+          if (-not $childProcess) { Write-Error "❌ LAYER 2 FAILED: Child 'fortuna-ui-bridge' process is not running."; exit 1 }
           # --- LAYER 3: NETWORK VERIFICATION ---
           $maxAttempts = 10
           $healthUrl = "http://localhost:${{ env.FORTUNA_PORT }}/health"
