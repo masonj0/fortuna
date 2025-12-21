@@ -1,4 +1,4 @@
-# System Timestamp: 2024-05-21 12:00:00
+# System Timestamp: 2025-12-21 14:04:35
 name: 🎩 HatTrick Fusion (Standard)
 on:
   workflow_dispatch:
@@ -133,62 +133,19 @@ jobs:
           pip install pyinstaller==6.6.0 pywin32
       - name: Build Backend (PyInstaller)
         shell: pwsh
+        env:
+          PYTHONUTF8: '1'
         run: |
-          $spec_script = @(
-            '# -*- mode: python ; coding: utf-8 -*-',
-            'from PyInstaller.utils.hooks import collect_data_files, collect_submodules',
-            '',
-            "uvicorn_datas = collect_data_files('uvicorn')",
-            "uvicorn_hidden = collect_submodules('uvicorn')",
-            "fastapi_hidden = collect_submodules('fastapi')",
-            "starlette_hidden = collect_submodules('starlette')",
-            "anyio_hidden = collect_submodules('anyio')",
-            '',
-            "a = Analysis(['web_service/backend/service_entry.py'],",
-            "             pathex=['web_service/backend'],",
-            "             datas=uvicorn_datas + [('web_service/backend', '.'), ('web_platform/frontend/out', 'ui')],",
-            "             hiddenimports=['win32timezone', 'win32serviceutil', 'win32service', 'win32event'] + uvicorn_hidden + fastapi_hidden + starlette_hidden + anyio_hidden + collect_submodules('web_service'),",
-            "             hookspath=[],",
-            "             runtime_hooks=[],",
-            "             excludes=[],",
-            "             win_no_prefer_redirects=False,",
-            "             win_private_assemblies=False,",
-            "             cipher=None)",
-            "pyz = PYZ(a.pure, a.zipped_data, cipher=None)",
-            "exe = EXE(pyz,",
-            "          a.scripts,",
-            "          a.binaries,",
-            "          a.zipfiles,",
-            "          a.datas,",
-            "          [],",
-            "          name='fortuna-backend',",
-            "          debug=False,",
-            "          bootloader_ignore_signals=False,",
-            "          strip=False,",
-            "          upx=True,",
-            "          runtime_tmpdir=None,",
-            "          console=True)",
-            "coll = COLLECT(exe,",
-            "               a.binaries,",
-            "               a.zipfiles,",
-            "               a.datas,",
-            "               strip=False,",
-            "               upx=True,",
-            "               upx_exclude=[],",
-            "               name='fortuna-backend')"
-          )
-          $spec_script | Out-File -FilePath "hat-trick-fusion.spec" -Encoding utf8
-
-          python -m PyInstaller --noconfirm --clean hat-trick-fusion.spec
+          python scripts/generate_spec_dual.py --mode svc
       - name: 🔍 Sanity Check Executable
         shell: pwsh
         run: |
-          dist/fortuna-backend/fortuna-backend.exe --help
+          dist/fortuna-core-service/fortuna-core-service.exe --help
       - name: Upload Backend
         uses: actions/upload-artifact@v4
         with:
-          name: backend-dist-${{ matrix.arch }}
-          path: dist/fortuna-backend/
+          name: backend-dist-${{ matrix.arch }}-${{ github.run_id }}
+          path: dist/fortuna-core-service/
 
   package-msi:
     name: '💿 Package MSI (${{ matrix.arch }})'
@@ -202,16 +159,16 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: backend-dist-${{ matrix.arch }}
+          name: backend-dist-${{ matrix.arch }}-${{ github.run_id }}
           path: staging/backend
 
       - name: '🔐 Verify Backend Executable Hash'
         shell: pwsh
         run: |
-          $exePath = "staging/backend/fortuna-backend.exe"
+          $exePath = "staging/backend/fortuna-core-service.exe"
           if (Test-Path $exePath) {
             $hash = (Get-FileHash $exePath -Algorithm SHA256).Hash
-            Write-Host "✅ SHA-256 of fortuna-backend.exe: $hash"
+            Write-Host "✅ SHA-256 of fortuna-core-service.exe: $hash"
           } else {
             throw "❌ Backend executable not found at $exePath"
           }
@@ -238,7 +195,7 @@ jobs:
       - name: Create Restart Service Batch Script
         shell: pwsh
         run: |
-          $scriptContent = "@echo off`r`necho Requesting Admin privileges to restart FortunaWebService...`r`nnet stop FortunaWebService`r`nnet start FortunaWebService`r`necho Service Restarted.`r`npause"
+          $scriptContent = "@echo off`r`necho Requesting Admin privileges to restart fortuna-core-service...`r`nnet stop fortuna-core-service`r`nnet start fortuna-core-service`r`necho Service Restarted.`r`npause"
           Set-Content -Path "staging/backend/restart_service.bat" -Value $scriptContent -Encoding Ascii
           Write-Host "✅ Created restart_service.bat script."
 
@@ -275,7 +232,7 @@ jobs:
               Write-Host "✅ Dynamically removed 'Start=install' attribute from WiX template."
           }
           $sourceDir = "staging/backend"
-          $distDir = "staging/backend/fortuna-backend" # PyInstaller one-dir output
+          $distDir = "staging/backend/fortuna-core-service" # PyInstaller one-dir output
           $targetExe = "fortuna-webservice.exe"
 
           if (Test-Path $distDir) {
@@ -285,7 +242,7 @@ jobs:
             # Clean up the now-empty dist directory
             Remove-Item $distDir -Recurse -Force
             # Rename the main executable for WiX
-            Rename-Item -Path (Join-Path $sourceDir "fortuna-backend.exe") -NewName $targetExe -Force
+            Rename-Item -Path (Join-Path $sourceDir "fortuna-core-service.exe") -NewName $targetExe -Force
             Write-Host "✅ Staging complete for WiX."
           } else {
             Write-Host "##[error]Could not find fortuna-backend.exe in expected locations."
@@ -320,26 +277,24 @@ jobs:
       - name: Rename & Hash MSI
         run: |
           $ver = "${{ needs.build-backend.outputs.semver }}"
-          $sha = "${{ needs.build-backend.outputs.short_sha }}"
           $releaseDir = "build_wix/bin/${{ matrix.arch }}/Release"
           $msiFound = Get-ChildItem -Path $releaseDir -Filter "*.msi" | Select-Object -First 1
           if (-not $msiFound) { throw "MSI not found in $releaseDir" }
-          $targetName = "HatTrickFusion-${{ matrix.arch }}-${ver}-${sha}.msi"
+          $targetName = "HatTrickFusion-${{ matrix.arch }}-${ver}.msi"
           $newPath = Join-Path $releaseDir $targetName
           Move-Item -Path $msiFound.FullName -Destination $newPath -Force
           Write-Host "✅ MSI Ready: $targetName"
       - name: Upload MSI
         uses: actions/upload-artifact@v4
         with:
-          name: hat-trick-msi-${{ matrix.arch }}
+          name: hat-trick-msi-${{ matrix.arch }}-${{ github.run_id }}
           path: build_wix/bin/${{ matrix.arch }}/Release/*
 
       - name: 📝 Generate Job Summary
         shell: pwsh
         run: |
           $ver = "${{ needs.build-backend.outputs.semver }}"
-          $sha = "${{ needs.build-backend.outputs.short_sha }}"
-          $targetName = "HatTrickFusion-${{ matrix.arch }}-${ver}-${sha}.msi"
+          $targetName = "HatTrickFusion-${{ matrix.arch }}-${ver}.msi"
           $hash = (Get-FileHash "build_wix/bin/${{ matrix.arch }}/Release/$targetName").Hash
           echo "### 📦 Build Summary (`${{ matrix.arch }}`)" >> $env:GITHUB_STEP_SUMMARY
           echo "| File | Version | SHA-256 |" >> $env:GITHUB_STEP_SUMMARY
@@ -357,7 +312,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: backend-dist-${{ matrix.arch }}
+          name: backend-dist-${{ matrix.arch }}-${{ github.run_id }}
           path: backend
       - name: Create SBOM
         uses: anchore/sbom-action@v0
@@ -376,7 +331,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: hat-trick-msi-${{ matrix.arch }}
+          name: hat-trick-msi-${{ matrix.arch }}-${{ github.run_id }}
           path: msi-installer
       - name: 🔥 Smoke Test
         shell: pwsh
@@ -389,9 +344,9 @@ jobs:
 
           # 1. PRE-INSTALL CLEANUP
           Write-Host "Attempting pre-emptive service removal..."
-          $service = Get-Service -Name "FortunaWebService" -ErrorAction SilentlyContinue
+          $service = Get-Service -Name "fortuna-core-service" -ErrorAction SilentlyContinue
           if ($service) {
-            sc.exe delete "FortunaWebService"
+            sc.exe delete "fortuna-core-service"
             Start-Sleep -Seconds 5
           }
 
@@ -414,7 +369,7 @@ jobs:
           New-Item -ItemType Directory -Path (Join-Path $installDir "data") -Force | Out-Null
           New-Item -ItemType Directory -Path (Join-Path $installDir "json") -Force | Out-Null
           New-Item -ItemType Directory -Path (Join-Path $installDir "logs") -Force | Out-Null
-          Start-Service -Name "FortunaWebService" -ErrorAction Stop
+          Start-Service -Name "fortuna-core-service" -ErrorAction Stop
           Start-Sleep -Seconds 10
 
           # 4. HEALTH CHECK
@@ -425,7 +380,7 @@ jobs:
               $response = Invoke-WebRequest -Uri "http://localhost:${{ env.SERVICE_PORT }}/health" -UseBasicParsing
               if ($response.StatusCode -eq 200) {
                 Write-Host "✅ Health check PASSED."
-                Stop-Service -Name "FortunaWebService"
+                Stop-Service -Name "fortuna-core-service"
                 exit 0
               }
             } catch { Write-Host "Attempt $($i+1) failed. Retrying in $delay seconds..." }
