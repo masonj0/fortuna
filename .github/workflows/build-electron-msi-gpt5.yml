@@ -195,8 +195,11 @@ jobs:
           $backendExe = Join-Path $installDir "resources/fortuna-backend/fortuna-backend.exe"
 
           if (Test-Path $backendExe) {
-            Write-Host "Attempting to run backend directly..."
-            Start-Process -FilePath $backendExe -NoNewWindow -Wait
+            Write-Host "Attempting to run backend directly for 10 seconds..."
+            $process = Start-Process -FilePath $backendExe -NoNewWindow -PassThru
+            Start-Sleep -Seconds 10
+            Stop-Process -Id $process.Id -Force
+            Write-Host "Backend process stopped."
           } else {
             Write-Error "Backend executable not found at $backendExe"
           }
