@@ -8,6 +8,20 @@ import sys
 import subprocess
 from pathlib import Path
 
+# Fix for UnicodeEncodeError on Windows runners with special characters in logs
+if sys.platform == 'win32':
+    try:
+        # This is the most reliable way to ensure UTF-8 output on Windows
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except TypeError:
+        # In some environments (like older Python versions or certain terminals),
+        # reconfigure might not be available. We fall back to a less ideal but
+        # still helpful method.
+        import codecs
+        sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
+        sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
+
 # Force stdout to handle UTF-8 characters for logging in GitHub Actions.
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')

@@ -10,6 +10,10 @@ os.environ["PYTHONUTF8"] = "1"
 # This is the definitive entry point for the Fortuna Faucet backend service.
 # It is designed to be compiled with PyInstaller.
 
+# [CRITICAL] Set Windows event loop policy for stable service operation
+if sys.platform == 'win32':
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 def _configure_sys_path():
     """
     Dynamically adds project paths to sys.path.
@@ -111,11 +115,6 @@ def main():
                     status_code=404,
                     detail="Frontend not found. Please build the frontend and ensure it's in the correct location.",
                 )
-
-    # CRITICAL FIX FOR PYINSTALLER on WINDOWS: Force event loop policy
-    if sys.platform == "win32" and getattr(sys, 'frozen', False):
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-        print("[BOOT] Applied WindowsSelectorEventLoopPolicy for PyInstaller", file=sys.stderr)
 
     print(f"INFO: Starting Uvicorn server...")
     print(f"      APP: web_service.backend.api:app")
