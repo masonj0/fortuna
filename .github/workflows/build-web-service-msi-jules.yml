@@ -681,12 +681,12 @@ jobs:
           Write-Host "✅ Created runtime directories with proper permissions"
 
           # CRITICAL: Explicitly start the service (WiX removed auto-start)
-          Write-Host "Starting FortunaWebService..."
-          Start-Service -Name "FortunaWebService" -ErrorAction Stop
+          Write-Host "Starting fortuna-core-service..."
+          Start-Service -Name "fortuna-core-service" -ErrorAction Stop
           Start-Sleep -Seconds 10
 
           # Verify service is running
-          $svc = Get-Service -Name "FortunaWebService"
+          $svc = Get-Service -Name "fortuna-core-service"
           if ($svc.Status -ne 'Running') {
             throw "❌ Service failed to start. Status: $($svc.Status)"
           }
@@ -701,7 +701,7 @@ jobs:
               $response = Invoke-WebRequest -Uri "http://localhost:${{ env.SERVICE_PORT }}/health" -UseBasicParsing
               if ($response.StatusCode -eq 200) {
                 Write-Host "✅ Health check PASSED."
-                Stop-Service -Name "FortunaWebService"
+                Stop-Service -Name "fortuna-core-service"
                 exit 0
               }
             } catch { Write-Host "Attempt $($i+1) failed. Retrying..." }
