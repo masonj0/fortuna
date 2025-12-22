@@ -290,9 +290,9 @@ jobs:
           Write-Host "Found MSI at $msiPath"
           # 1. PRE-INSTALL CLEANUP
           Write-Host "Attempting pre-emptive service removal..."
-          $service = Get-Service -Name "fortuna-core-service" -ErrorAction SilentlyContinue
+          $service = Get-Service -Name "FortunaWebService" -ErrorAction SilentlyContinue
           if ($service) {
-            sc.exe delete "fortuna-core-service"
+            sc.exe delete "FortunaWebService"
             Start-Sleep -Seconds 5
           }
           # 2. INSTALL
@@ -324,7 +324,7 @@ jobs:
       - name: 🚀 Start Service
         shell: pwsh
         run: |
-          Start-Service -Name "fortuna-core-service"
+          Start-Service -Name "FortunaWebService"
           Start-Sleep -Seconds 10
 
       - name: 🩺 Health Check
@@ -354,11 +354,28 @@ jobs:
         if: success()
         shell: pwsh
         run: |
+          $url = "http://127.0.0.1:${{ env.SERVICE_PORT }}/docs"
+          Write-Host "Waiting for URL: $url"
+          $maxRetries = 10
+          $delay = 3
+          for ($i=1; $i -le $maxRetries; $i++) {
+            try {
+              $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 5
+              if ($response.StatusCode -eq 200) {
+                Write-Host "✅ URL is accessible. Proceeding with screenshot."
+                break
+              }
+            } catch {
+              Write-Warning "Attempt $i: URL not accessible yet. Retrying in $delay seconds..."
+              Start-Sleep -Seconds $delay
+            }
+            if ($i -eq $maxRetries) {
+              throw "❌ URL did not become accessible after $maxRetries attempts."
+            }
+          }
+
           npm install playwright
           npx playwright install chromium
-
-          # Ensure we hit the local service
-          $url = "http://127.0.0.1:${{ env.SERVICE_PORT }}/docs"
 
           $nodeScript = "const { chromium } = require('playwright'); (async () => { const browser = await chromium.launch(); const page = await browser.newPage(); try { await page.goto('$url', { timeout: 10000 }); await page.screenshot({ path: 'proof-of-life.png', fullPage: true }); console.log('✅ Screenshot captured!'); } catch (e) { console.error('❌ Failed to capture screenshot:', e); process.exit(1); } await browser.close(); })();"
           node -e $nodeScript
@@ -379,7 +396,7 @@ jobs:
         if: always()
         shell: pwsh
         run: |
-          Stop-Service -Name "fortuna-core-service" -ErrorAction SilentlyContinue
+          Stop-Service -Name "FortunaWebService" -ErrorAction SilentlyContinue
 
   generate-sbom:
     name: '📜 Generate SBOM (${{ matrix.arch }})'
