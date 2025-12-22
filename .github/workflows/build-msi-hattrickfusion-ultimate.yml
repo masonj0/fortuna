@@ -202,14 +202,11 @@ jobs:
         run: |
           if (-not (Test-Path build_wix)) { New-Item -ItemType Directory -Path build_wix | Out-Null }
           $licensePath = 'build_wix/license.rtf'
-          if (-not (Test-Path $licensePath)) {
-            Write-Host '⚠️ License file missing. Generating placeholder...'
-            $rtfContent = [System.Text.Encoding]::ASCII.GetString([System.Convert]::FromBase64String("e1xydGYxXGFuc2lcZGVmZjB7XGZvbnR0Ymx7XGYwIEFyaWFsO319XGYwXGZzMjQgRU5EIFVTRVIgTElDRU5TRSBBR1JFRU1FTlRccGFyXHBhciBUaGlzIGlzIGEgcGxhY2Vob2xkZXIgbGljZW5zZSBmb3IgRm9ydHVuYSBGYXVjZXQuIFBsZWFzZSByZXBsYWNlIHdpdGggYWN0dWFsIHRlcm1zLn0="))
-            Set-Content -Path $licensePath -Value $rtfContent -Encoding Ascii
-            Write-Host '✅ Placeholder license.rtf created.'
-          } else {
-            Write-Host '✅ Existing license.rtf found.'
-          }
+          $rtfLines = @(
+            '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\f0\fs24 END USER LICENSE AGREEMENT\par\par This is a placeholder license for Fortuna Faucet. Please replace with actual terms.}\0'
+          )
+          Set-Content -Path $licensePath -Value ($rtfLines -join "`r`n") -Encoding Ascii
+          Write-Host '✅ Robust license.rtf created.'
       - name: Prepare WiX
         shell: pwsh
         run: |
