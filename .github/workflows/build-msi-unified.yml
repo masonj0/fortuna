@@ -331,7 +331,7 @@ jobs:
           $maxAttempts = 10
           for ($i = 1; $i -le $maxAttempts; $i++) {
             try {
-              $response = Invoke-WebRequest -Uri "http://localhost:${{ env.SERVICE_PORT }}/health" -Method Get -UseBasicParsing -ErrorAction Stop
+              $response = Invoke-WebRequest -Uri "http://localhost:8000/health" -Method Get -UseBasicParsing -ErrorAction Stop
               if ($response.StatusCode -eq 200) { Write-Host "✅✅✅ SMOKE TEST PASSED ✅✅✅"; exit 0 }
             } catch { Start-Sleep -Seconds 5 }
           }
@@ -342,7 +342,7 @@ jobs:
         continue-on-error: true
         shell: pwsh
         run: |
-          $url = "http://127.0.0.1:${{ env.SERVICE_PORT }}/docs"
+          $url = "http://127.0.0.1:8000/docs"
           Write-Host "Waiting for URL: $url"
           $maxRetries = 10
           $delay = 3
