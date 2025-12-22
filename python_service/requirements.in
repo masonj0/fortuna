@@ -5,7 +5,7 @@
 
 # --- Core Application Framework (Hard Pins) ---
 fastapi
-uvicorn==0.30.1
+uvicorn==0.40.0
 cryptography
 
 # --- Core Application Dependencies (Flexible) ---
