@@ -344,9 +344,9 @@ jobs:
 
           # 1. PRE-INSTALL CLEANUP
           Write-Host "Attempting pre-emptive service removal..."
-          $service = Get-Service -Name "fortuna-core-service" -ErrorAction SilentlyContinue
+          $service = Get-Service -Name "FortunaWebService" -ErrorAction SilentlyContinue
           if ($service) {
-            sc.exe delete "fortuna-core-service"
+            sc.exe delete "FortunaWebService"
             Start-Sleep -Seconds 5
           }
 
@@ -369,7 +369,7 @@ jobs:
           New-Item -ItemType Directory -Path (Join-Path $installDir "data") -Force | Out-Null
           New-Item -ItemType Directory -Path (Join-Path $installDir "json") -Force | Out-Null
           New-Item -ItemType Directory -Path (Join-Path $installDir "logs") -Force | Out-Null
-          Start-Service -Name "fortuna-core-service" -ErrorAction Stop
+          Start-Service -Name "FortunaWebService" -ErrorAction Stop
           Start-Sleep -Seconds 10
 
           # 4. HEALTH CHECK
@@ -380,7 +380,7 @@ jobs:
               $response = Invoke-WebRequest -Uri "http://localhost:${{ env.SERVICE_PORT }}/health" -UseBasicParsing
               if ($response.StatusCode -eq 200) {
                 Write-Host "✅ Health check PASSED."
-                Stop-Service -Name "fortuna-core-service"
+                Stop-Service -Name "FortunaWebService"
                 exit 0
               }
             } catch { Write-Host "Attempt $($i+1) failed. Retrying in $delay seconds..." }

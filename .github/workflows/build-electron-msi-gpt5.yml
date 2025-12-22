@@ -81,8 +81,8 @@ jobs:
           pip install -r ${{ env.BACKEND_DIR }}/requirements.txt -c ${{ steps.constraints.outputs.file }}
           pip install pyinstaller==6.6.0 pywin32
 
-          # FIXED: Use the dedicated Electron spec file instead of generating a broken one
-          # This ensures we build main.py (Uvicorn) instead of service_entry.py (Service Wrapper)
+          # FIXED: Use the dedicated Electron spec file.
+          # This ensures we build main.py (Uvicorn) for the desktop app, not the Service Wrapper.
           pyinstaller --noconfirm --clean fortuna-backend-electron.spec
 
       - name: 🔍 Sanity Check Executable
@@ -222,4 +222,24 @@ jobs:
           if (-not $child) { throw "Backend process 'fortuna-backend' not found!" }
 
           Write-Host "✅ Smoke test passed! Both processes are running."
-          Stop-Process -Name "Fortuna Faucet", "fortuna-backend" -Force
+
+      - name: '📸 Paparazzi (Visual Proof)'
+        shell: pwsh
+        run: |
+          npm install playwright
+          npx playwright install chromium --with-deps
+          $url = "http://localhost:3000" # Electron serves the UI on this port
+          node -e "const { chromium } = require('playwright'); (async () => { const browser = await chromium.launch(); const page = await browser.newPage(); try { await page.goto('$url', {timeout: 15000}); await page.screenshot({ path: 'proof.png' }); } catch(e) { console.error(e); process.exit(1); } await browser.close(); })();"
+
+      - name: '📤 Upload Visual Proof'
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: visual-proof-${{ matrix.arch }}
+          path: proof.png
+
+      - name: '🧹 Cleanup'
+        if: always()
+        shell: pwsh
+        run: |
+          Stop-Process -Name "Fortuna Faucet", "fortuna-backend" -Force -ErrorAction SilentlyContinue
