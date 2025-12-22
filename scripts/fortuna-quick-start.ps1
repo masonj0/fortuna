@@ -61,20 +61,20 @@ function Show-Header {
 }
 
 function Show-Step ([string]$msg) {
-    Write-Host "🔹 $msg" -ForegroundColor Cyan
+    Write-Host ('🔹 ' + $msg) -ForegroundColor Cyan
 }
 
 function Show-Success ([string]$msg) {
-    Write-Host "✅ $msg" -ForegroundColor Green
+    Write-Host ('✅ ' + $msg) -ForegroundColor Green
 }
 
 function Show-Warn ([string]$msg) {
-    Write-Host "⚠️  $msg" -ForegroundColor Yellow
+    Write-Host ('⚠️  ' + $msg) -ForegroundColor Yellow
 }
 
 function Show-Fail ([string]$msg) {
     Write-Host ""
-    Write-Host "❌ $msg" -ForegroundColor Red
+    Write-Host ('❌ ' + $msg) -ForegroundColor Red
     Write-Host ""
     Write-Host "💡 TIP: Run with -Help flag for setup instructions" -ForegroundColor Gray
     Write-Host ""
@@ -82,7 +82,7 @@ function Show-Fail ([string]$msg) {
 }
 
 function Show-Info ([string]$msg) {
-    Write-Host "ℹ️  $msg" -ForegroundColor Gray
+    Write-Host ('ℹ️  ' + $msg) -ForegroundColor Gray
 }
 
 # --- 3. PORT MANAGER (The "Self-Healing" Feature) ---
