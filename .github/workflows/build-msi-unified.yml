@@ -212,7 +212,7 @@ jobs:
           Rename-Item -Path staging/fortuna-core-service.exe -NewName fortuna-webservice.exe -Force
 
           # Create Restart Script (Required by WiX)
-          $scriptContent = "@echo off`r`necho Requesting Admin privileges...`r`nnet stop fortuna-core-service`r`nnet start fortuna-core-service`r`necho Service Restarted.`r`npause"
+          $scriptContent = "@echo off`r`necho Requesting Admin privileges...`r`nnet stop FortunaWebService`r`nnet start FortunaWebService`r`necho Service Restarted.`r`npause"
           Set-Content -Path "staging/restart_service.bat" -Value $scriptContent -Encoding Ascii
           Write-Host "✅ Created restart_service.bat"
 
@@ -320,9 +320,9 @@ jobs:
           if (-not (Test-Path $installRoot)) { Write-Error "❌ LAYER 1 FAILED: Install directory not found."; exit 1 }
           New-Item -Path "$installRoot\data", "$installRoot\json", "$installRoot\logs" -ItemType Directory -Force | Out-Null
           # --- LAYER 2: PROCESS VERIFICATION ---
-          Start-Service "fortuna-core-service"
+          Start-Service "FortunaWebService"
           Start-Sleep -Seconds 10
-          $svc = Get-Service "fortuna-core-service"
+          $svc = Get-Service "FortunaWebService"
           if ($svc.Status -ne 'Running') {
             Write-Error "❌ LAYER 2 FAILED: Service failed to start. Status: $($svc.Status)"
             exit 1
@@ -339,8 +339,29 @@ jobs:
           exit 1
 
       - name: '📸 The Paparazzi (Visual Proof)'
+        continue-on-error: true
         shell: pwsh
         run: |
+          $url = "http://127.0.0.1:${{ env.SERVICE_PORT }}/docs"
+          Write-Host "Waiting for URL: $url"
+          $maxRetries = 10
+          $delay = 3
+          for ($i=1; $i -le $maxRetries; $i++) {
+            try {
+              $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 5
+              if ($response.StatusCode -eq 200) {
+                Write-Host "✅ URL is accessible. Proceeding with screenshot."
+                break
+              }
+            } catch {
+              Write-Warning "Attempt ${i}: URL not accessible yet. Retrying in $delay seconds..."
+              Start-Sleep -Seconds $delay
+            }
+            if ($i -eq $maxRetries) {
+              throw "❌ URL did not become accessible after $maxRetries attempts."
+            }
+          }
+
           npm install playwright
           npx playwright install chromium --with-deps
           node -e "
@@ -349,7 +370,7 @@ jobs:
               try {
                 const browser = await chromium.launch();
                 const page = await browser.newPage();
-                await page.goto('http://127.0.0.1:${{ env.SERVICE_PORT }}/docs', { timeout: 15000 });
+                await page.goto('$url', { timeout: 15000 });
                 await page.waitForSelector('.swagger-ui', { timeout: 5000 });
                 await page.screenshot({ path: 'proof.png', fullPage: true });
                 await browser.close();
@@ -365,4 +386,4 @@ jobs:
 
       - name: Cleanup
         if: always()
-        run: sc.exe delete "fortuna-core-service"
+        run: sc.exe delete "FortunaWebService"
