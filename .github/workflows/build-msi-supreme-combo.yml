@@ -337,7 +337,7 @@ jobs:
                 break
               }
             } catch {
-              Write-Warning "Attempt $i: URL not accessible yet. Retrying in $delay seconds..."
+              Write-Warning "Attempt ${i}: URL not accessible yet. Retrying in $delay seconds..."
               Start-Sleep -Seconds $delay
             }
             if ($i -eq $maxRetries) {
