@@ -290,9 +290,9 @@ jobs:
           Write-Host "Found MSI at $msiPath"
           # 1. PRE-INSTALL CLEANUP
           Write-Host "Attempting pre-emptive service removal..."
-          $service = Get-Service -Name "fortuna-core-service" -ErrorAction SilentlyContinue
+          $service = Get-Service -Name "FortunaWebService" -ErrorAction SilentlyContinue
           if ($service) {
-            sc.exe delete "fortuna-core-service"
+            sc.exe delete "FortunaWebService"
             Start-Sleep -Seconds 5
           }
           # 2. INSTALL
@@ -324,7 +324,7 @@ jobs:
       - name: 🚀 Start Service
         shell: pwsh
         run: |
-          Start-Service -Name "fortuna-core-service"
+          Start-Service -Name "FortunaWebService"
           Start-Sleep -Seconds 10
 
       - name: 🩺 Health Check
@@ -379,7 +379,7 @@ jobs:
         if: always()
         shell: pwsh
         run: |
-          Stop-Service -Name "fortuna-core-service" -ErrorAction SilentlyContinue
+          Stop-Service -Name "FortunaWebService" -ErrorAction SilentlyContinue
 
   generate-sbom:
     name: '📜 Generate SBOM (${{ matrix.arch }})'
