@@ -27,6 +27,7 @@
     "web_platform/frontend/next-env.d.ts",
     "web_platform/frontend/next.config.mjs",
     "web_platform/frontend/package-lock.json",
+    "web_platform/frontend/public/workbox-4754cb34.js",
     "web_platform/frontend/src/components/ErrorDisplay.tsx",
     "web_platform/frontend/src/components/RaceCardSkeleton.tsx",
     "web_platform/frontend/src/components/Tabs.tsx",
@@ -52,6 +53,5 @@
     "web_service/frontend/app/layout.tsx",
     "web_service/frontend/app/utils/exportManager.ts",
     "web_service/frontend/package.json",
-    "web_service/frontend/public/workbox-4754cb34.js",
     "wix/WixUI_CustomInstallDir.wxs"
 ]

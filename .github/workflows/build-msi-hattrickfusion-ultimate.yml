@@ -215,7 +215,7 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
           if (-not (Test-Path build_wix)) { New-Item -ItemType Directory -Path build_wix | Out-Null }
-          Copy-Item build_wix/Product_WithService.wxs build_wix/Product.wxs -Force
+          Copy-Item build_wix/Product_WebService.wxs build_wix/Product.wxs -Force
           $wxsPath = 'build_wix/Product.wxs'
           $wxsContent = [xml](Get-Content $wxsPath -Raw)
           $serviceControl = $wxsContent.SelectSingleNode("//*[local-name()='ServiceControl']")

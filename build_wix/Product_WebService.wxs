@@ -3,19 +3,6 @@
      xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
      xmlns:fire="http://wixtoolset.org/schemas/v4/wxs/firewall">
 
-  <!-- 🔧 CRITICAL FIX: Define defaults for preprocessor variables -->
-  <?if !defined(ServicePort) ?>
-    <?define ServicePort = 8102 ?>
-  <?endif?>
-
-  <?if !defined(Version) ?>
-    <?define Version = 0.0.0 ?>
-  <?endif?>
-
-  <?if !defined(SourceDir) ?>
-    <?define SourceDir = staging/backend ?>
-  <?endif?>
-
   <Package Name="Fortuna Faucet Web Service"
            Manufacturer="Fortuna Engineering"
            Version="$(var.Version)"
@@ -36,27 +23,26 @@
     <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
     <WixVariable Id="WixUILicenseRtf" Value="license.rtf" />
 
-    <!-- Properties for the auto-launch checkbox on the exit dialog -->
     <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Launch Fortuna Dashboard" />
     <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
     <Property Id="WixShellExecTarget" Value="http://localhost:$(var.ServicePort)" />
 
     <?if $(var.Platform) = x64 ?>
-    <StandardDirectory Id="ProgramFiles64Folder">
-      <Directory Id="INSTALLFOLDER" Name="Fortuna Faucet Service">
-         <Directory Id="Dir_Data" Name="data" />
-         <Directory Id="Dir_Json" Name="json" />
-         <Directory Id="Dir_Logs" Name="logs" />
-      </Directory>
-    </StandardDirectory>
+      <StandardDirectory Id="ProgramFiles64Folder">
+        <Directory Id="INSTALLFOLDER" Name="Fortuna Faucet Service">
+           <Directory Id="Dir_Data" Name="data" />
+           <Directory Id="Dir_Json" Name="json" />
+           <Directory Id="Dir_Logs" Name="logs" />
+        </Directory>
+      </StandardDirectory>
     <?else?>
-    <StandardDirectory Id="ProgramFilesFolder">
-      <Directory Id="INSTALLFOLDER" Name="Fortuna Faucet Service">
-         <Directory Id="Dir_Data" Name="data" />
-         <Directory Id="Dir_Json" Name="json" />
-         <Directory Id="Dir_Logs" Name="logs" />
-      </Directory>
-    </StandardDirectory>
+      <StandardDirectory Id="ProgramFilesFolder">
+        <Directory Id="INSTALLFOLDER" Name="Fortuna Faucet Service">
+           <Directory Id="Dir_Data" Name="data" />
+           <Directory Id="Dir_Json" Name="json" />
+           <Directory Id="Dir_Logs" Name="logs" />
+        </Directory>
+      </StandardDirectory>
     <?endif?>
 
     <StandardDirectory Id="ProgramMenuFolder">
@@ -66,10 +52,11 @@
     <StandardDirectory Id="DesktopFolder" />
 
     <ComponentGroup Id="ServiceComponents" Directory="INSTALLFOLDER">
-      <!-- Statically setting GUIDs is best practice for component stability -->
       <Component Id="ServiceExecutable" Guid="E4B9C2C2-5B4E-4B02-A2DA-820152433E72">
         <File Id="FortunaEXE" Source="$(var.SourceDir)/fortuna-webservice.exe" KeyPath="yes" />
-        <ServiceInstall Id="ServiceInstaller" Type="ownProcess" Name="FortunaWebService" DisplayName="Fortuna Web Service" Description="Background service for Fortuna Faucet" Start="auto" Account="LocalSystem" ErrorControl="normal" Vital="yes" />
+        <ServiceInstall Id="ServiceInstaller" Type="ownProcess" Name="FortunaWebService"
+                        DisplayName="Fortuna Web Service" Description="Background service for Fortuna Faucet"
+                        Start="auto" Account="LocalSystem" ErrorControl="normal" Vital="yes" />
         <ServiceControl Id="StartService" Stop="both" Remove="uninstall" Name="FortunaWebService" Wait="no" />
         <fire:FirewallException Id="FirewallRule" Name="Fortuna Faucet" Port="$(var.ServicePort)" Protocol="tcp" Scope="any" />
       </Component>
@@ -107,6 +94,5 @@
             <RegistryValue Root="HKCU" Key="Software\Fortuna Faucet" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
         </Component>
     </ComponentGroup>
-
   </Package>
 </Wix>
