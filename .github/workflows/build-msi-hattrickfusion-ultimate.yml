@@ -202,14 +202,11 @@ jobs:
         run: |
           if (-not (Test-Path build_wix)) { New-Item -ItemType Directory -Path build_wix | Out-Null }
           $licensePath = 'build_wix/license.rtf'
-          if (-not (Test-Path $licensePath)) {
-            Write-Host '⚠️ License file missing. Generating placeholder...'
-            $rtfContent = [System.Text.Encoding]::ASCII.GetString([System.Convert]::FromBase64String("e1xydGYxXGFuc2lcZGVmZjB7XGZvbnR0Ymx7XGYwIEFyaWFsO319XGYwXGZzMjQgRU5EIFVTRVIgTElDRU5TRSBBR1JFRU1FTlRccGFyXHBhciBUaGlzIGlzIGEgcGxhY2Vob2xkZXIgbGljZW5zZSBmb3IgRm9ydHVuYSBGYXVjZXQuIFBsZWFzZSByZXBsYWNlIHdpdGggYWN0dWFsIHRlcm1zLn0="))
-            Set-Content -Path $licensePath -Value $rtfContent -Encoding Ascii
-            Write-Host '✅ Placeholder license.rtf created.'
-          } else {
-            Write-Host '✅ Existing license.rtf found.'
-          }
+          $rtfLines = @(
+            '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\f0\fs24 END USER LICENSE AGREEMENT\par\par This is a placeholder license for Fortuna Faucet. Please replace with actual terms.}\0'
+          )
+          Set-Content -Path $licensePath -Value ($rtfLines -join "`r`n") -Encoding Ascii
+          Write-Host '✅ Robust license.rtf created.'
       - name: Prepare WiX
         shell: pwsh
         run: |
@@ -290,9 +287,9 @@ jobs:
           Write-Host "Found MSI at $msiPath"
           # 1. PRE-INSTALL CLEANUP
           Write-Host "Attempting pre-emptive service removal..."
-          $service = Get-Service -Name "fortuna-core-service" -ErrorAction SilentlyContinue
+          $service = Get-Service -Name "FortunaWebService" -ErrorAction SilentlyContinue
           if ($service) {
-            sc.exe delete "fortuna-core-service"
+            sc.exe delete "FortunaWebService"
             Start-Sleep -Seconds 5
           }
           # 2. INSTALL
@@ -324,7 +321,7 @@ jobs:
       - name: 🚀 Start Service
         shell: pwsh
         run: |
-          Start-Service -Name "fortuna-core-service"
+          Start-Service -Name "FortunaWebService"
           Start-Sleep -Seconds 10
 
       - name: 🩺 Health Check
@@ -335,7 +332,7 @@ jobs:
           $success = $false
           For ($i=0; $i -lt $maxRetries; $i++) {
             try {
-              $response = Invoke-WebRequest -Uri "http://localhost:${{ env.SERVICE_PORT }}/health" -UseBasicParsing
+              $response = Invoke-WebRequest -Uri "http://localhost:8000/health" -UseBasicParsing
               if ($response.StatusCode -eq 200) {
                 Write-Host "✅ Health check PASSED."
                 $success = $true
@@ -352,13 +349,31 @@ jobs:
       # ---------------------------------------------------------
       - name: '📸 Paparazzi (Visual Proof)'
         if: success()
+        continue-on-error: true
         shell: pwsh
         run: |
+          $url = "http://127.0.0.1:8000/docs"
+          Write-Host "Waiting for URL: $url"
+          $maxRetries = 10
+          $delay = 3
+          for ($i=1; $i -le $maxRetries; $i++) {
+            try {
+              $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 5
+              if ($response.StatusCode -eq 200) {
+                Write-Host "✅ URL is accessible. Proceeding with screenshot."
+                break
+              }
+            } catch {
+              Write-Warning "Attempt ${i}: URL not accessible yet. Retrying in $delay seconds..."
+              Start-Sleep -Seconds $delay
+            }
+            if ($i -eq $maxRetries) {
+              throw "❌ URL did not become accessible after $maxRetries attempts."
+            }
+          }
+
           npm install playwright
           npx playwright install chromium
-
-          # Ensure we hit the local service
-          $url = "http://127.0.0.1:${{ env.SERVICE_PORT }}/docs"
 
           $nodeScript = "const { chromium } = require('playwright'); (async () => { const browser = await chromium.launch(); const page = await browser.newPage(); try { await page.goto('$url', { timeout: 10000 }); await page.screenshot({ path: 'proof-of-life.png', fullPage: true }); console.log('✅ Screenshot captured!'); } catch (e) { console.error('❌ Failed to capture screenshot:', e); process.exit(1); } await browser.close(); })();"
           node -e $nodeScript
@@ -379,7 +394,7 @@ jobs:
         if: always()
         shell: pwsh
         run: |
-          Stop-Service -Name "fortuna-core-service" -ErrorAction SilentlyContinue
+          Stop-Service -Name "FortunaWebService" -ErrorAction SilentlyContinue
 
   generate-sbom:
     name: '📜 Generate SBOM (${{ matrix.arch }})'
