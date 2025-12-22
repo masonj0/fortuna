@@ -192,8 +192,15 @@ jobs:
         run: |
           Get-ChildItem -Path "staging" -Recurse | Select-Object FullName, Length
 
-      - name: 🔧 Setup WiX
-        run: dotnet tool install --global wix --version ${{ env.WIX_VERSION }}
+      - name: 🔧 Setup WiX Toolset
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - run: dotnet tool install --global wix --version ${{ env.WIX_VERSION }}
+
+      - run: echo C:\Users\runneradmin\.dotnet\tools >> $GITHUB_PATH
+        shell: bash
 
       - name: 🏗️ Build MSI
         shell: pwsh
