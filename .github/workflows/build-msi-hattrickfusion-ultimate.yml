@@ -332,7 +332,7 @@ jobs:
           $success = $false
           For ($i=0; $i -lt $maxRetries; $i++) {
             try {
-              $response = Invoke-WebRequest -Uri "http://localhost:8000/health" -UseBasicParsing
+              $response = Invoke-WebRequest -Uri "http://localhost:${{ env.SERVICE_PORT }}/health" -UseBasicParsing
               if ($response.StatusCode -eq 200) {
                 Write-Host "✅ Health check PASSED."
                 $success = $true
