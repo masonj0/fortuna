@@ -8,7 +8,7 @@
            Manufacturer="Fortuna Engineering"
            Version="$(var.Version)"
            UpgradeCode="B1E9748D-842C-4A2B-893C-854746A1456A"
-           Scope="perUser"
+           Scope="perMachine"
            Compressed="yes">
 
     <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
