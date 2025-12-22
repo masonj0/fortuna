@@ -130,8 +130,8 @@ jobs:
         shell: cmd
         run: |
           echo @echo off > staging\backend\restart_service.bat
-          echo net stop fortuna-core-service >> staging\backend\restart_service.bat
-          echo net start fortuna-core-service >> staging\backend\restart_service.bat
+          echo net stop FortunaWebService >> staging\backend\restart_service.bat
+          echo net start FortunaWebService >> staging\backend\restart_service.bat
 
       - name: '⚖️ The Dietician (Size Analysis)'
         shell: pwsh
@@ -250,7 +250,7 @@ jobs:
                 break
               }
             } catch {
-              Write-Warning "Attempt $i: URL not accessible yet. Retrying in $delay seconds..."
+              Write-Warning "Attempt ${i}: URL not accessible yet. Retrying in $delay seconds..."
               Start-Sleep -Seconds $delay
             }
             if ($i -eq $maxRetries) {
