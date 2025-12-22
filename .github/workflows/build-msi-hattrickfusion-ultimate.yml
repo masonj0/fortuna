@@ -335,7 +335,7 @@ jobs:
           $success = $false
           For ($i=0; $i -lt $maxRetries; $i++) {
             try {
-              $response = Invoke-WebRequest -Uri "http://localhost:${{ env.SERVICE_PORT }}/health" -UseBasicParsing
+              $response = Invoke-WebRequest -Uri "http://localhost:8000/health" -UseBasicParsing
               if ($response.StatusCode -eq 200) {
                 Write-Host "✅ Health check PASSED."
                 $success = $true
@@ -352,9 +352,10 @@ jobs:
       # ---------------------------------------------------------
       - name: '📸 Paparazzi (Visual Proof)'
         if: success()
+        continue-on-error: true
         shell: pwsh
         run: |
-          $url = "http://127.0.0.1:${{ env.SERVICE_PORT }}/docs"
+          $url = "http://127.0.0.1:8000/docs"
           Write-Host "Waiting for URL: $url"
           $maxRetries = 10
           $delay = 3

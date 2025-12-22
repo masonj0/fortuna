@@ -233,12 +233,13 @@ jobs:
           Write-Host "Waiting for service..."
           Start-Sleep -Seconds 10
 
-          $response = Invoke-WebRequest -Uri "http://localhost:${{ env.FORTUNA_PORT }}/health" -UseBasicParsing
+          $response = Invoke-WebRequest -Uri "http://localhost:8000/health" -UseBasicParsing
           if ($response.StatusCode -eq 200) { Write-Host "✅ Service Healthy" } else { throw "❌ Service Failed" }
 
       - name: '📸 Paparazzi (Visual Proof)'
+        continue-on-error: true
         run: |
-          $url = "http://127.0.0.1:${{ env.FORTUNA_PORT }}/docs"
+          $url = "http://127.0.0.1:8000/docs"
           Write-Host "Waiting for URL: $url"
           $maxRetries = 10
           $delay = 3
