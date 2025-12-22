@@ -26,7 +26,6 @@
     "web_platform/frontend/app/Providers.tsx",
     "web_platform/frontend/package.json",
     "web_platform/frontend/postcss.config.js",
-    "web_platform/frontend/public/workbox-4754cb34.js",
     "web_platform/frontend/src/components/LiveModeToggle.tsx",
     "web_platform/frontend/src/components/RaceFilters.tsx",
     "web_platform/frontend/src/components/TrifectaFactors.tsx",
@@ -53,5 +52,6 @@
     "web_service/frontend/app/lib/queryClient.ts",
     "web_service/frontend/next-env.d.ts",
     "web_service/frontend/public/manifest.json",
+    "web_service/frontend/public/workbox-4754cb34.js",
     "wix/WixUI_CustomProgress.wxs"
 ]
