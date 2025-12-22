@@ -224,9 +224,9 @@ jobs:
       - name: Verify Service & Port
         shell: pwsh
         run: |
-          # 🚀 DYNAMIC PATH LOGIC
+          # FIXED: Hardcode the x86 path since this job does not use a matrix.
           $progFiles = ${env:ProgramFiles(x86)}
-          $installRoot = "$progFiles\FortunaWeb"
+          $installRoot = Join-Path $progFiles "Fortuna Faucet Service"
 
           if (-not (Test-Path $installRoot)) { throw "❌ Install dir not found at $installRoot" }
 
@@ -247,5 +247,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: proof-${{ matrix.arch }}
+          name: proof-x86
           path: proof.png

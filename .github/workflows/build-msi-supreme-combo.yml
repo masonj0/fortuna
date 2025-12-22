@@ -192,8 +192,15 @@ jobs:
         run: |
           Get-ChildItem -Path "staging" -Recurse | Select-Object FullName, Length
 
-      - name: 🔧 Setup WiX
-        run: dotnet tool install --global wix --version ${{ env.WIX_VERSION }}
+      - name: 🔧 Setup WiX Toolset
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - run: dotnet tool install --global wix --version ${{ env.WIX_VERSION }}
+
+      - run: echo C:\Users\runneradmin\.dotnet\tools >> $GITHUB_PATH
+        shell: bash
 
       - name: 🏗️ Build MSI
         shell: pwsh
@@ -239,6 +246,18 @@ jobs:
       matrix:
         arch: [x64, x86]
     steps:
+      - name: Pre-Flight - Clear Zombie Ports
+        shell: powershell
+        run: |
+          Write-Host "Checking for zombie processes on ports 3000 and 8000..."
+          $ports = @(3000, 8000)
+          foreach ($port in $ports) {
+            $tcp = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue
+            if ($tcp) {
+              Write-Host "Killing process on port $port (PID $($tcp.OwningProcess))..."
+              Stop-Process -Id $tcp.OwningProcess -Force -ErrorAction SilentlyContinue
+            }
+          }
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4 # Needed for Playwright
 
