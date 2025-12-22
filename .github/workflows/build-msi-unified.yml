@@ -341,6 +341,26 @@ jobs:
       - name: '📸 The Paparazzi (Visual Proof)'
         shell: pwsh
         run: |
+          $url = "http://127.0.0.1:${{ env.SERVICE_PORT }}/docs"
+          Write-Host "Waiting for URL: $url"
+          $maxRetries = 10
+          $delay = 3
+          for ($i=1; $i -le $maxRetries; $i++) {
+            try {
+              $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 5
+              if ($response.StatusCode -eq 200) {
+                Write-Host "✅ URL is accessible. Proceeding with screenshot."
+                break
+              }
+            } catch {
+              Write-Warning "Attempt $i: URL not accessible yet. Retrying in $delay seconds..."
+              Start-Sleep -Seconds $delay
+            }
+            if ($i -eq $maxRetries) {
+              throw "❌ URL did not become accessible after $maxRetries attempts."
+            }
+          }
+
           npm install playwright
           npx playwright install chromium --with-deps
           node -e "
@@ -349,7 +369,7 @@ jobs:
               try {
                 const browser = await chromium.launch();
                 const page = await browser.newPage();
-                await page.goto('http://127.0.0.1:${{ env.SERVICE_PORT }}/docs', { timeout: 15000 });
+                await page.goto('$url', { timeout: 15000 });
                 await page.waitForSelector('.swagger-ui', { timeout: 5000 });
                 await page.screenshot({ path: 'proof.png', fullPage: true });
                 await browser.close();

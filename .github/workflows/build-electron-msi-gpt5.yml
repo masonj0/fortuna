@@ -226,9 +226,28 @@ jobs:
       - name: '📸 Paparazzi (Visual Proof)'
         shell: pwsh
         run: |
+          $url = "http://localhost:3000" # Electron serves the UI on this port
+          Write-Host "Waiting for URL: $url"
+          $maxRetries = 10
+          $delay = 3
+          for ($i=1; $i -le $maxRetries; $i++) {
+            try {
+              $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 5
+              if ($response.StatusCode -eq 200) {
+                Write-Host "✅ URL is accessible. Proceeding with screenshot."
+                break
+              }
+            } catch {
+              Write-Warning "Attempt $i: URL not accessible yet. Retrying in $delay seconds..."
+              Start-Sleep -Seconds $delay
+            }
+            if ($i -eq $maxRetries) {
+              throw "❌ URL did not become accessible after $maxRetries attempts."
+            }
+          }
+
           npm install playwright
           npx playwright install chromium --with-deps
-          $url = "http://localhost:3000" # Electron serves the UI on this port
           node -e "const { chromium } = require('playwright'); (async () => { const browser = await chromium.launch(); const page = await browser.newPage(); try { await page.goto('$url', {timeout: 15000}); await page.screenshot({ path: 'proof.png' }); } catch(e) { console.error(e); process.exit(1); } await browser.close(); })();"
 
       - name: '📤 Upload Visual Proof'
