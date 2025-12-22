@@ -81,8 +81,8 @@ jobs:
           pip install -r ${{ env.BACKEND_DIR }}/requirements.txt -c ${{ steps.constraints.outputs.file }}
           pip install pyinstaller==6.6.0 pywin32
 
-          # FIXED: Use the dedicated Electron spec file instead of generating a broken one
-          # This ensures we build main.py (Uvicorn) instead of service_entry.py (Service Wrapper)
+          # FIXED: Use the dedicated Electron spec file.
+          # This ensures we build main.py (Uvicorn) for the desktop app, not the Service Wrapper.
           pyinstaller --noconfirm --clean fortuna-backend-electron.spec
 
       - name: 🔍 Sanity Check Executable
