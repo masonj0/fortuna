@@ -186,6 +186,21 @@ jobs:
           if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
           $installDir = Join-Path $progFiles "Fortuna Faucet"
 
+      - name: '✅ Create Required Runtime Directories Post-Install'
+        shell: pwsh
+        run: |
+          $progFiles = ${env:ProgramFiles}
+          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
+          $installDir = Join-Path $progFiles "Fortuna Faucet"
+          if (! (Test-Path $installDir)) {
+            Write-Error "Installation directory not found at $installDir."
+            exit 1
+          }
+          New-Item -Path "$installDir\\data" -ItemType Directory -Force | Out-Null
+          New-Item -Path "$installDir\\json" -ItemType Directory -Force | Out-Null
+          New-Item -Path "$installDir\\logs" -ItemType Directory -Force | Out-Null
+          Write-Host "✅ Created runtime directories (data, json, logs) in '$installDir'."
+
       - name: '🔬 Debug: Run Backend Directly'
         shell: pwsh
         continue-on-error: true
