@@ -320,6 +320,23 @@ jobs:
 
           Write-Host "✅ Installation verified and permissions granted."
 
+      - name: '🕵️ DLL Dependency Forensics'
+        shell: pwsh
+        run: |
+            $progFiles = ${env:ProgramFiles}
+            if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
+            $installDir = Join-Path $progFiles "Fortuna Faucet Service"
+            $exePath = Join-Path $installDir "fortuna-webservice.exe"
+
+            # Find dumpbin.exe in the Visual Studio installation
+            $vsPath = (Get-ChildItem "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\*\bin\Hostx64\x64\dumpbin.exe" -Recurse | Select-Object -First 1).FullName
+            if (-not $vsPath) {
+                throw "dumpbin.exe not found!"
+            }
+
+            # Use dumpbin to list the imported DLLs
+            & $vsPath /dependents $exePath
+
       - name: '🔬 Pre-flight Service Check (Run executable directly)'
         shell: pwsh
         run: |
