@@ -4,6 +4,18 @@
 # "The best way to run the app without building an installer."
 # ====================================================================
 
+# Check if the current process is running as Administrator
+$currentPrincipal = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
+$isAdmin = $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+
+if (-not $isAdmin) {
+    # If not Admin, relaunch the script with the 'RunAs' verb to trigger UAC
+    Start-Process PowerShell -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
+
+    # Exit the current non-admin instance
+    Exit
+}
+
 param(
     [switch]$SkipChecks, # Use this if you know your environment is perfect
     [switch]$NoFrontend, # Use this if you only want to test the Python API
