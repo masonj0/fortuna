@@ -35,6 +35,11 @@ def generate_spec(mode: str):
         is_console = True  # Electron bridge needs console for stdio
         datas = "[('{frontend_dist.as_posix()}', 'frontend_dist')]"
         hidden_imports = """[
+        'uvicorn',
+        'fastapi',
+        'starlette',
+        'anyio',
+        'pydantic',
         'uvicorn.logging',
         'uvicorn.loops.auto',
         'uvicorn.protocols.http.auto',
@@ -46,6 +51,11 @@ def generate_spec(mode: str):
         is_console = False # Windows Service should be a GUI app
         datas = "[]" # Service does not bundle the UI
         hidden_imports = """[
+        'uvicorn',
+        'fastapi',
+        'starlette',
+        'anyio',
+        'pydantic',
         'uvicorn.logging',
         'uvicorn.loops.auto',
         'uvicorn.protocols.http.auto',
