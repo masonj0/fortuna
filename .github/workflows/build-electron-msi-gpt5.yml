@@ -78,7 +78,7 @@ jobs:
         shell: pwsh
         run: |
           pip install --upgrade pip setuptools wheel
-          pip install -r ${{ env.BACKEND_DIR }}/requirements.txt
+          pip install -r ${{ env.BACKEND_DIR }}/requirements.txt -c ${{ steps.constraints.outputs.file }}
           pip install pyinstaller==6.6.0 pywin32 -c ${{ steps.constraints.outputs.file }}
 
           # FIXED: Use the dedicated Electron spec file.
