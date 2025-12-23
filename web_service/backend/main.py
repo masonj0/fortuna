@@ -14,47 +14,18 @@ os.environ["PYTHONUTF8"] = "1"
 if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
-def _configure_sys_path():
-    """
-    Dynamically adds project paths to sys.path.
-    This is the robust solution to ensure that string-based imports like
-    "web_service.backend.api:app" work correctly when the application is
-    run from a PyInstaller executable. The `_MEIPASS` attribute is a temporary
-    directory created by PyInstaller at runtime.
-    """
-    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
-        # Running in a PyInstaller bundle. The project root is the _MEIPASS directory.
-        project_root = os.path.abspath(sys._MEIPASS)
-
-        # Aggressively add paths to resolve potential module lookup issues in frozen mode.
-        paths_to_add = [
-            project_root,
-            os.path.join(project_root, "web_service"),
-            os.path.join(project_root, "web_service", "backend"),
-        ]
-
-        # Insert paths at the beginning of sys.path in reverse order
-        # to maintain the desired precedence.
-        for path in reversed(paths_to_add):
-            if path not in sys.path:
-                sys.path.insert(0, path)
-                print(f"INFO: Added path to sys.path: {path}")
-
-    else:
-        # Running as a normal script. The project root is two levels up.
-        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-        if project_root not in sys.path:
-            sys.path.insert(0, project_root)
-            print(f"INFO: Added project root to sys.path: {project_root}")
-
-
 def main():
     """
     Primary entry point for the Fortuna Faucet backend application.
     This function configures and runs the Uvicorn server.
     """
-    # CRITICAL: This must be called before any other application imports.
-    _configure_sys_path()
+    # [CRITICAL] This sys.path modification is essential for the application to find its
+    # modules when running as a frozen executable from PyInstaller. The `sys._MEIPASS`
+    # attribute points to a temporary directory where PyInstaller unpacks the app.
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        sys.path.insert(0, os.path.abspath(sys._MEIPASS))
+        # When frozen, the CWD is not reliable. Change it to the executable's directory.
+        os.chdir(sys._MEIPASS)
 
     # When packaged, we need to ensure multiprocessing works correctly.
     if getattr(sys, "frozen", False):
@@ -117,7 +88,7 @@ def main():
                 )
 
     print(f"INFO: Starting Uvicorn server...")
-    print(f"      APP: web_service.backend.api:app")
+    print(f"      APP: web_service.backend.api:app (via direct import)")
     print(f"      HOST: {run_host}")
     print(f"      PORT: {settings.FORTUNA_PORT}")
 
@@ -125,7 +96,7 @@ def main():
         app,
         host=run_host,
         port=settings.FORTUNA_PORT,
-        log_level="info"
+        log_level="info",
     )
 
 if __name__ == "__main__":
