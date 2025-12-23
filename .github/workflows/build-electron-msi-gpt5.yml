@@ -60,10 +60,9 @@ jobs:
               "numpy==1.23.5",
               "pandas==1.5.3",
               "sqlalchemy==1.4.53",
-              "greenlet==3.1.1",
               "--only-binary=:all:"
             ) | Set-Content $file
-            Write-Host "✅ Constraints: SQLAlchemy 1.4.53, greenlet 3.1.1"
+            Write-Host "✅ Constraints: SQLAlchemy 1.4.53"
           } else {
             New-Item $file -ItemType File -Force
           }
