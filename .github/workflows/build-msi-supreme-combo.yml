@@ -169,7 +169,7 @@ jobs:
   # =========================================================
   package-msi:
     name: 📦 Package MSI (${{ matrix.arch }})
-    needs: [build-backend]
+    needs: [preflight-check, build-backend]
     runs-on: windows-latest
     strategy:
       matrix:
