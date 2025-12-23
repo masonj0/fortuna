@@ -43,6 +43,10 @@ hiddenimports.update([
     'python_multipart',
     'numpy',
     'pandas',
+    'mss',
+    'PIL',
+    'cv2',
+    'multipart'
 ])
 
 a = Analysis(
