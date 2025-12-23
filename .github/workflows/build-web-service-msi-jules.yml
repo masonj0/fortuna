@@ -471,7 +471,7 @@ jobs:
           Set-StrictMode -Version Latest
           python -m pip install --upgrade pip setuptools wheel
           $req_file = Join-Path $env:BACKEND_DIR "requirements.txt"
-          pip install -r $req_file -c ${{ steps.constraints.outputs.file }}
+          pip install -r $req_file
           if (Test-Path (Join-Path $env:BACKEND_DIR "requirements-dev.txt")) {
             pip install -r (Join-Path $env:BACKEND_DIR "requirements-dev.txt") -c ${{ steps.constraints.outputs.file }}
           }
