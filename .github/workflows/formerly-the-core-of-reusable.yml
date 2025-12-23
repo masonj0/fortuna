@@ -248,7 +248,8 @@ jobs:
           wix build build_wix/Product_WebService.wxs `
             -arch ${{ matrix.arch }} -o $msiName `
             -d Version="${{ needs.preflight.outputs.semver }}" -d SourceDir="staging" `
-            -d ServicePort="${{ env.SERVICE_PORT }}"
+            -d ServicePort="${{ env.SERVICE_PORT }}" `
+            -d Platform=${{ matrix.arch }}
           Write-Host "✅ Built: $msiName"
 
       - name: 🦜 The Canary
