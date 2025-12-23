@@ -221,7 +221,8 @@ jobs:
             -o "Fortuna-${{ needs.preflight-check.outputs.semver }}-${arch}.msi" `
             -d Version="${{ needs.preflight-check.outputs.semver }}" `
             -d SourceDir="staging/backend" `
-            -d Platform=$arch
+            -d Platform=$arch `
+            -d ServicePort="${{ env.SERVICE_PORT }}"
 
       - name: 🦜 The Canary (Malware Scan)
         continue-on-error: true
