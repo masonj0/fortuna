@@ -55,16 +55,18 @@ jobs:
         run: |
           $file = "constraints.txt"
           if ('${{ matrix.arch }}' -eq 'x86') {
-            Write-Host "🛡️ ACTIVATING X86 SAFE MODE"
+            Write-Host "🛡️ ACTIVATING X86 SAFE MODE: Pinning dependencies with known 32-bit wheels."
             @(
+              "# This prevents pip from attempting to build packages that lack pre-compiled x86 wheels.",
               "numpy==1.23.5",
               "pandas==1.5.3",
               "sqlalchemy==1.4.53",
               "--only-binary=:all:"
             ) | Set-Content $file
-            Write-Host "✅ Constraints: SQLAlchemy 1.4.53"
+            Write-Host "✅ Constraints Applied: numpy, pandas, sqlalchemy"
           } else {
             New-Item $file -ItemType File -Force
+            Write-Host "✅ No architecture-specific constraints needed for x64."
           }
           "file=$file" | Out-File $env:GITHUB_OUTPUT -Append
 
