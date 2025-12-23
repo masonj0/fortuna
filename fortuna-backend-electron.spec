@@ -35,6 +35,11 @@ hiddenimports.update(collect_submodules('starlette'))
 hiddenimports.update(collect_submodules('anyio'))
 hiddenimports.add('win32timezone')
 hiddenimports.update([
+    'uvicorn',
+    'fastapi',
+    'starlette',
+    'anyio',
+    'pydantic',
     'asyncio',
     'asyncio.windows_events',
     'asyncio.selector_events',
