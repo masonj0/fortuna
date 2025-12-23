@@ -55,17 +55,18 @@ jobs:
         run: |
           $file = "constraints.txt"
           if ('${{ matrix.arch }}' -eq 'x86') {
-            Write-Host "🛡️ ACTIVATING X86 SAFE MODE"
+            Write-Host "🛡️ ACTIVATING X86 SAFE MODE: Pinning dependencies with known 32-bit wheels."
             @(
+              "# This prevents pip from attempting to build packages that lack pre-compiled x86 wheels.",
               "numpy==1.23.5",
               "pandas==1.5.3",
               "sqlalchemy==1.4.53",
-              "greenlet==3.1.1",
               "--only-binary=:all:"
             ) | Set-Content $file
-            Write-Host "✅ Constraints: SQLAlchemy 1.4.53, greenlet 3.1.1"
+            Write-Host "✅ Constraints Applied: numpy, pandas, sqlalchemy"
           } else {
             New-Item $file -ItemType File -Force
+            Write-Host "✅ No architecture-specific constraints needed for x64."
           }
           "file=$file" | Out-File $env:GITHUB_OUTPUT -Append
 
@@ -79,12 +80,16 @@ jobs:
       - name: 📦 Build Binary
         shell: pwsh
         run: |
+          # 1. Upgrade core packaging tools
           pip install --upgrade pip setuptools wheel
+
+          # 2. Install main dependencies, applying x86 constraints if applicable
           pip install -r ${{ env.BACKEND_DIR }}/requirements.txt -c ${{ steps.constraints.outputs.file }}
+
+          # 3. Install build-time dependencies, ALSO applying constraints
           pip install pyinstaller==6.6.0 pywin32 -c ${{ steps.constraints.outputs.file }}
 
-          # FIXED: Use the dedicated Electron spec file.
-          # This ensures we build main.py (Uvicorn) for the desktop app, not the Service Wrapper.
+          # 4. Build the executable using the dedicated Electron spec file
           pyinstaller --noconfirm --clean fortuna-backend-electron.spec
 
 
