@@ -70,9 +70,9 @@ jobs:
       - name: 💾 Create required directories
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Path "python_service/data" -Force
-          New-Item -ItemType Directory -Path "python_service/json" -Force
-          New-Item -ItemType Directory -Path "python_service/adapters" -Force
+          New-Item -ItemType Directory -Path "${{ env.BACKEND_DIR }}/data" -Force
+          New-Item -ItemType Directory -Path "${{ env.BACKEND_DIR }}/json" -Force
+          New-Item -ItemType Directory -Path "${{ env.BACKEND_DIR }}/adapters" -Force
 
       - name: 📦 Build Binary
         shell: pwsh
