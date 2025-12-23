@@ -247,7 +247,8 @@ jobs:
           $msiName = "Fortuna-${{ needs.preflight.outputs.semver }}-${{ matrix.arch }}.msi"
           wix build build_wix/Product_WebService.wxs `
             -arch ${{ matrix.arch }} -o $msiName `
-            -d Version="${{ needs.preflight.outputs.semver }}" -d SourceDir="staging"
+            -d Version="${{ needs.preflight.outputs.semver }}" -d SourceDir="staging" `
+            -d ServicePort="${{ env.SERVICE_PORT }}"
           Write-Host "✅ Built: $msiName"
 
       - name: 🦜 The Canary
