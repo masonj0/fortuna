@@ -43,71 +43,6 @@ env:
   WIX_VERSION: '4.0.5'
 
 jobs:
-  path-finder:
-    name: '🔎 Path Finder Dynamic Backend Detection'
-    runs-on: windows-latest
-    outputs:
-      backend_dir: ${{ steps.find-path.outputs.backend_dir }}
-      backend_module_path: ${{ steps.find-path.outputs.backend_module_path }}
-      spec_file: ${{ steps.find-path.outputs.spec_file }}
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Detect Backend Path
-        id: find-path
-        run: |
-          Set-StrictMode -Version Latest
-          $web_service_path = "web_service/backend"
-          $python_service_path = "python_service"
-          $backend_dir = ""
-          $backend_module_path = ""
-          $spec_file = ""
-
-          Write-Host "--- Path Finding Forensics ---"
-          Write-Host "Searching for the correct backend service directory..."
-
-          # Test web_service path
-          $web_service_main = Test-Path (Join-Path $web_service_path "main.py")
-          $web_service_api = Test-Path (Join-Path $web_service_path "api.py")
-          $web_service_init = Test-Path (Join-Path $web_service_path "__init__.py")
-          Write-Host "Checking '$web_service_path':"
-          Write-Host "  main.py -> $web_service_main"
-          Write-Host "  api.py -> $web_service_api"
-          Write-Host "  __init__.py -> $web_service_init"
-
-          # Test python_service path
-          $python_service_main = Test-Path (Join-Path $python_service_path "main.py")
-          $python_service_api = Test-Path (Join-Path $python_service_path "api.py")
-          $python_service_init = Test-Path (Join-Path $python_service_path "__init__.py")
-          Write-Host "Checking '$python_service_path':"
-          Write-Host "  main.py -> $python_service_main"
-          Write-Host "  api.py -> $python_service_api"
-          Write-Host "  __init__.py -> $python_service_init"
-
-          if ($web_service_main -and $web_service_api -and $web_service_init) {
-            $backend_dir = $web_service_path
-            $backend_module_path = "web_service.backend"
-            $spec_file = "jules.spec"
-            Write-Host "✅ Verdict: Detected 'web_service/backend' as the target." -ForegroundColor Green
-          } elseif ($python_service_main -and $python_service_api -and $python_service_init) {
-            $backend_dir = $python_service_path
-            $backend_module_path = "python_service"
-            $spec_file = "fortuna-backend-webservice.spec"
-            Write-Host "✅ Verdict: Detected 'python_service' as the target." -ForegroundColor Green
-          } else {
-            Write-Host "❌ FATAL: Could not determine a valid backend directory. Neither 'web_service/backend' nor 'python_service' contains the required files (main.py, api.py, __init__.py)." -ForegroundColor Red
-            exit 1
-          }
-
-          Write-Host "--- Outputs ---"
-          Write-Host "backend_dir: $backend_dir"
-          Write-Host "backend_module_path: $backend_module_path"
-          Write-Host "spec_file: $spec_file"
-
-          "backend_dir=$backend_dir" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "backend_module_path=$backend_module_path" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "spec_file=$spec_file" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
   system-check:
     name: '⚙️ System Prerequisites'
     runs-on: windows-latest
@@ -144,7 +79,7 @@ jobs:
   repo-preflight:
     name: '🧪 Repo Preflight & Integrity'
     runs-on: windows-latest
-    needs: [path-finder, system-check]
+    needs: [system-check]
     timeout-minutes: 5
     outputs:
       frontend_lock_hash: ${{ steps.hashes.outputs.frontend_lock_hash }}
@@ -175,7 +110,7 @@ jobs:
 
       - name: Validate Critical Files Exist
         env:
-          BACKEND_DIR: ${{ needs.path-finder.outputs.backend_dir }}
+          BACKEND_DIR: 'web_service/backend'
         run: |
           Set-StrictMode -Version Latest
           $paths = @(
@@ -196,7 +131,7 @@ jobs:
       - name: Capture Integrity Hashes
         id: hashes
         env:
-          BACKEND_DIR: ${{ needs.path-finder.outputs.backend_dir }}
+          BACKEND_DIR: 'web_service/backend'
         run: |
           Set-StrictMode -Version Latest
           $frontend = (Get-FileHash "${{ env.FRONTEND_DIR }}/package-lock.json" -Algorithm SHA256).Hash
@@ -212,7 +147,7 @@ jobs:
           name: repo-preflight-${{ github.run_id }}
           path: |
             ${{ env.FRONTEND_DIR }}/package-lock.json
-            ${{ env.BACKEND_DIR }}/requirements.txt
+            web_service/backend/requirements.txt
             ${{ env.WIX_DIR }}/Product_WebService.wxs
           retention-days: 3
 
@@ -280,11 +215,11 @@ jobs:
     name: '🧯 Backend Quality Gates'
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    needs: [path-finder, repo-preflight]
+    needs: repo-preflight
     env:
       BACKEND_REQUIREMENTS_HASH: ${{ needs.repo-preflight.outputs.backend_requirements_hash }}
-      BACKEND_DIR: ${{ needs.path-finder.outputs.backend_dir }}
-      BACKEND_SPEC: ${{ needs.path-finder.outputs.spec_file }}
+      BACKEND_DIR: 'web_service/backend'
+      BACKEND_SPEC: 'jules.spec'
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -363,7 +298,7 @@ jobs:
     name: '📦 Build Frontend'
     runs-on: windows-latest
     timeout-minutes: 20
-    needs: [path-finder, repo-preflight, frontend-quality]
+    needs: [repo-preflight, frontend-quality]
     env:
       FRONTEND_LOCK_HASH: ${{ needs.repo-preflight.outputs.frontend_lock_hash }}
     steps:
@@ -474,16 +409,16 @@ jobs:
     name: '🐍 Build Backend (${{ matrix.arch }})'
     runs-on: windows-latest
     timeout-minutes: 25
-    needs: [path-finder, repo-preflight, build-frontend, backend-quality]
+    needs: [repo-preflight, build-frontend, backend-quality]
     strategy:
       matrix:
         arch: [x64, x86]
     env:
       BACKEND_REQUIREMENTS_HASH: ${{ needs.repo-preflight.outputs.backend_requirements_hash }}
       BUILD_VERSION: ${{ needs.repo-preflight.outputs.semver }}
-      BACKEND_DIR: ${{ needs.path-finder.outputs.backend_dir }}
-      BACKEND_MODULE_PATH: ${{ needs.path-finder.outputs.backend_module_path }}
-      BACKEND_SPEC: ${{ needs.path-finder.outputs.spec_file }}
+      BACKEND_DIR: 'web_service/backend'
+      BACKEND_MODULE_PATH: 'web_service.backend'
+      BACKEND_SPEC: 'jules.spec'
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -536,7 +471,7 @@ jobs:
           Set-StrictMode -Version Latest
           python -m pip install --upgrade pip setuptools wheel
           $req_file = Join-Path $env:BACKEND_DIR "requirements.txt"
-          pip install -r $req_file -c ${{ steps.constraints.outputs.file }}
+          pip install -r $req_file
           if (Test-Path (Join-Path $env:BACKEND_DIR "requirements-dev.txt")) {
             pip install -r (Join-Path $env:BACKEND_DIR "requirements-dev.txt") -c ${{ steps.constraints.outputs.file }}
           }
@@ -586,7 +521,7 @@ jobs:
     name: '🔍 ASGI Import Killer Pre-Smoke Diagnostic'
     runs-on: windows-latest
     timeout-minutes: 15
-    needs: [path-finder, build-backend]
+    needs: [build-backend]
     continue-on-error: true
     steps:
       - name: Checkout Repository
@@ -597,19 +532,19 @@ jobs:
         uses: ./.github/actions/run-asgi-diagnostics
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          backend-dir: ${{ needs.path-finder.outputs.backend_dir }}
-          backend-module-path: ${{ needs.path-finder.outputs.backend_module_path }}
+          backend-dir: 'web_service/backend'
+          backend-module-path: 'web_service.backend'
   diagnose-runtime:
     name: '🔎 Diagnose PyInstaller Runtime'
     runs-on: windows-latest
     timeout-minutes: 10
-    needs: [path-finder, build-backend]
+    needs: [build-backend]
     continue-on-error: true
     strategy:
       matrix:
         arch: [x64, x86]
     env:
-      BACKEND_MODULE_PATH: ${{ needs.path-finder.outputs.backend_module_path }}
+      BACKEND_MODULE_PATH: 'web_service.backend'
     steps:
       - name: 📥 Download Backend Executable
         uses: actions/download-artifact@v4
@@ -714,7 +649,7 @@ jobs:
     name: '💿 Package Service MSI (${{ matrix.arch }})'
     runs-on: windows-latest
     timeout-minutes: 25
-    needs: [path-finder, repo-preflight, build-backend]
+    needs: [repo-preflight, build-backend]
     strategy:
       matrix:
         arch: [x64, x86]
