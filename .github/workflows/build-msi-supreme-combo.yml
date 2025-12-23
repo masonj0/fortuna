@@ -44,7 +44,17 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
+      - name: 🧹 Pre-Flight: Clear Zombie Ports
+        shell: pwsh
+        run: |
+          $ports = @(3000, 8000)
+          foreach ($port in $ports) {
+            $tcp = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue
+            if ($tcp) {
+              Stop-Process -Id $tcp.OwningProcess -Force
+              Write-Host "Cleared zombie process on port $port"
+            }
+          }
       - name: 🏷️ Derive SemVer & Build ID
         id: git_version
         shell: pwsh
