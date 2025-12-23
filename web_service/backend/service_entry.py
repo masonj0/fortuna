@@ -14,6 +14,8 @@ from pathlib import Path
 # This block is designed to robustly locate the `main` module and its `app` object,
 # whether running from source, as a PyInstaller bundle, or as a Windows Service.
 
+import asyncio
+
 def _bootstrap_path():
     """
     Ensures the application's root directories are on the Python path.
@@ -71,6 +73,10 @@ class FortunaSvc(win32serviceutil.ServiceFramework):
         # directory to the location of the executable.
         if getattr(sys, 'frozen', False):
             os.chdir(os.path.dirname(sys.executable))
+            # ☢️ CRITICAL FIX for Windows Services running asyncio ☢️
+            # This policy prevents the notorious "NotImplementedError" when uvicorn
+            # tries to create a subprocess in a non-interactive service environment.
+            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
         servicemanager.LogMsg(servicemanager.EVENTLOG_INFORMATION_TYPE,
                               servicemanager.PYS_SERVICE_STARTED,

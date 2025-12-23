@@ -33,7 +33,7 @@ def generate_spec(mode: str):
         binary_name = 'fortuna-ui-bridge'
         entry_point_name = 'main.py'
         is_console = True  # Electron bridge needs console for stdio
-        datas = "[('{frontend_dist.as_posix()}', 'frontend_dist')]"
+        datas = f"[('{frontend_dist.as_posix()}', 'frontend_dist')]"
         hidden_imports = """[
         'uvicorn',
         'fastapi',

@@ -320,6 +320,48 @@ jobs:
 
           Write-Host "✅ Installation verified and permissions granted."
 
+      - name: '🕵️ DLL Dependency Forensics'
+        shell: pwsh
+        run: |
+            $progFiles = ${env:ProgramFiles}
+            if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
+            $installDir = Join-Path $progFiles "Fortuna Faucet Service"
+            $exePath = Join-Path $installDir "fortuna-webservice.exe"
+
+            # Find dumpbin.exe in the Visual Studio installation
+            $vsPath = (Get-ChildItem "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\*\bin\Hostx64\x64\dumpbin.exe" -Recurse | Select-Object -First 1).FullName
+            if (-not $vsPath) {
+                throw "dumpbin.exe not found!"
+            }
+
+            # Use dumpbin to list the imported DLLs
+            & $vsPath /dependents $exePath
+
+      - name: '🔬 Pre-flight Service Check (Run executable directly)'
+        shell: pwsh
+        run: |
+          $progFiles = ${env:ProgramFiles}
+          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
+          $installDir = Join-Path $progFiles "Fortuna Faucet Service"
+          $exePath = Join-Path $installDir "fortuna-webservice.exe"
+
+          Write-Host "Attempting to run the service executable directly for 5 seconds to catch startup errors..."
+          $process = Start-Process -FilePath $exePath -NoNewWindow -PassThru
+          Start-Sleep -Seconds 5
+          if ($process.HasExited) {
+              Write-Error "The service executable exited prematurely. Exit Code: $($process.ExitCode)"
+              # Attempt to get more info if there are logs
+              $logFile = Get-ChildItem -Path (Join-Path $installDir "logs") -Filter "*.log" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+              if ($logFile) {
+                  Write-Host "--- Last Log File Content ---"
+                  Get-Content $logFile.FullName -Tail 50
+              }
+              exit 1
+          } else {
+              Write-Host "✅ Executable started without immediate errors. Stopping it to proceed with service-based test."
+              Stop-Process -Id $process.Id -Force
+          }
+
       - name: 🚀 Start Service
         shell: pwsh
         run: |
