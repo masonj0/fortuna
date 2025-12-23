@@ -3,7 +3,9 @@ from pathlib import Path
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 block_cipher = None
-project_root = Path(SPECPATH).parent
+# In GitHub Actions, the working directory is the repo root, which is also the SPECPATH.
+# Using .parent would incorrectly point one level above the repo.
+project_root = Path(SPECPATH)
 backend_root = project_root / 'web_service' / 'backend'
 
 # Helper function to include data files
