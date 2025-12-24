@@ -86,7 +86,15 @@ jobs:
           pip install --upgrade pip setuptools wheel
 
           # 2. Install main dependencies, applying x86 constraints if applicable
-          pip install -r ${{ env.BACKEND_DIR }}/requirements.txt -c ${{ steps.constraints.outputs.file }}
+          $requirementsFile = "${{ env.BACKEND_DIR }}/requirements.txt"
+          if ('${{ matrix.arch }}' -eq 'x86') {
+            Write-Host "X86 architecture detected. Filtering requirements to exclude problematic packages."
+            $tempRequirements = "temp-requirements.txt"
+            Get-Content $requirementsFile | Where-Object { $_ -notmatch 'sqlalchemy' -and $_ -notmatch 'greenlet' -and $_ -notmatch 'psycopg2-binary' } | Set-Content $tempRequirements
+            $requirementsFile = $tempRequirements
+            Write-Host "Using temporary requirements file: $requirementsFile"
+          }
+          pip install -r $requirementsFile -c ${{ steps.constraints.outputs.file }}
 
           # 3. Install build-time dependencies, ALSO applying constraints
           pip install pyinstaller==6.6.0 pywin32 -c ${{ steps.constraints.outputs.file }}
@@ -175,6 +183,7 @@ jobs:
         with:
           name: fortuna-msi-${{ matrix.arch }}
           path: electron/dist/*.msi
+
 
       - name: '🔍 Verify PyInstaller Bundle'
         shell: pwsh
