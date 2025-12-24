@@ -79,6 +79,8 @@ jobs:
 
       - name: 📦 Build Binary
         shell: pwsh
+        env:
+          PYTHONUTF8: '1'
         run: |
           # 1. Upgrade core packaging tools
           pip install --upgrade pip setuptools wheel

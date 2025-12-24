@@ -73,7 +73,7 @@ jobs:
       - name: Upload Frontend
         uses: actions/upload-artifact@v4
         with:
-          name: frontend-build
+          name: frontend-build-${{ github.run_id }}
           path: |
             web_platform/frontend/out
             web_platform/frontend/frontend-manifest.tsv
@@ -102,8 +102,8 @@ jobs:
       matrix:
         arch: [x64, x86]
     outputs:
-      semver: ${{ steps.meta.outputs.semver }}
-      short_sha: ${{ steps.meta.outputs.short_sha }}
+      semver: ${{ steps.build_metadata.outputs.semver }}
+      short_sha: ${{ steps.build_metadata.outputs.short_sha }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
@@ -111,7 +111,7 @@ jobs:
           architecture: ${{ matrix.arch }}
       - uses: actions/download-artifact@v4
         with:
-          name: frontend-build
+          name: frontend-build-${{ github.run_id }}
           path: web_platform/frontend/out
       - id: meta
         shell: pwsh
@@ -151,10 +151,18 @@ jobs:
           PYTHONUTF8: '1'
         run: |
           python scripts/generate_spec_dual.py --mode svc
+      - name: 📋 Export Build Metadata
+        id: build_metadata
+        shell: pwsh
+        run: |
+          $ver = "${{ steps.meta.outputs.semver }}"
+          $sha = "${{ steps.meta.outputs.short_sha }}"
+          "semver=$ver" | Out-File $env:GITHUB_OUTPUT -Append
+          "short_sha=$sha" | Out-File $env:GITHUB_OUTPUT -Append
       - name: Upload Backend
         uses: actions/upload-artifact@v4
         with:
-          name: backend-dist-${{ matrix.arch }}
+          name: backend-dist-${{ matrix.arch }}-${{ github.run_id }}
           path: dist/fortuna-core-service/
 
   package-msi:
@@ -170,7 +178,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: backend-dist-${{ matrix.arch }}
+          name: backend-dist-${{ matrix.arch }}-${{ github.run_id }}
           path: staging/backend
       # ---------------------------------------------------------
       # 💉 INJECT: THE DIETICIAN (Subroutine #3)
@@ -264,7 +272,7 @@ jobs:
       - name: Upload MSI
         uses: actions/upload-artifact@v4
         with:
-          name: hat-trick-msi-${{ matrix.arch }}
+          name: hat-trick-msi-${{ matrix.arch }}-${{ github.run_id }}
           path: build_wix/bin/${{ matrix.arch }}/Release/*
 
   smoke-test:
@@ -277,7 +285,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: hat-trick-msi-${{ matrix.arch }}
+          name: hat-trick-msi-${{ matrix.arch }}-${{ github.run_id }}
           path: msi-installer
       - name: 🔥 Install & Verify
         shell: pwsh
@@ -451,7 +459,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: backend-dist-${{ matrix.arch }}
+          name: backend-dist-${{ matrix.arch }}-${{ github.run_id }}
           path: backend
       - name: Create SBOM
         uses: anchore/sbom-action@v0

@@ -134,7 +134,7 @@ jobs:
       - name: 📤 Upload Backend Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: backend-dist-${{ matrix.arch }}
+          name: backend-dist-${{ matrix.arch }}-${{ github.run_id }}
           path: dist/fortuna-core-service
           retention-days: 1
 
@@ -180,7 +180,7 @@ jobs:
       # Download Artifacts
       - uses: actions/download-artifact@v4
         with:
-          name: backend-dist-${{ matrix.arch }}
+          name: backend-dist-${{ matrix.arch }}-${{ github.run_id }}
           path: staging/backend
 
       - name: 📝 Inject Restart Script (Revived)
@@ -238,7 +238,7 @@ jobs:
       - name: 📤 Upload MSI
         uses: actions/upload-artifact@v4
         with:
-          name: msi-${{ matrix.arch }}
+          name: msi-${{ matrix.arch }}-${{ github.run_id }}
           path: Fortuna-${{ needs.preflight-check.outputs.semver }}-${{ matrix.arch }}.msi
 
       - name: '🧪 Basic Integrity Check'
@@ -251,7 +251,7 @@ jobs:
   # =========================================================
   smoke-test:
     name: 🚬 Smoke Test (${{ matrix.arch }})
-    needs: package-msi
+    needs: [package-msi, preflight-check]
     runs-on: windows-latest
     strategy:
       matrix:
@@ -274,7 +274,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: msi-${{ matrix.arch }}
+          name: msi-${{ matrix.arch }}-${{ github.run_id }}
           path: msi-installer
 
       - name: '🧪 Basic Integrity Check'

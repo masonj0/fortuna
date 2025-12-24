@@ -128,12 +128,12 @@ jobs:
       - name: 'Compress Backend Artifact'
         shell: pwsh
         run: |
-          Compress-Archive -Path dist/fortuna-ui-bridge/* -DestinationPath dist/fortuna-ui-bridge.tar.gz
+          Compress-Archive -Path dist/fortuna-ui-bridge/* -DestinationPath dist/fortuna-ui-bridge.zip
       - name: '📤 Upload Backend Artifact'
         uses: actions/upload-artifact@v4
         with:
           name: python-ui-bridge-${{ matrix.arch }}-${{ github.run_id }}
-          path: dist/fortuna-ui-bridge.tar.gz
+          path: dist/fortuna-ui-bridge.zip
           retention-days: 1
 
       - name: '📤 Upload Frontend Artifact'
@@ -180,7 +180,7 @@ jobs:
       - name: 'Decompress Backend Artifact'
         shell: pwsh
         run: |
-          Expand-Archive -Path python-service-bin/fortuna-ui-bridge.tar.gz -DestinationPath python-service-bin
+          Expand-Archive -Path python-service-bin/fortuna-ui-bridge.zip -DestinationPath python-service-bin
       - name: 'List decompressed files'
         shell: pwsh
         run: |
