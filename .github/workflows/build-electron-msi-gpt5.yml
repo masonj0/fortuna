@@ -82,28 +82,88 @@ jobs:
         env:
           PYTHONUTF8: '1'
         run: |
+          $ErrorActionPreference = 'Stop'
+
           # 1. Upgrade core packaging tools
+          Write-Host "--- upgrading packaging tools ---"
           pip install --upgrade pip setuptools wheel
 
-          # 2. Install main dependencies, applying x86 constraints if applicable
-          pip install -r ${{ env.BACKEND_DIR }}/requirements.txt -c ${{ steps.constraints.outputs.file }}
+          # 2. Install dependencies in stages for x86 to avoid conflicts
+          $constraintsFile = "${{ steps.constraints.outputs.file }}"
+          $requirementsFile = "${{ env.BACKEND_DIR }}/requirements.txt"
 
-          # 3. Install build-time dependencies, ALSO applying constraints
-          pip install pyinstaller==6.6.0 pywin32 -c ${{ steps.constraints.outputs.file }}
+          if ('${{ matrix.arch }}' -eq 'x86') {
+            Write-Host "--- x86 detected: applying staged installation ---"
 
-          # 4. Build the executable using the dedicated Electron spec file
+            # Show constraints for debugging
+            Write-Host "--- constraint file content ---"
+            Get-Content $constraintsFile
+
+            # Exclude conflicting packages from the main install
+            $conflictingPackages = @('numpy', 'pandas', 'sqlalchemy', 'greenlet', 'psycopg2-binary')
+            $regex = $conflictingPackages -join '|'
+            $tempRequirements = "temp-requirements-x86.txt"
+
+            Write-Host "--- filtering main requirements ---"
+            Get-Content $requirementsFile | Where-Object { $_ -notmatch $regex } | Set-Content $tempRequirements
+
+            Write-Host "--- temporary requirements file content ---"
+            Get-Content $tempRequirements
+
+            Write-Host "--- installing non-conflicting packages ---"
+            pip install -r $tempRequirements
+
+            Write-Host "--- installing CONFLICTING packages with x86 constraints ---"
+            # This is the key: install these separately using the strict constraints
+            pip install numpy pandas sqlalchemy -c $constraintsFile
+
+          } else {
+            Write-Host "--- x64 detected: installing all requirements directly ---"
+            pip install -r $requirementsFile
+          }
+
+          # 3. Install build-time dependencies
+          Write-Host "--- installing build-time dependencies ---"
+          pip install --upgrade "pyinstaller>=6.12" pywin32 -c $constraintsFile
+
+          # 4. Show final installed packages for verification
+          Write-Host "--- final installed packages (pip list) ---"
+          pip list
+
+          # 5. Build the executable
+          Write-Host "--- building executable ---"
           pyinstaller --noconfirm --clean fortuna-backend-electron.spec
 
-
+      - name: 🔍 Verify PyInstaller Bundle Contents
+        shell: pwsh
+        run: |
+          $exePath = "dist/fortuna-backend/fortuna-backend.exe"
+          Write-Host "--- Verifying bundle contents of $exePath ---"
+          $archiveContents = pyi-archive_viewer $exePath
+          $criticalModules = @("uvicorn", "fastapi", "starlette")
+          foreach ($module in $criticalModules) {
+              Write-Host "Checking for module: $module"
+              if ($archiveContents | Select-String -SimpleMatch -Quiet $module) {
+                  Write-Host "✅ Found '$module' in bundle."
+              } else {
+                  throw "❌ CRITICAL: Module '$module' not found in PyInstaller bundle."
+              }
+          }
+          Write-Host "--- Bundle verification successful ---"
 
       - name: 📦 Download Tesseract OCR
         run: |
           Invoke-WebRequest -Uri https://digi.bib.uni-mannheim.de/tesseract/tesseract-ocr-w64-setup-5.4.0.20240606.exe -OutFile tesseract_installer.exe
 
+      - name: 🧐 List dist directory
+        shell: pwsh
+        run: |
+          Get-ChildItem -Path dist -Recurse
+
       - name: 🔍 Sanity Check Executable
         shell: pwsh
         run: |
-          dist/fortuna-backend.exe --help
+          dist/fortuna-backend/fortuna-backend.exe --help
 
       - name: 📤 Upload
         uses: actions/upload-artifact@v4

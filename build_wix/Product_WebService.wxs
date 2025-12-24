@@ -6,7 +6,7 @@
   <Package Name="Fortuna Faucet Web Service"
            Manufacturer="Fortuna Engineering"
            Version="$(var.Version)"
-           UpgradeCode="D2F8159E-6324-4B3A-867A-8A875D3C5D3D"
+           UpgradeCode="FA689549-366B-4C5C-A482-1132F9A34B10"
            Scope="perMachine"
            Compressed="yes">
 
@@ -19,6 +19,9 @@
       <ComponentGroupRef Id="RuntimeDirectoryComponents" />
       <ComponentGroupRef Id="ShortcutComponents" />
     </Feature>
+
+    <Icon Id="fortuna_app.ico" SourceFile="../electron/assets/icon.ico" />
+    <Property Id="ARPPRODUCTICON" Value="fortuna_app.ico" />
 
     <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
     <WixVariable Id="WixUILicenseRtf" Value="license.rtf" />
@@ -53,7 +56,7 @@
 
     <ComponentGroup Id="ServiceComponents" Directory="INSTALLFOLDER">
       <Component Id="ServiceExecutable" Guid="E4B9C2C2-5B4E-4B02-A2DA-820152433E72">
-        <File Id="FortunaEXE" Source="$(var.SourceDir)/fortuna-webservice.exe" KeyPath="yes" />
+        <File Id="ServiceExe" Name="fortuna-core-service.exe" Source="$(var.SourceDir)/fortuna-core-service.exe" KeyPath="yes" />
         <ServiceInstall Id="ServiceInstaller" Type="ownProcess" Name="FortunaWebService"
                         DisplayName="Fortuna Web Service" Description="Background service for Fortuna Faucet"
                         Start="auto" Account="LocalSystem" ErrorControl="normal" Vital="yes" />
