@@ -124,7 +124,7 @@ jobs:
 
           # 3. Install build-time dependencies
           Write-Host "--- installing build-time dependencies ---"
-          pip install pyinstaller==6.6.0 pywin32 -c $constraintsFile
+          pip install --upgrade "pyinstaller>=6.12" pywin32 -c $constraintsFile
 
           # 4. Show final installed packages for verification
           Write-Host "--- final installed packages (pip list) ---"

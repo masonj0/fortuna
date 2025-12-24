@@ -141,16 +141,17 @@ jobs:
             Write-Host "✅ Constraints: SQLAlchemy 1.4.53, greenlet 3.1.1"
           } else { New-Item $constraintFile -ItemType File -Force }
           "file=$constraintFile" | Out-File $env:GITHUB_OUTPUT -Append
-      - name: Install Dependencies
+      - name: Install Dependencies & Build Tools
         run: |
           python -m pip install --upgrade pip
           pip install -r web_service/backend/requirements.txt -c ${{ steps.constraints.outputs.file }}
-          pip install pyinstaller==6.6.0 pywin32 -c ${{ steps.constraints.outputs.file }}
-      - name: 🔮 Generate Spec & Build
+          # Upgrade PyInstaller to a version with the pywin32 fix
+          pip install --upgrade "pyinstaller>=6.12" pywin32 -c ${{ steps.constraints.outputs.file }}
+      - name: 🔮 Build Executable with Modern PyInstaller
         env:
           PYTHONUTF8: '1'
         run: |
-          python scripts/generate_spec_dual.py --mode svc
+          pyinstaller service_entry.py --name fortuna-core-service --clean --noconfirm --onedir --add-data "web_platform/frontend/out;ui" --hidden-import win32timezone
 
       - name: 🔍 Verify PyInstaller Bundle Contents
         shell: pwsh
