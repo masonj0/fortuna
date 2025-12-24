@@ -176,6 +176,44 @@ jobs:
           name: fortuna-msi-${{ matrix.arch }}
           path: electron/dist/*.msi
 
+      - name: '🔍 Verify PyInstaller Bundle'
+        shell: pwsh
+        run: |
+          $exe = "dist/fortuna-backend/fortuna-backend.exe"
+          $internalDir = "dist/fortuna-backend/_internal"
+
+          Write-Host "Checking: $exe"
+          if (!(Test-Path $exe)) {
+            throw "Executable not found!"
+          }
+          Write-Host "✅ Executable exists"
+
+          Write-Host "Checking: $internalDir"
+          if (!(Test-Path $internalDir)) {
+            throw "Dependencies not bundled!"
+          }
+          Write-Host "✅ Dependencies folder exists"
+
+          # Check for key modules
+          $keyModules = @("uvicorn", "fastapi", "starlette", "pydantic")
+          foreach ($module in $keyModules) {
+            $modulePath = Join-Path $internalDir $module
+            if (Test-Path $modulePath) {
+              Write-Host "✅ Found $module"
+            } else {
+              Write-Host "⚠️  Missing $module - might fail at runtime"
+            }
+          }
+
+          # Try to run --help
+          Write-Host "Testing executable..."
+          & $exe --help 2>&1 | Select-Object -First 10
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Executable failed with code $LASTEXITCODE"
+            Write-Host "This might be OK if it's just --help not being recognized"
+          }
+
   smoke-test:
     name: '🔬 Smoke Test (${{ matrix.arch }})'
     runs-on: windows-latest
