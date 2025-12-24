@@ -33,7 +33,7 @@ def generate_spec(mode: str):
         binary_name = 'fortuna-ui-bridge'
         entry_point_name = 'main.py'
         is_console = True  # Electron bridge needs console for stdio
-        datas = "[('{frontend_dist.as_posix()}', 'frontend_dist')]"
+        datas = f"[('{frontend_dist.as_posix()}', 'frontend_dist')]"
         hidden_imports = """[
         'uvicorn',
         'fastapi',
@@ -94,6 +94,28 @@ def generate_spec(mode: str):
             print(f"✅ Found required DLL: {dll_path}")
         else:
              print(f"⚠️ Could not find optional DLL, skipping: {dll_path}")
+
+    # ☢️ CRITICAL FIX for pywin32 service errors ☢️
+    # PyInstaller often fails to bundle the core pywin32 DLLs needed for a service.
+    # We must find them and include them manually.
+    try:
+        import win32ctypes.pywin32.pywintypes
+        import win32ctypes.pywin32.pythoncom
+
+        pywin32_dlls = [
+            win32ctypes.pywin32.pywintypes.__file__,
+            win32ctypes.pywin32.pythoncom.__file__,
+        ]
+        for dll_path in pywin32_dlls:
+            if Path(dll_path).exists():
+                binaries.append((str(Path(dll_path)).replace('\\\\', '/'), '.'))
+                print(f"✅ Found and included pywin32 DLL: {dll_path}")
+            else:
+                print(f"❌ CRITICAL: Could not find required pywin32 DLL: {dll_path}")
+                sys.exit(1)
+    except ImportError as e:
+        print(f"❌ CRITICAL: Failed to import pywin32 modules to find DLLs: {e}")
+        sys.exit(1)
 
     # 4. Define the spec file content
     spec_content = f"""
