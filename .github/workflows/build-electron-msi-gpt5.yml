@@ -82,9 +82,9 @@ jobs:
         env:
           PYTHONUTF8: '1'
         run: |
+          $ErrorActionPreference = 'Stop'
           # 1. Upgrade core packaging tools
           pip install --upgrade pip setuptools wheel
-
           # 2. Install main dependencies, applying x86 constraints if applicable
           $requirementsFile = "${{ env.BACKEND_DIR }}/requirements.txt"
           if ('${{ matrix.arch }}' -eq 'x86') {
@@ -95,23 +95,24 @@ jobs:
             Write-Host "Using temporary requirements file: $requirementsFile"
           }
           pip install -r $requirementsFile -c ${{ steps.constraints.outputs.file }}
-
           # 3. Install build-time dependencies, ALSO applying constraints
           pip install pyinstaller==6.6.0 pywin32 -c ${{ steps.constraints.outputs.file }}
-
           # 4. Build the executable using the dedicated Electron spec file
           pyinstaller --noconfirm --clean fortuna-backend-electron.spec
-
-
 
       - name: 📦 Download Tesseract OCR
         run: |
           Invoke-WebRequest -Uri https://digi.bib.uni-mannheim.de/tesseract/tesseract-ocr-w64-setup-5.4.0.20240606.exe -OutFile tesseract_installer.exe
 
+      - name: 🧐 List dist directory
+        shell: pwsh
+        run: |
+          Get-ChildItem -Path dist -Recurse
+
       - name: 🔍 Sanity Check Executable
         shell: pwsh
         run: |
-          dist/fortuna-backend.exe --help
+          dist/fortuna-backend/fortuna-backend.exe --help
 
       - name: 📤 Upload
         uses: actions/upload-artifact@v4
