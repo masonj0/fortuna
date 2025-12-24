@@ -151,6 +151,33 @@ jobs:
           PYTHONUTF8: '1'
         run: |
           python scripts/generate_spec_dual.py --mode svc
+
+      - name: 🔍 Verify PyInstaller Bundle Contents
+        shell: pwsh
+        run: |
+          $exePath = "dist/fortuna-core-service/fortuna-core-service.exe"
+          Write-Host "--- Verifying bundle contents of $exePath ---"
+          # It's possible the exe is one level deeper if PyInstaller used a wrapper dir
+          if (-not (Test-Path $exePath)) {
+              $found = Get-ChildItem -Path "dist" -Filter "fortuna-core-service.exe" -Recurse | Select-Object -First 1
+              if ($found) {
+                  $exePath = $found.FullName
+                  Write-Host "Updated exe path to: $exePath"
+              } else {
+                  throw "❌ CRITICAL: Could not find 'fortuna-core-service.exe' in the 'dist' directory."
+              }
+          }
+          $archiveContents = pyi-archive_viewer $exePath
+          $criticalModules = @("uvicorn", "fastapi", "starlette")
+          foreach ($module in $criticalModules) {
+              Write-Host "Checking for module: $module"
+              if ($archiveContents | Select-String -SimpleMatch -Quiet $module) {
+                  Write-Host "✅ Found '$module' in bundle."
+              } else {
+                  throw "❌ CRITICAL: Module '$module' not found in PyInstaller bundle."
+              }
+          }
+          Write-Host "--- Bundle verification successful ---"
       - name: 📋 Export Build Metadata
         id: build_metadata
         shell: pwsh
