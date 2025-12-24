@@ -48,7 +48,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: frontend-dist
+          name: frontend-dist-${{ github.run_id }}
           path: ${{ env.FRONTEND_DIR }}/out
 
   # 2. BUILD BACKEND (Matrix: x64 & x86)
@@ -60,7 +60,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: frontend-dist
+          name: frontend-dist-${{ github.run_id }}
           path: ${{ env.FRONTEND_DIR }}/out
 
       - name: 🐍 Setup Python (x86 Safe Mode)
@@ -95,7 +95,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: backend-dist-x86
+          name: backend-dist-x86-${{ github.run_id }}
           path: dist/fortuna-core-service/
 
   # 3. PREFLIGHT CHECK
@@ -123,7 +123,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: backend-dist-x86
+          name: backend-dist-x86-${{ github.run_id }}
           path: staging/backend
 
       - name: Create Restart Service Batch Script
@@ -200,7 +200,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: msi-x86
+          name: msi-x86-${{ github.run_id }}
           path: |
             ${{ env.WIX_DIR }}/bin/x86/Release/*.msi
             ${{ env.WIX_DIR }}/bin/x86/Release/*.sha256
@@ -213,7 +213,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: msi-x86
+          name: msi-x86-${{ github.run_id }}
           path: installer
 
       - name: Install MSI
@@ -232,6 +232,8 @@ jobs:
 
           Write-Host "Waiting for service..."
           Start-Sleep -Seconds 10
+
+          Start-Service -Name "FortunaWebService" -ErrorAction SilentlyContinue
 
           $response = Invoke-WebRequest -Uri "http://localhost:8000/health" -UseBasicParsing
           if ($response.StatusCode -eq 200) { Write-Host "✅ Service Healthy" } else { throw "❌ Service Failed" }

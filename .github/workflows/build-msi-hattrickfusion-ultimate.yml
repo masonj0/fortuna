@@ -73,7 +73,7 @@ jobs:
       - name: Upload Frontend
         uses: actions/upload-artifact@v4
         with:
-          name: frontend-build
+          name: frontend-build-${{ github.run_id }}
           path: |
             web_platform/frontend/out
             web_platform/frontend/frontend-manifest.tsv
@@ -102,8 +102,8 @@ jobs:
       matrix:
         arch: [x64, x86]
     outputs:
-      semver: ${{ steps.meta.outputs.semver }}
-      short_sha: ${{ steps.meta.outputs.short_sha }}
+      semver: ${{ steps.build_metadata.outputs.semver }}
+      short_sha: ${{ steps.build_metadata.outputs.short_sha }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
@@ -111,7 +111,7 @@ jobs:
           architecture: ${{ matrix.arch }}
       - uses: actions/download-artifact@v4
         with:
-          name: frontend-build
+          name: frontend-build-${{ github.run_id }}
           path: web_platform/frontend/out
       - id: meta
         shell: pwsh
@@ -151,10 +151,18 @@ jobs:
           PYTHONUTF8: '1'
         run: |
           python scripts/generate_spec_dual.py --mode svc
+      - name: 📋 Export Build Metadata
+        id: build_metadata
+        shell: pwsh
+        run: |
+          $ver = "${{ steps.meta.outputs.semver }}"
+          $sha = "${{ steps.meta.outputs.short_sha }}"
+          "semver=$ver" | Out-File $env:GITHUB_OUTPUT -Append
+          "short_sha=$sha" | Out-File $env:GITHUB_OUTPUT -Append
       - name: Upload Backend
         uses: actions/upload-artifact@v4
         with:
-          name: backend-dist-${{ matrix.arch }}
+          name: backend-dist-${{ matrix.arch }}-${{ github.run_id }}
           path: dist/fortuna-core-service/
 
   package-msi:
@@ -170,7 +178,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: backend-dist-${{ matrix.arch }}
+          name: backend-dist-${{ matrix.arch }}-${{ github.run_id }}
           path: staging/backend
       # ---------------------------------------------------------
       # 💉 INJECT: THE DIETICIAN (Subroutine #3)
@@ -264,7 +272,7 @@ jobs:
       - name: Upload MSI
         uses: actions/upload-artifact@v4
         with:
-          name: hat-trick-msi-${{ matrix.arch }}
+          name: hat-trick-msi-${{ matrix.arch }}-${{ github.run_id }}
           path: build_wix/bin/${{ matrix.arch }}/Release/*
 
   smoke-test:
@@ -277,7 +285,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: hat-trick-msi-${{ matrix.arch }}
+          name: hat-trick-msi-${{ matrix.arch }}-${{ github.run_id }}
           path: msi-installer
       - name: 🔥 Install & Verify
         shell: pwsh
@@ -319,6 +327,48 @@ jobs:
           icacls (Join-Path $installDir "logs") /grant "NT AUTHORITY\SYSTEM:(OI)(CI)F" /T
 
           Write-Host "✅ Installation verified and permissions granted."
+
+      - name: '🕵️ DLL Dependency Forensics'
+        shell: pwsh
+        run: |
+            $progFiles = ${env:ProgramFiles}
+            if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
+            $installDir = Join-Path $progFiles "Fortuna Faucet Service"
+            $exePath = Join-Path $installDir "fortuna-webservice.exe"
+
+            # Find dumpbin.exe in the Visual Studio installation
+            $vsPath = (Get-ChildItem "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\*\bin\Hostx64\x64\dumpbin.exe" -Recurse | Select-Object -First 1).FullName
+            if (-not $vsPath) {
+                throw "dumpbin.exe not found!"
+            }
+
+            # Use dumpbin to list the imported DLLs
+            & $vsPath /dependents $exePath
+
+      - name: '🔬 Pre-flight Service Check (Run executable directly)'
+        shell: pwsh
+        run: |
+          $progFiles = ${env:ProgramFiles}
+          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
+          $installDir = Join-Path $progFiles "Fortuna Faucet Service"
+          $exePath = Join-Path $installDir "fortuna-webservice.exe"
+
+          Write-Host "Attempting to run the service executable directly for 5 seconds to catch startup errors..."
+          $process = Start-Process -FilePath $exePath -NoNewWindow -PassThru
+          Start-Sleep -Seconds 5
+          if ($process.HasExited) {
+              Write-Error "The service executable exited prematurely. Exit Code: $($process.ExitCode)"
+              # Attempt to get more info if there are logs
+              $logFile = Get-ChildItem -Path (Join-Path $installDir "logs") -Filter "*.log" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+              if ($logFile) {
+                  Write-Host "--- Last Log File Content ---"
+                  Get-Content $logFile.FullName -Tail 50
+              }
+              exit 1
+          } else {
+              Write-Host "✅ Executable started without immediate errors. Stopping it to proceed with service-based test."
+              Stop-Process -Id $process.Id -Force
+          }
 
       - name: 🚀 Start Service
         shell: pwsh
@@ -409,7 +459,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: backend-dist-${{ matrix.arch }}
+          name: backend-dist-${{ matrix.arch }}-${{ github.run_id }}
           path: backend
       - name: Create SBOM
         uses: anchore/sbom-action@v0

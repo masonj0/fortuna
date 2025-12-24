@@ -134,7 +134,7 @@ jobs:
       - name: 📤 Upload Backend Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: backend-dist-${{ matrix.arch }}
+          name: backend-dist-${{ matrix.arch }}-${{ github.run_id }}
           path: dist/fortuna-core-service
           retention-days: 1
 
@@ -169,7 +169,7 @@ jobs:
   # =========================================================
   package-msi:
     name: 📦 Package MSI (${{ matrix.arch }})
-    needs: [build-backend]
+    needs: [preflight-check, build-backend]
     runs-on: windows-latest
     strategy:
       matrix:
@@ -180,7 +180,7 @@ jobs:
       # Download Artifacts
       - uses: actions/download-artifact@v4
         with:
-          name: backend-dist-${{ matrix.arch }}
+          name: backend-dist-${{ matrix.arch }}-${{ github.run_id }}
           path: staging/backend
 
       - name: 📝 Inject Restart Script (Revived)
@@ -221,7 +221,8 @@ jobs:
             -o "Fortuna-${{ needs.preflight-check.outputs.semver }}-${arch}.msi" `
             -d Version="${{ needs.preflight-check.outputs.semver }}" `
             -d SourceDir="staging/backend" `
-            -d Platform=$arch
+            -d Platform=$arch `
+            -d ServicePort="${{ env.SERVICE_PORT }}"
 
       - name: 🦜 The Canary (Malware Scan)
         continue-on-error: true
@@ -237,7 +238,7 @@ jobs:
       - name: 📤 Upload MSI
         uses: actions/upload-artifact@v4
         with:
-          name: msi-${{ matrix.arch }}
+          name: msi-${{ matrix.arch }}-${{ github.run_id }}
           path: Fortuna-${{ needs.preflight-check.outputs.semver }}-${{ matrix.arch }}.msi
 
       - name: '🧪 Basic Integrity Check'
@@ -250,7 +251,7 @@ jobs:
   # =========================================================
   smoke-test:
     name: 🚬 Smoke Test (${{ matrix.arch }})
-    needs: package-msi
+    needs: [package-msi, preflight-check]
     runs-on: windows-latest
     strategy:
       matrix:
@@ -273,7 +274,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: msi-${{ matrix.arch }}
+          name: msi-${{ matrix.arch }}-${{ github.run_id }}
           path: msi-installer
 
       - name: '🧪 Basic Integrity Check'
