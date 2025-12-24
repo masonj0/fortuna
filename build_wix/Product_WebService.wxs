@@ -20,6 +20,9 @@
       <ComponentGroupRef Id="ShortcutComponents" />
     </Feature>
 
+    <Icon Id="fortuna_app.ico" SourceFile="../electron/assets/icon.ico" />
+    <Property Id="ARPPRODUCTICON" Value="fortuna_app.ico" />
+
     <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
     <WixVariable Id="WixUILicenseRtf" Value="license.rtf" />
 
