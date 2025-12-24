@@ -83,21 +83,55 @@ jobs:
           PYTHONUTF8: '1'
         run: |
           $ErrorActionPreference = 'Stop'
+
           # 1. Upgrade core packaging tools
+          Write-Host "--- upgrading packaging tools ---"
           pip install --upgrade pip setuptools wheel
-          # 2. Install main dependencies, applying x86 constraints if applicable
+
+          # 2. Install dependencies in stages for x86 to avoid conflicts
+          $constraintsFile = "${{ steps.constraints.outputs.file }}"
           $requirementsFile = "${{ env.BACKEND_DIR }}/requirements.txt"
+
           if ('${{ matrix.arch }}' -eq 'x86') {
-            Write-Host "X86 architecture detected. Filtering requirements to exclude problematic packages."
-            $tempRequirements = "temp-requirements.txt"
-            Get-Content $requirementsFile | Where-Object { $_ -notmatch 'sqlalchemy' -and $_ -notmatch 'greenlet' -and $_ -notmatch 'psycopg2-binary' } | Set-Content $tempRequirements
-            $requirementsFile = $tempRequirements
-            Write-Host "Using temporary requirements file: $requirementsFile"
+            Write-Host "--- x86 detected: applying staged installation ---"
+
+            # Show constraints for debugging
+            Write-Host "--- constraint file content ---"
+            Get-Content $constraintsFile
+
+            # Exclude conflicting packages from the main install
+            $conflictingPackages = @('numpy', 'pandas', 'sqlalchemy', 'greenlet', 'psycopg2-binary')
+            $regex = $conflictingPackages -join '|'
+            $tempRequirements = "temp-requirements-x86.txt"
+
+            Write-Host "--- filtering main requirements ---"
+            Get-Content $requirementsFile | Where-Object { $_ -notmatch $regex } | Set-Content $tempRequirements
+
+            Write-Host "--- temporary requirements file content ---"
+            Get-Content $tempRequirements
+
+            Write-Host "--- installing non-conflicting packages ---"
+            pip install -r $tempRequirements
+
+            Write-Host "--- installing CONFLICTING packages with x86 constraints ---"
+            # This is the key: install these separately using the strict constraints
+            pip install numpy pandas sqlalchemy -c $constraintsFile
+
+          } else {
+            Write-Host "--- x64 detected: installing all requirements directly ---"
+            pip install -r $requirementsFile
           }
-          pip install -r $requirementsFile -c ${{ steps.constraints.outputs.file }}
-          # 3. Install build-time dependencies, ALSO applying constraints
-          pip install pyinstaller==6.6.0 pywin32 -c ${{ steps.constraints.outputs.file }}
-          # 4. Build the executable using the dedicated Electron spec file
+
+          # 3. Install build-time dependencies
+          Write-Host "--- installing build-time dependencies ---"
+          pip install pyinstaller==6.6.0 pywin32 -c $constraintsFile
+
+          # 4. Show final installed packages for verification
+          Write-Host "--- final installed packages (pip list) ---"
+          pip list
+
+          # 5. Build the executable
+          Write-Host "--- building executable ---"
           pyinstaller --noconfirm --clean fortuna-backend-electron.spec
 
       - name: 📦 Download Tesseract OCR
