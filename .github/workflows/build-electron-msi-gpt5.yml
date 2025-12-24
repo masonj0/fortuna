@@ -49,27 +49,6 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: ${{ matrix.arch }}
-      - name: 🧾 Create Architecture Constraints
-        id: constraints
-        shell: pwsh
-        run: |
-          $file = "constraints.txt"
-          if ('${{ matrix.arch }}' -eq 'x86') {
-            Write-Host "🛡️ ACTIVATING X86 SAFE MODE: Pinning dependencies with known 32-bit wheels."
-            @(
-              "# This prevents pip from attempting to build packages that lack pre-compiled x86 wheels.",
-              "numpy==1.23.5",
-              "pandas==1.5.3",
-              "sqlalchemy==1.4.53",
-              "--only-binary=:all:"
-            ) | Set-Content $file
-            Write-Host "✅ Constraints Applied: numpy, pandas, sqlalchemy"
-          } else {
-            New-Item $file -ItemType File -Force
-            Write-Host "✅ No architecture-specific constraints needed for x64."
-          }
-          "file=$file" | Out-File $env:GITHUB_OUTPUT -Append
-
       - name: 💾 Create required directories
         shell: pwsh
         run: |
@@ -77,61 +56,30 @@ jobs:
           New-Item -ItemType Directory -Path "${{ env.BACKEND_DIR }}/json" -Force
           New-Item -ItemType Directory -Path "${{ env.BACKEND_DIR }}/adapters" -Force
 
-      - name: 📦 Build Binary
+      - name: 📦 Install Dependencies & Build Binary
         shell: pwsh
         env:
           PYTHONUTF8: '1'
         run: |
           $ErrorActionPreference = 'Stop'
 
-          # 1. Upgrade core packaging tools
-          Write-Host "--- upgrading packaging tools ---"
-          pip install --upgrade pip setuptools wheel
+          pip install --upgrade pip
 
-          # 2. Install dependencies in stages for x86 to avoid conflicts
-          $constraintsFile = "${{ steps.constraints.outputs.file }}"
-          $requirementsFile = "${{ env.BACKEND_DIR }}/requirements.txt"
-
-          if ('${{ matrix.arch }}' -eq 'x86') {
-            Write-Host "--- x86 detected: applying staged installation ---"
-
-            # Show constraints for debugging
-            Write-Host "--- constraint file content ---"
-            Get-Content $constraintsFile
-
-            # Exclude conflicting packages from the main install
-            $conflictingPackages = @('numpy', 'pandas', 'sqlalchemy', 'greenlet', 'psycopg2-binary')
-            $regex = $conflictingPackages -join '|'
-            $tempRequirements = "temp-requirements-x86.txt"
-
-            Write-Host "--- filtering main requirements ---"
-            Get-Content $requirementsFile | Where-Object { $_ -notmatch $regex } | Set-Content $tempRequirements
-
-            Write-Host "--- temporary requirements file content ---"
-            Get-Content $tempRequirements
-
-            Write-Host "--- installing non-conflicting packages ---"
-            pip install -r $tempRequirements
-
-            Write-Host "--- installing CONFLICTING packages with x86 constraints ---"
-            # This is the key: install these separately using the strict constraints
-            pip install numpy pandas sqlalchemy -c $constraintsFile
-
+          $requirementsFile = if ('${{ matrix.arch }}' -eq 'x86') {
+            Write-Host "--- Using x86-specific requirements file ---"
+            "${{ env.BACKEND_DIR }}/requirements-x86.txt"
           } else {
-            Write-Host "--- x64 detected: installing all requirements directly ---"
-            pip install -r $requirementsFile
+            Write-Host "--- Using standard requirements file ---"
+            "${{ env.BACKEND_DIR }}/requirements.txt"
           }
 
-          # 3. Install build-time dependencies
-          Write-Host "--- installing build-time dependencies ---"
-          pip install --upgrade "pyinstaller>=6.12" pywin32 -c $constraintsFile
+          pip install -r $requirementsFile
+          pip install --upgrade "pyinstaller>=6.12" pywin32
 
-          # 4. Show final installed packages for verification
-          Write-Host "--- final installed packages (pip list) ---"
+          Write-Host "--- Final installed packages (pip list) ---"
           pip list
 
-          # 5. Build the executable
-          Write-Host "--- building executable ---"
+          Write-Host "--- Building executable ---"
           pyinstaller --noconfirm --clean fortuna-backend-electron.spec
 
       - name: 🔍 Verify PyInstaller Bundle Contents
