@@ -176,8 +176,12 @@ jobs:
         if: always()
         shell: pwsh
         run: |
-          Rename-Item -Path "web_service\backend\json_temp" -NewName "json" -Force
-          Write-Host "Restored 'json' directory name."
+          if (Test-Path "web_service\backend\json_temp") {
+            Rename-Item -Path "web_service\backend\json_temp" -NewName "json" -Force
+            Write-Host "Restored 'json' directory name."
+          } else {
+            Write-Host "Skipping restore, 'json_temp' directory not found."
+          }
       - name: 🔮 Build Executable with Modern PyInstaller
         env:
           PYTHONUTF8: '1'
