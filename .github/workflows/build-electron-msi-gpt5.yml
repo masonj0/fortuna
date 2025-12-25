@@ -140,7 +140,7 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "--- Building executable with verbose logging ---"
-          pyinstaller --noconfirm --clean --log-level INFO fortuna-backend-electron.spec
+          pyinstaller --noconfirm --clean --log-level INFO --additional-hooks-dir=./fortuna-backend-hooks fortuna-backend-electron.spec
 
       - name: '🔍 Post-build Bundle Inspection'
         id: inspect-bundle
