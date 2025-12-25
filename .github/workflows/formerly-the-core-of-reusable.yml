@@ -189,6 +189,7 @@ jobs:
           pip install pyinstaller
 
           pyinstaller --noconfirm --onedir --clean --name fortuna-backend `
+            --additional-hooks-dir fortuna-backend-hooks `
             --hidden-import=win32timezone --hidden-import=win32serviceutil `
             --add-data "web_service/backend;backend" `
             --add-data "electron/out;ui" `
