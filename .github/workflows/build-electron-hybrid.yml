@@ -119,6 +119,34 @@ jobs:
         run: |
           pip install -r ${{ env.BACKEND_DIR }}/requirements-dev.txt -c ${{ steps.constraints.outputs.file }}
           pip install --upgrade "pyinstaller>=6.12" pywin32
+      - name: '🔍 Verify Critical Imports Before Build'
+        shell: pwsh
+        run: |
+          Write-Host "Verifying all critical modules can be imported..."
+
+          $modules = @(
+              'structlog',
+              'uvicorn',
+              'fastapi',
+              'starlette',
+              'pydantic',
+              'pydantic_settings',
+              'sqlalchemy',
+              'aiosqlite',
+              'httpx',
+              'redis',
+              'slowapi',
+              'limits'
+          )
+
+          foreach ($module in $modules) {
+              python -c "import $module; print(f'✅ $module')"
+              if ($LASTEXITCODE -ne 0) {
+                  throw "❌ Failed to import $module"
+              }
+          }
+
+          Write-Host "✅ All critical modules verified"
       - name: '📦 Build Python Backend (UI Bridge)'
         shell: pwsh
         env:
