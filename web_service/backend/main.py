@@ -45,6 +45,10 @@ def main():
         sys.path.insert(0, os.path.abspath(sys._MEIPASS))
         os.chdir(sys._MEIPASS)
 
+    # Configure logging at the earliest point after path setup
+    from web_service.backend.logging_config import configure_logging
+    configure_logging()
+
     # Defer third-party imports until after sys.path is configured for PyInstaller
     import uvicorn
     import structlog
@@ -127,7 +131,4 @@ def main():
     )
 
 if __name__ == "__main__":
-    # Configure logging at the earliest point
-    from web_service.backend.logging_config import configure_logging
-    configure_logging()
     main()
