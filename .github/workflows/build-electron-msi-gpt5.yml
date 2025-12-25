@@ -56,7 +56,7 @@ jobs:
           New-Item -ItemType Directory -Path "${{ env.BACKEND_DIR }}/json" -Force
           New-Item -ItemType Directory -Path "${{ env.BACKEND_DIR }}/adapters" -Force
 
-      - name: 📦 Install Dependencies & Build Binary
+      - name: 📦 Install Dependencies
         shell: pwsh
         env:
           PYTHONUTF8: '1'
@@ -85,40 +85,104 @@ jobs:
           Write-Host "--- Final installed packages (pip list) ---"
           pip list
 
-          Write-Host "--- Building executable ---"
-          pyinstaller --noconfirm --clean fortuna-backend-electron.spec
-
-      - name: 🔍 Verify PyInstaller Bundle Contents
+      - name: 🐍 Set up PYTHONPATH
         shell: pwsh
         run: |
-          $exePath = "dist/fortuna-backend/fortuna-backend.exe"
-          Write-Host "--- Verifying bundle structure ---"
+          echo "PYTHONPATH=${{ github.workspace }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "PYTHONPATH set to ${{ github.workspace }}"
 
-          # Check if executable exists
-          if (!(Test-Path $exePath)) {
-              throw "❌ CRITICAL: Executable not found at $exePath"
+      - name: '🩹 Temporarily Rename Shadowing Directory'
+        shell: pwsh
+        run: |
+          Rename-Item -Path "${{ env.BACKEND_DIR }}\json" -NewName "json_temp" -Force
+          Write-Host "Temporarily renamed 'json' directory to avoid import shadowing."
+
+      - name: '🔬 Pre-build Import Verification'
+        id: verify-imports
+        shell: pwsh
+        run: |
+          Write-Host "--- Verifying all critical modules can be imported before build ---"
+          $modules = @(
+              'structlog',
+              'uvicorn',
+              'fastapi',
+              'starlette',
+              'pydantic',
+              'pydantic_settings',
+              'sqlalchemy',
+              'aiosqlite',
+              'httpx',
+              'redis',
+              'slowapi',
+              'limits',
+              'web_service',
+              'web_service.backend',
+              'web_service.backend.api'
+          )
+          $ErrorActionPreference = "Continue"
+          foreach ($module in $modules) {
+              python -c "import $module; print('✅ $module')"
+              if ($LASTEXITCODE -ne 0) {
+                  Write-Error "❌ Failed to import '$module'. This module is required for the application to run."
+                  exit 1
+              }
           }
-          Write-Host "✅ Executable found: $exePath"
+          Write-Host "✅ All critical modules imported successfully."
 
-          # Check _internal folder exists (where dependencies are)
+      - name: '🩹 Restore Shadowing Directory Name'
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path "${{ env.BACKEND_DIR }}\json_temp") {
+            Rename-Item -Path "${{ env.BACKEND_DIR }}\json_temp" -NewName "json" -Force
+            Write-Host "Restored 'json' directory name."
+          } else {
+            Write-Host "Skipping restore, 'json_temp' directory not found."
+          }
+
+      - name: '📦 Build Executable'
+        shell: pwsh
+        run: |
+          Write-Host "--- Building executable with verbose logging ---"
+          pyinstaller --noconfirm --clean --log-level INFO --additional-hooks-dir=./fortuna-backend-hooks fortuna-backend-electron.spec
+
+      - name: '🔍 Post-build Bundle Inspection'
+        id: inspect-bundle
+        shell: pwsh
+        run: |
           $internalDir = "dist/fortuna-backend/_internal"
           if (!(Test-Path $internalDir)) {
-              throw "❌ CRITICAL: _internal directory not found"
+              throw "❌ CRITICAL: _internal directory not found after build. The bundle is incomplete."
           }
-          Write-Host "✅ Dependencies folder found"
+          Write-Host "--- Contents of _internal directory ---"
+          Get-ChildItem -Path $internalDir -Recurse | ForEach-Object { $_.FullName }
 
-          # Try to list critical packages in _internal
-          $criticalModules = @("uvicorn", "fastapi", "starlette")
-          foreach ($module in $criticalModules) {
-              $modulePath = Get-ChildItem -Path $internalDir -Recurse -Filter "*$module*" -ErrorAction SilentlyContinue
-              if ($modulePath) {
-                  Write-Host "✅ Found files related to '$module'"
+          $modules_to_check = @(
+              "structlog",
+              "uvicorn",
+              "fastapi",
+              "starlette",
+              "pydantic",
+              "sqlalchemy",
+              "httpx",
+              "redis"
+          )
+
+          $found_all = $true
+          foreach ($module in $modules_to_check) {
+              $found = Get-ChildItem -Path $internalDir -Recurse -Filter "*$module*" -ErrorAction SilentlyContinue
+              if ($found) {
+                  Write-Host "✅ Found '$module' in bundle."
               } else {
-                  Write-Warning "⚠️ No files found for '$module' (may be embedded)"
+                  Write-Error "❌ CRITICAL: Did not find '$module' in the final bundle."
+                  $found_all = $false
               }
           }
 
-          Write-Host "--- Bundle verification completed ---"
+          if (-not $found_all) {
+              throw "One or more critical modules were not found in the PyInstaller bundle."
+          }
+          Write-Host "✅ All critical modules verified in the final bundle."
 
       - name: 📦 Download Tesseract OCR
         run: |
