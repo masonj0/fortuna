@@ -143,8 +143,38 @@ jobs:
       - name: '📦 Build Executable'
         shell: pwsh
         run: |
-          Write-Host "--- Building executable with verbose logging ---"
-          pyinstaller --noconfirm --clean --log-level INFO fortuna-backend-electron.spec
+          Write-Host "=== BUILDING EXECUTABLE WITH UVICORN HOOK ==="
+
+          # Verify hooks directory exists
+          $hooksDir = "fortuna-backend-hooks"
+          if (!(Test-Path $hooksDir)) {
+            Write-Error "❌ CRITICAL: Hooks directory not found at $hooksDir"
+            exit 1
+          }
+          Write-Host "✅ Hooks directory confirmed: $(Resolve-Path $hooksDir)"
+
+          # Verify hook file exists
+          $hookFile = Join-Path $hooksDir "hook-uvicorn.py"
+          if (!(Test-Path $hookFile)) {
+            Write-Error "❌ CRITICAL: Hook file not found at $hookFile"
+            exit 1
+          }
+          Write-Host "✅ Hook file confirmed: $(Resolve-Path $hookFile)"
+
+          # Build with hooks directory
+          $hooksPath = Resolve-Path $hooksDir
+          Write-Host "Running PyInstaller with hooks from: $hooksPath"
+
+          pyinstaller --noconfirm --clean --log-level INFO `
+            --additional-hooks-dir="$hooksPath" `
+            fortuna-backend-electron.spec
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "❌ PyInstaller build failed with exit code $LASTEXITCODE"
+            exit 1
+          }
+
+          Write-Host "✅ Build completed successfully"
 
       - name: '🔍 Post-build Bundle Inspection'
         id: inspect-bundle
@@ -154,8 +184,10 @@ jobs:
           if (!(Test-Path $internalDir)) {
               throw "❌ CRITICAL: _internal directory not found after build. The bundle is incomplete."
           }
-          Write-Host "--- Contents of _internal directory ---"
-          Get-ChildItem -Path $internalDir -Recurse | ForEach-Object { $_.FullName }
+
+          Write-Host "✅ Bundle directory structure verified"
+          Write-Host ""
+          Write-Host "--- Checking for critical modules ---"
 
           $modules_to_check = @(
               "structlog",
@@ -170,19 +202,21 @@ jobs:
 
           $found_all = $true
           foreach ($module in $modules_to_check) {
-              $found = Get-ChildItem -Path $internalDir -Recurse -Filter "*$module*" -ErrorAction SilentlyContinue
+              $found = Get-ChildItem -Path $internalDir -Recurse -Filter "*$module*" -ErrorAction SilentlyContinue | Select-Object -First 1
               if ($found) {
-                  Write-Host "✅ Found '$module' in bundle."
+                  Write-Host "✅ Found '$module' in bundle"
               } else {
-                  Write-Error "❌ CRITICAL: Did not find '$module' in the final bundle."
+                  Write-Error "❌ CRITICAL: Did not find '$module' in the final bundle"
                   $found_all = $false
               }
           }
 
+          Write-Host ""
           if (-not $found_all) {
               throw "One or more critical modules were not found in the PyInstaller bundle."
           }
-          Write-Host "✅ All critical modules verified in the final bundle."
+
+          Write-Host "✅ All critical modules verified in the final bundle"
 
       - name: 📦 Download Tesseract OCR
         run: |
