@@ -65,15 +65,21 @@ jobs:
 
           pip install --upgrade pip
 
-          $requirementsFile = if ('${{ matrix.arch }}' -eq 'x86') {
+          if ('${{ matrix.arch }}' -eq 'x86') {
             Write-Host "--- Using x86-specific requirements file ---"
-            "${{ env.BACKEND_DIR }}/requirements-x86.txt"
+            # Pre-install specific versions of packages with known good 32-bit wheels for Python 3.11
+            # to avoid building from source which is failing for scipy.
+            Write-Host "--- Pre-installing numpy, pandas, and scipy for x86 ---"
+            pip install numpy==1.23.5 pandas==1.5.3 scipy==1.10.1
+            $requirementsFile = "${{ env.BACKEND_DIR }}/requirements-x86.txt"
+            # Install the rest of the requirements. Pip will skip already satisfied packages.
+            pip install -r $requirementsFile
           } else {
             Write-Host "--- Using standard requirements file ---"
-            "${{ env.BACKEND_DIR }}/requirements.txt"
+            $requirementsFile = "${{ env.BACKEND_DIR }}/requirements.txt"
+            pip install -r $requirementsFile
           }
 
-          pip install -r $requirementsFile
           pip install --upgrade "pyinstaller>=6.12" pywin32
 
           Write-Host "--- Final installed packages (pip list) ---"
