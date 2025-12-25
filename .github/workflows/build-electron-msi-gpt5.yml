@@ -91,6 +91,12 @@ jobs:
           echo "PYTHONPATH=${{ github.workspace }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           Write-Host "PYTHONPATH set to ${{ github.workspace }}"
 
+      - name: '🩹 Temporarily Rename Shadowing Directory'
+        shell: pwsh
+        run: |
+          Rename-Item -Path "${{ env.BACKEND_DIR }}/json" -NewName "${{ env.BACKEND_DIR }}/json_temp" -Force
+          Write-Host "Temporarily renamed 'json' directory to avoid import shadowing."
+
       - name: '🔬 Pre-build Import Verification'
         id: verify-imports
         shell: pwsh
@@ -122,6 +128,13 @@ jobs:
               }
           }
           Write-Host "✅ All critical modules imported successfully."
+
+      - name: '🩹 Restore Shadowing Directory Name'
+        if: always()
+        shell: pwsh
+        run: |
+          Rename-Item -Path "${{ env.BACKEND_DIR }}/json_temp" -NewName "${{ env.BACKEND_DIR }}/json" -Force
+          Write-Host "Restored 'json' directory name."
 
       - name: '📦 Build Executable'
         shell: pwsh
