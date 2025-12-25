@@ -1,6 +1,6 @@
 # ============================================================================
 # FILE: fortuna-backend-electron.spec
-# FIXED: Includes all dependencies needed for PyInstaller bundle
+# FIXED: Includes ALL dependencies including structlog
 # ============================================================================
 
 import sys
@@ -9,20 +9,41 @@ from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 block_cipher = None
 
 # CRITICAL FIX: Explicitly list ALL hidden imports
-# These won't be found by PyInstaller's import scanning
 hidden_imports = [
     # FastAPI & ASGI server stack
     'uvicorn',
     'uvicorn.logging',
+    'uvicorn.loops',
+    'uvicorn.loops.auto',
+    'uvicorn.loops.asyncio',
     'uvicorn.protocols',
     'uvicorn.protocols.http',
     'uvicorn.protocols.http.auto',
-    'uvicorn.protocols.websocket',
+    'uvicorn.protocols.http.h11_impl',
+    'uvicorn.protocols.websockets',
+    'uvicorn.protocols.websockets.auto',
+    'uvicorn.protocols.websockets.wsproto_impl',
+    'uvicorn.lifespan',
+    'uvicorn.lifespan.on',
+    'uvicorn.lifespan.off',
     'fastapi',
+    'fastapi.routing',
     'starlette',
+    'starlette.applications',
     'starlette.middleware',
     'starlette.middleware.cors',
+    'starlette.middleware.base',
     'starlette.staticfiles',
+    'starlette.routing',
+
+    # ⭐ STRUCTLOG - THE MISSING MODULE! ⭐
+    'structlog',
+    'structlog.processors',
+    'structlog.dev',
+    'structlog.stdlib',
+    'structlog.contextvars',
+    'structlog.testing',
+    'structlog.threadlocal',
 
     # Async runtime
     'asyncio',
@@ -31,27 +52,86 @@ hidden_imports = [
 
     # HTTP & networking
     'httpx',
+    'httpx._client',
+    'httpx._config',
+    'httpx._transports',
     'httptools',
     'websockets',
+    'h11',
+    'h2',
+    'hpack',
+    'hyperframe',
+    'httpcore',
 
-    # Data validation
+    # Data validation & settings
     'pydantic',
+    'pydantic.fields',
+    'pydantic.main',
     'pydantic.json',
+    'pydantic_core',
+    'pydantic_settings',
     'email_validator',
+
+    # Database
+    'sqlalchemy',
+    'sqlalchemy.dialects',
+    'sqlalchemy.dialects.sqlite',
+    'sqlalchemy.ext',
+    'sqlalchemy.ext.asyncio',
+    'sqlalchemy.pool',
+    'aiosqlite',
+    'greenlet',
+
+    # Rate limiting & caching
+    'slowapi',
+    'limits',
+    'redis',
+
+    # Utilities
+    'python_multipart',
+    'python-dotenv',
+    'click',
+    'tenacity',
+    'psutil',
+
+    # Data processing (if used)
+    'numpy',
+    'pandas',
+    'scipy',
+    'beautifulsoup4',
+    'selectolax',
+    'soupsieve',
+
+    # Image processing (if used)
+    'PIL',
+    'PIL.Image',
+    'opencv-python',
+    'cv2',
+    'mss',
+
+    # Crypto & security
+    'cryptography',
+    'cryptography.fernet',
+    'cryptography.hazmat',
+    'cryptography.hazmat.primitives',
+    'keyring',
+    'secretstorage',
 
     # Standard library (sometimes missed)
     'json',
     'logging',
+    'logging.config',
+    'logging.handlers',
     'pathlib',
     'os',
     'sys',
     're',
     'typing',
     'dataclasses',
-
-    # Common utilities
-    'python-dotenv',
-    'click',
+    'datetime',
+    'collections',
+    'functools',
+    'itertools',
 ]
 
 # Collect all submodules from key packages
@@ -59,18 +139,22 @@ hidden_imports += collect_submodules('uvicorn')
 hidden_imports += collect_submodules('fastapi')
 hidden_imports += collect_submodules('starlette')
 hidden_imports += collect_submodules('pydantic')
+hidden_imports += collect_submodules('structlog')  # ← Add this!
+hidden_imports += collect_submodules('sqlalchemy')
 
 # Collect data files from packages that include static files
 datas = []
 datas += collect_data_files('starlette')
 datas += collect_data_files('fastapi')
+datas += collect_data_files('certifi')  # SSL certificates
+datas += collect_data_files('tzdata')  # Timezone data
 
 a = Analysis(
     ['web_service/backend/main.py'],
     pathex=[],
     binaries=[],
     datas=datas,
-    hiddenimports=hidden_imports,  # ← NOW POPULATED!
+    hiddenimports=hidden_imports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
