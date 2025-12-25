@@ -4,7 +4,14 @@
 # ============================================================================
 
 import sys
+import os
+import pathlib
 from PyInstaller.utils.hooks import collect_submodules, collect_data_files
+
+# Determine the absolute path to the hooks directory
+# SPECPATH is a global provided by PyInstaller that contains its own path
+spec_dir = pathlib.Path(SPECPATH).parent.resolve()
+hooks_dir = str(spec_dir / 'fortuna-backend-hooks')
 
 block_cipher = None
 
@@ -155,7 +162,7 @@ a = Analysis(
     binaries=[],
     datas=datas,
     hiddenimports=hidden_imports,
-    hookspath=['./fortuna-backend-hooks'],
+    hookspath=[hooks_dir],
     hooksconfig={},
     runtime_hooks=[],
     excludedimports=[],
