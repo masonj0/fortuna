@@ -94,7 +94,7 @@ jobs:
       - name: '🩹 Temporarily Rename Shadowing Directory'
         shell: pwsh
         run: |
-          Rename-Item -Path "${{ env.BACKEND_DIR }}/json" -NewName "${{ env.BACKEND_DIR }}/json_temp" -Force
+          Rename-Item -Path "${{ env.BACKEND_DIR }}\json" -NewName "json_temp" -Force
           Write-Host "Temporarily renamed 'json' directory to avoid import shadowing."
 
       - name: '🔬 Pre-build Import Verification'
@@ -133,7 +133,7 @@ jobs:
         if: always()
         shell: pwsh
         run: |
-          Rename-Item -Path "${{ env.BACKEND_DIR }}/json_temp" -NewName "${{ env.BACKEND_DIR }}/json" -Force
+          Rename-Item -Path "${{ env.BACKEND_DIR }}\json_temp" -NewName "json" -Force
           Write-Host "Restored 'json' directory name."
 
       - name: '📦 Build Executable'
