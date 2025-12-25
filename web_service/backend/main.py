@@ -1,9 +1,7 @@
-import uvicorn
 import sys
 import os
 import asyncio
 from multiprocessing import freeze_support
-import structlog
 from pathlib import Path
 
 # Force UTF-8 encoding for stdout and stderr, crucial for PyInstaller on Windows
@@ -12,8 +10,6 @@ if sys.stdout.encoding != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8')
 if sys.stderr.encoding != 'utf-8':
     sys.stderr.reconfigure(encoding='utf-8')
-
-log = structlog.get_logger(__name__)
 
 # This is the definitive entry point for the Fortuna Faucet backend service.
 # It is designed to be compiled with PyInstaller.
@@ -48,6 +44,12 @@ def main():
         # The `sys._MEIPASS` attribute points to a temporary directory where PyInstaller unpacks the app.
         sys.path.insert(0, os.path.abspath(sys._MEIPASS))
         os.chdir(sys._MEIPASS)
+
+    # Defer third-party imports until after sys.path is configured for PyInstaller
+    import uvicorn
+    import structlog
+
+    log = structlog.get_logger(__name__)
 
     # When packaged, we need to ensure multiprocessing works correctly.
     if getattr(sys, "frozen", False):

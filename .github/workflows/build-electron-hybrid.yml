@@ -1,4 +1,4 @@
-# System Timestamp: 2025-12-24 18:00:00
+# System Timestamp: 2025-12-25 10:00:00
 name:  🚀 Build Electron MSI (Hybrid V12 Engine)
 
 on:
@@ -118,7 +118,35 @@ jobs:
       - name: '🐍 Install Python Dependencies'
         run: |
           pip install -r ${{ env.BACKEND_DIR }}/requirements-dev.txt -c ${{ steps.constraints.outputs.file }}
-          pip install pyinstaller==6.6.0
+          pip install --upgrade "pyinstaller>=6.12" pywin32
+      - name: '🔍 Verify Critical Imports Before Build'
+        shell: pwsh
+        run: |
+          Write-Host "Verifying all critical modules can be imported..."
+
+          $modules = @(
+              'structlog',
+              'uvicorn',
+              'fastapi',
+              'starlette',
+              'pydantic',
+              'pydantic_settings',
+              'sqlalchemy',
+              'aiosqlite',
+              'httpx',
+              'redis',
+              'slowapi',
+              'limits'
+          )
+
+          foreach ($module in $modules) {
+              python -c "import $module; print(f'✅ $module')"
+              if ($LASTEXITCODE -ne 0) {
+                  throw "❌ Failed to import $module"
+              }
+          }
+
+          Write-Host "✅ All critical modules verified"
       - name: '📦 Build Python Backend (UI Bridge)'
         shell: pwsh
         env:
@@ -135,8 +163,8 @@ jobs:
           name: python-ui-bridge-${{ matrix.arch }}-${{ github.run_id }}
           path: dist/fortuna-ui-bridge.zip
           retention-days: 1
-
       - name: '📤 Upload Frontend Artifact'
+        if: matrix.arch == 'x64'
         uses: actions/upload-artifact@v4
         with:
           name: frontend-build-${{ github.run_id }}
@@ -144,6 +172,25 @@ jobs:
             ${{ env.FRONTEND_DIR }}/out/
             ${{ env.FRONTEND_DIR }}/frontend-manifest.tsv
           retention-days: 1
+
+  generate-sbom:
+    name: '📜 Generate SBOM'
+    runs-on: ubuntu-latest
+    needs: [build-core]
+    strategy:
+      matrix:
+        arch: [x64, x86]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: python-ui-bridge-${{ matrix.arch }}-${{ github.run_id }}
+          path: backend
+      - name: Create SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: backend
+          artifact-name: sbom-${{ matrix.arch }}-${{ github.run_id }}
+          format: spdx-json
 
   # ============================================================================
   # JOB 2: PACKAGE ELECTRON (The "Ironclad" Chassis)
@@ -396,6 +443,22 @@ jobs:
           }
           Write-Error "❌ LAYER 3 FAILED: Service Failed Health Check"
           exit 1
+      - name: '📸 Visual Proof'
+        if: success()
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          pip install playwright
+          python -m playwright install chromium
+
+          $url = "http://localhost:${{ env.FORTUNA_PORT }}"
+          node -e "const { chromium } = require('playwright'); (async () => { const browser = await chromium.launch(); const page = await browser.newPage(); await page.goto('$url'); await page.screenshot({ path: 'proof.png' }); await browser.close(); })();"
+      - name: '📤 Upload Proof'
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-proof-${{ matrix.arch }}-${{ github.run_id }}
+          path: proof.png
       - name: Cleanup
         if: always()
         run: Stop-Process -Name "Fortuna Faucet", "fortuna-ui-bridge" -Force -ErrorAction SilentlyContinue
