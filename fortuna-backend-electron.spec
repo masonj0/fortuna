@@ -47,6 +47,18 @@ datas += collect_data_files('fastapi')
 datas += collect_data_files('certifi')
 datas += collect_data_files('tzdata')
 
+# CRITICAL: Explicitly bundle tenacity package files
+try:
+    import tenacity
+    tenacity_path = Path(tenacity.__file__).parent
+    datas.append((str(tenacity_path), 'tenacity'))
+    print(f"[SPEC] ✅ Tenacity package location: {tenacity_path}")
+except ImportError:
+    print("[SPEC] ⚠️  WARNING: Tenacity not found in development environment")
+
+# Also use collect_data_files as fallback
+datas += collect_data_files('tenacity')
+
 # ============================================================================
 # ULTIMATE FALLBACK: Manually bundle uvicorn and structlog as data
 # ============================================================================
@@ -87,6 +99,12 @@ except Exception as e:
 hidden_imports = [
     # Windows service support
     'win32timezone',
+    'win32ctypes',
+    'win32ctypes.core',
+    'win32ctypes.pywin32',
+    'pywin32',
+    'pywintypes',
+    'pythoncom',
     'win32serviceutil',
     'win32service',
     'win32event',
@@ -153,7 +171,41 @@ hidden_imports = [
     # Rate limiting
     'slowapi',
     'limits',
+    # CRITICAL: Comprehensive tenacity bundling
     'tenacity',
+    'tenacity.after',
+    'tenacity.before',
+    'tenacity.before_sleep',
+    'tenacity.compat',
+    'tenacity.future',
+    'tenacity.retry',
+    'tenacity.retry_if_exception',
+    'tenacity.retry_if_result',
+    'tenacity.retry_if_dunder_last_retry',
+    'tenacity.retry_if_not_result',
+    'tenacity.retry_if_not_exception',
+    'tenacity.retry_if_exception_type',
+    'tenacity.retry_if_exception_message',
+    'tenacity.retry_any',
+    'tenacity.retry_all',
+    'tenacity.stop',
+    'tenacity.stop_after_attempt',
+    'tenacity.stop_after_delay',
+    'tenacity.wait',
+    'tenacity.wait_base',
+    'tenacity.wait_fixed',
+    'tenacity.wait_random',
+    'tenacity.wait_exponential',
+    'tenacity.wait_incrementing',
+    'tenacity.wait_chain',
+    'tenacity.wait_combine',
+    'tenacity.wait_random_exponential',
+    'tenacity.wait_arbitrary',
+    'tenacity.wait_incrementing_random',
+    'tenacity.wait_exponential_jitter',
+    'tenacity.asyncio',
+    'tenacity.retry_error',
+    'tenacity.retry_base',
 
     # Data processing
     'numpy',

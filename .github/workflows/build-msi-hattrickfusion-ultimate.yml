@@ -101,6 +101,8 @@ jobs:
     strategy:
       matrix:
         arch: [x64, x86]
+    env:
+      PYTHONUTF8: '1'
     outputs:
       semver: ${{ steps.build_metadata.outputs.semver }}
       short_sha: ${{ steps.build_metadata.outputs.short_sha }}
