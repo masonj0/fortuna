@@ -1,200 +1,98 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-PyInstaller spec file for Fortuna Backend - FIXED VERSION
-This spec properly references the custom hooks directory for uvicorn bundling.
+PyInstaller spec file for Fortuna Backend
+CORRECTED VERSION: This spec uses the robust 'collect_submodules' technique
+to emulate '--collect-all' behavior for problematic packages like tenacity.
 """
 
 import sys
-import os
 from pathlib import Path
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
+# ============================================================================
+# Basic Configuration
+# ============================================================================
 block_cipher = None
-
-# ============================================================================
-# CRITICAL: Determine hooks directory relative to spec file location
-# ============================================================================
-# Use SPECPATH, the PyInstaller-provided global containing the path to the spec file.
 spec_file_dir = Path(SPECPATH).parent.resolve()
-hooks_directory = str(spec_file_dir / 'fortuna-backend-hooks')
+hooks_directory = spec_file_dir / 'fortuna-backend-hooks'
 
 print(f"[SPEC] Spec file location: {spec_file_dir}")
 print(f"[SPEC] Hooks directory: {hooks_directory}")
 
-if not Path(hooks_directory).exists():
-    print(f"[SPEC] ⚠️  WARNING: Hooks directory does not exist: {hooks_directory}")
-else:
-    print(f"[SPEC] ✅ Hooks directory found")
-
 # ============================================================================
-# Frontend data bundling
+# Data Files (for non-Python assets)
 # ============================================================================
-frontend_path = spec_file_dir / "web_platform/frontend/out"
 datas = []
-
+frontend_path = spec_file_dir / "web_platform/frontend/out"
 if frontend_path.exists():
     datas.append((str(frontend_path), 'ui'))
     print(f"[SPEC] ✅ Frontend bundling enabled: {frontend_path}")
 else:
-    print(f"[SPEC] ⚠️  Frontend not found: {frontend_path}")
+    print(f"[SPEC] ⚠️  Frontend not found, UI will not be bundled: {frontend_path}")
+
+# Add data files from core libraries that are not auto-detected
+try:
+    from PyInstaller.utils.hooks import collect_data_files
+    datas += collect_data_files('starlette')
+    datas += collect_data_files('fastapi')
+    datas += collect_data_files('certifi')
+    datas += collect_data_files('tzdata')
+    print("[SPEC] ✅ Collected standard library data files.")
+except ImportError:
+    print("[SPEC] ⚠️ Could not import 'collect_data_files'. Standard library data may be missing.")
 
 # ============================================================================
-# Additional data files from packages
+# Hidden Imports (The Correct Approach)
 # ============================================================================
-import site
-datas += collect_data_files('starlette')
-datas += collect_data_files('fastapi')
-datas += collect_data_files('certifi')
-datas += collect_data_files('tzdata')
-
-
-# ============================================================================
-# CRITICAL: Hidden imports - explicit list for PyInstaller
-# ============================================================================
+# 1. Start with a minimal list of imports that analysis might miss.
 hidden_imports = [
-    # Windows service support
     'win32timezone',
     'win32ctypes',
     'win32ctypes.core',
-    'win32ctypes.pywin32',
     'pywin32',
     'pywintypes',
     'pythoncom',
     'win32serviceutil',
     'win32service',
     'win32event',
-
-    # Web framework core
-    'fastapi',
-    'fastapi.openapi',
-    'fastapi.openapi.models',
-    'starlette',
-    'starlette.middleware',
-    'starlette.middleware.cors',
-    'starlette.routing',
-    'starlette.responses',
-    'starlette.staticfiles',
-    'starlette.websockets',
-
-    # Uvicorn (CRITICAL - even with hook, explicit listing helps)
-    'uvicorn',
-    'uvicorn.config',
-    'uvicorn.server',
-    'uvicorn.logging',
-    'uvicorn.loops',
-    'uvicorn.loops.auto',
-    'uvicorn.loops.asyncio',
-    'uvicorn.protocols',
-    'uvicorn.protocols.http',
-    'uvicorn.protocols.http.auto',
-    'uvicorn.protocols.http.h11_impl',
-    'uvicorn.protocols.websockets',
-    'uvicorn.protocols.websockets.auto',
-    'uvicorn.lifespan',
-    'uvicorn.importer',
-
-    # Pydantic
-    'pydantic',
-    'pydantic.json',
-    'pydantic_settings',
-    'pydantic_core',
-
-    # Structlog (CRITICAL - was missing)
-    'structlog',
-    'structlog.processors',
-    'structlog.testing',
-
-    # SQLAlchemy
-    'sqlalchemy',
-    'sqlalchemy.orm',
-    'sqlalchemy.dialects',
+    'pydantic_settings.sources', # For .env file support
     'sqlalchemy.dialects.sqlite',
-    'sqlalchemy.dialects.postgresql',
     'aiosqlite',
     'greenlet',
-
-    # HTTP clients
-    'httpx',
-    'httpx._models',
-    'httpx._client',
-    'httpcore',
-
-    # Redis
-    'redis',
-    'redis.asyncio',
-
-    # Rate limiting
-    'slowapi',
-    'limits',
-    # CRITICAL: Comprehensive tenacity bundling
-    'tenacity',
-    'tenacity.after',
-    'tenacity.before',
-    'tenacity.before_sleep',
-    'tenacity.compat',
-    'tenacity.future',
-    'tenacity.retry',
-    'tenacity.retry_if_exception',
-    'tenacity.retry_if_result',
-    'tenacity.retry_if_dunder_last_retry',
-    'tenacity.retry_if_not_result',
-    'tenacity.retry_if_not_exception',
-    'tenacity.retry_if_exception_type',
-    'tenacity.retry_if_exception_message',
-    'tenacity.retry_any',
-    'tenacity.retry_all',
-    'tenacity.stop',
-    'tenacity.stop_after_attempt',
-    'tenacity.stop_after_delay',
-    'tenacity.wait',
-    'tenacity.wait_base',
-    'tenacity.wait_fixed',
-    'tenacity.wait_random',
-    'tenacity.wait_exponential',
-    'tenacity.wait_incrementing',
-    'tenacity.wait_chain',
-    'tenacity.wait_combine',
-    'tenacity.wait_random_exponential',
-    'tenacity.wait_arbitrary',
-    'tenacity.wait_incrementing_random',
-    'tenacity.wait_exponential_jitter',
-    'tenacity.asyncio',
-    'tenacity.retry_error',
-    'tenacity.retry_base',
-
-    # Data processing
-    'numpy',
-    'pandas',
-    'scipy',
-
-    # HTML parsing
-    'beautifulsoup4',
-    'selectolax',
-
-    # Image processing
-    'PIL',
-    'cv2',
-    'mss',
-
-    # Utilities
-    'pytz',
-    'python_dateutil',
-    'cryptography',
-    'certifi',
-    'dotenv',
-    'click',
 ]
+print(f"[SPEC] Initial hidden imports: {len(hidden_imports)}")
+
+# 2. Emulate '--collect-all' by using collect_submodules directly in the spec.
+#    This is the robust way to handle packages with complex/dynamic imports.
+print("[SPEC] Force-collecting submodules for problematic packages...")
+try:
+    from PyInstaller.utils.hooks import collect_submodules
+    problematic_packages = [
+        'tenacity',
+        'uvicorn',
+        'structlog',
+        'fastapi',
+        'starlette',
+        'httpx',
+        'redis',
+        'slowapi',
+        'limits',
+    ]
+
+    for package in problematic_packages:
+        try:
+            collected_modules = collect_submodules(package)
+            hidden_imports.extend(collected_modules)
+            print(f"[SPEC] ✅ Collected {len(collected_modules)} submodules from '{package}'")
+        except Exception as e:
+            print(f"[SPEC] ⚠️  Could not collect submodules from '{package}': {e}")
+
+    print(f"[SPEC] ✅ Total hidden imports after collection: {len(hidden_imports)}")
+
+except ImportError:
+    print("[SPEC] ⚠️ Could not import 'collect_submodules'. Dynamic collection will be skipped.")
 
 # ============================================================================
-# BRUTE-FORCE a solution for uvicorn and structlog bundling
-# ============================================================================
-print("[SPEC] Force-collecting all 'uvicorn' and 'structlog' submodules...")
-hidden_imports.extend(collect_submodules('uvicorn'))
-hidden_imports.extend(collect_submodules('structlog'))
-print(f"[SPEC] Total hidden imports after extension: {len(hidden_imports)}")
-
-# ============================================================================
-# Analysis configuration
+# Analysis Configuration
 # ============================================================================
 a = Analysis(
     ['web_service/backend/main.py'],
@@ -202,21 +100,12 @@ a = Analysis(
     binaries=[],
     datas=datas,
     hiddenimports=hidden_imports,
-    # ✅ CRITICAL FIX: Explicitly specify hooks directory
-    hookspath=[hooks_directory],
+    hookspath=[str(hooks_directory) if hooks_directory.exists() else ''],
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
-        'tcl',
-        'tk',
-        '_tkinter',
-        'tkinter',
-        'matplotlib',
-        'pytest',
-        'sphinx',
-        'IPython',
-        'jupyter',
-        'distutils',
+        'tcl', 'tk', '_tkinter', 'tkinter', 'matplotlib', 'pytest',
+        'sphinx', 'IPython', 'jupyter', 'distutils', 'python_service'
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
@@ -224,18 +113,8 @@ a = Analysis(
     noarchive=False,
 )
 
-# ============================================================================
-# PYZ (Python archive)
-# ============================================================================
-pyz = PYZ(
-    a.pure,
-    a.zipped_data,
-    cipher=block_cipher
-)
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
-# ============================================================================
-# EXE (Executable)
-# ============================================================================
 exe = EXE(
     pyz,
     a.scripts,
@@ -246,17 +125,9 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    upx_exclude=[],
     console=True,
-    disable_windowed_traceback=False,
-    target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
 )
 
-# ============================================================================
-# COLLECT (Final bundle)
-# ============================================================================
 coll = COLLECT(
     exe,
     a.binaries,
@@ -264,6 +135,5 @@ coll = COLLECT(
     a.datas,
     strip=False,
     upx=True,
-    upx_exclude=[],
     name='fortuna-backend',
 )
