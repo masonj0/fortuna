@@ -1,12 +1,11 @@
-import sys
-import os
-import asyncio
-from multiprocessing import freeze_support
-from pathlib import Path
+#!/usr/bin/env python3
+"""
+Fortuna Backend Entry Point
+"""
 
 # ============================================================================
-# CRITICAL: Force PyInstaller to discover and bundle packages
-# These imports are REQUIRED for PyInstaller's static analysis to work
+# CRITICAL: Force PyInstaller to analyze and bundle these packages
+# These MUST be at the top of the file, BEFORE any other imports
 # ============================================================================
 import tenacity
 import tenacity.asyncio
@@ -16,11 +15,18 @@ import fastapi
 import starlette
 import httpx
 import redis
+import sqlalchemy
+import aiosqlite
 # ============================================================================
 
+# Now continue with the rest of the original imports
+import sys
+import os
+import asyncio
+from multiprocessing import freeze_support
+from pathlib import Path
 
-# Force UTF-8 encoding for stdout and stderr, crucial for PyInstaller on Windows
-# PATCH #1: Added UTF-8 logging configuration
+# Force UTF-8 encoding for stdout and stderr
 if sys.stdout.encoding != 'utf-8':
     sys.stdout.reconfigure(encoding='utf-8')
 if sys.stderr.encoding != 'utf-8':
@@ -33,7 +39,6 @@ if sys.stderr.encoding != 'utf-8':
 if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
-# PATCH #1: get_asset_path() helper function
 def get_asset_path(relative_path: str) -> Path:
     """
     Get the absolute path to an asset, which works for both development
@@ -44,7 +49,6 @@ def get_asset_path(relative_path: str) -> Path:
         base_path = Path(sys._MEIPASS)
     else:
         # Running in a normal Python environment.
-        # Assumes this script is in web_service/backend/
         base_path = Path(__file__).parent.parent.parent
     return base_path / relative_path
 
@@ -53,28 +57,21 @@ def main():
     Primary entry point for the Fortuna Faucet backend application.
     This function configures and runs the Uvicorn server.
     """
-    # [CRITICAL] This sys.path modification is essential for the application to find its
-    # modules when running as a frozen executable from PyInstaller.
     if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
-        # The `sys._MEIPASS` attribute points to a temporary directory where PyInstaller unpacks the app.
         sys.path.insert(0, os.path.abspath(sys._MEIPASS))
         os.chdir(sys._MEIPASS)
 
-    # Configure logging at the earliest point after path setup
     from web_service.backend.logging_config import configure_logging
     configure_logging()
 
-    # Defer third-party imports until after sys.path is configured for PyInstaller
     import uvicorn
     import structlog
 
     log = structlog.get_logger(__name__)
 
-    # When packaged, we need to ensure multiprocessing works correctly.
     if getattr(sys, "frozen", False):
         freeze_support()
 
-    # Import the app object here after sys.path is configured.
     from web_service.backend.api import app, HTTPException
     from web_service.backend.config import get_settings
     from fastapi.staticfiles import StaticFiles
@@ -88,24 +85,18 @@ def main():
         run_host = "0.0.0.0"
         log.info("Smoke test environment detected. Overriding host.", host=run_host)
 
-    # --- Port Sanity Check ---
     check_port_and_exit_if_in_use(settings.FORTUNA_PORT, run_host)
 
-    # --- Conditional UI Serving for Web Service Mode ---
     if os.environ.get("FORTUNA_MODE") == "webservice":
         log.info("Webservice mode enabled, attempting to serve UI.")
-        # PATCH #1: Replaced hardcoded paths with the helper
-        # The spec file bundles 'web_platform/frontend/out' into the 'ui' directory at the root.
         static_dir_relative = "ui" if getattr(sys, "frozen", False) else "web_platform/frontend/out"
         STATIC_DIR = get_asset_path(static_dir_relative)
         log.info("Static asset directory resolved.", path=str(STATIC_DIR))
 
-        # PATCH #1: Adds startup verification to catch missing assets early
         if not STATIC_DIR.is_dir():
             log.error("CRITICAL: Static asset directory not found! UI will not be served.", path=str(STATIC_DIR))
         else:
             log.info("Mounting static assets.", directory=str(STATIC_DIR))
-            # Mount the _next directory specifically for Next.js assets
             next_dir = STATIC_DIR / "_next"
             if next_dir.is_dir():
                 app.mount("/_next", StaticFiles(directory=str(next_dir)), name="next-static")
@@ -113,12 +104,10 @@ def main():
             else:
                 log.warning("'_next' directory not found in static assets. Frontend may not render correctly.", path=str(next_dir))
 
-            # Serve the main index.html for any non-API path.
             @app.get("/{full_path:path}", include_in_schema=False)
             async def serve_frontend(full_path: str):
                 api_prefixes = ("api/", "docs", "openapi.json", "redoc")
                 if any(full_path.startswith(p) for p in api_prefixes) or full_path == "health":
-                    # Let FastAPI handle API routes. A 404 will be raised naturally if no route matches.
                     return
 
                 index_path = STATIC_DIR / "index.html"
@@ -138,11 +127,11 @@ def main():
              port=settings.FORTUNA_PORT)
 
     uvicorn.run(
-        "web_service.backend.api:app", # Use string import to be reload-friendly
+        "web_service.backend.api:app",
         host=run_host,
         port=settings.FORTUNA_PORT,
         log_level="info",
-        reload=False # Reload should be disabled for production/service
+        reload=False
     )
 
 if __name__ == "__main__":
