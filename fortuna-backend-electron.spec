@@ -47,51 +47,6 @@ datas += collect_data_files('fastapi')
 datas += collect_data_files('certifi')
 datas += collect_data_files('tzdata')
 
-# CRITICAL: Explicitly bundle tenacity package files
-try:
-    import tenacity
-    tenacity_path = Path(tenacity.__file__).parent
-    datas.append((str(tenacity_path), 'tenacity'))
-    print(f"[SPEC] ✅ Tenacity package location: {tenacity_path}")
-except ImportError:
-    print("[SPEC] ⚠️  WARNING: Tenacity not found in development environment")
-
-# Also use collect_data_files as fallback
-datas += collect_data_files('tenacity')
-
-# ============================================================================
-# ULTIMATE FALLBACK: Manually bundle uvicorn and structlog as data
-# ============================================================================
-print("[SPEC] !!! USING MANUAL BUNDLING FALLBACK FOR UVICORN AND STRUCTLOG !!!")
-try:
-    site_packages_path = next(p for p in site.getsitepackages() if 'site-packages' in p)
-    print(f"[SPEC] Found site-packages at: {site_packages_path}")
-
-    uvicorn_path = Path(site_packages_path) / 'uvicorn'
-    if uvicorn_path.exists():
-        datas.append((str(uvicorn_path), 'uvicorn'))
-        print(f"[SPEC] ✅ Added uvicorn data from: {uvicorn_path}")
-    else:
-        print(f"[SPEC] ⚠️  uvicorn directory not found at {uvicorn_path}")
-
-    structlog_path = Path(site_packages_path) / 'structlog'
-    if structlog_path.exists():
-        datas.append((str(structlog_path), 'structlog'))
-        print(f"[SPEC] ✅ Added structlog data from: {structlog_path}")
-    else:
-        print(f"[SPEC] ⚠️  structlog directory not found at {structlog_path}")
-
-    httpx_path = Path(site_packages_path) / 'httpx'
-    if httpx_path.exists():
-        datas.append((str(httpx_path), 'httpx'))
-        print(f"[SPEC] ✅ Added httpx data from: {httpx_path}")
-    else:
-        print(f"[SPEC] ⚠️  httpx directory not found at {httpx_path}")
-
-except StopIteration:
-    print("[SPEC] ⚠️  Could not find site-packages directory.")
-except Exception as e:
-    print(f"[SPEC] ⚠️  An error occurred during manual bundling: {e}")
 
 # ============================================================================
 # CRITICAL: Hidden imports - explicit list for PyInstaller
