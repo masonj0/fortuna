@@ -475,6 +475,7 @@ jobs:
           if (Test-Path (Join-Path $env:BACKEND_DIR "requirements-dev.txt")) {
             pip install -r (Join-Path $env:BACKEND_DIR "requirements-dev.txt") -c ${{ steps.constraints.outputs.file }}
           }
+          pip install pywin32
 
       - name: Generate SBOM (Software Bill of Materials)
         uses: anchore/sbom-action@v0

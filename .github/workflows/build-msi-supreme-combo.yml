@@ -117,7 +117,7 @@ jobs:
       - name: 📦 Install Dependencies
         run: |
           pip install -r web_service/backend/requirements.txt -c ${{ steps.constraints.outputs.file }}
-          pip install pyinstaller
+          pip install pyinstaller pywin32
 
       - name: 🧪 Backend Quality Gate (Fail Fast)
         if: matrix.arch == 'x64' && !inputs.skip_tests
