@@ -218,3 +218,6 @@ python-multipart
 mss
 Pillow
 opencv-python
+structlog
+beautifulsoup4
+tenacity
