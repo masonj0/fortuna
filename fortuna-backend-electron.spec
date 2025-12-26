@@ -7,7 +7,7 @@ This spec properly references the custom hooks directory for uvicorn bundling.
 import sys
 import os
 from pathlib import Path
-from PyInstaller.utils.hooks import collect_data_files
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 block_cipher = None
 
@@ -142,6 +142,14 @@ hidden_imports = [
     'dotenv',
     'click',
 ]
+
+# ============================================================================
+# BRUTE-FORCE a solution for uvicorn and structlog bundling
+# ============================================================================
+print("[SPEC] Force-collecting all 'uvicorn' and 'structlog' submodules...")
+hidden_imports.extend(collect_submodules('uvicorn'))
+hidden_imports.extend(collect_submodules('structlog'))
+print(f"[SPEC] Total hidden imports after extension: {len(hidden_imports)}")
 
 # ============================================================================
 # Analysis configuration
