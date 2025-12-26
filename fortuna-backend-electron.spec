@@ -14,7 +14,8 @@ block_cipher = None
 # ============================================================================
 # CRITICAL: Determine hooks directory relative to spec file location
 # ============================================================================
-spec_file_dir = Path(__file__).parent.resolve()
+# Use SPECPATH, the PyInstaller-provided global containing the path to the spec file.
+spec_file_dir = Path(SPECPATH).parent.resolve()
 hooks_directory = str(spec_file_dir / 'fortuna-backend-hooks')
 
 print(f"[SPEC] Spec file location: {spec_file_dir}")
