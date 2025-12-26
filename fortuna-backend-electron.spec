@@ -47,39 +47,6 @@ datas += collect_data_files('fastapi')
 datas += collect_data_files('certifi')
 datas += collect_data_files('tzdata')
 
-# ============================================================================
-# ULTIMATE FALLBACK: Manually bundle uvicorn and structlog as data
-# ============================================================================
-print("[SPEC] !!! USING MANUAL BUNDLING FALLBACK FOR UVICORN AND STRUCTLOG !!!")
-try:
-    site_packages_path = next(p for p in site.getsitepackages() if 'site-packages' in p)
-    print(f"[SPEC] Found site-packages at: {site_packages_path}")
-
-    uvicorn_path = Path(site_packages_path) / 'uvicorn'
-    if uvicorn_path.exists():
-        datas.append((str(uvicorn_path), 'uvicorn'))
-        print(f"[SPEC] ✅ Added uvicorn data from: {uvicorn_path}")
-    else:
-        print(f"[SPEC] ⚠️  uvicorn directory not found at {uvicorn_path}")
-
-    structlog_path = Path(site_packages_path) / 'structlog'
-    if structlog_path.exists():
-        datas.append((str(structlog_path), 'structlog'))
-        print(f"[SPEC] ✅ Added structlog data from: {structlog_path}")
-    else:
-        print(f"[SPEC] ⚠️  structlog directory not found at {structlog_path}")
-
-    httpx_path = Path(site_packages_path) / 'httpx'
-    if httpx_path.exists():
-        datas.append((str(httpx_path), 'httpx'))
-        print(f"[SPEC] ✅ Added httpx data from: {httpx_path}")
-    else:
-        print(f"[SPEC] ⚠️  httpx directory not found at {httpx_path}")
-
-except StopIteration:
-    print("[SPEC] ⚠️  Could not find site-packages directory.")
-except Exception as e:
-    print(f"[SPEC] ⚠️  An error occurred during manual bundling: {e}")
 
 # ============================================================================
 # CRITICAL: Hidden imports - explicit list for PyInstaller
@@ -87,6 +54,12 @@ except Exception as e:
 hidden_imports = [
     # Windows service support
     'win32timezone',
+    'win32ctypes',
+    'win32ctypes.core',
+    'win32ctypes.pywin32',
+    'pywin32',
+    'pywintypes',
+    'pythoncom',
     'win32serviceutil',
     'win32service',
     'win32event',
@@ -153,7 +126,41 @@ hidden_imports = [
     # Rate limiting
     'slowapi',
     'limits',
+    # CRITICAL: Comprehensive tenacity bundling
     'tenacity',
+    'tenacity.after',
+    'tenacity.before',
+    'tenacity.before_sleep',
+    'tenacity.compat',
+    'tenacity.future',
+    'tenacity.retry',
+    'tenacity.retry_if_exception',
+    'tenacity.retry_if_result',
+    'tenacity.retry_if_dunder_last_retry',
+    'tenacity.retry_if_not_result',
+    'tenacity.retry_if_not_exception',
+    'tenacity.retry_if_exception_type',
+    'tenacity.retry_if_exception_message',
+    'tenacity.retry_any',
+    'tenacity.retry_all',
+    'tenacity.stop',
+    'tenacity.stop_after_attempt',
+    'tenacity.stop_after_delay',
+    'tenacity.wait',
+    'tenacity.wait_base',
+    'tenacity.wait_fixed',
+    'tenacity.wait_random',
+    'tenacity.wait_exponential',
+    'tenacity.wait_incrementing',
+    'tenacity.wait_chain',
+    'tenacity.wait_combine',
+    'tenacity.wait_random_exponential',
+    'tenacity.wait_arbitrary',
+    'tenacity.wait_incrementing_random',
+    'tenacity.wait_exponential_jitter',
+    'tenacity.asyncio',
+    'tenacity.retry_error',
+    'tenacity.retry_base',
 
     # Data processing
     'numpy',

@@ -4,6 +4,21 @@ import asyncio
 from multiprocessing import freeze_support
 from pathlib import Path
 
+# ============================================================================
+# CRITICAL: Force PyInstaller to discover and bundle packages
+# These imports are REQUIRED for PyInstaller's static analysis to work
+# ============================================================================
+import tenacity
+import tenacity.asyncio
+import uvicorn
+import structlog
+import fastapi
+import starlette
+import httpx
+import redis
+# ============================================================================
+
+
 # Force UTF-8 encoding for stdout and stderr, crucial for PyInstaller on Windows
 # PATCH #1: Added UTF-8 logging configuration
 if sys.stdout.encoding != 'utf-8':
