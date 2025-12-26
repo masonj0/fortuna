@@ -134,11 +134,12 @@ jobs:
             @(
               "numpy==1.23.5",
               "pandas==1.5.3",
+              "scipy==1.10.1",
               "sqlalchemy==1.4.53",
               "greenlet==3.1.1",
               "--only-binary=:all:"
             ) | Set-Content $constraintFile
-            Write-Host "✅ Constraints: SQLAlchemy 1.4.53, greenlet 3.1.1"
+            Write-Host "✅ Constraints: SQLAlchemy 1.4.53, greenlet 3.1.1, scipy 1.10.1"
           } else { New-Item $constraintFile -ItemType File -Force }
           "file=$constraintFile" | Out-File $env:GITHUB_OUTPUT -Append
       - name: Install Dependencies & Build Tools
