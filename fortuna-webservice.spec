@@ -49,7 +49,7 @@ a = Analysis(
     datas=[('web_service/backend', 'backend')],
     # FIX: Ensure critical service modules are hidden-imported
     hiddenimports=['win32timezone', 'win32serviceutil', 'win32service', 'win32event'],
-    hookspath=[],
+    hookspath=[str(project_root / 'fortuna-backend-hooks')],
     hooksconfig={},
     runtime_hooks=[],
     excludes=[],
