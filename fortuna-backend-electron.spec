@@ -41,10 +41,38 @@ else:
 # ============================================================================
 # Additional data files from packages
 # ============================================================================
+import site
 datas += collect_data_files('starlette')
 datas += collect_data_files('fastapi')
 datas += collect_data_files('certifi')
 datas += collect_data_files('tzdata')
+
+# ============================================================================
+# ULTIMATE FALLBACK: Manually bundle uvicorn and structlog as data
+# ============================================================================
+print(\"[SPEC] !!! USING MANUAL BUNDLING FALLBACK FOR UVICORN AND STRUCTLOG !!!\")
+try:
+    site_packages_path = next(p for p in site.getsitepackages() if 'site-packages' in p)
+    print(f\"[SPEC] Found site-packages at: {site_packages_path}\")
+
+    uvicorn_path = Path(site_packages_path) / 'uvicorn'
+    if uvicorn_path.exists():
+        datas.append((str(uvicorn_path), 'uvicorn'))
+        print(f\"[SPEC] ✅ Added uvicorn data from: {uvicorn_path}\")
+    else:
+        print(f\"[SPEC] ⚠️  uvicorn directory not found at {uvicorn_path}\")
+
+    structlog_path = Path(site_packages_path) / 'structlog'
+    if structlog_path.exists():
+        datas.append((str(structlog_path), 'structlog'))
+        print(f\"[SPEC] ✅ Added structlog data from: {structlog_path}\")
+    else:
+        print(f\"[SPEC] ⚠️  structlog directory not found at {structlog_path}\")
+
+except StopIteration:
+    print(\"[SPEC] ⚠️  Could not find site-packages directory.\")
+except Exception as e:
+    print(f\"[SPEC] ⚠️  An error occurred during manual bundling: {e}\")
 
 # ============================================================================
 # CRITICAL: Hidden imports - explicit list for PyInstaller
