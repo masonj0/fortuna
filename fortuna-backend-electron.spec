@@ -69,6 +69,13 @@ try:
     else:
         print(f"[SPEC] ⚠️  structlog directory not found at {structlog_path}")
 
+    httpx_path = Path(site_packages_path) / 'httpx'
+    if httpx_path.exists():
+        datas.append((str(httpx_path), 'httpx'))
+        print(f"[SPEC] ✅ Added httpx data from: {httpx_path}")
+    else:
+        print(f"[SPEC] ⚠️  httpx directory not found at {httpx_path}")
+
 except StopIteration:
     print("[SPEC] ⚠️  Could not find site-packages directory.")
 except Exception as e:
