@@ -85,7 +85,7 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           # 🚀 Apply Constraints
           pip install -r ${{ env.BACKEND_DIR }}/requirements.txt -c ${{ steps.constraints.outputs.file }}
-          pip install pyinstaller==6.6.0 pywin32
+          pip install pyinstaller==6.6.0 pywin32 scipy==1.10.1
 
       - name: Build Backend (PyInstaller)
         env:
