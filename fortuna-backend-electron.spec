@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-PyInstaller spec file for Fortuna Backend - FIXED VERSION
-This spec properly references the custom hooks directory for uvicorn bundling.
+PyInstaller spec file for Fortuna Backend
+Final working version with collect_submodules() integration
 """
 
 import sys
@@ -12,19 +12,14 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 block_cipher = None
 
 # ============================================================================
-# CRITICAL: Determine hooks directory relative to spec file location
+# Spec file directory
 # ============================================================================
-# Use SPECPATH, the PyInstaller-provided global containing the path to the spec file.
 spec_file_dir = Path(SPECPATH).parent.resolve()
 hooks_directory = str(spec_file_dir / 'fortuna-backend-hooks')
 
-print(f"[SPEC] Spec file location: {spec_file_dir}")
+print(f"[SPEC] Spec directory: {spec_file_dir}")
 print(f"[SPEC] Hooks directory: {hooks_directory}")
-
-if not Path(hooks_directory).exists():
-    print(f"[SPEC] ⚠️  WARNING: Hooks directory does not exist: {hooks_directory}")
-else:
-    print(f"[SPEC] ✅ Hooks directory found")
+print(f"[SPEC] Hooks exist: {Path(hooks_directory).exists()}")
 
 # ============================================================================
 # Frontend data bundling
@@ -34,157 +29,64 @@ datas = []
 
 if frontend_path.exists():
     datas.append((str(frontend_path), 'ui'))
-    print(f"[SPEC] ✅ Frontend bundling enabled: {frontend_path}")
+    print(f"[SPEC] ✅ Frontend found: {frontend_path}")
 else:
     print(f"[SPEC] ⚠️  Frontend not found: {frontend_path}")
 
 # ============================================================================
-# Additional data files from packages
+# Standard data files from packages
 # ============================================================================
-import site
 datas += collect_data_files('starlette')
 datas += collect_data_files('fastapi')
 datas += collect_data_files('certifi')
 datas += collect_data_files('tzdata')
 
-# ============================================================================
-# ULTIMATE FALLBACK: Manually bundle uvicorn and structlog as data
-# ============================================================================
-print("[SPEC] !!! USING MANUAL BUNDLING FALLBACK FOR UVICORN AND STRUCTLOG !!!")
-try:
-    site_packages_path = next(p for p in site.getsitepackages() if 'site-packages' in p)
-    print(f"[SPEC] Found site-packages at: {site_packages_path}")
-
-    uvicorn_path = Path(site_packages_path) / 'uvicorn'
-    if uvicorn_path.exists():
-        datas.append((str(uvicorn_path), 'uvicorn'))
-        print(f"[SPEC] ✅ Added uvicorn data from: {uvicorn_path}")
-    else:
-        print(f"[SPEC] ⚠️  uvicorn directory not found at {uvicorn_path}")
-
-    structlog_path = Path(site_packages_path) / 'structlog'
-    if structlog_path.exists():
-        datas.append((str(structlog_path), 'structlog'))
-        print(f"[SPEC] ✅ Added structlog data from: {structlog_path}")
-    else:
-        print(f"[SPEC] ⚠️  structlog directory not found at {structlog_path}")
-
-    httpx_path = Path(site_packages_path) / 'httpx'
-    if httpx_path.exists():
-        datas.append((str(httpx_path), 'httpx'))
-        print(f"[SPEC] ✅ Added httpx data from: {httpx_path}")
-    else:
-        print(f"[SPEC] ⚠️  httpx directory not found at {httpx_path}")
-
-except StopIteration:
-    print("[SPEC] ⚠️  Could not find site-packages directory.")
-except Exception as e:
-    print(f"[SPEC] ⚠️  An error occurred during manual bundling: {e}")
+print(f"[SPEC] Data files to include: {len(datas)}")
 
 # ============================================================================
-# CRITICAL: Hidden imports - explicit list for PyInstaller
+# CRITICAL: Minimal explicit hidden imports
 # ============================================================================
 hidden_imports = [
-    # Windows service support
     'win32timezone',
-    'win32serviceutil',
-    'win32service',
-    'win32event',
-
-    # Web framework core
-    'fastapi',
-    'fastapi.openapi',
-    'fastapi.openapi.models',
-    'starlette',
-    'starlette.middleware',
-    'starlette.middleware.cors',
-    'starlette.routing',
-    'starlette.responses',
-    'starlette.staticfiles',
-    'starlette.websockets',
-
-    # Uvicorn (CRITICAL - even with hook, explicit listing helps)
-    'uvicorn',
-    'uvicorn.config',
-    'uvicorn.server',
-    'uvicorn.logging',
-    'uvicorn.loops',
-    'uvicorn.loops.auto',
-    'uvicorn.loops.asyncio',
-    'uvicorn.protocols',
-    'uvicorn.protocols.http',
-    'uvicorn.protocols.http.auto',
-    'uvicorn.protocols.http.h11_impl',
-    'uvicorn.protocols.websockets',
-    'uvicorn.protocols.websockets.auto',
-    'uvicorn.lifespan',
-    'uvicorn.importer',
-
-    # Pydantic
-    'pydantic',
-    'pydantic.json',
-    'pydantic_settings',
-    'pydantic_core',
-
-    # Structlog (CRITICAL - was missing)
-    'structlog',
-    'structlog.processors',
-    'structlog.testing',
-
-    # SQLAlchemy
-    'sqlalchemy',
-    'sqlalchemy.orm',
-    'sqlalchemy.dialects',
-    'sqlalchemy.dialects.sqlite',
-    'sqlalchemy.dialects.postgresql',
-    'aiosqlite',
-    'greenlet',
-
-    # HTTP clients
-    'httpx',
-    'httpx._models',
-    'httpx._client',
-    'httpcore',
-
-    # Redis
-    'redis',
-    'redis.asyncio',
-
-    # Rate limiting
-    'slowapi',
-    'limits',
-    'tenacity',
-
-    # Data processing
-    'numpy',
-    'pandas',
-    'scipy',
-
-    # HTML parsing
-    'beautifulsoup4',
-    'selectolax',
-
-    # Image processing
-    'PIL',
-    'cv2',
-    'mss',
-
-    # Utilities
-    'pytz',
-    'python_dateutil',
-    'cryptography',
-    'certifi',
-    'dotenv',
-    'click',
+    'win32ctypes',
+    'win32ctypes.core',
+    'pywin32',
+    'pywintypes',
+    'pythoncom',
 ]
 
+print(f"[SPEC] Starting with {len(hidden_imports)} explicit hidden imports")
+
 # ============================================================================
-# BRUTE-FORCE a solution for uvicorn and structlog bundling
+# FORCE collect_submodules for problematic packages
+# This is the equivalent of --collect-all on the command line
 # ============================================================================
-print("[SPEC] Force-collecting all 'uvicorn' and 'structlog' submodules...")
-hidden_imports.extend(collect_submodules('uvicorn'))
-hidden_imports.extend(collect_submodules('structlog'))
-print(f"[SPEC] Total hidden imports after extension: {len(hidden_imports)}")
+print("[SPEC] ========================================")
+print("[SPEC] FORCE-COLLECTING SUBMODULES")
+print("[SPEC] ========================================")
+
+problematic_packages = [
+    ('tenacity', 'Retry library'),
+    ('uvicorn', 'ASGI server'),
+    ('structlog', 'Logging library'),
+    ('fastapi', 'Web framework'),
+    ('starlette', 'Web toolkit'),
+    ('httpx', 'HTTP client'),
+    ('redis', 'Cache client'),
+    ('sqlalchemy', 'ORM'),
+]
+
+for package_name, description in problematic_packages:
+    try:
+        modules = collect_submodules(package_name)
+        hidden_imports.extend(modules)
+        print(f"[SPEC] ✅ {package_name:20} -> Collected {len(modules):3} submodules ({description})")
+    except Exception as e:
+        print(f"[SPEC] ⚠️  {package_name:20} -> Error: {str(e)[:50]}")
+
+print(f"[SPEC] ========================================")
+print(f"[SPEC] Total hidden imports: {len(hidden_imports)}")
+print(f"[SPEC] ========================================")
 
 # ============================================================================
 # Analysis configuration
@@ -195,7 +97,6 @@ a = Analysis(
     binaries=[],
     datas=datas,
     hiddenimports=hidden_imports,
-    # ✅ CRITICAL FIX: Explicitly specify hooks directory
     hookspath=[hooks_directory],
     hooksconfig={},
     runtime_hooks=[],

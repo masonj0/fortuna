@@ -38,8 +38,8 @@ pytest-asyncio
 black
 
 # --- Build Dependencies (Hard Pins) ---
-# THE FIX: Upgraded to 6.6.0 for official Python 3.12 support.
-pyinstaller==6.6.0
+# Downgraded to 6.5.0 to resolve pywin32 bundling regression.
+pyinstaller==6.5.0
 wheel
 setuptools>=78.1.1,<81
 pip-tools
