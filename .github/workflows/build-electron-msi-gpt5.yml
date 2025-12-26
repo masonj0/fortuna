@@ -104,6 +104,8 @@ jobs:
       - name: '🔬 Pre-build Import Verification'
         id: verify-imports
         shell: pwsh
+        env:
+          PYTHONUTF8: '1'
         run: |
           Write-Host "--- Verifying all critical modules can be imported before build ---"
           $modules = @(

@@ -108,7 +108,7 @@ jobs:
           $file = "constraints.txt"
           if ('${{ matrix.arch }}' -eq 'x86') {
             Write-Host "🛡️ ACTIVATING X86 SAFE MODE"
-            "numpy==1.23.5`r`npandas==1.5.3" | Set-Content $file
+            "numpy==1.23.5`r`npandas==1.5.3`r`nscipy==1.10.1" | Set-Content $file
           } else {
             New-Item $file -ItemType File -Force
           }
@@ -117,7 +117,7 @@ jobs:
       - name: 📦 Install Dependencies
         run: |
           pip install -r web_service/backend/requirements.txt -c ${{ steps.constraints.outputs.file }}
-          pip install pyinstaller
+          pip install pyinstaller pywin32
 
       - name: 🧪 Backend Quality Gate (Fail Fast)
         if: matrix.arch == 'x64' && !inputs.skip_tests
