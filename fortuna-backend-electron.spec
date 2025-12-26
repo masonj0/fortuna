@@ -5,28 +5,23 @@ Final working version with collect_submodules() integration
 """
 
 import sys
-import os
 from pathlib import Path
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
-
-block_cipher = None
 
 # ============================================================================
 # Spec file directory
 # ============================================================================
 spec_file_dir = Path(SPECPATH).parent.resolve()
-hooks_directory = str(spec_file_dir / 'fortuna-backend-hooks')
+hooks_directory = spec_file_dir / 'fortuna-backend-hooks'
 
 print(f"[SPEC] Spec directory: {spec_file_dir}")
 print(f"[SPEC] Hooks directory: {hooks_directory}")
 print(f"[SPEC] Hooks exist: {Path(hooks_directory).exists()}")
 
 # ============================================================================
-# Frontend data bundling
+# Data Files (for non-Python assets)
 # ============================================================================
-frontend_path = spec_file_dir / "web_platform/frontend/out"
 datas = []
-
+frontend_path = spec_file_dir / "web_platform/frontend/out"
 if frontend_path.exists():
     datas.append((str(frontend_path), 'ui'))
     print(f"[SPEC] ✅ Frontend found: {frontend_path}")
@@ -46,6 +41,7 @@ print(f"[SPEC] Data files to include: {len(datas)}")
 # ============================================================================
 # CRITICAL: Minimal explicit hidden imports
 # ============================================================================
+# 1. Start with a minimal list of imports that analysis might miss.
 hidden_imports = [
     'win32timezone',
     'win32ctypes',
@@ -75,6 +71,7 @@ problematic_packages = [
     ('redis', 'Cache client'),
     ('sqlalchemy', 'ORM'),
 ]
+print(f"[SPEC] Initial hidden imports: {len(hidden_imports)}")
 
 for package_name, description in problematic_packages:
     try:
@@ -101,16 +98,8 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
-        'tcl',
-        'tk',
-        '_tkinter',
-        'tkinter',
-        'matplotlib',
-        'pytest',
-        'sphinx',
-        'IPython',
-        'jupyter',
-        'distutils',
+        'tcl', 'tk', '_tkinter', 'tkinter', 'matplotlib', 'pytest',
+        'sphinx', 'IPython', 'jupyter', 'distutils', 'python_service'
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
@@ -118,18 +107,8 @@ a = Analysis(
     noarchive=False,
 )
 
-# ============================================================================
-# PYZ (Python archive)
-# ============================================================================
-pyz = PYZ(
-    a.pure,
-    a.zipped_data,
-    cipher=block_cipher
-)
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
-# ============================================================================
-# EXE (Executable)
-# ============================================================================
 exe = EXE(
     pyz,
     a.scripts,
@@ -140,17 +119,9 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    upx_exclude=[],
     console=True,
-    disable_windowed_traceback=False,
-    target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
 )
 
-# ============================================================================
-# COLLECT (Final bundle)
-# ============================================================================
 coll = COLLECT(
     exe,
     a.binaries,
@@ -158,6 +129,5 @@ coll = COLLECT(
     a.datas,
     strip=False,
     upx=True,
-    upx_exclude=[],
     name='fortuna-backend',
 )

@@ -177,6 +177,7 @@ structlog==25.5.0
     # via -r web_service/backend/requirements.in
 tenacity==8.2.3
     # via -r web_service/backend/requirements.in
+    # Note: Pinned to 8.2.3 to avoid asyncio import issues in 8.4.0+
 typing-extensions==4.15.0
     # via
     #   aiosqlite
