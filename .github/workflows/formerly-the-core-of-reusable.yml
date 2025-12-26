@@ -250,7 +250,10 @@ jobs:
             -arch ${{ matrix.arch }} -o $msiName `
             -d Version="${{ needs.preflight.outputs.semver }}" -d SourceDir="staging" `
             -d ServicePort="${{ env.SERVICE_PORT }}" `
-            -d Platform=${{ matrix.arch }}
+            -d Platform=${{ matrix.arch }} `
+            -ext WixToolset.UI.wixext `
+            -ext WixToolset.Firewall.wixext `
+            -ext WixToolset.Util.wixext
           Write-Host "✅ Built: $msiName"
 
       - name: 🦜 The Canary
