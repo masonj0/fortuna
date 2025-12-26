@@ -47,7 +47,7 @@ pydantic==2.8.2
 pydantic-core==2.20.1
 pydantic-settings==2.3.4
 pygments==2.18.0
-pyinstaller==6.6.0
+pyinstaller==6.5.0
 pyinstaller-hooks-contrib==2024.6
 pyproject-hooks==1.1.0
 pytest==8.2.2

@@ -81,41 +81,15 @@ def generate_spec(mode: str):
         print(f"❌ Entry point not found: {entry_point}")
         sys.exit(1)
 
-    # 3. Locate critical DLLs
-    python_home = Path(sys.base_prefix)
-    dlls_to_bundle = [
-        python_home / 'python311.dll',
-        python_home / 'vcruntime140.dll'
-    ]
+    # 3. Critical binaries for Windows Service
+    # PyInstaller 6.5.0 handles pywin32 DLLs automatically via hooks
+    # We only need to ensure pywin32 modules are imported
     binaries = []
-    for dll_path in dlls_to_bundle:
-        if dll_path.exists():
-            binaries.append((str(dll_path).replace('\\\\', '/'), '.'))
-            print(f"✅ Found required DLL: {dll_path}")
-        else:
-             print(f"⚠️ Could not find optional DLL, skipping: {dll_path}")
 
-    # ☢️ CRITICAL FIX for pywin32 service errors ☢️
-    # PyInstaller often fails to bundle the core pywin32 DLLs needed for a service.
-    # We must find them and include them manually.
-    try:
-        import win32ctypes.pywin32.pywintypes
-        import win32ctypes.pywin32.pythoncom
-
-        pywin32_dlls = [
-            win32ctypes.pywin32.pywintypes.__file__,
-            win32ctypes.pywin32.pythoncom.__file__,
-        ]
-        for dll_path in pywin32_dlls:
-            if Path(dll_path).exists():
-                binaries.append((str(Path(dll_path)).replace('\\\\', '/'), '.'))
-                print(f"✅ Found and included pywin32 DLL: {dll_path}")
-            else:
-                print(f"❌ CRITICAL: Could not find required pywin32 DLL: {dll_path}")
-                sys.exit(1)
-    except ImportError as e:
-        print(f"❌ CRITICAL: Failed to import pywin32 modules to find DLLs: {e}")
-        sys.exit(1)
+    # Note: PyInstaller 6.5.0 properly bundles pywin32 DLLs via the win32ctypes hook
+    # We don't need to manually hunt for DLL files - the hook handles it
+    print(f"[SPEC] Using PyInstaller 6.5.0 hooks for automatic pywin32 bundling")
+    print(f"[SPEC] ✅ Binaries will be handled by PyInstaller hooks")
 
     # 4. Define the spec file content
     spec_content = f"""

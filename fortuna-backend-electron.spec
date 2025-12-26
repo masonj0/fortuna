@@ -99,6 +99,12 @@ except Exception as e:
 hidden_imports = [
     # Windows service support
     'win32timezone',
+    'win32ctypes',
+    'win32ctypes.core',
+    'win32ctypes.pywin32',
+    'pywin32',
+    'pywintypes',
+    'pythoncom',
     'win32serviceutil',
     'win32service',
     'win32event',
