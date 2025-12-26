@@ -153,6 +153,10 @@ jobs:
         run: |
           echo "PYTHONPATH=${{ github.workspace }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           Write-Host "PYTHONPATH set to ${{ github.workspace }}"
+      - name: 💾 Create required directories
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path "web_service/backend/json" -Force
       - name: '🩹 Temporarily Rename Shadowing Directory'
         shell: pwsh
         run: |

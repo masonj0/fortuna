@@ -45,10 +45,6 @@ deprecated==1.3.1
     # via limits
 fastapi==0.121.1
     # via -r web_service/backend/requirements.in
-greenlet
-    # via
-    #   -r web_service/backend/requirements.in
-    #   sqlalchemy
 h11==0.16.0
     # via
     #   httpcore
@@ -218,3 +214,6 @@ python-multipart
 mss
 Pillow
 opencv-python
+structlog
+beautifulsoup4
+tenacity
