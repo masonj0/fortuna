@@ -110,6 +110,40 @@ jobs:
             Write-Host "Directory '${{ env.BACKEND_DIR }}/json' not found, skipping rename."
           }
 
+      - name: '🔬 Pre-build Import Verification'
+        id: verify-imports
+        shell: pwsh
+        env:
+          PYTHONUTF8: '1'
+        run: |
+          Write-Host "--- Verifying all critical modules can be imported before build ---"
+          $modules = @(
+              'structlog',
+              'uvicorn',
+              'fastapi',
+              'starlette',
+              'pydantic',
+              'pydantic_settings',
+              'sqlalchemy',
+              'aiosqlite',
+              'httpx',
+              'redis',
+              'slowapi',
+              'limits',
+              'web_service',
+              'web_service.backend',
+              'web_service.backend.api'
+          )
+          $ErrorActionPreference = "Continue"
+          foreach ($module in $modules) {
+              python -c "import $module; print('✅ $module')"
+              if ($LASTEXITCODE -ne 0) {
+                  Write-Error "❌ Failed to import '$module'. This module is required for the application to run."
+                  exit 1
+              }
+          }
+          Write-Host "✅ All critical modules imported successfully."
+
       - name: '🩹 Restore Shadowing Directory Name'
         if: always()
         shell: pwsh
