@@ -56,34 +56,43 @@ jobs:
           New-Item -ItemType Directory -Path "${{ env.BACKEND_DIR }}/json" -Force
           New-Item -ItemType Directory -Path "${{ env.BACKEND_DIR }}/adapters" -Force
 
-      - name: 📦 Install Dependencies
+      - name: 📦 Install Dependencies and Verify Imports
         shell: pwsh
         env:
           PYTHONUTF8: '1'
         run: |
           $ErrorActionPreference = 'Stop'
-
           pip install --upgrade pip
-
           if ('${{ matrix.arch }}' -eq 'x86') {
             Write-Host "--- Using x86-specific requirements file ---"
-            # Pre-install specific versions of packages with known good 32-bit wheels for Python 3.11
-            # to avoid building from source which is failing for scipy.
-            Write-Host "--- Pre-installing numpy, pandas, and scipy for x86 ---"
             pip install numpy==1.23.5 pandas==1.5.3 scipy==1.10.1
             $requirementsFile = "${{ env.BACKEND_DIR }}/requirements-x86.txt"
-            # Install the rest of the requirements. Pip will skip already satisfied packages.
             pip install -r $requirementsFile
           } else {
             Write-Host "--- Using standard requirements file ---"
             $requirementsFile = "${{ env.BACKEND_DIR }}/requirements.txt"
             pip install -r $requirementsFile
           }
-
+          pip install structlog uvicorn fastapi starlette pydantic pydantic_settings sqlalchemy aiosqlite httpx redis slowapi limits beautifulsoup4
           pip install --upgrade "pyinstaller>=6.12" pywin32
-
           Write-Host "--- Final installed packages (pip list) ---"
           pip list
+
+          Write-Host "--- Verifying all critical modules can be imported before build ---"
+          $modules = @(
+              'structlog', 'uvicorn', 'fastapi', 'starlette', 'pydantic',
+              'pydantic_settings', 'sqlalchemy', 'aiosqlite', 'httpx', 'redis',
+              'slowapi', 'limits', 'web_service', 'web_service.backend', 'web_service.backend.api'
+          )
+          $ErrorActionPreference = "Continue"
+          foreach ($module in $modules) {
+              python -c "import $module; print('✅ $module')"
+              if ($LASTEXITCODE -ne 0) {
+                  Write-Error "❌ Failed to import '$module'. This module is required for the application to run."
+                  exit 1
+              }
+          }
+          Write-Host "✅ All critical modules imported successfully."
 
       - name: 🐍 Set up PYTHONPATH
         shell: pwsh
@@ -100,38 +109,6 @@ jobs:
           } else {
             Write-Host "Directory '${{ env.BACKEND_DIR }}/json' not found, skipping rename."
           }
-
-      - name: '🔬 Pre-build Import Verification'
-        id: verify-imports
-        shell: pwsh
-        run: |
-          Write-Host "--- Verifying all critical modules can be imported before build ---"
-          $modules = @(
-              'structlog',
-              'uvicorn',
-              'fastapi',
-              'starlette',
-              'pydantic',
-              'pydantic_settings',
-              'sqlalchemy',
-              'aiosqlite',
-              'httpx',
-              'redis',
-              'slowapi',
-              'limits',
-              'web_service',
-              'web_service.backend',
-              'web_service.backend.api'
-          )
-          $ErrorActionPreference = "Continue"
-          foreach ($module in $modules) {
-              python -c "import $module; print('✅ $module')"
-              if ($LASTEXITCODE -ne 0) {
-                  Write-Error "❌ Failed to import '$module'. This module is required for the application to run."
-                  exit 1
-              }
-          }
-          Write-Host "✅ All critical modules imported successfully."
 
       - name: '🩹 Restore Shadowing Directory Name'
         if: always()
