@@ -54,16 +54,9 @@ _configure_sys_path()
 
 # ============================================================================
 # CRITICAL: Windows Compatibility Layer
+# This MUST be the first import to ensure event loop is configured correctly
 # ============================================================================
-import sys
-import asyncio
-
-def setup_windows_event_loop():
-    if sys.platform == 'win32' and getattr(sys, 'frozen', False):
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-        print('[BOOT] ✓ Applied WindowsSelectorEventLoopPolicy for PyInstaller',
-              file=sys.stderr)
-
+from web_service.backend.windows_compat import setup_windows_event_loop
 setup_windows_event_loop()
 # ============================================================================
 

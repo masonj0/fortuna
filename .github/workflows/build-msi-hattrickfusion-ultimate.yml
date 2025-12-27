@@ -149,14 +149,13 @@ jobs:
         run: |
           python -m pip install --upgrade pip
 
-          # CRITICAL: Install x86-constrained packages first with wheel-only enforcement
-          pip install --platform win32 --only-binary=:all: `
-            -r web_service/backend/requirements-x86-constraints.txt
+          # CRITICAL: Install all dependencies at once, applying the x86 constraints file
+          # with the '-c' flag to enforce the older, wheel-available versions.
+          pip install --only-binary=:all: `
+            -r web_service/backend/requirements.txt `
+            -c web_service/backend/requirements-x86-constraints.txt
 
-          # Then install remaining dependencies (which may use x64 or source)
-          pip install -r web_service/backend/requirements.txt
-
-          # Finally, install PyInstaller
+          # Finally, install PyInstaller separately
           pip install pyinstaller==5.13.2
 
       - name: Verify x86 packages are from wheels (not compiled from source)

@@ -18,7 +18,8 @@ import os
 import sys
 from pathlib import Path
 
-spec_file_path = Path(__file__).resolve()
+# SPECPATH is a variable injected by PyInstaller. It is the reliable way to get the spec file's path.
+spec_file_path = Path(SPECPATH).resolve()
 project_root = spec_file_path.parent.resolve()
 
 print(f'[SPEC] Spec file location: {spec_file_path}')
