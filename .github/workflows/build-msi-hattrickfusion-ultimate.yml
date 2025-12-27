@@ -137,19 +137,46 @@ jobs:
               "numpy==1.23.5",
               "pandas==1.5.3",
               "scipy==1.10.1",
-              "sqlalchemy==1.4.53",
-              "greenlet==3.1.1",
+              "sqlalchemy==2.0.44",
+              "greenlet==3.0.3",
               "--only-binary=:all:"
             ) | Set-Content $constraintFile
-            Write-Host "✅ Constraints: SQLAlchemy 1.4.53, greenlet 3.1.1, scipy 1.10.1"
+            Write-Host "✅ Constraints: SQLAlchemy 2.0.44, greenlet 3.0.3, scipy 1.10.1"
           } else { New-Item $constraintFile -ItemType File -Force }
           "file=$constraintFile" | Out-File $env:GITHUB_OUTPUT -Append
-      - name: Install Dependencies & Build Tools
+      - name: Install Python dependencies (x86 Build)
+        shell: pwsh
         run: |
           python -m pip install --upgrade pip
-          pip install -r web_service/backend/requirements.txt -c ${{ steps.constraints.outputs.file }}
-          # Upgrade PyInstaller to a version with the pywin32 fix
-          pip install --upgrade "pyinstaller>=6.12" pywin32 -c ${{ steps.constraints.outputs.file }}
+
+          # CRITICAL: Install all dependencies at once, applying the x86 constraints file
+          # with the '-c' flag to enforce the older, wheel-available versions.
+          pip install --only-binary=:all: `
+            -r web_service/backend/requirements.txt `
+            -c web_service/backend/requirements-x86-constraints.txt
+
+          # Finally, install PyInstaller separately
+          pip install pyinstaller==5.13.2
+
+      - name: Verify x86 packages are from wheels (not compiled from source)
+        shell: pwsh
+        run: |
+          Write-Host "[BUILD] Verifying critical x86 packages..."
+
+          $criticalPackages = @('sqlalchemy', 'greenlet', 'pandas', 'numpy', 'scipy')
+
+          foreach ($pkg in $criticalPackages) {
+            $location = pip show $pkg | Select-String "Location:"
+            Write-Host "✓ $pkg installed at: $location"
+
+            # Check if package metadata indicates wheel installation
+            $files = pip show -f $pkg | Select-String "\.dist-info"
+            if (-not $files) {
+              throw "ERROR: $pkg appears to be installed from source, not wheel!"
+            }
+          }
+
+          Write-Host "[BUILD] ✓ All critical x86 packages verified as wheels"
       - name: 🐍 Set up PYTHONPATH
         shell: pwsh
         run: |
@@ -193,7 +220,7 @@ jobs:
         env:
           PYTHONUTF8: '1'
         run: |
-          pyinstaller service_entry.py --name fortuna-core-service --clean --noconfirm --onedir --add-data "web_platform/frontend/out;ui" --hidden-import win32timezone --log-level INFO --additional-hooks-dir=./fortuna-backend-hooks
+          pyinstaller web_service/backend/service_entry.py --name fortuna-webservice --clean --noconfirm --onedir --add-data "web_platform/frontend/out;ui" --hidden-import win32timezone --log-level INFO --additional-hooks-dir=./fortuna-backend-hooks
       - name: '🔍 Post-build Bundle Inspection'
         id: inspect-bundle
         shell: pwsh
@@ -327,7 +354,7 @@ jobs:
       - name: Build MSI
         working-directory: build_wix
         run: |
-          dotnet build Fortuna.wixproj -c Release -p:Platform=${{ matrix.arch }} -p:Version="${{ needs.build-backend.outputs.semver }}" -p:SourceDir="../staging/backend" -p:ServicePort="${{ env.SERVICE_PORT }}"
+          dotnet build Fortuna.wixproj -c Release -p:Platform=${{ matrix.arch }} -p:Version="${{ needs.build-backend.outputs.semver }}" -p:SourceDir="../staging" -p:ServicePort="${{ env.SERVICE_PORT }}"
       - name: Rename & Hash MSI
         run: |
           $ver = "${{ needs.build-backend.outputs.semver }}"

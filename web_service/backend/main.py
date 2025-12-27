@@ -4,6 +4,15 @@ Fortuna Backend Entry Point
 """
 
 # ============================================================================
+# CRITICAL: Windows Compatibility Layer
+# This MUST be the first import to ensure event loop is configured correctly
+# ============================================================================
+from web_service.backend.windows_compat import setup_windows_event_loop
+setup_windows_event_loop()
+# ============================================================================
+
+
+# ============================================================================
 # CRITICAL: Force PyInstaller to analyze and bundle these packages
 # These MUST be at the top of the file, BEFORE any other imports
 # ============================================================================
@@ -34,10 +43,6 @@ if sys.stderr.encoding != 'utf-8':
 
 # This is the definitive entry point for the Fortuna Faucet backend service.
 # It is designed to be compiled with PyInstaller.
-
-# [CRITICAL] Set Windows event loop policy for stable service operation
-if sys.platform == 'win32':
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 def get_asset_path(relative_path: str) -> Path:
     """
