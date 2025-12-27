@@ -1,14 +1,21 @@
 # python_service/credentials_manager.py
-try:
-    import keyring
+import sys
 
-    # This check is crucial for cross-platform compatibility
-    import keyring.backends.windows
+keyring = None
+IS_WINDOWS = False
 
+# Only attempt to import keyring on a Windows system.
+if sys.platform == "win32":
     IS_WINDOWS = True
-except ImportError:
-    keyring = None
-    IS_WINDOWS = False
+    try:
+        import keyring
+        # This check is crucial for cross-platform compatibility
+        import keyring.backends.windows
+    except ImportError:
+        # If imports fail even on Windows, gracefully disable keyring
+        keyring = None
+        IS_WINDOWS = False
+        print("Warning: keyring or its Windows backend is not available. Secure credential storage is disabled.")
 
 
 class SecureCredentialsManager:

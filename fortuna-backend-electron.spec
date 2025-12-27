@@ -5,12 +5,17 @@ Final working version with collect_submodules() integration
 """
 
 import sys
+import os
 from pathlib import Path
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+
+block_cipher = None
 
 # ============================================================================
-# Spec file directory
+# Spec file directory (Corrected for CI environment)
 # ============================================================================
-spec_file_dir = Path(SPECPATH).parent.resolve()
+# In a CI environment, SPECPATH can be unreliable. os.getcwd() is more robust.
+spec_file_dir = Path(os.getcwd())
 hooks_directory = spec_file_dir / 'fortuna-backend-hooks'
 
 print(f"[SPEC] Spec directory: {spec_file_dir}")
