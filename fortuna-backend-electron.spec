@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
+block_cipher = None
+
 # ============================================================================
 # Spec file directory
 # ============================================================================
