@@ -327,7 +327,7 @@ jobs:
       - name: Build MSI
         working-directory: build_wix
         run: |
-          dotnet build Fortuna.wixproj -c Release -p:Platform=${{ matrix.arch }} -p:Version="${{ needs.build-backend.outputs.semver }}" -p:SourceDir="../staging/backend" -p:ServicePort="${{ env.SERVICE_PORT }}"
+          dotnet build Fortuna.wixproj -c Release -p:Platform=${{ matrix.arch }} -p:Version="${{ needs.build-backend.outputs.semver }}" -p:SourceDir="../staging" -p:ServicePort="${{ env.SERVICE_PORT }}"
       - name: Rename & Hash MSI
         run: |
           $ver = "${{ needs.build-backend.outputs.semver }}"

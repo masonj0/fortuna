@@ -17,6 +17,7 @@
       <ComponentGroupRef Id="ServiceComponents" />
       <ComponentGroupRef Id="ScriptComponents" />
       <ComponentGroupRef Id="RuntimeDirectoryComponents" />
+      <ComponentGroupRef Id="UIComponents" />
       <ComponentGroupRef Id="ShortcutComponents" />
     </Feature>
 
@@ -45,6 +46,7 @@
            <Directory Id="Dir_Data" Name="data" />
            <Directory Id="Dir_Json" Name="json" />
            <Directory Id="Dir_Logs" Name="logs" />
+           <Directory Id="Dir_UI" Name="ui" />
         </Directory>
       </StandardDirectory>
     <?endif?>
@@ -57,7 +59,7 @@
 
     <ComponentGroup Id="ServiceComponents" Directory="INSTALLFOLDER">
       <Component Id="ServiceExecutable" Guid="E4B9C2C2-5B4E-4B02-A2DA-820152433E72">
-        <File Id="ServiceExe" Name="fortuna-core-service.exe" Source="$(var.SourceDir)/fortuna-core-service.exe" KeyPath="yes" />
+        <File Id="ServiceExe" Name="fortuna-webservice.exe" Source="$(var.SourceDir)/backend/fortuna-webservice.exe" KeyPath="yes" />
         <ServiceInstall Id="ServiceInstaller" Type="ownProcess" Name="FortunaWebService"
                         DisplayName="Fortuna Web Service" Description="Background service for Fortuna Faucet"
                         Start="auto" Account="LocalSystem" ErrorControl="normal" Vital="yes" />
@@ -68,7 +70,7 @@
 
     <ComponentGroup Id="ScriptComponents" Directory="INSTALLFOLDER">
       <Component Id="RestartScriptComponent" Guid="F8A2D7B1-6E9A-4E1D-9B6C-7264871E9D5B">
-        <File Id="RestartScript" Source="$(var.SourceDir)/restart_service.bat" KeyPath="yes" />
+        <File Id="RestartScript" Source="$(var.SourceDir)/backend/restart_service.bat" KeyPath="yes" />
       </Component>
     </ComponentGroup>
 
@@ -97,6 +99,12 @@
             <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall" />
             <RegistryValue Root="HKCU" Key="Software\Fortuna Faucet" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
         </Component>
+    </ComponentGroup>
+
+    <ComponentGroup Id="UIComponents" Directory="Dir_UI">
+      <Component Id="UI_Files" Guid="*">
+        <File Id="UI_Files" Source="$(var.SourceDir)/backend/ui/**/*.*" />
+      </Component>
     </ComponentGroup>
   </Package>
 </Wix>
