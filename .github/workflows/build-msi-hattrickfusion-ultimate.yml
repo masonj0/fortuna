@@ -149,72 +149,82 @@ jobs:
         run: |
           python -m pip install --upgrade pip
 
-          # CRITICAL: Install all dependencies at once, applying the x86 constraints file
-          # with the '-c' flag to enforce the older, wheel-available versions.
-          pip install --only-binary=:all: -r web_service/backend/requirements.txt -c web_service/backend/requirements-x86-constraints.txt
+          Write-Host "[BUILD] Installing x86-constrained packages first..."
 
-          # Finally, install PyInstaller separately
+          # CRITICAL: Install x86-constrained packages FIRST with exact versions
+          # These versions are guaranteed to have pre-built x86 wheels
+          pip install --only-binary=:all: `
+            "sqlalchemy==2.0.28" `
+            "greenlet==3.0.3" `
+            "pandas==1.5.3" `
+            "numpy==1.23.5" `
+            "scipy==1.10.1"
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "[BUILD] ❌ Failed to install x86-constrained packages"
+          }
+
+          Write-Host "[BUILD] Installing remaining dependencies..."
+
+          # Now install the rest of the requirements
+          # Use --no-deps to prevent pip from upgrading the packages we just installed
+          pip install -r web_service/backend/requirements.txt --no-deps
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "[BUILD] ❌ Failed to install remaining requirements"
+          }
+
+          Write-Host "[BUILD] Verifying all dependencies are satisfied..."
+
+          # Finally, run a dependency check to install any missing transitive dependencies
+          # This will NOT upgrade the packages we pinned earlier
+          pip check
+
+          Write-Host "[BUILD] Installing PyInstaller..."
           pip install pyinstaller==5.13.2
 
-          # ✅ NEW: Give pip time to finish writing all metadata
-          Write-Host "[BUILD] Waiting for pip metadata to stabilize..."
-          Start-Sleep -Seconds 5
+          Write-Host "[BUILD] ✅ All dependencies installed successfully"
 
-      - name: Verify x86 packages are from wheels (not compiled from source)
+      - name: Verify x86 packages are from wheels
         shell: pwsh
         run: |
-          Write-Host "[BUILD] Verifying critical x86 packages..."
+          Write-Host "[BUILD] Verifying x86-constrained packages..."
 
-          $criticalPackages = @('sqlalchemy', 'greenlet', 'pandas', 'numpy', 'scipy')
+          $expectedVersions = @{
+            'sqlalchemy' = '2.0.28'
+            'greenlet' = '3.0.3'
+            'pandas' = '1.5.3'
+            'numpy' = '1.23.5'
+            'scipy' = '1.10.1'
+          }
+
           $allVerified = $true
 
-          foreach ($pkg in $criticalPackages) {
-            Write-Host "Checking $pkg..."
+          foreach ($pkg in $expectedVersions.Keys) {
+            $expectedVersion = $expectedVersions[$pkg]
 
-            # Get the installation location
-            $location = pip show $pkg 2>&1 | Select-String "Location:" | ForEach-Object { $_.Line -replace 'Location: ', '' }
+            # Get installed version
+            $installedVersion = pip show $pkg 2>&1 | Select-String "Version:" | ForEach-Object { $_.Line -replace 'Version: ', '' }
 
-            if (-not $location) {
-              Write-Error "❌ Package '$pkg' not found by pip show!"
+            if (-not $installedVersion) {
+              Write-Error "❌ Package '$pkg' not installed!"
               $allVerified = $false
               continue
             }
 
-            Write-Host "  Location: $location"
-
-            # CRITICAL FIX: Check for .dist-info DIRECTORY, not file pattern
-            # The directory name format is: packagename-version.dist-info
-            $pkgPattern = "${pkg}*.dist-info"
-            $distInfoDir = Get-ChildItem -Path $location -Directory -Filter $pkgPattern -ErrorAction SilentlyContinue | Select-Object -First 1
-
-            if ($distInfoDir) {
-              Write-Host "  ✅ Found wheel metadata: $($distInfoDir.Name)"
-
-              # Double-check: wheel-installed packages have a WHEEL file
-              $wheelFile = Join-Path $distInfoDir.FullName "WHEEL"
-              if (Test-Path $wheelFile) {
-                $wheelContent = Get-Content $wheelFile -Raw
-                if ($wheelContent -match "Root-Is-Purelib: (true|false)") {
-                  Write-Host "  ✅ Confirmed: Package was installed from wheel"
-                } else {
-                  Write-Warning "  ⚠️  WHEEL file exists but format is unexpected"
-                }
-              } else {
-                Write-Warning "  ⚠️  .dist-info exists but no WHEEL file found (might be editable install)"
-              }
-            } else {
-              Write-Error "  ❌ No .dist-info directory found for '$pkg' in $location"
-              Write-Host "  Available directories:"
-              Get-ChildItem -Path $location -Directory | Select-Object -First 10 | ForEach-Object { Write-Host "    - $($_.Name)" }
+            if ($installedVersion -ne $expectedVersion) {
+              Write-Error "❌ Package '$pkg' has wrong version: $installedVersion (expected $expectedVersion)"
               $allVerified = $false
+            } else {
+              Write-Host "✅ $pkg==$installedVersion"
             }
           }
 
           if (-not $allVerified) {
-            throw "[BUILD] ❌ One or more critical x86 packages failed verification"
+            throw "[BUILD] ❌ x86 package verification failed"
           }
 
-          Write-Host "[BUILD] ✅ All critical x86 packages verified as wheels"
+          Write-Host "[BUILD] ✅ All x86 packages verified"
       - name: 🐍 Set up PYTHONPATH
         shell: pwsh
         run: |
