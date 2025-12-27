@@ -36,6 +36,7 @@
            <Directory Id="Dir_Data" Name="data" />
            <Directory Id="Dir_Json" Name="json" />
            <Directory Id="Dir_Logs" Name="logs" />
+           <Directory Id="Dir_UI" Name="ui" />
         </Directory>
       </StandardDirectory>
     <?else?>
