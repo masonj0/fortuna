@@ -193,7 +193,7 @@ jobs:
         env:
           PYTHONUTF8: '1'
         run: |
-          pyinstaller web_service/backend/service_entry.py --name fortuna-core-service --clean --noconfirm --onedir --add-data "web_platform/frontend/out;ui" --hidden-import win32timezone --log-level INFO --additional-hooks-dir=./fortuna-backend-hooks
+          pyinstaller web_service/backend/service_entry.py --name fortuna-webservice --clean --noconfirm --onedir --add-data "web_platform/frontend/out;ui" --hidden-import win32timezone --log-level INFO --additional-hooks-dir=./fortuna-backend-hooks
       - name: '🔍 Post-build Bundle Inspection'
         id: inspect-bundle
         shell: pwsh
