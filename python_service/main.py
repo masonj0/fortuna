@@ -31,6 +31,8 @@ def _configure_sys_path():
         paths_to_add = [
             project_root,
             os.path.join(project_root, "python_service"),
+            # Add web_service path to find the shared compat module
+            os.path.join(project_root, "web_service"),
         ]
 
         # Insert paths at the beginning of sys.path in reverse order
