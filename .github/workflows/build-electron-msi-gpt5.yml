@@ -73,8 +73,7 @@ jobs:
             $requirementsFile = "${{ env.BACKEND_DIR }}/requirements.txt"
             pip install -r $requirementsFile
           }
-          pip install structlog uvicorn fastapi starlette pydantic pydantic_settings sqlalchemy aiosqlite httpx redis slowapi limits beautifulsoup4
-          pip install --upgrade "pyinstaller>=6.12" pywin32
+          pip install structlog uvicorn fastapi starlette pydantic pydantic_settings sqlalchemy aiosqlite httpx redis slowapi limits beautifulsoup4 pywin32
           Write-Host "--- Final installed packages (pip list) ---"
           pip list
 
