@@ -156,25 +156,65 @@ jobs:
           # Finally, install PyInstaller separately
           pip install pyinstaller==5.13.2
 
+          # ✅ NEW: Give pip time to finish writing all metadata
+          Write-Host "[BUILD] Waiting for pip metadata to stabilize..."
+          Start-Sleep -Seconds 5
+
       - name: Verify x86 packages are from wheels (not compiled from source)
         shell: pwsh
         run: |
           Write-Host "[BUILD] Verifying critical x86 packages..."
 
           $criticalPackages = @('sqlalchemy', 'greenlet', 'pandas', 'numpy', 'scipy')
+          $allVerified = $true
 
           foreach ($pkg in $criticalPackages) {
-            $location = pip show $pkg | Select-String "Location:"
-            Write-Host "✓ $pkg installed at: $location"
+            Write-Host "Checking $pkg..."
 
-            # Check if package metadata indicates wheel installation
-            $files = pip show -f $pkg | Select-String "\.dist-info"
-            if (-not $files) {
-              throw "ERROR: $pkg appears to be installed from source, not wheel!"
+            # Get the installation location
+            $location = pip show $pkg 2>&1 | Select-String "Location:" | ForEach-Object { $_.Line -replace 'Location: ', '' }
+
+            if (-not $location) {
+              Write-Error "❌ Package '$pkg' not found by pip show!"
+              $allVerified = $false
+              continue
+            }
+
+            Write-Host "  Location: $location"
+
+            # CRITICAL FIX: Check for .dist-info DIRECTORY, not file pattern
+            # The directory name format is: packagename-version.dist-info
+            $pkgPattern = "${pkg}*.dist-info"
+            $distInfoDir = Get-ChildItem -Path $location -Directory -Filter $pkgPattern -ErrorAction SilentlyContinue | Select-Object -First 1
+
+            if ($distInfoDir) {
+              Write-Host "  ✅ Found wheel metadata: $($distInfoDir.Name)"
+
+              # Double-check: wheel-installed packages have a WHEEL file
+              $wheelFile = Join-Path $distInfoDir.FullName "WHEEL"
+              if (Test-Path $wheelFile) {
+                $wheelContent = Get-Content $wheelFile -Raw
+                if ($wheelContent -match "Root-Is-Purelib: (true|false)") {
+                  Write-Host "  ✅ Confirmed: Package was installed from wheel"
+                } else {
+                  Write-Warning "  ⚠️  WHEEL file exists but format is unexpected"
+                }
+              } else {
+                Write-Warning "  ⚠️  .dist-info exists but no WHEEL file found (might be editable install)"
+              }
+            } else {
+              Write-Error "  ❌ No .dist-info directory found for '$pkg' in $location"
+              Write-Host "  Available directories:"
+              Get-ChildItem -Path $location -Directory | Select-Object -First 10 | ForEach-Object { Write-Host "    - $($_.Name)" }
+              $allVerified = $false
             }
           }
 
-          Write-Host "[BUILD] ✓ All critical x86 packages verified as wheels"
+          if (-not $allVerified) {
+            throw "[BUILD] ❌ One or more critical x86 packages failed verification"
+          }
+
+          Write-Host "[BUILD] ✅ All critical x86 packages verified as wheels"
       - name: 🐍 Set up PYTHONPATH
         shell: pwsh
         run: |
