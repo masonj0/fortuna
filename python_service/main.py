@@ -31,6 +31,8 @@ def _configure_sys_path():
         paths_to_add = [
             project_root,
             os.path.join(project_root, "python_service"),
+            # Add web_service path to find the shared compat module
+            os.path.join(project_root, "web_service"),
         ]
 
         # Insert paths at the beginning of sys.path in reverse order
@@ -47,6 +49,24 @@ def _configure_sys_path():
             sys.path.insert(0, project_root)
             print(f"INFO: Added project root to sys.path: {project_root}")
 
+# CRITICAL: This must be called before any other application imports.
+_configure_sys_path()
+
+# ============================================================================
+# CRITICAL: Windows Compatibility Layer
+# ============================================================================
+import sys
+import asyncio
+
+def setup_windows_event_loop():
+    if sys.platform == 'win32' and getattr(sys, 'frozen', False):
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+        print('[BOOT] ✓ Applied WindowsSelectorEventLoopPolicy for PyInstaller',
+              file=sys.stderr)
+
+setup_windows_event_loop()
+# ============================================================================
+
 
 def main():
     """
@@ -55,9 +75,6 @@ def main():
     It's crucial to launch the app this way to ensure PyInstaller's bootloader
     can correctly resolve the package context.
     """
-    # CRITICAL: This must be called before any other application imports.
-    _configure_sys_path()
-
     # When packaged, we need to ensure multiprocessing works correctly.
     if getattr(sys, "frozen", False):
         # CRITICAL for multiprocessing support in frozen mode on Windows.
@@ -110,13 +127,6 @@ def main():
                     status_code=404,
                     detail="Frontend not found. Please build the frontend and ensure it's in the correct location.",
                 )
-
-    # CRITICAL FIX FOR PYINSTALLER on WINDOWS: Force event loop policy
-    # This resolves a silent network binding failure where Uvicorn reports startup
-    # but the OS never actually binds the port.
-    if sys.platform == "win32" and getattr(sys, 'frozen', False):
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-        print("[BOOT] Applied WindowsSelectorEventLoopPolicy for PyInstaller", file=sys.stderr)
 
     uvicorn.run(app, host=settings.UVICORN_HOST, port=settings.FORTUNA_PORT, log_level="info")
 
