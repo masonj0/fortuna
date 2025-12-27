@@ -183,9 +183,11 @@ jobs:
           Write-Host "[BUILD] Installing PyInstaller..."
           pip install pyinstaller==5.13.2
 
-          Write-Host "[BUILD] ✅ All dependencies installed successfully"
+          # ✅ NEW: Give pip time to finish writing all metadata
+          Write-Host "[BUILD] Waiting for pip metadata to stabilize..."
+          Start-Sleep -Seconds 5
 
-      - name: Verify x86 packages are from wheels
+      - name: Verify x86 packages are from wheels (not compiled from source)
         shell: pwsh
         run: |
           Write-Host "[BUILD] Verifying x86-constrained packages..."
@@ -224,7 +226,11 @@ jobs:
             throw "[BUILD] ❌ x86 package verification failed"
           }
 
-          Write-Host "[BUILD] ✅ All x86 packages verified"
+          if (-not $allVerified) {
+            throw "[BUILD] ❌ One or more critical x86 packages failed verification"
+          }
+
+          Write-Host "[BUILD] ✅ All critical x86 packages verified as wheels"
       - name: 🐍 Set up PYTHONPATH
         shell: pwsh
         run: |
