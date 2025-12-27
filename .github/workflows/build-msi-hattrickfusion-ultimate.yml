@@ -144,12 +144,40 @@ jobs:
             Write-Host "✅ Constraints: SQLAlchemy 2.0.44, greenlet 3.0.3, scipy 1.10.1"
           } else { New-Item $constraintFile -ItemType File -Force }
           "file=$constraintFile" | Out-File $env:GITHUB_OUTPUT -Append
-      - name: Install Dependencies & Build Tools
+      - name: Install Python dependencies (x86 Build)
+        shell: pwsh
         run: |
           python -m pip install --upgrade pip
-          pip install -r web_service/backend/requirements.txt -c ${{ steps.constraints.outputs.file }}
-          # Upgrade PyInstaller to a version with the pywin32 fix
-          pip install --upgrade "pyinstaller>=6.12" pywin32 -c ${{ steps.constraints.outputs.file }}
+
+          # CRITICAL: Install x86-constrained packages first with wheel-only enforcement
+          pip install --platform win32 --only-binary=:all: `
+            -r web_service/backend/requirements-x86-constraints.txt
+
+          # Then install remaining dependencies (which may use x64 or source)
+          pip install -r web_service/backend/requirements.txt
+
+          # Finally, install PyInstaller
+          pip install pyinstaller==5.13.2
+
+      - name: Verify x86 packages are from wheels (not compiled from source)
+        shell: pwsh
+        run: |
+          Write-Host "[BUILD] Verifying critical x86 packages..."
+
+          $criticalPackages = @('sqlalchemy', 'greenlet', 'pandas', 'numpy', 'scipy')
+
+          foreach ($pkg in $criticalPackages) {
+            $location = pip show $pkg | Select-String "Location:"
+            Write-Host "✓ $pkg installed at: $location"
+
+            # Check if package metadata indicates wheel installation
+            $files = pip show -f $pkg | Select-String "\.dist-info"
+            if (-not $files) {
+              throw "ERROR: $pkg appears to be installed from source, not wheel!"
+            }
+          }
+
+          Write-Host "[BUILD] ✓ All critical x86 packages verified as wheels"
       - name: 🐍 Set up PYTHONPATH
         shell: pwsh
         run: |

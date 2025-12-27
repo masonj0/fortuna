@@ -1,0 +1,21 @@
+# x86 Build Constraints - MANDATORY for successful x86 builds
+# These packages MUST be installed from pre-built wheels only
+#
+# USAGE:
+#   pip install --platform win32 --only-binary=:all: -r requirements-x86-constraints.txt
+#
+# The --only-binary=:all: flag ensures all packages come from wheels, not source.
+# If a wheel is not available, the installation will FAIL LOUDLY instead of
+# attempting to compile from source (which will fail silently on x86).
+
+# Database and ORM
+sqlalchemy==2.0.28
+greenlet==3.0.3
+
+# Data Science Stack (use older versions with guaranteed x86 wheel availability)
+pandas==1.5.3
+numpy==1.23.5
+scipy==1.10.1
+
+# Note: These versions are older than the main requirements.txt to ensure
+# pre-built x86 wheels exist. This is a necessary trade-off for x86 support.

@@ -12,21 +12,37 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 block_cipher = None
 
 # ============================================================================
-# Spec file directory (Corrected for CI environment)
+# HARDENING REQUIREMENT #3: Absolute Path Logic
 # ============================================================================
-# In a CI environment, SPECPATH can be unreliable. os.getcwd() is more robust.
-spec_file_dir = Path(os.getcwd())
-hooks_directory = spec_file_dir / 'fortuna-backend-hooks'
+import os
+import sys
+from pathlib import Path
 
-print(f"[SPEC] Spec directory: {spec_file_dir}")
-print(f"[SPEC] Hooks directory: {hooks_directory}")
-print(f"[SPEC] Hooks exist: {Path(hooks_directory).exists()}")
+spec_file_path = Path(__file__).resolve()
+project_root = spec_file_path.parent.resolve()
+
+print(f'[SPEC] Spec file location: {spec_file_path}')
+print(f'[SPEC] Project root computed: {project_root}')
+
+# Define all critical paths as absolute
+entry_point = project_root / 'python_service' / 'main.py'
+frontend_path = project_root / 'web_platform' / 'frontend' / 'out'
+hooks_dir = project_root / 'fortuna-backend-hooks'
+
+# Verify paths exist at spec LOAD TIME (not run time)
+if not entry_point.exists():
+    raise FileNotFoundError(f'Entry point not found: {entry_point}')
+if not hooks_dir.exists():
+    print(f'[SPEC] WARNING: Hooks directory not found: {hooks_dir}')
+
+print(f'[SPEC] Entry point: {entry_point}')
+print(f'[SPEC] Frontend: {frontend_path}')
+print(f'[SPEC] Hooks: {hooks_dir}')
 
 # ============================================================================
 # Data Files (for non-Python assets)
 # ============================================================================
 datas = []
-frontend_path = spec_file_dir / "web_platform/frontend/out"
 if frontend_path.exists():
     datas.append((str(frontend_path), 'ui'))
     print(f"[SPEC] ✅ Frontend found: {frontend_path}")
@@ -59,52 +75,67 @@ hidden_imports = [
 print(f"[SPEC] Starting with {len(hidden_imports)} explicit hidden imports")
 
 # ============================================================================
-# FORCE collect_submodules for problematic packages
-# This is the equivalent of --collect-all on the command line
+# HARDCODED CRITICAL HOOKS - Backup to external hook files
+# This ensures uvicorn/tenacity/structlog are ALWAYS bundled
 # ============================================================================
-print("[SPEC] ========================================")
-print("[SPEC] FORCE-COLLECTING SUBMODULES")
-print("[SPEC] ========================================")
+from PyInstaller.utils.hooks import collect_submodules
 
-problematic_packages = [
-    ('tenacity', 'Retry library'),
-    ('uvicorn', 'ASGI server'),
-    ('structlog', 'Logging library'),
-    ('fastapi', 'Web framework'),
-    ('starlette', 'Web toolkit'),
-    ('httpx', 'HTTP client'),
-    ('redis', 'Cache client'),
-    ('sqlalchemy', 'ORM'),
+print('[SPEC] Applying hardcoded critical hooks for dynamic-import libraries')
+
+# Start with explicit critical list
+hardcoded_critical = [
+    'tenacity',
+    'tenacity.asyncio',
+    'tenacity.retry',
+    'tenacity.stop',
+    'tenacity.wait',
+    'uvicorn',
+    'uvicorn.config',
+    'uvicorn.logging',
+    'uvicorn.loops',
+    'uvicorn.loops.auto',
+    'uvicorn.protocols',
+    'uvicorn.protocols.http',
+    'uvicorn.protocols.http.auto',
+    'uvicorn.protocols.websockets',
+    'uvicorn.protocols.websockets.auto',
+    'uvicorn.server',
+    'structlog',
+    'structlog.processors',
 ]
-print(f"[SPEC] Initial hidden imports: {len(hidden_imports)}")
 
-for package_name, description in problematic_packages:
+# BONUS: Try to collect all submodules as additional safety layer
+for package in ['tenacity', 'uvicorn', 'structlog']:
     try:
-        modules = collect_submodules(package_name)
-        hidden_imports.extend(modules)
-        print(f"[SPEC] ✅ {package_name:20} -> Collected {len(modules):3} submodules ({description})")
+        collected = collect_submodules(package)
+        hardcoded_critical.extend(collected)
+        print(f'[SPEC] Collected {len(collected)} submodules from {package}')
     except Exception as e:
-        print(f"[SPEC] ⚠️  {package_name:20} -> Error: {str(e)[:50]}")
+        print(f'[SPEC] Could not collect from {package}: {e}')
 
-print(f"[SPEC] ========================================")
-print(f"[SPEC] Total hidden imports: {len(hidden_imports)}")
-print(f"[SPEC] ========================================")
+# Deduplicate
+hardcoded_critical = list(set(hardcoded_critical))
+print(f'[SPEC] Total hardcoded critical imports: {len(hardcoded_critical)}')
+
+# Merge with any existing hidden_imports
+hidden_imports = list(set(hidden_imports + hardcoded_critical))
+print(f'[SPEC] Final hidden_imports count: {len(hidden_imports)}')
 
 # ============================================================================
 # Analysis configuration
 # ============================================================================
 a = Analysis(
-    ['web_service/backend/main.py'],
-    pathex=[str(spec_file_dir)],
+    [str(entry_point)],  # Use absolute path
+    pathex=[str(project_root)],  # Use absolute path
     binaries=[],
     datas=datas,
     hiddenimports=hidden_imports,
-    hookspath=[hooks_directory],
+    hookspath=[str(hooks_dir)] if hooks_dir.exists() else [],  # Use absolute path
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
         'tcl', 'tk', '_tkinter', 'tkinter', 'matplotlib', 'pytest',
-        'sphinx', 'IPython', 'jupyter', 'distutils', 'python_service'
+        'sphinx', 'IPython', 'jupyter', 'distutils', 'web_service'  # Exclude the other service
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
