@@ -43,6 +43,7 @@ jobs:
     - name: Install Python dependencies
       if: matrix.language == 'python'
       run: |
+        pip install -r python_service/requirements-dev.txt
         pip install -r web_service/backend/requirements-dev.txt
     - name: Install JavaScript dependencies
       if: matrix.language == 'javascript'
