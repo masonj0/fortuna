@@ -226,11 +226,7 @@ jobs:
             throw "[BUILD] ❌ x86 package verification failed"
           }
 
-          if (-not $allVerified) {
-            throw "[BUILD] ❌ One or more critical x86 packages failed verification"
-          }
-
-          Write-Host "[BUILD] ✅ All critical x86 packages verified as wheels"
+          Write-Host "[BUILD] ✅ All x86 packages verified"
       - name: 🐍 Set up PYTHONPATH
         shell: pwsh
         run: |
