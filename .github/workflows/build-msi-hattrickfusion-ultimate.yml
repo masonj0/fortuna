@@ -151,9 +151,7 @@ jobs:
 
           # CRITICAL: Install all dependencies at once, applying the x86 constraints file
           # with the '-c' flag to enforce the older, wheel-available versions.
-          pip install --only-binary=:all: `
-            -r web_service/backend/requirements.txt `
-            -c web_service/backend/requirements-x86-constraints.txt
+          pip install --only-binary=:all: -r web_service/backend/requirements.txt -c web_service/backend/requirements-x86-constraints.txt
 
           # Finally, install PyInstaller separately
           pip install pyinstaller==5.13.2

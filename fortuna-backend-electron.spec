@@ -18,11 +18,11 @@ import os
 import sys
 from pathlib import Path
 
-# SPECPATH is a variable injected by PyInstaller. It is the reliable way to get the spec file's path.
-spec_file_path = Path(SPECPATH).resolve()
-project_root = spec_file_path.parent.resolve()
+# SPECPATH is a variable injected by PyInstaller. It is the reliable way to get the spec file's directory.
+# In the CI environment, the project root IS the spec path directory.
+project_root = Path(SPECPATH).resolve()
 
-print(f'[SPEC] Spec file location: {spec_file_path}')
+print(f'[SPEC] PyInstaller SPECPATH: {SPECPATH}')
 print(f'[SPEC] Project root computed: {project_root}')
 
 # Define all critical paths as absolute
