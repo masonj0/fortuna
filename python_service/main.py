@@ -4,6 +4,20 @@ import os
 import asyncio
 from multiprocessing import freeze_support
 
+# BEFORE any other imports, define the compatibility function inline
+def _setup_windows_event_loop():
+    """Configure Windows event loop policy for PyInstaller bundles."""
+    import sys
+    if sys.platform == 'win32' and getattr(sys, 'frozen', False):
+        import asyncio
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+        print('[BOOT] ✓ Applied WindowsSelectorEventLoopPolicy for PyInstaller',
+              file=sys.stderr)
+
+# Call it immediately
+_setup_windows_event_loop()
+
+
 # Force UTF-8 encoding for stdout and stderr, crucial for PyInstaller on Windows
 os.environ["PYTHONUTF8"] = "1"
 
@@ -51,14 +65,6 @@ def _configure_sys_path():
 
 # CRITICAL: This must be called before any other application imports.
 _configure_sys_path()
-
-# ============================================================================
-# CRITICAL: Windows Compatibility Layer
-# This MUST be the first import to ensure event loop is configured correctly
-# ============================================================================
-from web_service.backend.windows_compat import setup_windows_event_loop
-setup_windows_event_loop()
-# ============================================================================
 
 
 def main():
