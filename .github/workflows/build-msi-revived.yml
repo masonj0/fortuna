@@ -12,7 +12,7 @@ concurrency:
 
 env:
   NODE_VERSION: '20'
-  PYTHON_VERSION: '3.11' # 🚀 CRITICAL: 3.12 breaks x86 builds
+  PYTHON_VERSION: '3.9' # 🚀 CRITICAL: 3.12 breaks x86 builds
   DOTNET_VERSION: '8.0.x'
   WIX_VERSION: '4.0.5'
   FORTUNA_PORT: '8102'
@@ -66,7 +66,7 @@ jobs:
       - name: 🐍 Setup Python (x86 Safe Mode)
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.9'
           architecture: 'x86' # FIXED: Force 32-bit Python to match the 'Safe Mode' MSI target
           cache: 'pip'
 
@@ -87,8 +87,8 @@ jobs:
 
           Write-Host "[BUILD] Installing x86-constrained packages first..."
           pip install --only-binary=:all: `
-            "sqlalchemy==2.0.28" `
-            "greenlet==3.0.3" `
+            "sqlalchemy==1.4.46" `
+            "greenlet==1.1.2" `
             "pandas==1.5.3" `
             "numpy==1.23.5" `
             "scipy==1.10.1"

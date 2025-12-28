@@ -17,7 +17,7 @@ concurrency:
 
 env:
   NODE_VERSION: '20'
-  PYTHON_VERSION: '3.11' # 🚀 DOWNGRADE
+  PYTHON_VERSION: '3.9' # 🚀 DOWNGRADE
   DOTNET_VERSION: '8.0.x'
   WIX_VERSION: '4.0.5'
   SERVICE_PORT: '8102'
@@ -154,8 +154,8 @@ jobs:
           # CRITICAL: Install x86-constrained packages FIRST with exact versions
           # These versions are guaranteed to have pre-built x86 wheels
           pip install --only-binary=:all: `
-            "sqlalchemy==2.0.28" `
-            "greenlet==3.0.3" `
+            "sqlalchemy==1.4.46" `
+            "greenlet==1.1.2" `
             "pandas==1.5.3" `
             "numpy==1.23.5" `
             "scipy==1.10.1"
