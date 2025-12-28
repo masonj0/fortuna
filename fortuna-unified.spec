@@ -1,4 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
+import os
 from pathlib import Path
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
@@ -6,7 +7,8 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 # removing the dependency on the obsolete 'python_service'.
 
 block_cipher = None
-project_root = Path(SPECPATH).parent
+# Use os.getcwd() for reliable pathing in CI environments
+project_root = Path(os.getcwd())
 backend_root = project_root / 'web_service' / 'backend'
 
 # --- Data Files ---
