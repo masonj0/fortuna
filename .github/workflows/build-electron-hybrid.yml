@@ -12,7 +12,7 @@ concurrency:
 
 env:
   NODE_VERSION: '20'
-  PYTHON_VERSION: '3.11' # 🚀 DOWNGRADE
+  PYTHON_VERSION: '3.9' # 🚀 DOWNGRADE
   # Paths
   BACKEND_DIR: 'web_service/backend'
   FRONTEND_DIR: 'web_platform/frontend'
@@ -112,7 +112,7 @@ jobs:
           New-Item -ItemType Directory -Path $constraintDir -Force | Out-Null
           $constraintFile = Join-Path $constraintDir "constraint-${{ matrix.arch }}.txt"
           if ('${{ matrix.arch }}' -eq 'x86') {
-            "numpy==1.23.5`r`npandas==1.5.3`r`nscipy==1.10.1" | Set-Content $constraintFile
+            "numpy==1.23.5`r`npandas==1.5.3`r`nscipy==1.10.1`r`ngreenlet==1.1.2`r`nsqlalchemy==1.4.46" | Set-Content $constraintFile
           } else { New-Item $constraintFile -ItemType File -Force }
           "file=$constraintFile" | Out-File $env:GITHUB_OUTPUT -Append
       - name: '🐍 Install Python Dependencies'
