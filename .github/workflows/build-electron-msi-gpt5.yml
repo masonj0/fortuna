@@ -61,7 +61,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: dist/fortuna-backend
-          key: ${{ runner.os }}-${{ matrix.arch }}-pyi-${{ hashFiles('web_service/backend/**/*.py', 'fortuna-backend-electron.spec', 'web_service/backend/requirements*.txt') }}
+          key: ${{ runner.os }}-${{ matrix.arch }}-pyi-${{ hashFiles('web_service/backend/**/*.py', 'fortuna-unified.spec', 'web_service/backend/requirements*.txt') }}
 
       - name: 📦 Install Dependencies and Verify Imports
         shell: pwsh
@@ -81,7 +81,7 @@ jobs:
             $requirementsFile = "${{ env.BACKEND_DIR }}/requirements.txt"
             uv pip install --system -r $requirementsFile
           }
-          uv pip install --system structlog uvicorn fastapi starlette pydantic pydantic_settings sqlalchemy aiosqlite httpx redis slowapi limits beautifulsoup4 pywin32
+          uv pip install --system structlog uvicorn fastapi starlette pydantic pydantic_settings sqlalchemy aiosqlite httpx redis slowapi limits beautifulsoup4 pywin32 tenacity
           Write-Host "--- Final installed packages (pip list) ---"
           pip list
 
@@ -89,7 +89,7 @@ jobs:
           $modules = @(
               'structlog', 'uvicorn', 'fastapi', 'starlette', 'pydantic',
               'pydantic_settings', 'sqlalchemy', 'aiosqlite', 'httpx', 'redis',
-              'slowapi', 'limits', 'web_service', 'web_service.backend', 'web_service.backend.api'
+              'slowapi', 'limits', 'tenacity', 'web_service', 'web_service.backend', 'web_service.backend.api'
           )
           $ErrorActionPreference = "Continue"
           foreach ($module in $modules) {
