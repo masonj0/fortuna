@@ -36,7 +36,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
       - run: |
           pip install uv
-          uv pip install -r web_service/backend/requirements-dev.txt
+          uv pip install --system -r web_service/backend/requirements-dev.txt
           pytest web_service/backend/tests
   # ============================================================================
   # JOB 1: BUILD CORE (The "HatTrick" Engine)
@@ -119,8 +119,8 @@ jobs:
       - name: '🐍 Install Python Dependencies'
         run: |
           pip install uv
-          uv pip install -r ${{ env.BACKEND_DIR }}/requirements-dev.txt -c ${{ steps.constraints.outputs.file }}
-          uv pip install --upgrade "pyinstaller>=6.12" pywin32
+          uv pip install --system -r ${{ env.BACKEND_DIR }}/requirements-dev.txt -c ${{ steps.constraints.outputs.file }}
+          uv pip install --system --upgrade "pyinstaller>=6.12" pywin32
       - name: '🔍 Verify Critical Imports Before Build'
         shell: pwsh
         run: |
@@ -451,7 +451,7 @@ jobs:
         shell: pwsh
         run: |
           pip install uv
-          uv pip install playwright
+          uv pip install --system playwright
           python -m playwright install chromium
 
           $url = "http://localhost:${{ env.FORTUNA_PORT }}"
