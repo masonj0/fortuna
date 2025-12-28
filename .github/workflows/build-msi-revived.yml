@@ -12,7 +12,7 @@ concurrency:
 
 env:
   NODE_VERSION: '20'
-  PYTHON_VERSION: '3.11' # 🚀 CRITICAL: 3.12 breaks x86 builds
+  PYTHON_VERSION: '3.9' # 🚀 CRITICAL: 3.12 breaks x86 builds
   DOTNET_VERSION: '8.0.x'
   WIX_VERSION: '4.0.5'
   FORTUNA_PORT: '8102'
@@ -53,9 +53,13 @@ jobs:
 
   # 2. BUILD BACKEND (Matrix: x64 & x86)
   build-backend:
-    name: '🐍 Build Backend (x86)'
+    name: '🐍 Build Backend (${{ matrix.arch }})'
     runs-on: windows-latest
     needs: build-frontend
+    continue-on-error: ${{ matrix.arch == 'x86' }}
+    strategy:
+      matrix:
+        arch: [x64, x86]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -63,11 +67,11 @@ jobs:
           name: frontend-dist-${{ github.run_id }}
           path: ${{ env.FRONTEND_DIR }}/out
 
-      - name: 🐍 Setup Python (x86 Safe Mode)
+      - name: 🐍 Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-          architecture: 'x86' # FIXED: Force 32-bit Python to match the 'Safe Mode' MSI target
+          python-version: '3.9'
+          architecture: '${{ matrix.arch }}'
           cache: 'pip'
 
       - name: 🧾 Create Architecture Constraints
@@ -75,9 +79,12 @@ jobs:
         shell: pwsh
         run: |
           $file = "constraints.txt"
-          # 🚀 SAFE MODE: Pin versions with known 32-bit wheels
-          "numpy==1.23.5`r`npandas==1.5.3" | Set-Content $file
-          Write-Host "✅ Created x86 constraints (Safe Mode)"
+          if ('${{ matrix.arch }}' -eq 'x86') {
+            "numpy==1.23.5`r`npandas==1.5.3" | Set-Content $file
+            Write-Host "✅ Created x86 constraints (Safe Mode)"
+          } else {
+            New-Item $file -ItemType File -Force
+          }
           "file=$file" | Out-File $env:GITHUB_OUTPUT -Append
 
       - name: Install Dependencies
@@ -85,16 +92,17 @@ jobs:
         run: |
           python -m pip install --upgrade pip
 
-          Write-Host "[BUILD] Installing x86-constrained packages first..."
-          pip install --only-binary=:all: `
-            "sqlalchemy==2.0.28" `
-            "greenlet==3.0.3" `
-            "pandas==1.5.3" `
-            "numpy==1.23.5" `
-            "scipy==1.10.1"
-
-          if ($LASTEXITCODE -ne 0) {
-            throw "[BUILD] ❌ Failed to install x86-constrained packages"
+          if ('${{ matrix.arch }}' -eq 'x86') {
+            Write-Host "[BUILD] Installing x86-constrained packages first..."
+            pip install --only-binary=:all: `
+              "sqlalchemy==1.4.46" `
+              "greenlet==1.1.2" `
+              "pandas==1.5.3" `
+              "numpy==1.23.5" `
+              "scipy==1.10.1"
+            if ($LASTEXITCODE -ne 0) {
+              throw "[BUILD] ❌ Failed to install x86-constrained packages"
+            }
           }
 
           Write-Host "[BUILD] Installing remaining dependencies..."
@@ -117,28 +125,24 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "[BUILD] Verifying x86-constrained packages..."
-
           $expectedVersions = @{
-            'sqlalchemy' = '2.0.28'
-            'greenlet' = '3.0.3'
+            'sqlalchemy' = '1.4.46'
+            'greenlet' = '1.1.2'
             'pandas' = '1.5.3'
             'numpy' = '1.23.5'
             'scipy' = '1.10.1'
           }
-
           $allVerified = $true
-
           foreach ($pkg in $expectedVersions.Keys) {
             $expectedVersion = $expectedVersions[$pkg]
-
             $installedVersion = pip show $pkg 2>&1 | Select-String "Version:" | ForEach-Object { $_.Line -replace 'Version: ', '' }
-
             if (-not $installedVersion) {
               Write-Error "❌ Package '$pkg' not installed!"
               $allVerified = $false
               continue
             }
-
+            $installedVersion = $installedVersion.Trim()
+            $expectedVersion = $expectedVersion.Trim()
             if ($installedVersion -ne $expectedVersion) {
               Write-Error "❌ Package '$pkg' has wrong version: $installedVersion (expected $expectedVersion)"
               $allVerified = $false
@@ -146,11 +150,9 @@ jobs:
               Write-Host "✅ $pkg==$installedVersion"
             }
           }
-
           if (-not $allVerified) {
             throw "[BUILD] ❌ x86 package verification failed"
           }
-
           Write-Host "[BUILD] ✅ All x86 packages verified"
 
       - name: Build Backend (PyInstaller)
@@ -161,7 +163,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: backend-dist-x86-${{ github.run_id }}
+          name: backend-dist-${{ matrix.arch }}-${{ github.run_id }}
           path: dist/fortuna-core-service/
 
   # 3. PREFLIGHT CHECK
@@ -180,16 +182,20 @@ jobs:
           Write-Host "Build Version: $semver"
           "semver=$semver" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
-  # 4. PACKAGE MSI (x86)
+  # 4. PACKAGE MSI
   package-msi:
-    name: '💿 Package MSI (x86)'
+    name: '💿 Package MSI (${{ matrix.arch }})'
     runs-on: windows-latest
     needs: [build-backend, preflight-check]
+    continue-on-error: ${{ matrix.arch == 'x86' }}
+    strategy:
+      matrix:
+        arch: [x64, x86]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: backend-dist-x86-${{ github.run_id }}
+          name: backend-dist-${{ matrix.arch }}-${{ github.run_id }}
           path: staging/backend
 
       - name: Create Restart Service Batch Script
@@ -251,13 +257,13 @@ jobs:
       - name: Build MSI
         working-directory: ${{ env.WIX_DIR }}
         run: |
-          dotnet build Fortuna.wixproj -c Release -p:Platform=x86 -p:Version="${{ needs.preflight-check.outputs.semver }}" -p:SourceDir="../staging/backend" -p:ServicePort="${{ env.FORTUNA_PORT }}"
+          dotnet build Fortuna.wixproj -c Release -p:Platform=${{ matrix.arch }} -p:Version="${{ needs.preflight-check.outputs.semver }}" -p:SourceDir="../staging/backend" -p:ServicePort="${{ env.FORTUNA_PORT }}"
 
       - name: Rename & Hash
         run: |
-          $releaseDir = "${{ env.WIX_DIR }}/bin/x86/Release"
+          $releaseDir = "${{ env.WIX_DIR }}/bin/${{ matrix.arch }}/Release"
           $msi = Get-ChildItem -Path $releaseDir -Filter "*.msi" | Select -First 1
-          $target = "FortunaService-x86-${{ needs.preflight-check.outputs.semver }}.msi"
+          $target = "FortunaService-${{ matrix.arch }}-${{ needs.preflight-check.outputs.semver }}.msi"
           Move-Item $msi.FullName -Destination "$releaseDir/$target" -Force
           Write-Host "✅ MSI Ready: $target"
           $hash = (Get-FileHash "$releaseDir/$target" -Algorithm SHA256).Hash
@@ -266,20 +272,24 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: msi-x86-${{ github.run_id }}
+          name: msi-${{ matrix.arch }}-${{ github.run_id }}
           path: |
-            ${{ env.WIX_DIR }}/bin/x86/Release/*.msi
-            ${{ env.WIX_DIR }}/bin/x86/Release/*.sha256
+            ${{ env.WIX_DIR }}/bin/${{ matrix.arch }}/Release/*.msi
+            ${{ env.WIX_DIR }}/bin/${{ matrix.arch }}/Release/*.sha256
 
-  # 5. SMOKE TEST (x86)
+  # 5. SMOKE TEST
   smoke-test:
-    name: '🔬 Smoke Test (x86)'
+    name: '🔬 Smoke Test (${{ matrix.arch }})'
     runs-on: windows-latest
     needs: [package-msi, preflight-check]
+    continue-on-error: ${{ matrix.arch == 'x86' }}
+    strategy:
+      matrix:
+        arch: [x64, x86]
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: msi-x86-${{ github.run_id }}
+          name: msi-${{ matrix.arch }}-${{ github.run_id }}
           path: installer
 
       - name: Install MSI
@@ -290,8 +300,7 @@ jobs:
       - name: Verify Service & Port
         shell: pwsh
         run: |
-          # FIXED: Hardcode the x86 path since this job does not use a matrix.
-          $progFiles = ${env:ProgramFiles(x86)}
+          $progFiles = if ('${{ matrix.arch }}' -eq 'x86') { ${env:ProgramFiles(x86)} } else { ${env:ProgramFiles} }
           $installRoot = Join-Path $progFiles "Fortuna Faucet Service"
 
           if (-not (Test-Path $installRoot)) { throw "❌ Install dir not found at $installRoot" }
@@ -334,5 +343,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: proof-x86
+          name: proof-${{ matrix.arch }}
           path: proof.png
