@@ -90,7 +90,7 @@ jobs:
       - name: Install Dependencies
         run: |
           pip install uv
-          uv pip install -r web_service/backend/requirements-dev.txt
+          uv pip install --system -r web_service/backend/requirements-dev.txt
       - name: Run Pytest
         run: |
           pytest web_service/backend/tests
@@ -164,7 +164,7 @@ jobs:
 
           # CRITICAL: Install x86-constrained packages FIRST with exact versions
           # These versions are guaranteed to have pre-built x86 wheels
-          uv pip install --only-binary=:all: `
+          uv pip install --system --only-binary=:all: `
             "sqlalchemy==1.4.46" `
             "greenlet==1.1.2" `
             "pandas==1.5.3" `
@@ -179,7 +179,7 @@ jobs:
 
           # Now install the rest of the requirements
           # Use --no-deps to prevent pip from upgrading the packages we just installed
-          uv pip install -r web_service/backend/requirements.txt --no-deps
+          uv pip install --system -r web_service/backend/requirements.txt --no-deps
 
           if ($LASTEXITCODE -ne 0) {
             throw "[BUILD] ❌ Failed to install remaining requirements"
@@ -192,7 +192,7 @@ jobs:
           pip check
 
           Write-Host "[BUILD] Installing PyInstaller..."
-          uv pip install pyinstaller==5.13.2
+          uv pip install --system pyinstaller==5.13.2
 
           # ✅ NEW: Give pip time to finish writing all metadata
           Write-Host "[BUILD] Waiting for pip metadata to stabilize..."
@@ -205,8 +205,8 @@ jobs:
 
           # CRITICAL: These must match the versions installed in the previous step
           $expectedVersions = @{
-            'sqlalchemy' = '1.4.46'  # ✅ FIXED: Match installed version
-            'greenlet' = '1.1.2'     # ✅ FIXED: Match installed version
+            'sqlalchemy' = '1.4.46'
+            'greenlet' = '1.1.2'
             'pandas' = '1.5.3'
             'numpy' = '1.23.5'
             'scipy' = '1.10.1'
@@ -335,7 +335,7 @@ jobs:
         env:
           PYTHONUTF8: '1'
         run: |
-          pyinstaller web_service/backend/service_entry.py --name fortuna-webservice --clean --noconfirm --onedir --add-data "web_platform/frontend/out;ui" --hidden-import win32timezone --log-level INFO --additional-hooks-dir=./fortuna-backend-hooks
+          pyinstaller --noconfirm --clean --log-level INFO fortuna-unified.spec
       - name: '🔍 Post-build Bundle Inspection'
         id: inspect-bundle
         shell: pwsh
