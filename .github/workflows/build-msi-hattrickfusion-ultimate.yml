@@ -205,8 +205,8 @@ jobs:
 
           # CRITICAL: These must match the versions installed in the previous step
           $expectedVersions = @{
-            'sqlalchemy' = '1.4.46'  # ✅ FIXED: Match installed version
-            'greenlet' = '1.1.2'     # ✅ FIXED: Match installed version
+            'sqlalchemy' = '1.4.46'
+            'greenlet' = '1.1.2'
             'pandas' = '1.5.3'
             'numpy' = '1.23.5'
             'scipy' = '1.10.1'
@@ -335,7 +335,7 @@ jobs:
         env:
           PYTHONUTF8: '1'
         run: |
-          pyinstaller web_service/backend/service_entry.py --name fortuna-webservice --clean --noconfirm --onedir --add-data "web_platform/frontend/out;ui" --hidden-import win32timezone --log-level INFO --additional-hooks-dir=./fortuna-backend-hooks
+          pyinstaller --noconfirm --clean --log-level INFO fortuna-unified.spec
       - name: '🔍 Post-build Bundle Inspection'
         id: inspect-bundle
         shell: pwsh

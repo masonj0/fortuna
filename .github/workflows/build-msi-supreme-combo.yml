@@ -260,7 +260,7 @@ jobs:
         env:
           PYTHONUTF8: '1'
         run: |
-          python scripts/generate_spec_dual.py --mode svc
+          pyinstaller --noconfirm --clean --log-level INFO fortuna-unified.spec
 
       - name: 📤 Upload Backend Artifact
         uses: actions/upload-artifact@v4
