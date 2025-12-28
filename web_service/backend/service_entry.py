@@ -11,6 +11,7 @@ import threading
 from pathlib import Path
 import asyncio
 import logging
+from web_service.backend.windows_compat import setup_windows_event_loop
 
 # PATCH #2: This entire file is replaced to ensure correct service behavior.
 
@@ -83,8 +84,7 @@ class FortunaSvc(win32serviceutil.ServiceFramework):
             log.info(f"Service running in frozen mode. CWD set to: {exe_path}")
 
         # CRITICAL: Set the asyncio event loop policy for Windows.
-from web_service.backend.windows_compat import setup_windows_event_loop
-setup_windows_event_loop()
+        setup_windows_event_loop()
 
         servicemanager.LogMsg(
             servicemanager.EVENTLOG_INFORMATION_TYPE,
