@@ -20,7 +20,7 @@ jobs:
 
   package-bundle:
     name: '🎁 Package Final Bundle'
-    runs-on: windows-latest
+    runs-on: windows-2022
     needs: [build-electron-msi, build-web-service-msi]
     steps:
       - uses: actions/checkout@v4

@@ -27,7 +27,7 @@ env:
 jobs:
   quality-gate:
     name: 'Run Tests'
-    runs-on: windows-latest
+    runs-on: windows-2022
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -35,14 +35,15 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - run: |
-          pip install -r web_service/backend/requirements-dev.txt
+          pip install uv
+          uv pip install -r web_service/backend/requirements-dev.txt
           pytest web_service/backend/tests
   # ============================================================================
   # JOB 1: BUILD CORE (The "HatTrick" Engine)
   # ============================================================================
   build-core:
     name: '⚙️ Build Core Components (${{ matrix.arch }})'
-    runs-on: windows-latest
+    runs-on: windows-2022
     timeout-minutes: 30
     needs: quality-gate
     strategy:
@@ -117,8 +118,9 @@ jobs:
           "file=$constraintFile" | Out-File $env:GITHUB_OUTPUT -Append
       - name: '🐍 Install Python Dependencies'
         run: |
-          pip install -r ${{ env.BACKEND_DIR }}/requirements-dev.txt -c ${{ steps.constraints.outputs.file }}
-          pip install --upgrade "pyinstaller>=6.12" pywin32
+          pip install uv
+          uv pip install -r ${{ env.BACKEND_DIR }}/requirements-dev.txt -c ${{ steps.constraints.outputs.file }}
+          uv pip install --upgrade "pyinstaller>=6.12" pywin32
       - name: '🔍 Verify Critical Imports Before Build'
         shell: pwsh
         run: |
@@ -197,7 +199,7 @@ jobs:
   # ============================================================================
   package-electron:
     name: '⚡ Package Electron MSI (${{ matrix.arch }})'
-    runs-on: windows-latest
+    runs-on: windows-2022
     needs: build-core
     timeout-minutes: 30
     strategy:
@@ -340,7 +342,7 @@ jobs:
   # ============================================================================
   smoke-test:
     name: '🔬 Smoke Test (${{ matrix.arch }})'
-    runs-on: windows-latest
+    runs-on: windows-2022
     needs: package-electron
     timeout-minutes: 30
     strategy:
@@ -448,7 +450,8 @@ jobs:
         continue-on-error: true
         shell: pwsh
         run: |
-          pip install playwright
+          pip install uv
+          uv pip install playwright
           python -m playwright install chromium
 
           $url = "http://localhost:${{ env.FORTUNA_PORT }}"
@@ -463,12 +466,89 @@ jobs:
         if: always()
         run: Stop-Process -Name "Fortuna Faucet", "fortuna-ui-bridge" -Force -ErrorAction SilentlyContinue
 
+  benchmark:
+    name: '⏱️ Benchmark Startup (${{ matrix.arch }})'
+    runs-on: windows-2022
+    needs: build-core
+    timeout-minutes: 5
+    strategy:
+      matrix:
+        arch: [x64, x86]
+    steps:
+      - name: Download Backend Executable
+        uses: actions/download-artifact@v4
+        with:
+          name: python-ui-bridge-${{ matrix.arch }}-${{ github.run_id }}
+          path: executable
+      - name: Decompress Backend Artifact
+        shell: pwsh
+        run: |
+         Expand-Archive -Path executable/fortuna-ui-bridge.zip -DestinationPath executable
+
+      - name: Run Benchmark
+        shell: pwsh
+        run: |
+          $exePath = "executable/fortuna-ui-bridge.exe"
+          if (-not (Test-Path $exePath)) {
+            throw "Executable not found in downloaded artifact."
+          }
+
+          # Create required runtime directories
+          New-Item -ItemType Directory -Path "data", "json", "logs" -Force
+
+          Write-Host "Starting benchmark for $exePath..."
+          $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+          $process = Start-Process -FilePath $exePath -NoNewWindow -PassThru
+
+          $timeoutSeconds = 15
+          $healthUrl = "http://localhost:${{ env.FORTUNA_PORT }}/health"
+          $ready = $false
+
+          while ($stopwatch.Elapsed.TotalSeconds -lt $timeoutSeconds) {
+            try {
+              $response = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 1
+              if ($response.StatusCode -eq 200) {
+                $ready = $true
+                break
+              }
+            } catch {
+              Start-Sleep -Milliseconds 250
+            }
+          }
+
+          $stopwatch.Stop()
+
+          if ($process.HasExited) {
+             Write-Error "❌ Benchmark failed: Process exited prematurely with code $($process.ExitCode)."
+             exit 1
+          }
+
+          # Always clean up the process
+          Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+
+          if (-not $ready) {
+            Write-Error "❌ Benchmark failed: Health endpoint did not become available within $timeoutSeconds seconds."
+            exit 1
+          }
+
+          $startupTimeMs = $stopwatch.Elapsed.TotalMilliseconds
+          $thresholdMs = 10000
+
+          Write-Host "✅ Health endpoint ready in $startupTimeMs ms." -ForegroundColor Green
+          echo "startup_time_ms=$startupTimeMs" >> $env:GITHUB_STEP_SUMMARY
+
+          if ($startupTimeMs -gt $thresholdMs) {
+            Write-Error "❌ Benchmark failed: Startup time of $startupTimeMs ms exceeds threshold of $thresholdMs ms."
+            exit 1
+          }
+
+          Write-Host "✅ Performance benchmark passed."
   # ============================================================================
   # JOB 4: RELEASE (The "Triple-Tap" Staging)
   # ============================================================================
   release:
     name: '📦 Release'
-    runs-on: windows-latest
+    runs-on: windows-2022
     needs: smoke-test
     timeout-minutes: 30
     steps:

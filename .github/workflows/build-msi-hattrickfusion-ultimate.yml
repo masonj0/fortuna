@@ -36,7 +36,7 @@ jobs:
   # 1. Build Frontend First (so Backend can bundle it)
   build-frontend:
     name: Build Frontend
-    runs-on: windows-latest
+    runs-on: windows-2022
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -89,13 +89,14 @@ jobs:
       - uses: ./.github/actions/setup
       - name: Install Dependencies
         run: |
-          pip install -r web_service/backend/requirements-dev.txt
+          pip install uv
+          uv pip install -r web_service/backend/requirements-dev.txt
       - name: Run Pytest
         run: |
           pytest web_service/backend/tests
   build-backend:
     name: '🐍 Build Backend (${{ matrix.arch }})'
-    runs-on: windows-latest
+    runs-on: windows-2022
     needs: [build-frontend, backend-quality]
     timeout-minutes: 30
     continue-on-error: ${{ matrix.arch == 'x86' }}
@@ -145,16 +146,25 @@ jobs:
             Write-Host "✅ Constraints: SQLAlchemy 2.0.44, greenlet 3.0.3, scipy 1.10.1"
           } else { New-Item $constraintFile -ItemType File -Force }
           "file=$constraintFile" | Out-File $env:GITHUB_OUTPUT -Append
+
+      - name: CACHE-PYI Cache PyInstaller Build
+        id: cache-pyi-build
+        uses: actions/cache@v4
+        with:
+          path: dist/fortuna-core-service
+          key: ${{ runner.os }}-${{ matrix.arch }}-pyi-${{ hashFiles('web_service/backend/**/*.py', 'scripts/generate_spec_dual.py', 'web_service/backend/requirements*.txt') }}
+
       - name: Install Python dependencies (x86 Build)
         shell: pwsh
         run: |
           python -m pip install --upgrade pip
+          pip install uv
 
           Write-Host "[BUILD] Installing x86-constrained packages first..."
 
           # CRITICAL: Install x86-constrained packages FIRST with exact versions
           # These versions are guaranteed to have pre-built x86 wheels
-          pip install --only-binary=:all: `
+          uv pip install --only-binary=:all: `
             "sqlalchemy==1.4.46" `
             "greenlet==1.1.2" `
             "pandas==1.5.3" `
@@ -169,7 +179,7 @@ jobs:
 
           # Now install the rest of the requirements
           # Use --no-deps to prevent pip from upgrading the packages we just installed
-          pip install -r web_service/backend/requirements.txt --no-deps
+          uv pip install -r web_service/backend/requirements.txt --no-deps
 
           if ($LASTEXITCODE -ne 0) {
             throw "[BUILD] ❌ Failed to install remaining requirements"
@@ -182,7 +192,7 @@ jobs:
           pip check
 
           Write-Host "[BUILD] Installing PyInstaller..."
-          pip install pyinstaller==5.13.2
+          uv pip install pyinstaller==5.13.2
 
           # ✅ NEW: Give pip time to finish writing all metadata
           Write-Host "[BUILD] Waiting for pip metadata to stabilize..."
@@ -321,6 +331,7 @@ jobs:
             Write-Host "Skipping restore, 'json_temp' directory not found."
           }
       - name: 🔮 Build Executable with Modern PyInstaller
+        if: steps.cache-pyi-build.outputs.cache-hit != 'true'
         env:
           PYTHONUTF8: '1'
         run: |
@@ -366,7 +377,7 @@ jobs:
 
   package-msi:
     name: '💿 Package MSI (${{ matrix.arch }})'
-    runs-on: windows-latest
+    runs-on: windows-2022
     needs: [build-backend]
     timeout-minutes: 30
     continue-on-error: ${{ matrix.arch == 'x86' }}
@@ -479,7 +490,7 @@ jobs:
 
   smoke-test:
     name: '🔬 Smoke Test (${{ matrix.arch }})'
-    runs-on: windows-latest
+    runs-on: windows-2022
     needs: package-msi
     continue-on-error: ${{ matrix.arch == 'x86' }}
     strategy:
@@ -702,3 +713,80 @@ jobs:
             assets/*
           draft: false
           prerelease: false
+
+  benchmark:
+    name: '⏱️ Benchmark Startup (${{ matrix.arch }})'
+    runs-on: windows-2022
+    needs: build-backend
+    timeout-minutes: 5
+    strategy:
+      matrix:
+        arch: [x64, x86]
+    steps:
+      - name: Download Backend Executable
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-dist-${{ matrix.arch }}-${{ github.run_id }}
+          path: executable
+
+      - name: Run Benchmark
+        shell: pwsh
+        run: |
+          $exePath = "executable/fortuna-webservice.exe"
+          if (-not (Test-Path $exePath)) {
+            $exePath = "executable/fortuna-core-service.exe" # Fallback for different naming conventions
+          }
+          if (-not (Test-Path $exePath)) {
+            throw "Executable not found in downloaded artifact."
+          }
+
+          # Create required runtime directories
+          New-Item -ItemType Directory -Path "data", "json", "logs" -Force
+
+          Write-Host "Starting benchmark for $exePath..."
+          $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+          $process = Start-Process -FilePath $exePath -NoNewWindow -PassThru
+
+          $timeoutSeconds = 15
+          $healthUrl = "http://localhost:${{ env.SERVICE_PORT }}/health"
+          $ready = $false
+
+          while ($stopwatch.Elapsed.TotalSeconds -lt $timeoutSeconds) {
+            try {
+              $response = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 1
+              if ($response.StatusCode -eq 200) {
+                $ready = $true
+                break
+              }
+            } catch {
+              Start-Sleep -Milliseconds 250
+            }
+          }
+
+          $stopwatch.Stop()
+
+          if ($process.HasExited) {
+             Write-Error "❌ Benchmark failed: Process exited prematurely with code $($process.ExitCode)."
+             exit 1
+          }
+
+          # Always clean up the process
+          Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+
+          if (-not $ready) {
+            Write-Error "❌ Benchmark failed: Health endpoint did not become available within $timeoutSeconds seconds."
+            exit 1
+          }
+
+          $startupTimeMs = $stopwatch.Elapsed.TotalMilliseconds
+          $thresholdMs = 10000
+
+          Write-Host "✅ Health endpoint ready in $startupTimeMs ms." -ForegroundColor Green
+          echo "startup_time_ms=$startupTimeMs" >> $env:GITHUB_STEP_SUMMARY
+
+          if ($startupTimeMs -gt $thresholdMs) {
+            Write-Error "❌ Benchmark failed: Startup time of $startupTimeMs ms exceeds threshold of $thresholdMs ms."
+            exit 1
+          }
+
+          Write-Host "✅ Performance benchmark passed."
