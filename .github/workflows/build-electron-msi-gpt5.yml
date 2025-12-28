@@ -21,7 +21,7 @@ env:
 jobs:
   validate-environment:
     name: ✅ Pre-flight Validation
-    runs-on: windows-latest
+    runs-on: windows-2022
     outputs:
       semver: ${{ steps.meta.outputs.semver }}
       short_sha: ${{ steps.meta.outputs.short_sha }}
@@ -38,7 +38,7 @@ jobs:
 
   build-python-service:
     name: '🐍 Build Python Service (${{ matrix.arch }})'
-    runs-on: windows-latest
+    runs-on: windows-2022
     needs: validate-environment
     strategy:
       matrix:
@@ -56,6 +56,13 @@ jobs:
           New-Item -ItemType Directory -Path "${{ env.BACKEND_DIR }}/json" -Force
           New-Item -ItemType Directory -Path "${{ env.BACKEND_DIR }}/adapters" -Force
 
+      - name: CACHE-PYI Cache PyInstaller Build
+        id: cache-pyi-build
+        uses: actions/cache@v4
+        with:
+          path: dist/fortuna-backend
+          key: ${{ runner.os }}-${{ matrix.arch }}-pyi-${{ hashFiles('web_service/backend/**/*.py', 'fortuna-backend-electron.spec', 'web_service/backend/requirements*.txt') }}
+
       - name: 📦 Install Dependencies and Verify Imports
         shell: pwsh
         env:
@@ -63,17 +70,18 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           pip install --upgrade pip
+          pip install uv
           if ('${{ matrix.arch }}' -eq 'x86') {
             Write-Host "--- Using x86-specific requirements file ---"
-            pip install numpy==1.23.5 pandas==1.5.3 scipy==1.10.1
+            uv pip install numpy==1.23.5 pandas==1.5.3 scipy==1.10.1
             $requirementsFile = "${{ env.BACKEND_DIR }}/requirements-x86.txt"
-            pip install -r $requirementsFile
+            uv pip install -r $requirementsFile
           } else {
             Write-Host "--- Using standard requirements file ---"
             $requirementsFile = "${{ env.BACKEND_DIR }}/requirements.txt"
-            pip install -r $requirementsFile
+            uv pip install -r $requirementsFile
           }
-          pip install structlog uvicorn fastapi starlette pydantic pydantic_settings sqlalchemy aiosqlite httpx redis slowapi limits beautifulsoup4 pywin32
+          uv pip install structlog uvicorn fastapi starlette pydantic pydantic_settings sqlalchemy aiosqlite httpx redis slowapi limits beautifulsoup4 pywin32
           Write-Host "--- Final installed packages (pip list) ---"
           pip list
 
@@ -155,6 +163,7 @@ jobs:
           }
 
       - name: '📦 Build Executable'
+        if: steps.cache-pyi-build.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
           Write-Host "=== BUILDING EXECUTABLE WITH UVICORN HOOK ==="
@@ -306,7 +315,7 @@ jobs:
 
   build-frontend:
     name: 🎨 Build Web Frontend
-    runs-on: windows-latest
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -325,7 +334,7 @@ jobs:
 
   build-electron-msi:
     name: '🚀 Build Electron MSI (${{ matrix.arch }})'
-    runs-on: windows-latest
+    runs-on: windows-2022
     needs: [validate-environment, build-python-service, build-frontend]
     strategy:
       matrix:
@@ -410,7 +419,7 @@ jobs:
 
   smoke-test:
     name: '🔬 Smoke Test (${{ matrix.arch }})'
-    runs-on: windows-latest
+    runs-on: windows-2022
     needs: build-electron-msi
     strategy:
       matrix:
