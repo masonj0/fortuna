@@ -154,6 +154,54 @@ jobs:
             throw "[BUILD] ❌ x86 package verification failed"
           }
           Write-Host "[BUILD] ✅ All x86 packages verified"
+      - name: 🔬 Diagnostic - Verify wheel installation method
+        shell: pwsh
+        run: |
+          Write-Host "[DIAGNOSTIC] Checking installation metadata for x86 packages..."
+
+          $packages = @('sqlalchemy', 'greenlet')
+
+          foreach ($pkg in $packages) {
+            $location = pip show $pkg 2>&1 | Select-String "Location:" | ForEach-Object { $_.Line -replace 'Location: ', '' }
+
+            if ($location) {
+              $location = $location.Trim()
+              Write-Host "Package: $pkg"
+              Write-Host "  Location: $location"
+
+              # Find the .dist-info directory
+              $distInfo = Get-ChildItem -Path $location -Directory -Filter "${pkg}*.dist-info" -ErrorAction SilentlyContinue | Select-Object -First 1
+
+              if ($distInfo) {
+                Write-Host "  .dist-info: $($distInfo.Name)"
+
+                # Check for WHEEL file (proves it was a wheel installation)
+                $wheelFile = Join-Path $distInfo.FullName "WHEEL"
+                if (Test-Path $wheelFile) {
+                  $wheelContent = Get-Content $wheelFile -Raw
+                  Write-Host "  ✅ Installed from wheel (WHEEL file exists)"
+
+                  # Extract wheel tag
+                  if ($wheelContent -match "Tag: ([^\r\n]+)") {
+                    Write-Host "  Wheel tag: $($Matches[1])"
+                  }
+                } else {
+                  Write-Warning "  ⚠️  No WHEEL file found - might be source install"
+                }
+
+                # Check for INSTALLER file
+                $installerFile = Join-Path $distInfo.FullName "INSTALLER"
+                if (Test-Path $installerFile) {
+                  $installer = Get-Content $installerFile -Raw
+                  Write-Host "  Installer: $installer"
+                }
+              } else {
+                Write-Warning "  ⚠️  No .dist-info directory found for $pkg"
+              }
+
+              Write-Host ""
+            }
+          }
 
       - name: Build Backend (PyInstaller)
         env:
