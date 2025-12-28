@@ -17,7 +17,7 @@ concurrency:
 
 env:
   NODE_VERSION: '20'
-  PYTHON_VERSION: '3.11' # 🚀 DOWNGRADE
+  PYTHON_VERSION: '3.9' # 🚀 DOWNGRADE
   DOTNET_VERSION: '8.0.x'
   WIX_VERSION: '4.0.5'
   SERVICE_PORT: '8102'
@@ -154,8 +154,8 @@ jobs:
           # CRITICAL: Install x86-constrained packages FIRST with exact versions
           # These versions are guaranteed to have pre-built x86 wheels
           pip install --only-binary=:all: `
-            "sqlalchemy==2.0.28" `
-            "greenlet==3.0.3" `
+            "sqlalchemy==1.4.46" `
+            "greenlet==1.1.2" `
             "pandas==1.5.3" `
             "numpy==1.23.5" `
             "scipy==1.10.1"
@@ -192,9 +192,10 @@ jobs:
         run: |
           Write-Host "[BUILD] Verifying x86-constrained packages..."
 
+          # CRITICAL: These must match the versions installed in the previous step
           $expectedVersions = @{
-            'sqlalchemy' = '2.0.28'
-            'greenlet' = '3.0.3'
+            'sqlalchemy' = '1.4.46'  # ✅ FIXED: Match installed version
+            'greenlet' = '1.1.2'     # ✅ FIXED: Match installed version
             'pandas' = '1.5.3'
             'numpy' = '1.23.5'
             'scipy' = '1.10.1'
@@ -214,6 +215,10 @@ jobs:
               continue
             }
 
+            # Trim whitespace for comparison
+            $installedVersion = $installedVersion.Trim()
+            $expectedVersion = $expectedVersion.Trim()
+
             if ($installedVersion -ne $expectedVersion) {
               Write-Error "❌ Package '$pkg' has wrong version: $installedVersion (expected $expectedVersion)"
               $allVerified = $false
@@ -227,6 +232,54 @@ jobs:
           }
 
           Write-Host "[BUILD] ✅ All x86 packages verified"
+      - name: 🔬 Diagnostic - Verify wheel installation method
+        shell: pwsh
+        run: |
+          Write-Host "[DIAGNOSTIC] Checking installation metadata for x86 packages..."
+
+          $packages = @('sqlalchemy', 'greenlet')
+
+          foreach ($pkg in $packages) {
+            $location = pip show $pkg 2>&1 | Select-String "Location:" | ForEach-Object { $_.Line -replace 'Location: ', '' }
+
+            if ($location) {
+              $location = $location.Trim()
+              Write-Host "Package: $pkg"
+              Write-Host "  Location: $location"
+
+              # Find the .dist-info directory
+              $distInfo = Get-ChildItem -Path $location -Directory -Filter "${pkg}*.dist-info" -ErrorAction SilentlyContinue | Select-Object -First 1
+
+              if ($distInfo) {
+                Write-Host "  .dist-info: $($distInfo.Name)"
+
+                # Check for WHEEL file (proves it was a wheel installation)
+                $wheelFile = Join-Path $distInfo.FullName "WHEEL"
+                if (Test-Path $wheelFile) {
+                  $wheelContent = Get-Content $wheelFile -Raw
+                  Write-Host "  ✅ Installed from wheel (WHEEL file exists)"
+
+                  # Extract wheel tag
+                  if ($wheelContent -match "Tag: ([^\r\n]+)") {
+                    Write-Host "  Wheel tag: $($Matches[1])"
+                  }
+                } else {
+                  Write-Warning "  ⚠️  No WHEEL file found - might be source install"
+                }
+
+                # Check for INSTALLER file
+                $installerFile = Join-Path $distInfo.FullName "INSTALLER"
+                if (Test-Path $installerFile) {
+                  $installer = Get-Content $installerFile -Raw
+                  Write-Host "  Installer: $installer"
+                }
+              } else {
+                Write-Warning "  ⚠️  No .dist-info directory found for $pkg"
+              }
+
+              Write-Host ""
+            }
+          }
       - name: 🐍 Set up PYTHONPATH
         shell: pwsh
         run: |
