@@ -36,7 +36,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
       - run: |
           pip install uv
-          uv pip install -r web_service/backend/requirements-dev.txt
+          uv pip install --system -r web_service/backend/requirements-dev.txt
           pytest web_service/backend/tests
   # ============================================================================
   # JOB 1: BUILD CORE (The "HatTrick" Engine)
@@ -116,39 +116,47 @@ jobs:
             "numpy==1.23.5`r`npandas==1.5.3`r`nscipy==1.10.1`r`ngreenlet==1.1.2`r`nsqlalchemy==1.4.46" | Set-Content $constraintFile
           } else { New-Item $constraintFile -ItemType File -Force }
           "file=$constraintFile" | Out-File $env:GITHUB_OUTPUT -Append
-      - name: '🐍 Install Python Dependencies'
-        run: |
-          pip install uv
-          uv pip install -r ${{ env.BACKEND_DIR }}/requirements-dev.txt -c ${{ steps.constraints.outputs.file }}
-          uv pip install --upgrade "pyinstaller>=6.12" pywin32
-      - name: '🔍 Verify Critical Imports Before Build'
+      - name: '📦 Install Dependencies and Verify Imports'
         shell: pwsh
+        env:
+          PYTHONUTF8: '1'
         run: |
-          Write-Host "Verifying all critical modules can be imported..."
+          $ErrorActionPreference = 'Stop'
+          pip install --upgrade pip
+          pip install uv
 
-          $modules = @(
-              'structlog',
-              'uvicorn',
-              'fastapi',
-              'starlette',
-              'pydantic',
-              'pydantic_settings',
-              'sqlalchemy',
-              'aiosqlite',
-              'httpx',
-              'redis',
-              'slowapi',
-              'limits'
-          )
-
-          foreach ($module in $modules) {
-              python -c "import $module; print(f'✅ $module')"
-              if ($LASTEXITCODE -ne 0) {
-                  throw "❌ Failed to import $module"
-              }
+          if ('${{ matrix.arch }}' -eq 'x86') {
+            Write-Host "--- Using x86-specific requirements file ---"
+            uv pip install --system numpy==1.23.5 pandas==1.5.3 scipy==1.10.1
+            $requirementsFile = "web_service/backend/requirements-x86.txt"
+            uv pip install --system -r $requirementsFile
+          } else {
+            Write-Host "--- Using standard requirements file ---"
+            $requirementsFile = "web_service/backend/requirements.txt"
+            uv pip install --system -r $requirementsFile
           }
 
-          Write-Host "✅ All critical modules verified"
+          # ✅ CRITICAL FIX: Added tenacity + pyinstaller
+          uv pip install --system structlog uvicorn fastapi starlette pydantic pydantic_settings sqlalchemy aiosqlite httpx redis slowapi limits beautifulsoup4 pywin32 tenacity pyinstaller
+
+          Write-Host "--- Final installed packages (pip list) ---"
+          pip list
+
+          Write-Host "--- Verifying all critical modules can be imported before build ---"
+          $modules = @(
+              'structlog', 'uvicorn', 'fastapi', 'starlette', 'pydantic',
+              'pydantic_settings', 'sqlalchemy', 'aiosqlite', 'httpx', 'redis',
+              'slowapi', 'limits', 'tenacity', 'web_service', 'web_service.backend', 'web_service.backend.api'
+          )
+          $ErrorActionPreference = "Continue"
+          foreach ($module in $modules) {
+              python -c "import $module; print('✅ $module')"
+              if ($LASTEXITCODE -ne 0) {
+                  Write-Error "❌ Failed to import '$module'. This module is required for the application to run."
+                  exit 1
+              }
+          }
+          Write-Host "✅ All critical modules imported successfully."
       - name: '📦 Build Python Backend (UI Bridge)'
         shell: pwsh
         env:
@@ -451,7 +459,7 @@ jobs:
         shell: pwsh
         run: |
           pip install uv
-          uv pip install playwright
+          uv pip install --system playwright
           python -m playwright install chromium
 
           $url = "http://localhost:${{ env.FORTUNA_PORT }}"

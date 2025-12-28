@@ -42,8 +42,8 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install uv
-          uv pip install -r web_service/backend/requirements.txt
-          uv pip install pytest pytest-asyncio httpx asgi-lifespan fakeredis
+          uv pip install --system -r web_service/backend/requirements.txt
+          uv pip install --system pytest pytest-asyncio httpx asgi-lifespan fakeredis
 
       - name: Run Pytest (Soft Fail)
         shell: pwsh
@@ -138,44 +138,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: dist
-          key: ${{ runner.os }}-${{ matrix.arch }}-pyi-${{ hashFiles('web_service/backend/**/*.py', 'scripts/generate_spec_dual.py', 'web_service/backend/requirements*.txt') }}
+          key: ${{ runner.os }}-${{ matrix.arch }}-pyi-${{ hashFiles('web_service/backend/**/*.py', 'fortuna-unified.spec', 'web_service/backend/requirements*.txt') }}
 
-      - name: Install Python Dependencies
-        id: install-deps
-        if: steps.cache-pyi-build.outputs.cache-hit != 'true'
-        shell: pwsh
-        run: |
-          python -m pip install --upgrade pip
-          pip install uv
-
-          Write-Host "[BUILD] Installing x86-constrained packages first..."
-          uv pip install --only-binary=:all: `
-            "sqlalchemy==1.4.46" `
-            "greenlet==1.1.2" `
-            "pandas==1.5.3" `
-            "numpy==1.23.5" `
-            "scipy==1.10.1"
-
-          if ($LASTEXITCODE -ne 0) {
-            throw "[BUILD] ❌ Failed to install x86-constrained packages"
-          }
-
-          Write-Host "[BUILD] Installing remaining dependencies..."
-          uv pip install -r ${{ env.BACKEND_DIR }}/requirements.txt --no-deps
-
-          if ($LASTEXITCODE -ne 0) {
-            throw "[BUILD] ❌ Failed to install remaining requirements"
-          }
-
-          Write-Host "[BUILD] Verifying all dependencies are satisfied..."
-          pip check
-
-          Write-Host "[BUILD] Installing PyInstaller..."
-          uv pip install pyinstaller==6.6.0 pywin32
-
-          Write-Host "[BUILD] ✅ All dependencies installed successfully"
-
-      - name: Build Backend (PyInstaller)
+      - name: Install Python Dependencies & Build
+        id: install-deps-and-build
         if: steps.cache-pyi-build.outputs.cache-hit != 'true'
         shell: pwsh
         env:
@@ -185,19 +151,19 @@ jobs:
           pip install uv
 
           Write-Host "[BUILD] Installing x86-constrained packages first..."
-          uv pip install --only-binary=:all: `
+          uv pip install --system --only-binary=:all: `
             "sqlalchemy==1.4.46" `
             "greenlet==1.1.2" `
             "pandas==1.5.3" `
             "numpy==1.23.5" `
-            "scipy==1.10.1"
+            "scipy==1.8.1"
 
           if ($LASTEXITCODE -ne 0) {
             throw "[BUILD] ❌ Failed to install x86-constrained packages"
           }
 
           Write-Host "[BUILD] Installing remaining dependencies..."
-          uv pip install -r ${{ env.BACKEND_DIR }}/requirements.txt --no-deps
+          uv pip install --system -r ${{ env.BACKEND_DIR }}/requirements.txt --no-deps
 
           if ($LASTEXITCODE -ne 0) {
             throw "[BUILD] ❌ Failed to install remaining requirements"
@@ -207,9 +173,13 @@ jobs:
           pip check
 
           Write-Host "[BUILD] Installing PyInstaller..."
-          uv pip install pyinstaller==6.6.0 pywin32
+          uv pip install --system pyinstaller==6.6.0 pywin32
 
           Write-Host "[BUILD] ✅ All dependencies installed successfully"
+
+          Write-Host "[BUILD] Now building executable..."
+          pyinstaller --noconfirm --clean --log-level INFO fortuna-unified.spec
+          Write-Host "[BUILD] ✅ Executable built."
 
       - name: Verify x86 package versions
         if: matrix.arch == 'x86'
@@ -305,7 +275,6 @@ jobs:
               Write-Host ""
             }
           }
-          python scripts/generate_spec_dual.py --mode svc
 
       - name: Generate Artifact Manifest
         shell: pwsh
