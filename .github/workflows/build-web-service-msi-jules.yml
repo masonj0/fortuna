@@ -621,7 +621,7 @@ jobs:
         env:
           FORTUNA_VERSION: ${{ needs.repo-preflight.outputs.semver }}
         run: |
-          python scripts/generate_spec_dual.py --mode svc
+          pyinstaller --noconfirm --clean --log-level INFO fortuna-unified.spec
       - name: 🔍 Sanity Check Executable
         shell: pwsh
         run: |

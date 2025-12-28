@@ -83,10 +83,8 @@ class FortunaSvc(win32serviceutil.ServiceFramework):
             log.info(f"Service running in frozen mode. CWD set to: {exe_path}")
 
         # CRITICAL: Set the asyncio event loop policy for Windows.
-        # The default ProactorEventLoop is not compatible with services.
-        if sys.platform == 'win32':
-            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-            log.info("WindowsSelectorEventLoopPolicy applied for asyncio.")
+from web_service.backend.windows_compat import setup_windows_event_loop
+setup_windows_event_loop()
 
         servicemanager.LogMsg(
             servicemanager.EVENTLOG_INFORMATION_TYPE,

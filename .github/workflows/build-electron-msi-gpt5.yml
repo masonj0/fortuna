@@ -189,7 +189,7 @@ jobs:
           Write-Host "Hooks path verified at: $hooksPath"
           Write-Host "Running PyInstaller (hooks are specified in the .spec file)"
 
-          pyinstaller --noconfirm --clean --log-level INFO fortuna-backend-electron.spec
+          pyinstaller --noconfirm --clean --log-level INFO fortuna-unified.spec
 
           if ($LASTEXITCODE -ne 0) {
             Write-Error "❌ PyInstaller build failed with exit code $LASTEXITCODE"
