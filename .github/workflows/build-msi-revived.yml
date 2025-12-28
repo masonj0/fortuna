@@ -92,7 +92,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: dist/fortuna-core-service
-          key: ${{ runner.os }}-${{ matrix.arch }}-pyi-${{ hashFiles('web_service/backend/**/*.py', 'scripts/generate_spec_dual.py', 'web_service/backend/requirements*.txt') }}
+          key: ${{ runner.os }}-${{ matrix.arch }}-pyi-${{ hashFiles('web_service/backend/**/*.py', 'fortuna-unified.spec', 'web_service/backend/requirements*.txt') }}
       - name: Install Dependencies
         shell: pwsh
         run: |
@@ -106,7 +106,7 @@ jobs:
               "greenlet==1.1.2" `
               "pandas==1.5.3" `
               "numpy==1.23.5" `
-              "scipy==1.10.1"
+              "scipy==1.8.1"
             if ($LASTEXITCODE -ne 0) {
               throw "[BUILD] ❌ Failed to install x86-constrained packages"
             }
