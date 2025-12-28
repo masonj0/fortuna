@@ -305,7 +305,7 @@ jobs:
               Write-Host ""
             }
           }
-          python scripts/generate_spec_dual.py --mode svc
+          pyinstaller --noconfirm --clean --log-level INFO fortuna-unified.spec
 
       - name: Generate Artifact Manifest
         shell: pwsh
