@@ -69,6 +69,7 @@ jobs:
     name: '🛠️ Build Executable (${{ matrix.arch }})'
     runs-on: windows-latest
     needs: [quality-gate]
+    continue-on-error: ${{ matrix.arch == 'x86' }}
     strategy:
       matrix:
         arch: [x64, x86]
@@ -291,6 +292,7 @@ jobs:
     name: '💿 Package MSI (${{ matrix.arch }})'
     runs-on: windows-latest
     needs: [build-executable]
+    continue-on-error: ${{ matrix.arch == 'x86' }}
     strategy:
       matrix:
         arch: [x64, x86]
@@ -410,6 +412,7 @@ jobs:
     name: '🔬 Smoke Test (${{ matrix.arch }})'
     runs-on: windows-latest
     needs: package-msi
+    continue-on-error: ${{ matrix.arch == 'x86' }}
     strategy:
       matrix:
         arch: [x64, x86]

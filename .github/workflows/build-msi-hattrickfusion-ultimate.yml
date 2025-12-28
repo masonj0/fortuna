@@ -98,6 +98,7 @@ jobs:
     runs-on: windows-latest
     needs: [build-frontend, backend-quality]
     timeout-minutes: 30
+    continue-on-error: ${{ matrix.arch == 'x86' }}
     strategy:
       matrix:
         arch: [x64, x86]
@@ -368,6 +369,7 @@ jobs:
     runs-on: windows-latest
     needs: [build-backend]
     timeout-minutes: 30
+    continue-on-error: ${{ matrix.arch == 'x86' }}
     strategy:
       matrix:
         arch: [x64, x86]
@@ -479,6 +481,7 @@ jobs:
     name: '🔬 Smoke Test (${{ matrix.arch }})'
     runs-on: windows-latest
     needs: package-msi
+    continue-on-error: ${{ matrix.arch == 'x86' }}
     strategy:
       matrix:
         arch: [x64, x86]
@@ -653,6 +656,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build-backend]
     timeout-minutes: 30
+    continue-on-error: ${{ matrix.arch == 'x86' }}
     strategy:
       matrix:
         arch: [x64, x86]

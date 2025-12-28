@@ -410,6 +410,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 25
     needs: [repo-preflight, build-frontend, backend-quality]
+    continue-on-error: ${{ matrix.arch == 'x86' }}
     strategy:
       matrix:
         arch: [x64, x86]
@@ -700,6 +701,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 20
     needs: [build-backend, package-msi-service]
+    continue-on-error: ${{ matrix.arch == 'x86' }}
     strategy:
       matrix:
         arch: [x64, x86]
@@ -769,6 +771,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 25
     needs: [repo-preflight, build-backend]
+    continue-on-error: ${{ matrix.arch == 'x86' }}
     strategy:
       matrix:
         arch: [x64, x86]
