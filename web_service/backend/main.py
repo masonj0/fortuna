@@ -4,11 +4,14 @@ Fortuna Backend Entry Point
 """
 
 # ============================================================================
-# CRITICAL: Windows Compatibility Layer
-# This MUST be the first import to ensure event loop is configured correctly
+# CRITICAL: Eager Windows Event Loop Configuration
+# This MUST be the first code to run, before any other imports, to ensure
+# the correct asyncio event loop policy is applied for PyInstaller bundles.
 # ============================================================================
-from web_service.backend.windows_compat import setup_windows_event_loop
-setup_windows_event_loop()
+import sys
+if sys.platform == 'win32' and getattr(sys, 'frozen', False):
+    import asyncio
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 # ============================================================================
 
 
