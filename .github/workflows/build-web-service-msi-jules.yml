@@ -245,9 +245,9 @@ jobs:
           Set-StrictMode -Version Latest
           python -m pip install --upgrade pip setuptools wheel
           pip install uv
-          uv pip install -r (Join-Path $env:BACKEND_DIR "requirements.txt")
+          uv pip install --system -r (Join-Path $env:BACKEND_DIR "requirements.txt")
           if (Test-Path (Join-Path $env:BACKEND_DIR "requirements-dev.txt")) {
-            uv pip install -r (Join-Path $env:BACKEND_DIR "requirements-dev.txt")
+            uv pip install --system -r (Join-Path $env:BACKEND_DIR "requirements-dev.txt")
           }
 
       - name: Bytecode Compile (Fail Fast)
@@ -468,32 +468,32 @@ jobs:
           }
           "file=$constraintFile" | Out-File $env:GITHUB_OUTPUT -Append
 
-      - name: Install Dependencies
-        shell: pwsh
-        run: |
       - name: CACHE-PYI Cache PyInstaller Build
         id: cache-pyi-build
         uses: actions/cache@v4
         with:
-          path: dist/fortuna-core-service
-          key: ${{ runner.os }}-${{ matrix.arch }}-pyi-${{ hashFiles('web_service/backend/**/*.py', 'scripts/generate_spec_dual.py', 'web_service/backend/requirements*.txt') }}
+          path: dist/fortuna-webservice
+          key: ${{ runner.os }}-${{ matrix.arch }}-pyi-${{ hashFiles('web_service/backend/**/*.py', 'fortuna-unified.spec', 'web_service/backend/requirements*.txt') }}
+      - name: Install Dependencies
+        shell: pwsh
+        run: |
           python -m pip install --upgrade pip
           pip install uv
 
           Write-Host "[BUILD] Installing x86-constrained packages first..."
-          uv pip install --only-binary=:all: `
+          uv pip install --system --only-binary=:all: `
             "sqlalchemy==1.4.46" `
             "greenlet==1.1.2" `
             "pandas==1.5.3" `
             "numpy==1.23.5" `
-            "scipy==1.10.1"
+            "scipy==1.8.1"
 
           if ($LASTEXITCODE -ne 0) {
             throw "[BUILD] ❌ Failed to install x86-constrained packages"
           }
 
           Write-Host "[BUILD] Installing remaining dependencies..."
-          uv pip install -r (Join-Path $env:BACKEND_DIR "requirements.txt") --no-deps
+          uv pip install --system -r (Join-Path $env:BACKEND_DIR "requirements.txt") --no-deps
 
           if ($LASTEXITCODE -ne 0) {
             throw "[BUILD] ❌ Failed to install remaining requirements"
@@ -503,7 +503,7 @@ jobs:
           pip check
 
           Write-Host "[BUILD] Installing PyInstaller and PyWin32..."
-          uv pip install pyinstaller pywin32
+          uv pip install --system pyinstaller pywin32
 
           Write-Host "[BUILD] ✅ All dependencies installed successfully"
 
@@ -614,22 +614,22 @@ jobs:
       - name: 🔐 pip-audit
         continue-on-error: true
         run: |
-          uv pip install pip-audit
+          uv pip install --system pip-audit
           pip-audit -r (Join-Path $env:BACKEND_DIR "requirements.txt")
       - name: Build with PyInstaller
         if: steps.cache-pyi-build.outputs.cache-hit != 'true'
         env:
           FORTUNA_VERSION: ${{ needs.repo-preflight.outputs.semver }}
         run: |
-          python scripts/generate_spec_dual.py --mode svc
+          pyinstaller --noconfirm --clean --log-level INFO fortuna-unified.spec
       - name: 🔍 Sanity Check Executable
         shell: pwsh
         run: |
-          dist/fortuna-core-service/fortuna-core-service.exe --help
+          dist/fortuna-webservice/fortuna-webservice.exe --help
       - name: Verify Executable
         run: |
           Set-StrictMode -Version Latest
-          $exePath = "dist/fortuna-core-service.exe"
+          $exePath = "dist/fortuna-webservice.exe"
           if (-not (Test-Path $exePath)) { throw "❌ FATAL: Executable not found" }
           $size = (Get-Item $exePath).Length / 1MB
           if ($size -lt 10) { throw "❌ FATAL: Executable is suspiciously small: $($size) MB." }
@@ -642,7 +642,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: backend-executable-${{ matrix.arch }}-${{ github.run_id }}
-          path: dist/fortuna-core-service.exe
+          path: dist/fortuna-webservice/
           retention-days: 3
 
   diagnose-asgi-imports:
@@ -801,7 +801,7 @@ jobs:
           Set-StrictMode -Version Latest
           $staging = "${{ env.MSI_STAGING_DIR }}"
           New-Item -ItemType Directory -Path $staging -Force | Out-Null
-          Move-Item -Path "dist/fortuna-core-service.exe" -Destination "$staging/fortuna-webservice.exe" -Force
+          Copy-Item -Path "dist/*" -Destination $staging -Recurse -Force
           $msiName = "Fortuna-WebService-${{ matrix.arch }}-${{ env.BUILD_VERSION }}-${{ env.SHORT_SHA }}.msi".Replace('/', '-')
           "msi_name=$msiName" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
           Write-Host "✅ Staged for MSI: $msiName"

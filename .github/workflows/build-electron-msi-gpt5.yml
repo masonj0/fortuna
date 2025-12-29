@@ -73,15 +73,15 @@ jobs:
           pip install uv
           if ('${{ matrix.arch }}' -eq 'x86') {
             Write-Host "--- Using x86-specific requirements file ---"
-            uv pip install numpy==1.23.5 pandas==1.5.3 scipy==1.10.1
+            uv pip install --system numpy==1.23.5 pandas==1.5.3 scipy==1.10.1
             $requirementsFile = "${{ env.BACKEND_DIR }}/requirements-x86.txt"
-            uv pip install -r $requirementsFile
+            uv pip install --system -r $requirementsFile
           } else {
             Write-Host "--- Using standard requirements file ---"
             $requirementsFile = "${{ env.BACKEND_DIR }}/requirements.txt"
-            uv pip install -r $requirementsFile
+            uv pip install --system -r $requirementsFile
           }
-          uv pip install structlog uvicorn fastapi starlette pydantic pydantic_settings sqlalchemy aiosqlite httpx redis slowapi limits beautifulsoup4 pywin32
+          uv pip install --system structlog uvicorn fastapi starlette pydantic pydantic_settings sqlalchemy aiosqlite httpx redis slowapi limits beautifulsoup4 pywin32 tenacity
           Write-Host "--- Final installed packages (pip list) ---"
           pip list
 
@@ -89,7 +89,7 @@ jobs:
           $modules = @(
               'structlog', 'uvicorn', 'fastapi', 'starlette', 'pydantic',
               'pydantic_settings', 'sqlalchemy', 'aiosqlite', 'httpx', 'redis',
-              'slowapi', 'limits', 'web_service', 'web_service.backend', 'web_service.backend.api'
+              'slowapi', 'limits', 'tenacity', 'web_service', 'web_service.backend', 'web_service.backend.api'
           )
           $ErrorActionPreference = "Continue"
           foreach ($module in $modules) {
