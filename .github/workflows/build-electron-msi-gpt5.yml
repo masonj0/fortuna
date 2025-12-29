@@ -59,10 +59,9 @@ jobs:
             @(
               "numpy==1.23.5",
               "pandas==1.5.3",
-              "greenlet==3.0.3",
               "--only-binary=:all:"
             ) | Set-Content $constraintFile
-            Write-Host "✅ Constraints: numpy, pandas, greenlet==3.0.3"
+            Write-Host "✅ Constraints: numpy, pandas"
           } else { New-Item $constraintFile -ItemType File -Force }
           "file=$constraintFile" | Out-File $env:GITHUB_OUTPUT -Append
 
