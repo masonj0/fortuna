@@ -1,4 +1,4 @@
-# System Timestamp: 2025-12-24 18:00:00
+# System Timestamp: 2025-12-21 14:04:35
 name: 🤖 Build Electron MSI (GPT-5 Edition - Fixed)
 
 on:
@@ -15,13 +15,13 @@ env:
   NODE_VERSION: '20'
   PYTHON_VERSION: '3.11'
   ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
-  BACKEND_DIR: 'web_service/backend'
+  BACKEND_DIR: 'python_service'
   PYTHONUTF8: '1'
 
 jobs:
   validate-environment:
     name: ✅ Pre-flight Validation
-    runs-on: windows-2022
+    runs-on: windows-latest
     outputs:
       semver: ${{ steps.meta.outputs.semver }}
       short_sha: ${{ steps.meta.outputs.short_sha }}
@@ -38,7 +38,7 @@ jobs:
 
   build-python-service:
     name: '🐍 Build Python Service (${{ matrix.arch }})'
-    runs-on: windows-2022
+    runs-on: windows-latest
     needs: validate-environment
     strategy:
       matrix:
@@ -49,263 +49,75 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: ${{ matrix.arch }}
+      - name: 🧾 Create Architecture Constraints
+        id: constraints
+        shell: pwsh
+        run: |
+          $file = "constraints.txt"
+          if ('${{ matrix.arch }}' -eq 'x86') {
+            Write-Host "🛡️ ACTIVATING X86 SAFE MODE"
+            @(
+              "numpy==1.23.5",
+              "pandas==1.5.3",
+              "--only-binary=:all:"
+            ) | Set-Content $file
+            Write-Host "✅ x86 constraints: numpy 1.23.5, pandas 1.5.3, wheel-only"
+          } else {
+            New-Item $file -ItemType File -Force
+          }
+          "file=$file" | Out-File $env:GITHUB_OUTPUT -Append
+
       - name: 💾 Create required directories
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Path "${{ env.BACKEND_DIR }}/data" -Force
-          New-Item -ItemType Directory -Path "${{ env.BACKEND_DIR }}/json" -Force
-          New-Item -ItemType Directory -Path "${{ env.BACKEND_DIR }}/adapters" -Force
+          New-Item -ItemType Directory -Path "python_service/data" -Force
+          New-Item -ItemType Directory -Path "python_service/json" -Force
+          New-Item -ItemType Directory -Path "python_service/adapters" -Force
 
-      - name: CACHE-PYI Cache PyInstaller Build
-        id: cache-pyi-build
-        uses: actions/cache@v4
-        with:
-          path: dist/fortuna-backend
-          key: ${{ runner.os }}-${{ matrix.arch }}-pyi-${{ hashFiles('web_service/backend/**/*.py', 'fortuna-unified.spec', 'web_service/backend/requirements*.txt') }}
-
-      - name: 📦 Install Dependencies and Verify Imports
+      - name: 📦 Build Binary
         shell: pwsh
-        env:
-          PYTHONUTF8: '1'
         run: |
-          $ErrorActionPreference = 'Stop'
           pip install --upgrade pip
           pip install uv
           if ('${{ matrix.arch }}' -eq 'x86') {
             Write-Host "--- Using x86-specific requirements file ---"
-            uv pip install --system numpy==1.23.5 pandas==1.5.3 scipy==1.10.1
-            $requirementsFile = "${{ env.BACKEND_DIR }}/requirements-x86.txt"
-            uv pip install --system -r $requirementsFile
+            $tempReqs = "temp-requirements-x86.txt"
+
+            # Constraints MUST come first
+            @(
+              "sqlalchemy==1.4.46",
+              "pandas==1.5.3",
+              "numpy==1.23.5",
+              "scipy==1.10.1",
+              "--only-binary=:all:"
+            ) | Set-Content $tempReqs
+
+            # Append all other requirements
+            Get-Content python_service/requirements.txt |
+              Where-Object {$_ -notmatch "^(sqlalchemy|greenlet|pandas|numpy|scipy)=="} |
+              Add-Content $tempReqs
+
+            # Single atomic install - no partial state possible
+            uv pip install --system -r $tempReqs
+
+            if ($LASTEXITCODE -ne 0) {
+              throw "Installation failed - no partial state written"
+            }
           } else {
             Write-Host "--- Using standard requirements file ---"
             $requirementsFile = "${{ env.BACKEND_DIR }}/requirements.txt"
             uv pip install --system -r $requirementsFile
           }
-          uv pip install --system structlog uvicorn fastapi starlette pydantic pydantic_settings sqlalchemy aiosqlite httpx redis slowapi limits beautifulsoup4 pywin32 tenacity
-          Write-Host "--- Final installed packages (pip list) ---"
-          pip list
+          uv pip install --system pyinstaller==5.13.2
 
-          Write-Host "--- Verifying all critical modules can be imported before build ---"
-          $modules = @(
-              'structlog', 'uvicorn', 'fastapi', 'starlette', 'pydantic',
-              'pydantic_settings', 'sqlalchemy', 'aiosqlite', 'httpx', 'redis',
-              'slowapi', 'limits', 'tenacity', 'web_service', 'web_service.backend', 'web_service.backend.api'
-          )
-          $ErrorActionPreference = "Continue"
-          foreach ($module in $modules) {
-              python -c "import $module; print('✅ $module')"
-              if ($LASTEXITCODE -ne 0) {
-                  Write-Error "❌ Failed to import '$module'. This module is required for the application to run."
-                  exit 1
-              }
-          }
-          Write-Host "✅ All critical modules imported successfully."
-
-      - name: 🐍 Set up PYTHONPATH
-        shell: pwsh
-        run: |
-          echo "PYTHONPATH=${{ github.workspace }}" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host "PYTHONPATH set to ${{ github.workspace }}"
-
-      - name: '🩹 Temporarily Rename Shadowing Directory'
-        shell: pwsh
-        run: |
-          if (Test-Path "${{ env.BACKEND_DIR }}/json") {
-            Rename-Item -Path "${{ env.BACKEND_DIR }}/json" -NewName "json_temp" -Force
-            Write-Host "Temporarily renamed 'json' directory to avoid import shadowing."
-          } else {
-            Write-Host "Directory '${{ env.BACKEND_DIR }}/json' not found, skipping rename."
-          }
-
-      - name: '🔬 Pre-build Import Verification'
-        id: verify-imports
-        shell: pwsh
-        env:
-          PYTHONUTF8: '1'
-        run: |
-          Write-Host "--- Verifying all critical modules can be imported before build ---"
-          $modules = @(
-              'structlog',
-              'uvicorn',
-              'fastapi',
-              'starlette',
-              'pydantic',
-              'pydantic_settings',
-              'sqlalchemy',
-              'aiosqlite',
-              'httpx',
-              'redis',
-              'slowapi',
-              'limits',
-              'web_service',
-              'web_service.backend',
-              'web_service.backend.api'
-          )
-          $ErrorActionPreference = "Continue"
-          foreach ($module in $modules) {
-              python -c "import $module; print('✅ $module')"
-              if ($LASTEXITCODE -ne 0) {
-                  Write-Error "❌ Failed to import '$module'. This module is required for the application to run."
-                  exit 1
-              }
-          }
-          Write-Host "✅ All critical modules imported successfully."
-
-      - name: '🩹 Restore Shadowing Directory Name'
-        if: always()
-        shell: pwsh
-        run: |
-          if (Test-Path "${{ env.BACKEND_DIR }}/json_temp") {
-            Rename-Item -Path "${{ env.BACKEND_DIR }}/json_temp" -NewName "json" -Force
-            Write-Host "Restored 'json' directory name."
-          } else {
-            Write-Host "Skipping restore, 'json_temp' directory not found."
-          }
-
-      - name: '📦 Build Executable'
-        if: steps.cache-pyi-build.outputs.cache-hit != 'true'
-        shell: pwsh
-        run: |
-          Write-Host "=== BUILDING EXECUTABLE WITH UVICORN HOOK ==="
-
-          # Verify hooks directory exists
-          $hooksDir = "fortuna-backend-hooks"
-          if (!(Test-Path $hooksDir)) {
-            Write-Error "❌ CRITICAL: Hooks directory not found at $hooksDir"
-            exit 1
-          }
-          Write-Host "✅ Hooks directory confirmed: $(Resolve-Path $hooksDir)"
-
-          # Verify hook file exists
-          $hookFile = Join-Path $hooksDir "hook-uvicorn.py"
-          if (!(Test-Path $hookFile)) {
-            Write-Error "❌ CRITICAL: Hook file not found at $hookFile"
-            exit 1
-          }
-          Write-Host "✅ Hook file confirmed: $(Resolve-Path $hookFile)"
-
-          # Build with hooks directory
-          $hooksPath = Resolve-Path $hooksDir
-          Write-Host "Hooks path verified at: $hooksPath"
-          Write-Host "Running PyInstaller (hooks are specified in the .spec file)"
-
-          pyinstaller --noconfirm --clean --log-level INFO fortuna-unified.spec
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "❌ PyInstaller build failed with exit code $LASTEXITCODE"
-            exit 1
-          }
-
-          Write-Host "✅ Build completed successfully"
-
-      - name: '🔍 Post-build Bundle Inspection'
-        id: inspect-bundle
-        shell: pwsh
-        run: |
-          $internalDir = "dist/fortuna-backend/_internal"
-          if (!(Test-Path $internalDir)) {
-              throw "❌ CRITICAL: _internal directory not found after build. The bundle is incomplete."
-          }
-
-          Write-Host "✅ Bundle directory structure verified"
-          Write-Host ""
-
-          # NEW STRATEGY: Check the executable itself, not just the filesystem
-          Write-Host "--- Verifying bundle completeness ---"
-
-          # 1. Check that PYZ archive exists (this contains most Python modules)
-          $pyzFile = "dist/fortuna-backend/_internal/base_library.zip"
-          if (Test-Path $pyzFile) {
-              $pyzSize = (Get-Item $pyzFile).Length / 1MB
-              Write-Host "✅ Found base_library.zip (Python stdlib): $([math]::Round($pyzSize, 2)) MB"
-          } else {
-              throw "❌ CRITICAL: base_library.zip not found - Python stdlib missing"
-          }
-
-          # 2. Check for critical C extensions (these MUST be filesystem DLLs)
-          $criticalDLLs = @(
-              "_ssl.pyd",           # Required for HTTPS
-              "_socket.pyd",        # Required for networking
-              "select.pyd"          # Required for async I/O
-          )
-
-          $missingDLLs = @()
-          foreach ($dll in $criticalDLLs) {
-              $found = Get-ChildItem -Path $internalDir -Filter $dll -Recurse -ErrorAction SilentlyContinue
-              if ($found) {
-                  Write-Host "✅ Found critical extension: $dll"
-              } else {
-                  Write-Host "❌ Missing critical extension: $dll"
-                  $missingDLLs += $dll
-              }
-          }
-
-          if ($missingDLLs.Count -gt 0) {
-              throw "❌ CRITICAL: Missing required C extensions: $($missingDLLs -join ', ')"
-          }
-
-          # 3. Check for uvicorn's C extensions (if any)
-          $uvicornExtensions = Get-ChildItem -Path $internalDir -Recurse -Filter "*uvloop*.pyd" -ErrorAction SilentlyContinue
-          if ($uvicornExtensions) {
-              Write-Host "✅ Found uvloop extension (optional performance enhancement)"
-          }
-
-          # 4. Verify the executable can at least start
-          Write-Host ""
-          Write-Host "--- Testing executable startup ---"
-          $exePath = "dist/fortuna-backend/fortuna-backend.exe"
-
-          # Try to run with --help (or just run for 2 seconds)
-          $testProcess = Start-Process -FilePath $exePath -NoNewWindow -PassThru -RedirectStandardError "startup-test-err.txt" -RedirectStandardOutput "startup-test-out.txt"
-          Start-Sleep -Seconds 3
-
-          if ($testProcess.HasExited) {
-              # Check if it exited cleanly or crashed
-              $stderr = Get-Content "startup-test-err.txt" -Raw -ErrorAction SilentlyContinue
-              $stdout = Get-Content "startup-test-out.txt" -Raw -ErrorAction SilentlyContinue
-
-              # Look for signs of critical import failures
-              if ($stderr -match "ModuleNotFoundError|ImportError") {
-                  Write-Host "❌ CRITICAL: Executable failed to start due to missing imports:"
-                  Write-Host $stderr
-                  throw "Executable failed startup test - missing critical modules"
-              } elseif ($testProcess.ExitCode -eq 0) {
-                  Write-Host "✅ Executable started and exited cleanly"
-              } else {
-                  Write-Host "⚠️  Executable exited with code $($testProcess.ExitCode)"
-                  Write-Host "STDERR: $stderr"
-                  Write-Host "STDOUT: $stdout"
-                  # Don't fail - might just be missing --help flag
-                  Write-Host "⚠️  Non-zero exit code, but no import errors detected. Proceeding..."
-              }
-          } else {
-              # Still running - good sign
-              Write-Host "✅ Executable started successfully (still running after 3 seconds)"
-              Stop-Process -Id $testProcess.Id -Force
-          }
-
-          # 5. Final summary
-          Write-Host ""
-          Write-Host "--- Bundle Verification Summary ---"
-          Write-Host "✅ Base library archive present"
-          Write-Host "✅ All critical C extensions present"
-          Write-Host "✅ Executable passes startup test"
-          Write-Host ""
-          Write-Host "📦 Bundle is complete and ready for packaging"
-
-      - name: 📦 Download Tesseract OCR
-        run: |
-          Invoke-WebRequest -Uri https://digi.bib.uni-mannheim.de/tesseract/tesseract-ocr-w64-setup-5.4.0.20240606.exe -OutFile tesseract_installer.exe
-
-      - name: 🧐 List dist directory
-        shell: pwsh
-        run: |
-          Get-ChildItem -Path dist -Recurse
+          # FIXED: Use the dedicated Electron spec file.
+          # This ensures we build main.py (Uvicorn) for the desktop app, not the Service Wrapper.
+          pyinstaller --noconfirm --clean fortuna-backend-electron.spec
 
       - name: 🔍 Sanity Check Executable
         shell: pwsh
         run: |
-          dist/fortuna-backend/fortuna-backend.exe --help
+          dist/fortuna-backend.exe --help
 
       - name: 📤 Upload
         uses: actions/upload-artifact@v4
@@ -315,7 +127,7 @@ jobs:
 
   build-frontend:
     name: 🎨 Build Web Frontend
-    runs-on: windows-2022
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -334,7 +146,7 @@ jobs:
 
   build-electron-msi:
     name: '🚀 Build Electron MSI (${{ matrix.arch }})'
-    runs-on: windows-2022
+    runs-on: windows-latest
     needs: [validate-environment, build-python-service, build-frontend]
     strategy:
       matrix:
@@ -378,48 +190,9 @@ jobs:
           name: fortuna-msi-${{ matrix.arch }}
           path: electron/dist/*.msi
 
-
-      - name: '🔍 Verify PyInstaller Bundle'
-        shell: pwsh
-        run: |
-          $exe = "dist/fortuna-backend/fortuna-backend.exe"
-          $internalDir = "dist/fortuna-backend/_internal"
-
-          Write-Host "Checking: $exe"
-          if (!(Test-Path $exe)) {
-            throw "Executable not found!"
-          }
-          Write-Host "✅ Executable exists"
-
-          Write-Host "Checking: $internalDir"
-          if (!(Test-Path $internalDir)) {
-            throw "Dependencies not bundled!"
-          }
-          Write-Host "✅ Dependencies folder exists"
-
-          # Check for key modules
-          $keyModules = @("uvicorn", "fastapi", "starlette", "pydantic")
-          foreach ($module in $keyModules) {
-            $modulePath = Join-Path $internalDir $module
-            if (Test-Path $modulePath) {
-              Write-Host "✅ Found $module"
-            } else {
-              Write-Host "⚠️  Missing $module - might fail at runtime"
-            }
-          }
-
-          # Try to run --help
-          Write-Host "Testing executable..."
-          & $exe --help 2>&1 | Select-Object -First 10
-
-          if ($LASTEXITCODE -ne 0) {
-            Write-Warning "Executable failed with code $LASTEXITCODE"
-            Write-Host "This might be OK if it's just --help not being recognized"
-          }
-
   smoke-test:
     name: '🔬 Smoke Test (${{ matrix.arch }})'
-    runs-on: windows-2022
+    runs-on: windows-latest
     needs: build-electron-msi
     strategy:
       matrix:
