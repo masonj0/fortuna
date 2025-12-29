@@ -53,19 +53,18 @@ jobs:
         id: constraints
         shell: pwsh
         run: |
-          $file = "constraints.txt"
+          $constraintFile = "constraints.txt"
           if ('${{ matrix.arch }}' -eq 'x86') {
-            Write-Host "🛡️ ACTIVATING X86 SAFE MODE"
+            Write-Host "🛡️ ACTIVATING X86 SAFE MODE (SIMPLE)"
             @(
               "numpy==1.23.5",
               "pandas==1.5.3",
+              "greenlet==3.0.3",
               "--only-binary=:all:"
-            ) | Set-Content $file
-            Write-Host "✅ x86 constraints: numpy 1.23.5, pandas 1.5.3, wheel-only"
-          } else {
-            New-Item $file -ItemType File -Force
-          }
-          "file=$file" | Out-File $env:GITHUB_OUTPUT -Append
+            ) | Set-Content $constraintFile
+            Write-Host "✅ Constraints: numpy, pandas, greenlet==3.0.3"
+          } else { New-Item $constraintFile -ItemType File -Force }
+          "file=$constraintFile" | Out-File $env:GITHUB_OUTPUT -Append
 
       - name: 💾 Create required directories
         shell: pwsh
@@ -74,56 +73,25 @@ jobs:
           New-Item -ItemType Directory -Path "python_service/json" -Force
           New-Item -ItemType Directory -Path "python_service/adapters" -Force
 
-      - name: 📦 Build Binary
+      - name: 📦 Install Dependencies & Build
         shell: pwsh
         run: |
           pip install --upgrade pip
           pip install uv
-          if ('${{ matrix.arch }}' -eq 'x86') {
-            Write-Host "--- Using x86-specific requirements file ---"
-            $tempReqs = "temp-requirements-x86.txt"
-
-            # Constraints MUST come first
-            @(
-              "sqlalchemy==2.0.44",
-              "pandas==1.5.3",
-              "numpy==1.23.5",
-              "scipy==1.10.1",
-              "--only-binary=:all:"
-            ) | Set-Content $tempReqs
-
-            # Append all other requirements
-            Get-Content python_service/requirements.txt |
-              Where-Object {$_ -notmatch "^(sqlalchemy|greenlet|pandas|numpy|scipy)=="} |
-              Add-Content $tempReqs
-
-            # Single atomic install - no partial state possible
-            uv pip install --system -r $tempReqs
-
-            if ($LASTEXITCODE -ne 0) {
-              throw "Installation failed - no partial state written"
-            }
-          } else {
-            Write-Host "--- Using standard requirements file ---"
-            $requirementsFile = "${{ env.BACKEND_DIR }}/requirements.txt"
-            uv pip install --system -r $requirementsFile
-          }
-          uv pip install --system pyinstaller==5.13.2
-
-          # FIXED: Use the dedicated Electron spec file.
-          # This ensures we build main.py (Uvicorn) for the desktop app, not the Service Wrapper.
+          uv pip install --system -r ${{ env.BACKEND_DIR }}/requirements.txt -c ${{ steps.constraints.outputs.file }}
+          uv pip install --system pyinstaller==6.6.0
           pyinstaller --noconfirm --clean fortuna-backend-electron.spec
 
       - name: 🔍 Sanity Check Executable
         shell: pwsh
         run: |
-          dist/fortuna-backend.exe --help
+          dist/fortuna-backend/fortuna-backend.exe --help
 
       - name: 📤 Upload
         uses: actions/upload-artifact@v4
         with:
           name: python-service-${{ matrix.arch }}
-          path: dist/fortuna-backend.exe
+          path: dist/fortuna-backend/
 
   build-frontend:
     name: 🎨 Build Web Frontend
@@ -208,100 +176,38 @@ jobs:
         run: |
           $msi = Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse | Select-Object -First 1
           if (-not $msi) { throw "MSI not found!" }
-
           Start-Process msiexec.exe -ArgumentList "/i `"$($msi.FullName)`" /qn /L*v install.log" -Wait
-
           $progFiles = ${env:ProgramFiles}
           if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
           $installDir = Join-Path $progFiles "Fortuna Faucet"
-
-      - name: '✅ Create Required Runtime Directories Post-Install'
-        shell: pwsh
-        run: |
-          $progFiles = ${env:ProgramFiles}
-          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
-          $installDir = Join-Path $progFiles "Fortuna Faucet"
-          if (! (Test-Path $installDir)) {
-            Write-Error "Installation directory not found at $installDir."
-            exit 1
-          }
-          New-Item -Path "$installDir\\data" -ItemType Directory -Force | Out-Null
-          New-Item -Path "$installDir\\json" -ItemType Directory -Force | Out-Null
-          New-Item -Path "$installDir\\logs" -ItemType Directory -Force | Out-Null
-          Write-Host "✅ Created runtime directories (data, json, logs) in '$installDir'."
-
-      - name: '🔬 Debug: Run Backend Directly'
-        shell: pwsh
-        continue-on-error: true
-        run: |
-          $progFiles = ${env:ProgramFiles}
-          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
-          $installDir = Join-Path $progFiles "Fortuna Faucet"
-          $backendExe = Join-Path $installDir "resources/fortuna-backend/fortuna-backend.exe"
-
-          if (Test-Path $backendExe) {
-            Write-Host "Attempting to run backend directly for 10 seconds..."
-            $process = Start-Process -FilePath $backendExe -NoNewWindow -PassThru
-            Start-Sleep -Seconds 10
-            Stop-Process -Id $process.Id -Force
-            Write-Host "Backend process stopped."
-          } else {
-            Write-Error "Backend executable not found at $backendExe"
-          }
-
+          New-Item -Path "$installDir\data", "$installDir\json", "$installDir\logs" -ItemType Directory -Force
       - name: '🚀 Launch & Verify'
         shell: pwsh
         run: |
           $progFiles = ${env:ProgramFiles}
           if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
           $installDir = Join-Path $progFiles "Fortuna Faucet"
-
-          Start-Process -FilePath "$installDir\\Fortuna Faucet.exe"
+          Start-Process -FilePath "$installDir\Fortuna Faucet.exe"
           Start-Sleep -Seconds 15
-
           $parent = Get-Process -Name "Fortuna Faucet" -ErrorAction SilentlyContinue
           $child = Get-Process -Name "fortuna-backend" -ErrorAction SilentlyContinue
-
           if (-not $parent) { throw "Main process 'Fortuna Faucet' not found!" }
           if (-not $child) { throw "Backend process 'fortuna-backend' not found!" }
-
-          Write-Host "✅ Smoke test passed! Both processes are running."
-
+          Write-Host "✅ Smoke test passed!"
       - name: '📸 Paparazzi (Visual Proof)'
-        continue-on-error: true
+        if: success()
         shell: pwsh
         run: |
-          $url = "http://127.0.0.1:8000" # The backend serves the UI from this port
-          Write-Host "Waiting for URL: $url"
-          $maxRetries = 10
-          $delay = 3
-          for ($i=1; $i -le $maxRetries; $i++) {
-            try {
-              $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 5
-              if ($response.StatusCode -eq 200) {
-                Write-Host "✅ URL is accessible. Proceeding with screenshot."
-                break
-              }
-            } catch {
-              Write-Warning "Attempt ${i}: URL not accessible yet. Retrying in $delay seconds..."
-              Start-Sleep -Seconds $delay
-            }
-            if ($i -eq $maxRetries) {
-              throw "❌ URL did not become accessible after $maxRetries attempts."
-            }
-          }
-
           npm install playwright
-          npx playwright install chromium --with-deps
-          node -e "const { chromium } = require('playwright'); (async () => { const browser = await chromium.launch(); const page = await browser.newPage(); try { await page.goto('$url', {timeout: 15000}); await page.screenshot({ path: 'proof.png' }); } catch(e) { console.error(e); process.exit(1); } await browser.close(); })();"
-
+          npx playwright install chromium
+          $nodeScript = "const { chromium } = require('playwright'); (async () => { const browser = await chromium.launch(); const page = await browser.newPage(); try { await page.goto('http://127.0.0.1:8000', { timeout: 15000 }); await page.screenshot({ path: 'proof.png' }); } finally { await browser.close(); } })();"
+          node -e $nodeScript
       - name: '📤 Upload Visual Proof'
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: visual-proof-${{ matrix.arch }}
           path: proof.png
-
       - name: '🧹 Cleanup'
         if: always()
         shell: pwsh
