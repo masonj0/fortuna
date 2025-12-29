@@ -91,7 +91,7 @@ jobs:
         id: cache-pyi-build
         uses: actions/cache@v4
         with:
-          path: dist/fortuna-core-service
+          path: dist/fortuna-webservice
           key: ${{ runner.os }}-${{ matrix.arch }}-pyi-${{ hashFiles('web_service/backend/**/*.py', 'fortuna-unified.spec', 'web_service/backend/requirements*.txt') }}
       - name: Install Dependencies
         shell: pwsh
@@ -139,7 +139,7 @@ jobs:
             'greenlet' = '1.1.2'
             'pandas' = '1.5.3'
             'numpy' = '1.23.5'
-            'scipy' = '1.10.1'
+            'scipy' = '1.8.1'
           }
           $allVerified = $true
           foreach ($pkg in $expectedVersions.Keys) {
@@ -222,7 +222,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: backend-dist-${{ matrix.arch }}-${{ github.run_id }}
-          path: dist/fortuna-core-service/
+          path: dist/fortuna-webservice/
 
   # 3. PREFLIGHT CHECK
   preflight-check:
@@ -280,12 +280,10 @@ jobs:
           $sourceDir = "staging/backend"
           $targetExe = "fortuna-webservice.exe"
 
-          if (Test-Path (Join-Path $sourceDir "fortuna-core-service.exe")) {
-              Write-Host "PyInstaller 'onedir' output found. Renaming for WiX..."
-              Rename-Item -Path (Join-Path $sourceDir "fortuna-core-service.exe") -NewName $targetExe -Force
-              Write-Host "✅ Staging complete for WiX."
+          if (Test-Path (Join-Path $sourceDir "fortuna-webservice.exe")) {
+              Write-Host "✅ Found fortuna-webservice.exe, no rename needed."
           } else {
-              Write-Host "##[error]Could not find fortuna-core-service.exe in the staging directory."
+              Write-Host "##[error]Could not find fortuna-webservice.exe in the staging directory."
               Get-ChildItem -Path $sourceDir -Recurse
               exit 1
           }

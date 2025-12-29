@@ -26,7 +26,7 @@ print(f'[SPEC] PyInstaller SPECPATH: {SPECPATH}')
 print(f'[SPEC] Project root computed: {project_root}')
 
 # Define all critical paths as absolute
-entry_point = project_root / 'python_service' / 'main.py'
+entry_point = project_root / 'web_service' / 'backend' / 'main.py'
 frontend_path = project_root / 'web_platform' / 'frontend' / 'out'
 hooks_dir = project_root / 'fortuna-backend-hooks'
 
@@ -136,7 +136,7 @@ a = Analysis(
     runtime_hooks=[],
     excludes=[
         'tcl', 'tk', '_tkinter', 'tkinter', 'matplotlib', 'pytest',
-        'sphinx', 'IPython', 'jupyter', 'distutils', 'web_service'  # Exclude the other service
+        'sphinx', 'IPython', 'jupyter', 'distutils', 'python_service'
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,

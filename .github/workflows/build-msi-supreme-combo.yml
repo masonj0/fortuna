@@ -119,7 +119,7 @@ jobs:
         id: cache-pyi-build
         uses: actions/cache@v4
         with:
-          path: dist/fortuna-core-service
+          path: dist/fortuna-webservice
           key: ${{ runner.os }}-${{ matrix.arch }}-pyi-${{ hashFiles('web_service/backend/**/*.py', 'fortuna-unified.spec', 'web_service/backend/requirements*.txt') }}
       - name: 📦 Install Dependencies
         shell: pwsh
@@ -166,7 +166,7 @@ jobs:
             'greenlet' = '1.1.2'     # ✅ FIXED: Match installed version
             'pandas' = '1.5.3'
             'numpy' = '1.23.5'
-            'scipy' = '1.10.1'
+            'scipy' = '1.8.1'
           }
 
           $allVerified = $true
@@ -266,7 +266,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: backend-dist-${{ matrix.arch }}-${{ github.run_id }}
-          path: dist/fortuna-core-service
+          path: dist/fortuna-webservice
           retention-days: 1
 
   build-frontend:

@@ -137,7 +137,7 @@ jobs:
         id: cache-pyi-build
         uses: actions/cache@v4
         with:
-          path: dist
+          path: dist/fortuna-webservice
           key: ${{ runner.os }}-${{ matrix.arch }}-pyi-${{ hashFiles('web_service/backend/**/*.py', 'fortuna-unified.spec', 'web_service/backend/requirements*.txt') }}
 
       - name: Install Python Dependencies & Build
@@ -293,13 +293,13 @@ jobs:
 
       - name: Stage Manifest for Upload
         shell: pwsh
-        run: Copy-Item -Path "${{ env.FRONTEND_DIR }}/frontend-manifest.tsv" -Destination "dist/fortuna-core-service/"
+        run: Copy-Item -Path "${{ env.FRONTEND_DIR }}/frontend-manifest.tsv" -Destination "dist/fortuna-webservice/"
 
       - name: Upload Backend and Frontend Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: build-artifacts-${{ matrix.arch }}-${{ steps.vars.outputs.build_id }}
-          path: dist/fortuna-core-service/
+          path: dist/fortuna-webservice/
           retention-days: 1
 
   package-msi:
@@ -345,8 +345,8 @@ jobs:
       - name: Prepare Staging
         shell: pwsh
         run: |
-          # Rename EXE for WiX
-          Rename-Item -Path staging/fortuna-core-service.exe -NewName fortuna-webservice.exe -Force
+          # The EXE is already named fortuna-webservice.exe, so no rename is needed.
+          Write-Host "✅ Verified fortuna-webservice.exe exists."
 
           # Create Restart Script (Required by WiX)
           $scriptContent = "@echo off`r`necho Requesting Admin privileges...`r`nnet stop FortunaWebService`r`nnet start FortunaWebService`r`necho Service Restarted.`r`npause"

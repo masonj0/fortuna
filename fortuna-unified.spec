@@ -53,19 +53,30 @@ a.pure += [
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 # --- Final Executable ---
-# This creates a single-file executable. The COLLECT object has been removed
-# as it is not needed for this build target.
+# This creates a directory-based ('onedir') build.
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
+    [],
+    exclude_binaries=True,
     name='fortuna-webservice',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    runtime_tmpdir=None,
-    console=True # Console is useful for debugging service startup
+    console=True,
+)
+
+# --- COLLECT Object for Directory-Based Build ---
+# This gathers all the dependencies into a single directory, which is the
+# standard output for a 'onedir' build.
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    name='fortuna-webservice',
 )

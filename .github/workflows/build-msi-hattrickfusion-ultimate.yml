@@ -151,7 +151,7 @@ jobs:
         id: cache-pyi-build
         uses: actions/cache@v4
         with:
-          path: dist/fortuna-core-service
+          path: dist/fortuna-webservice
           key: ${{ runner.os }}-${{ matrix.arch }}-pyi-${{ hashFiles('web_service/backend/**/*.py', 'fortuna-unified.spec', 'web_service/backend/requirements*.txt') }}
 
       - name: Install Python dependencies (x86 Build)
@@ -340,7 +340,7 @@ jobs:
         id: inspect-bundle
         shell: pwsh
         run: |
-          $internalDir = "dist/fortuna-core-service/_internal"
+          $internalDir = "dist/fortuna-webservice/_internal"
           if (!(Test-Path $internalDir)) {
               throw "❌ CRITICAL: _internal directory not found after build. The bundle is incomplete."
           }
@@ -373,7 +373,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: backend-dist-${{ matrix.arch }}-${{ github.run_id }}
-          path: dist/fortuna-core-service/
+          path: dist/fortuna-webservice/
 
   package-msi:
     name: '💿 Package MSI (${{ matrix.arch }})'
@@ -444,8 +444,8 @@ jobs:
               $wxsContent.Save($wxsPath)
               Write-Host "✅ Dynamically removed 'Start=install' attribute from WiX template."
           }
-          if (Test-Path staging/backend/fortuna-core-service.exe) {
-            Move-Item staging/backend/fortuna-core-service.exe staging/backend/fortuna-webservice.exe -Force
+          if (Test-Path staging/backend/fortuna-webservice.exe) {
+            Write-Host "✅ Found fortuna-webservice.exe, no rename needed."
           }
           $proj = @(
             '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">',
@@ -734,7 +734,7 @@ jobs:
         run: |
           $exePath = "executable/fortuna-webservice.exe"
           if (-not (Test-Path $exePath)) {
-            $exePath = "executable/fortuna-core-service.exe" # Fallback for different naming conventions
+            throw "Executable not found in downloaded artifact."
           }
           if (-not (Test-Path $exePath)) {
             throw "Executable not found in downloaded artifact."
