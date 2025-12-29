@@ -58,7 +58,7 @@ fastapi==0.111.0
     # via -r web_service/backend/requirements.in
 fastapi-cli==0.0.20
     # via fastapi
-greenlet==3.0.3
+greenlet
     # via
     #   -r web_service/backend/requirements.in
     #   sqlalchemy
@@ -122,7 +122,7 @@ more-itertools==10.3.0
     #   jaraco-functools
 mypy-extensions==1.0.0
     # via black
-numpy==1.23.5
+numpy
     # via
     #   -r web_service/backend/requirements.in
     #   pandas
@@ -137,7 +137,7 @@ packaging==24.1
     #   pyinstaller
     #   pyinstaller-hooks-contrib
     #   pytest
-pandas==1.5.3
+pandas
     # via -r web_service/backend/requirements.in
 pathspec==0.12.1
     # via black
@@ -199,7 +199,7 @@ rich==14.2.0
     #   typer
 rich-toolkit==0.17.1
     # via fastapi-cli
-scipy==1.10.1
+scipy
     # via -r web_service/backend/requirements.in
 secretstorage==3.3.3
     # via keyring
