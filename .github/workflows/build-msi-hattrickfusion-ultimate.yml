@@ -167,7 +167,7 @@ jobs:
             "greenlet==3.0.3",
             "pandas==1.5.3",
             "numpy==1.23.5",
-              "scipy==1.10.1",
+            "scipy==1.10.1",
             "--only-binary=:all:"
           ) | Set-Content $tempReqs
 
