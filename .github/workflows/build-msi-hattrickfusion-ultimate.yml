@@ -164,7 +164,7 @@ jobs:
           # Constraints MUST come first
           @(
             "sqlalchemy==1.4.46",
-            "greenlet==1.1.2",
+            "greenlet==3.0.3",
             "pandas==1.5.3",
             "numpy==1.23.5",
             "scipy==1.10.1",
@@ -197,10 +197,10 @@ jobs:
           # CRITICAL: These must match the versions installed in the previous step
           $expectedVersions = @{
             'sqlalchemy' = '1.4.46'
-            'greenlet' = '1.1.2'
+            'greenlet' = '3.0.3'
             'pandas' = '1.5.3'
             'numpy' = '1.23.5'
-            'scipy' = '1.8.1'
+            'scipy' = '1.10.1'
           }
 
           $allVerified = $true
