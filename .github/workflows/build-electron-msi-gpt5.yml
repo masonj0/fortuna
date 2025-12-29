@@ -61,7 +61,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: dist/fortuna-backend
-          key: ${{ runner.os }}-${{ matrix.arch }}-pyi-${{ hashFiles('web_service/backend/**/*.py', 'fortuna-backend-electron.spec', 'web_service/backend/requirements*.txt') }}
+          key: ${{ runner.os }}-${{ matrix.arch }}-pyi-${{ hashFiles('web_service/backend/**/*.py', 'fortuna-unified.spec', 'web_service/backend/requirements*.txt') }}
 
       - name: 📦 Install Dependencies and Verify Imports
         shell: pwsh
@@ -189,7 +189,7 @@ jobs:
           Write-Host "Hooks path verified at: $hooksPath"
           Write-Host "Running PyInstaller (hooks are specified in the .spec file)"
 
-          pyinstaller --noconfirm --clean --log-level INFO fortuna-backend-electron.spec
+          pyinstaller --noconfirm --clean --log-level INFO fortuna-unified.spec
 
           if ($LASTEXITCODE -ne 0) {
             Write-Error "❌ PyInstaller build failed with exit code $LASTEXITCODE"
