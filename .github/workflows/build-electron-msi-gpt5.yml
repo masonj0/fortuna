@@ -73,15 +73,36 @@ jobs:
           pip install uv
           if ('${{ matrix.arch }}' -eq 'x86') {
             Write-Host "--- Using x86-specific requirements file ---"
-            uv pip install --system numpy==1.23.5 pandas==1.5.3 scipy==1.10.1
-            $requirementsFile = "${{ env.BACKEND_DIR }}/requirements-x86.txt"
-            uv pip install --system -r $requirementsFile
+            $tempReqs = "temp-requirements-x86.txt"
+
+            # Constraints MUST come first
+            @(
+              "sqlalchemy==1.4.46",
+              "greenlet==3.0.3",
+              "pandas==1.5.3",
+              "numpy==1.23.5",
+              "scipy==1.10.1",
+              "--only-binary=:all:"
+            ) | Set-Content $tempReqs
+
+            # Append all other requirements
+            Get-Content web_service/backend/requirements-x86.txt |
+              Where-Object {$_ -notmatch "^(sqlalchemy|greenlet|pandas|numpy|scipy)=="} |
+              Add-Content $tempReqs
+
+            # Single atomic install - no partial state possible
+            uv pip install --system -r $tempReqs
+
+            if ($LASTEXITCODE -ne 0) {
+              throw "Installation failed - no partial state written"
+            }
           } else {
             Write-Host "--- Using standard requirements file ---"
             $requirementsFile = "${{ env.BACKEND_DIR }}/requirements.txt"
             uv pip install --system -r $requirementsFile
           }
           uv pip install --system structlog uvicorn fastapi starlette pydantic pydantic_settings sqlalchemy aiosqlite httpx redis slowapi limits beautifulsoup4 pywin32 tenacity
+          uv pip install --system pyinstaller==5.13.2
           Write-Host "--- Final installed packages (pip list) ---"
           pip list
 
