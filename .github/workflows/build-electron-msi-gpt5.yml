@@ -86,7 +86,6 @@ jobs:
             # Constraints MUST come first
             @(
               "sqlalchemy==1.4.46",
-              "greenlet==2.0.2",
               "pandas==1.5.3",
               "numpy==1.23.5",
               "scipy==1.10.1",
