@@ -163,7 +163,7 @@ pydantic-settings==2.3.4
     # via -r web_service/backend/requirements.in
 pygments==2.18.0
     # via rich
-pyinstaller==6.5.0
+pyinstaller==6.6.0
     # via -r web_service/backend/requirements.in
 pyinstaller-hooks-contrib==2024.6
     # via pyinstaller
