@@ -58,6 +58,7 @@ print(f"[SPEC] Data files to include: {len(datas)}")
 # ============================================================================
 # 1. Start with a minimal list of imports that analysis might miss.
 hidden_imports = [
+    'uvicorn.lifespan.on',
     'win32timezone',
     'win32ctypes',
     'win32ctypes.core',
