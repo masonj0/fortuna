@@ -4,18 +4,16 @@ import os
 import asyncio
 from multiprocessing import freeze_support
 
-# BEFORE any other imports, define the compatibility function inline
-def _setup_windows_event_loop():
-    """Configure Windows event loop policy for PyInstaller bundles."""
-    import sys
-    if sys.platform == 'win32' and getattr(sys, 'frozen', False):
-        import asyncio
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-        print('[BOOT] ✓ Applied WindowsSelectorEventLoopPolicy for PyInstaller',
-              file=sys.stderr)
-
-# Call it immediately
-_setup_windows_event_loop()
+# ==================================================================================
+# EAGER ASYNCIO POLICY INJECTION (WINDOWS/PYINSTALLER)
+# This MUST be the first piece of code to run. It sets the asyncio event loop
+# policy to WindowsSelectorEventLoopPolicy, which is required for Uvicorn to
+# work correctly when the app is frozen with PyInstaller on Windows.
+# See: https://github.com/encode/uvicorn/issues/1599
+# ==================================================================================
+if sys.platform == 'win32':
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+# ==================================================================================
 
 
 # Force UTF-8 encoding for stdout and stderr, crucial for PyInstaller on Windows
@@ -65,6 +63,8 @@ def _configure_sys_path():
 
 # CRITICAL: This must be called before any other application imports.
 _configure_sys_path()
+
+
 
 
 def main():

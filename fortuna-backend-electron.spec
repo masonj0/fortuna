@@ -26,8 +26,7 @@ print(f'[SPEC] PyInstaller SPECPATH: {SPECPATH}')
 print(f'[SPEC] Project root computed: {project_root}')
 
 # Define all critical paths as absolute
-entry_point = project_root / 'web_service' / 'backend' / 'main.py'
-frontend_path = project_root / 'web_platform' / 'frontend' / 'out'
+entry_point = project_root / 'python_service' / 'main.py'
 hooks_dir = project_root / 'fortuna-backend-hooks'
 
 # Verify paths exist at spec LOAD TIME (not run time)
@@ -37,18 +36,12 @@ if not hooks_dir.exists():
     print(f'[SPEC] WARNING: Hooks directory not found: {hooks_dir}')
 
 print(f'[SPEC] Entry point: {entry_point}')
-print(f'[SPEC] Frontend: {frontend_path}')
 print(f'[SPEC] Hooks: {hooks_dir}')
 
 # ============================================================================
 # Data Files (for non-Python assets)
 # ============================================================================
 datas = []
-if frontend_path.exists():
-    datas.append((str(frontend_path), 'ui'))
-    print(f"[SPEC] ✅ Frontend found: {frontend_path}")
-else:
-    print(f"[SPEC] ⚠️  Frontend not found: {frontend_path}")
 
 # ============================================================================
 # Standard data files from packages
@@ -65,6 +58,7 @@ print(f"[SPEC] Data files to include: {len(datas)}")
 # ============================================================================
 # 1. Start with a minimal list of imports that analysis might miss.
 hidden_imports = [
+    'uvicorn.lifespan.on',
     'win32timezone',
     'win32ctypes',
     'win32ctypes.core',
@@ -136,7 +130,7 @@ a = Analysis(
     runtime_hooks=[],
     excludes=[
         'tcl', 'tk', '_tkinter', 'tkinter', 'matplotlib', 'pytest',
-        'sphinx', 'IPython', 'jupyter', 'distutils', 'python_service'
+        'sphinx', 'IPython', 'jupyter', 'distutils', 'web_service'
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
