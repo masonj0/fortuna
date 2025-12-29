@@ -6,7 +6,7 @@
 -r requirements.txt
 
 # --- Build Tools ---
-pyinstaller==6.5.0
+pyinstaller==6.6.0
 pip-tools
 
 # --- Testing Tools ---
