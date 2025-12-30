@@ -129,7 +129,7 @@ jobs:
         env:
           PYTHONUTF8: '1'
         run: |
-          python scripts/generate_spec_dual.py --mode svc
+          pyinstaller --noconfirm --clean fortuna-webservice.spec
 
       - name: 📤 Upload Backend Artifact
         uses: actions/upload-artifact@v4

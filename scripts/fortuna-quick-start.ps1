@@ -61,7 +61,7 @@ $PROJECT_ROOT = Split-Path -Parent $MyInvocation.MyCommand.Path | Split-Path -Pa
 $VENV_PATH    = Join-Path $PROJECT_ROOT ".venv"
 $PYTHON_EXE   = Join-Path $VENV_PATH "Scripts\python.exe"
 $BACKEND_DIR  = Join-Path $PROJECT_ROOT "web_service\backend"
-$FRONTEND_DIR = Join-Path $PROJECT_ROOT "electron"
+$FRONTEND_DIR = Join-Path $PROJECT_ROOT "web_platform\frontend"
 
 # --- 2. UI HELPERS ---
 function Show-Header {
@@ -106,10 +106,18 @@ function Clear-Ports {
     foreach ($port in $ports) {
         $proc = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue
         if ($proc) {
-            Show-Warn "Port $port is in use. Clearing it..."
-            Stop-Process -Id $proc.OwningProcess -Force -ErrorAction SilentlyContinue
-            Start-Sleep -Milliseconds 500
-            $cleared = $true
+            $owningProc = Get-Process -Id $proc.OwningProcess -ErrorAction SilentlyContinue
+            if ($owningProc -and ($owningProc.Name -match "python" -or $owningProc.Name -match "node")) {
+                Show-Warn "Port $port is in use by $($owningProc.Name) (PID: $($owningProc.Id))."
+                $kill = Read-Host "Kill this process? (y/n)"
+                if ($kill -eq 'y') {
+                    Stop-Process -Id $proc.OwningProcess -Force
+                    Show-Success "Process killed."
+                    $cleared = $true
+                }
+            } else {
+                Show-Warn "Port $port is in use by an unknown process: $($owningProc.Name). It will not be cleared automatically."
+            }
         }
     }
 
@@ -127,7 +135,7 @@ function Wait-For-Backend {
 
     for ($i = 0; $i -lt $maxRetries; $i++) {
         try {
-            $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/health" -UseBasicParsing -TimeoutSec 1 -ErrorAction Stop
+            $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/docs" -UseBasicParsing -TimeoutSec 1 -ErrorAction Stop
             if ($response.StatusCode -eq 200) {
                 Write-Host " Ready! 🎉" -ForegroundColor Green
                 Write-Host ""
@@ -300,7 +308,7 @@ Write-Host "║    FORTUNA FRONTEND - LIVE LOGS       ║" -ForegroundColor Mage
 Write-Host "╚════════════════════════════════════════╝" -ForegroundColor Magenta
 Write-Host ""
 cd '$FRONTEND_DIR'
-npm start
+npm run dev
 Write-Host ""
 Write-Host "Frontend stopped. Press Enter to close this window..." -ForegroundColor Yellow
 Read-Host
