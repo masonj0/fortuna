@@ -2,8 +2,6 @@
 name: 🚀 Build Fortuna Faucet Bundle
 on:
   workflow_dispatch:
-  # push:
-  #   branches: ["main"]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -28,13 +26,13 @@ jobs:
       - name: '📥 Download Electron MSI'
         uses: actions/download-artifact@v4
         with:
-          name: fortuna-msi-x64
+          name: fortuna-msi-x64-${{ github.run_id }}
           path: staging/electron
 
       - name: '📥 Download Web Service MSI'
         uses: actions/download-artifact@v4
         with:
-          name: hat-trick-msi-x64
+          name: msi-x64-${{ github.run_id }}
           path: staging/service
 
       - name: '🏗️ Build Bundle'
@@ -43,7 +41,6 @@ jobs:
           $electronMsi = (Get-ChildItem -Path "staging/electron" -Filter "*.msi" -Recurse | Select-Object -First 1).FullName
           $serviceMsi = (Get-ChildItem -Path "staging/service" -Filter "*.msi" -Recurse | Select-Object -First 1).FullName
 
-          # Use the WiX CLI to build the bundle, defining the MSI paths as variables
           wix build -o dist/FortunaFaucet-Setup.exe build_wix/Bundle.wxs `
             -d WebServiceMsiPath="$serviceMsi" `
             -d ElectronAppMsiPath="$electronMsi"
