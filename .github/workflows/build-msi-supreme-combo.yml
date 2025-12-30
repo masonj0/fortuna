@@ -49,8 +49,7 @@ jobs:
         run: |
           $ports = @(3000, 8000)
           foreach ($port in $ports) {
-            $tcp = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyCo
-ntinue
+            $tcp = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue
             if ($tcp) {
               Stop-Process -Id $tcp.OwningProcess -Force
               Write-Host "Cleared zombie process on port $port"
