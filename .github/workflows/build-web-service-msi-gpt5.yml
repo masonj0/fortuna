@@ -1,0 +1,306 @@
+# System Timestamp: 2025-12-21 14:04:35
+name: 🚀 Build Web Service MSI (GPT-5 Overkill)
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '20'
+  PYTHON_VERSION: '3.9'
+  DOTNET_VERSION: '8.0.x'
+  WIX_VERSION: '4.0.5'
+  SERVICE_PORT: '8100'
+
+jobs:
+  # =========================================================
+  # PHASE 1: PRE-FLIGHT & PATHFINDING
+  # =========================================================
+  preflight-check:
+    name: 🔍 System & Asset Preflight
+    runs-on: windows-2022
+    outputs:
+      backend_dir: ${{ steps.pathfinder.outputs.backend_dir }}
+      backend_reqs: ${{ steps.pathfinder.outputs.backend_reqs }}
+      backend_spec: ${{ steps.pathfinder.outputs.backend_spec }}
+      frontend_dir: ${{ steps.pathfinder.outputs.frontend_dir }}
+      wix_proj: ${{ steps.pathfinder.outputs.wix_proj }}
+      semver: ${{ steps.git_version.outputs.semver }}
+      build_id: ${{ steps.git_version.outputs.build_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🏷️ Derive SemVer & Build ID
+        id: git_version
+        shell: pwsh
+        run: |
+          $semver = "0.0.${{ github.run_number }}"
+          $run_id = "${{ github.run_id }}-${{ github.run_attempt }}"
+          echo "semver=$semver" >> $env:GITHUB_OUTPUT
+          echo "build_id=$run_id" >> $env:GITHUB_OUTPUT
+          Write-Host "Build Version: $semver"
+
+      - name: 🗺️ Path-Finder (Dynamic Project Detection)
+        id: pathfinder
+        shell: pwsh
+        run: |
+          if (Test-Path "web_service/backend/main.py") {
+            echo "backend_dir=web_service/backend" >> $env:GITHUB_OUTPUT
+            echo "backend_reqs=web_service/backend/requirements.txt" >> $env:GITHUB_OUTPUT
+            echo "backend_spec=fortuna-unified.spec" >> $env:GITHUB_OUTPUT
+            Write-Host "✅ Detected 'web_service' backend."
+          } else {
+            throw "❌ FATAL: Could not detect a valid backend."
+          }
+
+          if (Test-Path "web_platform/frontend/next.config.mjs") {
+            echo "frontend_dir=web_platform/frontend" >> $env:GITHUB_OUTPUT
+            Write-Host "✅ Detected 'web_platform' frontend."
+          } else {
+            throw "❌ FATAL: Could not detect a valid frontend."
+          }
+
+          if (Test-Path "build_wix/Product_WebService.wxs") {
+              echo "wix_proj=build_wix/Product_WebService.wxs" >> $env:GITHUB_OUTPUT
+              Write-Host "✅ Detected 'Product_WebService.wxs' for WiX build."
+          } else {
+              throw "❌ FATAL: Could not find a valid .wxs file."
+          }
+
+      - name: 🔎 Forensic Asset Verification
+        shell: pwsh
+        run: |
+          $critical_assets = @(
+            "${{ steps.pathfinder.outputs.frontend_dir }}/package.json",
+            "${{ steps.pathfinder.outputs.backend_reqs }}",
+            "${{ steps.pathfinder.outputs.wix_proj }}"
+          )
+          foreach ($asset in $critical_assets) {
+            if (-not (Test-Path $asset)) {
+              Write-Error "❌ FATAL: Missing critical asset: $asset"
+              exit 1
+            }
+            $hash = (Get-FileHash $asset).Hash
+            Write-Host "✅ Verified: $asset ($hash)"
+          }
+
+  # =========================================================
+  # PHASE 2: PARALLEL BUILDS
+  # =========================================================
+  build-backend:
+    name: 🐍 Build Backend
+    needs: preflight-check
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: ${{ needs.preflight-check.outputs.backend_reqs }}
+
+      - name: 📦 Install Dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r ${{ needs.preflight-check.outputs.backend_reqs }}
+          pip install pyinstaller==5.13.2 pywin32==306
+
+      - name: 🏗️ Build Binary with PyInstaller
+        shell: pwsh
+        env:
+          PYTHONUTF8: '1'
+        run: |
+          pyinstaller --noconfirm --clean --log-level INFO ${{ needs.preflight-check.outputs.backend_spec }}
+
+      - name: 📤 Upload Backend Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-dist-${{ needs.preflight-check.outputs.build_id }}
+          path: dist/fortuna-webservice
+          retention-days: 1
+
+  build-frontend:
+    name: ⚛️ Build Frontend
+    needs: preflight-check
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: 🟢 Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: ${{ needs.preflight-check.outputs.frontend_dir }}/package-lock.json
+
+      - name: 🏗️ Build Next.js/React App
+        working-directory: ${{ needs.preflight-check.outputs.frontend_dir }}
+        run: |
+          npm ci
+          npm run build
+      - name: 📤 Upload Frontend Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist-${{ needs.preflight-check.outputs.build_id }}
+          path: ${{ needs.preflight-check.outputs.frontend_dir }}/out
+          retention-days: 1
+
+  # =========================================================
+  # PHASE 3: PACKAGE MSI INSTALLER
+  # =========================================================
+  package-msi:
+    name: 📦 Package MSI Installer
+    needs: [preflight-check, build-backend, build-frontend]
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: 📥 Download Backend Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-dist-${{ needs.preflight-check.outputs.build_id }}
+          path: staging/backend
+      - name: 📥 Download Frontend Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist-${{ needs.preflight-check.outputs.build_id }}
+          path: staging/backend/ui
+
+      - name: 🧐 Pre-Build Forensic File Audit
+        shell: pwsh
+        run: |
+          Get-ChildItem -Path "staging" -Recurse | Select-Object FullName, Length
+
+      - name: 🔧 Setup WiX Toolset
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - run: dotnet tool install --global wix --version ${{ env.WIX_VERSION }}
+      - run: echo C:\Users\runneradmin\.dotnet\tools >> $GITHUB_PATH
+        shell: bash
+
+      - name: 🏗️ Build MSI
+        shell: pwsh
+        run: |
+          wix build ${{ needs.preflight-check.outputs.wix_proj }} `
+            -arch x64 `
+            -o "Fortuna-${{ needs.preflight-check.outputs.semver }}-x64.msi" `
+            -d Version="${{ needs.preflight-check.outputs.semver }}" `
+            -d SourceDir="staging/backend" `
+            -d Platform="x64" `
+            -d ServicePort="${{ env.SERVICE_PORT }}"
+
+      - name: 📤 Upload MSI Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: msi-dist-${{ needs.preflight-check.outputs.build_id }}
+          path: Fortuna-${{ needs.preflight-check.outputs.semver }}-x64.msi
+          retention-days: 1
+
+  # =========================================================
+  # PHASE 4: SMOKE TEST
+  # =========================================================
+  smoke-test:
+    name: 🚬 Smoke Test Installation
+    needs: [package-msi, preflight-check]
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: 📥 Download MSI Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: msi-dist-${{ needs.preflight-check.outputs.build_id }}
+          path: msi-installer
+
+      - name: 🧹 Pre-Install Service Cleanup
+        shell: pwsh
+        run: |
+          sc.exe delete "FortunaWebService" *>$null
+          Start-Sleep -Seconds 3
+
+      - name: 💿 Install MSI Silently
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse | Select-Object -First 1
+          if (-not $msi) { throw "MSI not found in msi-installer directory!" }
+          $proc = Start-Process msiexec.exe -ArgumentList "/i `"$($msi.FullName)`" /quiet /norestart /L*v install.log" -Wait -PassThru
+          if ($proc.ExitCode -ne 0 -and $proc.ExitCode -ne 3010) {
+            Get-Content install.log | Write-Error
+            throw "MSI installation failed with exit code $($proc.ExitCode)"
+          }
+      - name: 🚀 Start Service & Create Runtime Dirs
+        shell: pwsh
+        run: |
+          $installRoot = "C:\Program Files\Fortuna Faucet Service"
+          if (-not (Test-Path $installRoot)) { throw "❌ Install dir not found at $installRoot" }
+          New-Item -Path "$installRoot\data", "$installRoot\json", "$installRoot\logs" -ItemType Directory -Force | Out-Null
+          Start-Service "FortunaWebService"
+          Start-Sleep -Seconds 15
+
+      - name: 🩺 Health Check with Retry
+        shell: pwsh
+        run: |
+          $maxRetries = 5
+          $delay = 3
+          for ($i=1; $i -le $maxRetries; $i++) {
+            try {
+              $response = Invoke-WebRequest -Uri "http://127.0.0.1:${{ env.SERVICE_PORT }}/health" -UseBasicParsing -TimeoutSec 5
+              if ($response.StatusCode -eq 200) {
+                Write-Host "✅ Health check PASSED on attempt $i."
+                exit 0
+              }
+            } catch {
+              Write-Warning "Attempt $i: Health check failed. Error: $($_.Exception.Message)"
+            }
+            if ($i -lt $maxRetries) { Start-Sleep -Seconds ($delay * $i) }
+          }
+          throw "❌ Service health check failed after $maxRetries attempts."
+
+      - name: '🕵️ CSI: Windows Post-Mortem (On Failure)'
+        if: failure()
+        shell: pwsh
+        run: |
+          Get-Process | Where-Object { $_.ProcessName -like "fortuna*" }
+          Get-EventLog -LogName Application -Newest 50 -EntryType Error,Warning
+          Get-Content "C:\Program Files\Fortuna Faucet Service\logs\*.log" -ErrorAction SilentlyContinue
+
+      - name: 📤 Upload Diagnostic Logs (On Failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-test-logs-${{ needs.preflight-check.outputs.build_id }}
+          path: |
+            install.log
+            C:\Program Files\Fortuna Faucet Service\logs\*.log
+
+  # =========================================================
+  # PHASE 5: RELEASE
+  # =========================================================
+  release:
+    name: 🚀 Publish Release
+    needs: smoke-test
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: msi-dist-${{ needs.preflight-check.outputs.build_id }}
+          path: release_assets
+
+      - name: 🔏 Generate Checksums
+        run: |
+          cd release_assets
+          sha256sum *.msi > SHASUMS256.txt
+
+      - name: 📦 Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release_assets/*
+          generate_release_notes: true
