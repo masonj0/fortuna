@@ -66,16 +66,34 @@ async startBackend() {
         backendCommand = path.join(__dirname, '..', '.venv', 'Scripts', 'python.exe');
         backendCwd = path.join(__dirname, '..', 'web_service', 'backend');
     } else {
-        // This matches the structure: resources/bin/fortuna-ui-bridge.exe
-        const backendFolder = path.join(process.resourcesPath, 'bin');
-        backendCommand = path.join(backendFolder, 'fortuna-ui-bridge.exe');
+        const backendFolder = path.join(process.resourcesPath, 'fortuna-backend');
+        backendCommand = path.join(backendFolder, 'fortuna-backend.exe');
         backendCwd = backendFolder;
+
+        // DEBUG: Log the path we're looking for
+        console.log(`[Backend] Looking for executable at: ${backendCommand}`);
+        console.log(`[Backend] Directory exists: ${fs.existsSync(backendFolder)}`);
+        console.log(`[Backend] Executable exists: ${fs.existsSync(backendCommand)}`);
     }
 
     if (!fs.existsSync(backendCommand)) {
-        dialog.showErrorBox('Backend Missing', `Executable not found at: ${backendCommand}`);
+        const errorMsg = `Backend executable not found at: ${backendCommand}`;
+        console.error(`[Backend] ${errorMsg}`);
+        this.backendLogs.push(`ERROR: ${errorMsg}`);
+        this.backendState = 'error';
+
+        // Show user a helpful error dialog
+        dialog.showErrorBox(
+            'Backend Launch Failed',
+            `Could not find backend executable.\n\nExpected location:\n${backendCommand}`
+        );
         return;
     }
+
+    console.log(`[Backend] Executable found, attempting to spawn...`);
+
+    console.log(`[Electron] Spawning backend: ${backendCommand}`);
+    console.log(`[Electron] Backend CWD: ${backendCwd}`);
 
     this.backendProcess = spawn(backendCommand, [], {
         cwd: backendCwd, // CRITICAL: This allows the EXE to find the '_internal' folder
@@ -85,6 +103,14 @@ async startBackend() {
             FORTUNA_MODE: 'electron', // Let the backend know its execution context
             PYTHONPATH: backendCwd // Force python to look at the root of the extract dir
         }
+    });
+
+    this.backendProcess.stdout.on('data', (data) => {
+      console.log(`[Backend STDOUT] ${data.toString()}`);
+    });
+
+    this.backendProcess.stderr.on('data', (data) => {
+      console.error(`[Backend STDERR] ${data.toString()}`);
     });
 
     this.backendProcess.stdout.on('data', (data) => {
@@ -106,18 +132,30 @@ async startBackend() {
       this.backendState = 'error';
       this.isBackendStarting = false;
       this.sendBackendStatusUpdate();
-      if (errorOutput.includes('ModuleNotFoundError')) {
-        dialog.showErrorBox('Critical Error', 'Backend failed to load dependencies. See logs.');
-      }
+    });
+
+    this.backendProcess.on('error', (err) => {
+        const errorMsg = `Failed to spawn backend process: ${err.message}`;
+        console.error(`[Backend] ${errorMsg}`);
+        this.backendLogs.push(`ERROR: ${errorMsg}`);
+        this.backendState = 'error';
+        this.isBackendStarting = false;
+        this.sendBackendStatusUpdate();
     });
 
     this.backendProcess.on('exit', (code) => {
       if (code !== 0 && this.backendState !== 'stopped') {
-        const errorMsg = `Backend process exited unexpectedly with code ${code}`;
+        const errorMsg = `Backend exited with code ${code}. Last logs:\n${this.backendLogs.slice(-5).join('\n')}`;
         console.error(errorMsg);
         this.backendLogs.push(errorMsg);
         this.backendState = 'error';
         this.isBackendStarting = false;
+
+        // Save logs to file for debugging
+        const logsPath = path.join(os.homedir(), '.fortuna', 'backend_crash.log');
+        fs.writeFileSync(logsPath, this.backendLogs.join('\n'));
+        console.log(`[Backend] Crash logs saved to: ${logsPath}`);
+
         this.sendBackendStatusUpdate();
       }
     });
