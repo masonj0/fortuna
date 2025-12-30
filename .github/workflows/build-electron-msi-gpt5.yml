@@ -53,18 +53,19 @@ jobs:
         id: constraints
         shell: pwsh
         run: |
-          $constraintFile = "constraints.txt"
+          $file = "constraints.txt"
           if ('${{ matrix.arch }}' -eq 'x86') {
-            Write-Host "🛡️ ACTIVATING X86 SAFE MODE (SIMPLE)"
+            Write-Host "🛡️ ACTIVATING X86 SAFE MODE"
             @(
               "numpy==1.23.5",
               "pandas==1.5.3",
-              "greenlet==3.0.3",
               "--only-binary=:all:"
-            ) | Set-Content $constraintFile
-            Write-Host "✅ Constraints: numpy, pandas, greenlet==3.0.3"
-          } else { New-Item $constraintFile -ItemType File -Force }
-          "file=$constraintFile" | Out-File $env:GITHUB_OUTPUT -Append
+            ) | Set-Content $file
+            Write-Host "✅ x86 constraints: numpy 1.23.5, pandas 1.5.3, wheel-only"
+          } else {
+            New-Item $file -ItemType File -Force
+          }
+          "file=$file" | Out-File $env:GITHUB_OUTPUT -Append
 
       - name: 💾 Create required directories
         shell: pwsh
@@ -73,25 +74,27 @@ jobs:
           New-Item -ItemType Directory -Path "python_service/json" -Force
           New-Item -ItemType Directory -Path "python_service/adapters" -Force
 
-      - name: 📦 Install Dependencies & Build
+      - name: 📦 Build Binary
         shell: pwsh
         run: |
-          pip install --upgrade pip
-          pip install uv
-          uv pip install --system -r ${{ env.BACKEND_DIR }}/requirements.txt -c ${{ steps.constraints.outputs.file }}
-          uv pip install --system pyinstaller==6.6.0
+          pip install --upgrade pip setuptools wheel
+          pip install -r ${{ env.BACKEND_DIR }}/requirements.txt -c ${{ steps.constraints.outputs.file }}
+          pip install pyinstaller==6.6.0 pywin32
+
+          # FIXED: Use the dedicated Electron spec file.
+          # This ensures we build main.py (Uvicorn) for the desktop app, not the Service Wrapper.
           pyinstaller --noconfirm --clean fortuna-backend-electron.spec
 
       - name: 🔍 Sanity Check Executable
         shell: pwsh
         run: |
-          dist/fortuna-backend/fortuna-backend.exe --help
+          dist/fortuna-backend.exe --help
 
       - name: 📤 Upload
         uses: actions/upload-artifact@v4
         with:
           name: python-service-${{ matrix.arch }}
-          path: dist/fortuna-backend/
+          path: dist/fortuna-backend.exe
 
   build-frontend:
     name: 🎨 Build Web Frontend
@@ -138,6 +141,10 @@ jobs:
           $dest = "electron/resources/fortuna-backend"
           New-Item -ItemType Directory -Path $dest -Force
           Copy-Item -Path "temp_backend/*" -Destination $dest -Recurse -Force
+      - name: ✅ Verify backend staged for Electron
+        shell: pwsh
+        run: |
+          Test-Path electron/resources/fortuna-backend/fortuna-backend.exe
       - name: '🏗️ Build MSI'
         working-directory: electron
         shell: pwsh
@@ -151,7 +158,7 @@ jobs:
       - name: '📤 Upload MSI'
         uses: actions/upload-artifact@v4
         with:
-          name: fortuna-msi-${{ matrix.arch }}-${{ github.run_id }}
+          name: fortuna-msi-${{ matrix.arch }}
           path: electron/dist/*.msi
 
   smoke-test:
@@ -165,42 +172,104 @@ jobs:
       - name: '📥 Download MSI'
         uses: actions/download-artifact@v4
         with:
-          name: fortuna-msi-${{ matrix.arch }}-${{ github.run_id }}
+          name: fortuna-msi-${{ matrix.arch }}
           path: msi-installer
       - name: '🔥 Install & Verify'
         shell: pwsh
         run: |
-          $msi = (Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse | Select-Object -First 1).FullName
-          Start-Process msiexec.exe -ArgumentList "/i `"$msi`" /qn /L*v install.log" -Wait
-          $progFiles = if ('${{ matrix.arch }}' -eq 'x86') { ${env:ProgramFiles(x86)} } else { ${env:ProgramFiles} }
+          $msi = Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse | Select-Object -First 1
+          if (-not $msi) { throw "MSI not found!" }
+
+          Start-Process msiexec.exe -ArgumentList "/i `"$($msi.FullName)`" /qn /L*v install.log" -Wait
+
+          $progFiles = ${env:ProgramFiles}
+          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
           $installDir = Join-Path $progFiles "Fortuna Faucet"
-          New-Item -Path "$installDir\data", "$installDir\json", "$installDir\logs" -ItemType Directory -Force | Out-Null
-      - name: '🚀 Launch & Verify'
+
+      - name: '✅ Create Required Runtime Directories Post-Install'
         shell: pwsh
         run: |
-          $progFiles = if ('${{ matrix.arch }}' -eq 'x86') { ${env:ProgramFiles(x86)} } else { ${env:ProgramFiles} }
+          $progFiles = ${env:ProgramFiles}
+          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
           $installDir = Join-Path $progFiles "Fortuna Faucet"
-          Start-Process -FilePath "$installDir\Fortuna Faucet.exe"
-          Start-Sleep 15
-          $parent = Get-Process -Name "Fortuna Faucet" -ErrorAction SilentlyContinue
-          $child = Get-Process -Name "fortuna-backend" -ErrorAction SilentlyContinue
-          if (-not $parent) { throw "Main process 'Fortuna Faucet' not found!" }
-          if (-not $child) { throw "Backend process 'fortuna-backend' not found!" }
-          Write-Host "✅ Smoke test passed!"
-      - name: '📸 Paparazzi (Visual Proof)'
-        if: always()
+          if (! (Test-Path $installDir)) {
+            Write-Error "Installation directory not found at $installDir."
+            exit 1
+          }
+          New-Item -Path "$installDir\\data" -ItemType Directory -Force | Out-Null
+          New-Item -Path "$installDir\\json" -ItemType Directory -Force | Out-Null
+          New-Item -Path "$installDir\\logs" -ItemType Directory -Force | Out-Null
+          Write-Host "✅ Created runtime directories (data, json, logs) in '$installDir'."
+
+      - name: '🔬 Debug: Run Backend Directly'
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $progFiles = ${env:ProgramFiles}
+          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
+          $installDir = Join-Path $progFiles "Fortuna Faucet"
+          $backendExe = Join-Path $installDir "resources/fortuna-backend/fortuna-backend.exe"
+
+          if (Test-Path $backendExe) {
+            Write-Host "Attempting to run backend directly for 10 seconds..."
+            $process = Start-Process -FilePath $backendExe -NoNewWindow -PassThru
+            Start-Sleep -Seconds 10
+            Stop-Process -Id $process.Id -Force
+            Write-Host "Backend process stopped."
+          } else {
+            Write-Error "Backend executable not found at $backendExe"
+          }
+
+      - name: '🚀 Launch, Verify & Snap'
         shell: pwsh
         run: |
+          # 1. PREP: Install Playwright dependencies FIRST
           npm install playwright
           npx playwright install chromium --with-deps
-          $nodeScript = "const { chromium } = require('playwright'); (async () => { const browser = await chromium.launch(); const page = await browser.newPage(); try { await page.goto('http://127.0.0.1:8102', { timeout: 15000 }); await page.screenshot({ path: 'proof.png' }); } finally { await browser.close(); } })();"
-          node -e $nodeScript
+
+          # 2. LAUNCH: Start the Application
+          $progFiles = ${env:ProgramFiles}
+          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
+          $installDir = Join-Path $progFiles "Fortuna Faucet"
+
+          Write-Host "🚀 Launching from: $installDir"
+          $process = Start-Process -FilePath "$installDir\\Fortuna Faucet.exe" -PassThru
+
+          # 3. VERIFY: Wait for backend to be ready
+          # Target /docs to ensure 200 OK (root often returns 404)
+          $url = "http://127.0.0.1:8000/docs"
+          Write-Host "Waiting for backend at $url..."
+          $maxRetries = 20
+          for ($i=1; $i -le $maxRetries; $i++) {
+            try {
+              $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 3
+              if ($response.StatusCode -eq 200) {
+                Write-Host "✅ Backend is ONLINE! Proceeding to screenshot."
+                break
+              }
+            } catch {
+              Write-Host "⏳ Waiting for backend ($i/$maxRetries)..."
+              Start-Sleep -Seconds 3
+            }
+            if ($i -eq $maxRetries) { throw "❌ Backend never came online." }
+          }
+
+          # 4. SNAP: Take the screenshot (Paparazzi)
+          Write-Host "📸 Taking screenshot..."
+          node -e "const { chromium } = require('playwright'); (async () => { const browser = await chromium.launch(); const page = await browser.newPage(); try { await page.goto('$url', {timeout: 15000}); await page.screenshot({ path: 'proof.png' }); console.log('✅ Screenshot saved to proof.png'); } catch(e) { console.error(e); process.exit(1); } await browser.close(); })();"
+
+          # 5. CLEANUP: We are done, we can kill it now.
+          Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+
+      # 📸 Paparazzi step removed (merged into Launch step to preserve process lifecycle)
+
       - name: '📤 Upload Visual Proof'
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: visual-proof-${{ matrix.arch }}-${{ github.run_id }}
+          name: visual-proof-${{ matrix.arch }}
           path: proof.png
+
       - name: '🧹 Cleanup'
         if: always()
         shell: pwsh

@@ -66,16 +66,20 @@ async startBackend() {
         backendCommand = path.join(__dirname, '..', '.venv', 'Scripts', 'python.exe');
         backendCwd = path.join(__dirname, '..', 'web_service', 'backend');
     } else {
-        // This matches the structure: resources/bin/fortuna-ui-bridge.exe
-        const backendFolder = path.join(process.resourcesPath, 'bin');
-        backendCommand = path.join(backendFolder, 'fortuna-ui-bridge.exe');
+        // ✅ CORRECTED PATH: The workflow stages the executable at resources/fortuna-backend/fortuna-backend.exe
+        const backendFolder = path.join(process.resourcesPath, 'fortuna-backend');
+        backendCommand = path.join(backendFolder, 'fortuna-backend.exe');
         backendCwd = backendFolder;
+        console.log(`[Electron] Production mode detected. Setting backend path to: ${backendCommand}`);
     }
 
     if (!fs.existsSync(backendCommand)) {
         dialog.showErrorBox('Backend Missing', `Executable not found at: ${backendCommand}`);
         return;
     }
+
+    console.log(`[Electron] Spawning backend: ${backendCommand}`);
+    console.log(`[Electron] Backend CWD: ${backendCwd}`);
 
     this.backendProcess = spawn(backendCommand, [], {
         cwd: backendCwd, // CRITICAL: This allows the EXE to find the '_internal' folder
@@ -85,6 +89,14 @@ async startBackend() {
             FORTUNA_MODE: 'electron', // Let the backend know its execution context
             PYTHONPATH: backendCwd // Force python to look at the root of the extract dir
         }
+    });
+
+    this.backendProcess.stdout.on('data', (data) => {
+      console.log(`[Backend STDOUT] ${data.toString()}`);
+    });
+
+    this.backendProcess.stderr.on('data', (data) => {
+      console.error(`[Backend STDERR] ${data.toString()}`);
     });
 
     this.backendProcess.stdout.on('data', (data) => {
@@ -106,9 +118,6 @@ async startBackend() {
       this.backendState = 'error';
       this.isBackendStarting = false;
       this.sendBackendStatusUpdate();
-      if (errorOutput.includes('ModuleNotFoundError')) {
-        dialog.showErrorBox('Critical Error', 'Backend failed to load dependencies. See logs.');
-      }
     });
 
     this.backendProcess.on('exit', (code) => {
