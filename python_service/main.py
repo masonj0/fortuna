@@ -11,8 +11,10 @@ from multiprocessing import freeze_support
 # work correctly when the app is frozen with PyInstaller on Windows.
 # See: https://github.com/encode/uvicorn/issues/1599
 # ==================================================================================
-if sys.platform == 'win32':
+if sys.platform == 'win32' and getattr(sys, 'frozen', False):
+    import asyncio
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    print("[BOOT] Applied WindowsSelectorEventLoopPolicy for PyInstaller", file=sys.stderr)
 # ==================================================================================
 
 
