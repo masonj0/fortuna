@@ -69,8 +69,7 @@ ntinue
       - name: 🔎 Forensic Asset Verification (GPT5)
         shell: pwsh
         run: |
-          $critical = @("web_platform/frontend/package.json", "web_service/backe
-nd/requirements.txt", "build_wix/Product_WebService.wxs")
+          $critical = @("web_platform/frontend/package.json", "web_service/backend/requirements.txt", "build_wix/Product_WebService.wxs")
           foreach ($file in $critical) {
             if (-not (Test-Path $file)) {
               Write-Error "❌ FATAL: Missing critical asset: $file"; exit 1
@@ -118,8 +117,7 @@ nd/requirements.txt", "build_wix/Product_WebService.wxs")
 
       - name: 📦 Install Dependencies
         run: |
-          pip install -r web_service/backend/requirements.txt -c ${{ steps.const
-raints.outputs.file }}
+          pip install -r web_service/backend/requirements.txt -c ${{ steps.constraints.outputs.file }}
           pip install pyinstaller
 
       - name: 🧪 Backend Quality Gate (Fail Fast)
@@ -190,25 +188,20 @@ raints.outputs.file }}
         shell: cmd
         run: |
           echo @echo off > staging\\backend\\restart_service.bat
-          echo net stop FortunaWebService >> staging\\backend\\restart_service.b
-at
-          echo net start FortunaWebService >> staging\\backend\\restart_service.
-bat
+          echo net stop FortunaWebService >> staging\\backend\\restart_service.bat
+          echo net start FortunaWebService >> staging\\backend\\restart_service.bat
 
       - name: ⚖️ The Dietician (Size Analysis)
         shell: pwsh
         run: |
-          $size = (Get-ChildItem staging -Recurse | Measure-Object -Property Len
-gth -Sum).Sum / 1MB
+          $size = (Get-ChildItem staging -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB
           Write-Host "📊 Total Payload: $([math]::Round($size, 2)) MB"
-          if ($size -gt 300) { Write-Warning "⚠️ BLOAT ALERT: Payload exceeds 30
-0MB!" }
+          if ($size -gt 300) { Write-Warning "⚠️ BLOAT ALERT: Payload exceeds 300MB!" }
 
       - name: 🧐 Pre-Build Forensic File Audit
         shell: pwsh
         run: |
-          Get-ChildItem -Path "staging" -Recurse | Select-Object FullName, Lengt
-h
+          Get-ChildItem -Path "staging" -Recurse | Select-Object FullName, Length
 
       - name: 🔧 Setup WiX Toolset
         uses: actions/setup-dotnet@v4
@@ -226,8 +219,7 @@ h
           $arch = "${{ matrix.arch }}"
           wix build build_wix/Product_WebService.wxs `
             -arch $arch `
-            -o "Fortuna-${{ needs.preflight-check.outputs.semver }}-${arch}.msi"
- `
+            -o "Fortuna-${{ needs.preflight-check.outputs.semver }}-${arch}.msi" `
             -d Version="${{ needs.preflight-check.outputs.semver }}" `
             -d SourceDir="staging/backend" `
             -d Platform=$arch
@@ -236,12 +228,10 @@ h
         continue-on-error: true
         shell: pwsh
         run: |
-          $msi = "Fortuna-${{ needs.preflight-check.outputs.semver }}-${{ matrix
-.arch }}.msi"
+          $msi = "Fortuna-${{ needs.preflight-check.outputs.semver }}-${{ matrix.arch }}.msi"
           if (Test-Path "C:\\Program Files\\Windows Defender\\MpCmdRun.exe") {
             Write-Host "🛡️ Scanning $msi with Windows Defender..."
-            & "C:\\Program Files\\Windows Defender\\MpCmdRun.exe" -Scan -ScanTyp
-e 3 -File "$pwd\\$msi"
+            & "C:\\Program Files\\Windows Defender\\MpCmdRun.exe" -Scan -ScanType 3 -File "$pwd\\$msi"
             if ($LASTEXITCODE -ne 0) { throw "🦠 MALWARE DETECTED in MSI!" }
           }
 
@@ -249,8 +239,7 @@ e 3 -File "$pwd\\$msi"
         uses: actions/upload-artifact@v4
         with:
           name: msi-${{ matrix.arch }}
-          path: Fortuna-${{ needs.preflight-check.outputs.semver }}-${{ matrix.a
-rch }}.msi
+          path: Fortuna-${{ needs.preflight-check.outputs.semver }}-${{ matrix.arch }}.msi
 
       - name: '🧪 Basic Integrity Check'
         shell: pwsh
@@ -274,13 +263,10 @@ rch }}.msi
           Write-Host "Checking for zombie processes on ports 3000 and 8000..."
           $ports = @(3000, 8000)
           foreach ($port in $ports) {
-            $tcp = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyCo
-ntinue
+            $tcp = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue
             if ($tcp) {
-              Write-Host "Killing process on port $port (PID $($tcp.OwningProces
-s))..."
-              Stop-Process -Id $tcp.OwningProcess -Force -ErrorAction SilentlyCo
-ntinue
+              Write-Host "Killing process on port $port (PID $($tcp.OwningProcess))..."
+              Stop-Process -Id $tcp.OwningProcess -Force -ErrorAction SilentlyContinue
             }
           }
       - uses: actions/checkout@v4
@@ -299,32 +285,26 @@ ntinue
       - name: 🧹 Pre-Install Cleanup
         shell: pwsh
         run: |
-          # The '*' is a wildcard that tells PowerShell to ignore any errors if
-the service doesn't exist.
+          # The '*' is a wildcard that tells PowerShell to ignore any errors if the service doesn't exist.
           sc.exe delete "FortunaWebService" *>$null
           Start-Sleep -Seconds 2
 
       - name: 💿 Install MSI
         shell: pwsh
         run: |
-          $msi = Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse |
-Select-Object -First 1
+          $msi = Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse | Select-Object -First 1
           if (-not $msi) { throw "MSI not found in msi-installer directory!" }
-          Start-Process msiexec.exe -ArgumentList "/i `"$($msi.FullName)`" /quie
-t /norestart" -Wait
+          Start-Process msiexec.exe -ArgumentList "/i `"$($msi.FullName)`" /quiet /norestart" -Wait
           Start-Sleep 10 # Give service time to register
 
       - name: 🔍 Dynamic Path Verification (Revived)
         shell: pwsh
         run: |
-          $progFiles = if ('${{ matrix.arch }}' -eq 'x86') { ${env:ProgramFiles(
-x86)} } else { $env:ProgramFiles }
+          $progFiles = if ('${{ matrix.arch }}' -eq 'x86') { ${env:ProgramFiles(x86)} } else { $env:ProgramFiles }
           $installRoot = Join-Path $progFiles "Fortuna Faucet Service"
-          if (-not (Test-Path $installRoot)) { throw "❌ Install dir not found at
- $installRoot" }
+          if (-not (Test-Path $installRoot)) { throw "❌ Install dir not found at $installRoot" }
           Write-Host "✅ Found install at $installRoot"
-          New-Item -Path "$installRoot\data", "$installRoot\json", "$installRoot
-\logs" -ItemType Directory -Force | Out-Null
+          New-Item -Path "$installRoot\data", "$installRoot\json", "$installRoot\logs" -ItemType Directory -Force | Out-Null
           Start-Service "FortunaWebService"
           Start-Sleep 10
 
@@ -335,18 +315,15 @@ x86)} } else { $env:ProgramFiles }
           $delay = 2 # Initial delay in seconds
           for ($i=1; $i -le $maxRetries; $i++) {
             try {
-              $response = Invoke-WebRequest -Uri "http://127.0.0.1:${{ env.SERVI
-CE_PORT }}/health" -UseBasicParsing -TimeoutSec 5
+              $response = Invoke-WebRequest -Uri "http://127.0.0.1:${{ env.SERVICE_PORT }}/health" -UseBasicParsing -TimeoutSec 5
               if ($response.StatusCode -eq 200) {
                 Write-Host "✅ Health check PASSED on attempt $i."
                 exit 0
               } else {
-                Write-Warning "Attempt $i: Received status code $($response.Stat
-usCode)"
+                Write-Warning "Attempt $i: Received status code $($response.StatusCode)"
               }
             } catch {
-              Write-Warning "Attempt $i: Health check failed. Error: $($_.Except
-ion.Message)"
+              Write-Warning "Attempt $i: Health check failed. Error: $($_.Exception.Message)"
             }
             if ($i -lt $maxRetries) {
               $currentDelay = [math]::Pow($delay, $i)
@@ -366,20 +343,17 @@ ion.Message)"
           $delay = 3
           for ($i=1; $i -le $maxRetries; $i++) {
             try {
-              $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutS
-ec 5
+              $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 5
               if ($response.StatusCode -eq 200) {
                 Write-Host "✅ URL is accessible. Proceeding with screenshot."
                 break
               }
             } catch {
-              Write-Warning "Attempt ${i}: URL not accessible yet. Retrying in $
-delay seconds..."
+              Write-Warning "Attempt ${i}: URL not accessible yet. Retrying in $delay seconds..."
               Start-Sleep -Seconds $delay
             }
             if ($i -eq $maxRetries) {
-              throw "❌ URL did not become accessible after $maxRetries attempts.
-"
+              throw "❌ URL did not become accessible after $maxRetries attempts."
             }
           }
 
