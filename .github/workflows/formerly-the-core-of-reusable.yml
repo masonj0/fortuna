@@ -347,33 +347,23 @@ jobs:
           }
           Write-Host "✅ Service started successfully"
 
-      - name: 🩺 Health Check
+      - name: '🚀 Health Check & Paparazzi'
         shell: pwsh
         run: |
+          # Health Check
           $maxRetries = 10; $delay = 3; $url = "http://127.0.0.1:${{ env.SERVICE_PORT }}/health"
-
           for ($i = 0; $i -lt $maxRetries; $i++) {
             try {
               $response = Invoke-RestMethod -Uri $url -TimeoutSec 5
               if ($response.status -eq "ok") {
                 Write-Host "✅ Healthy after $($i * $delay)s"
-                exit 0
+                break
               }
             } catch {
-              Write-Host "Attempt $($i+1)/$maxRetries failed: $($_.Exception.Message)"
-
+              Write-Host "Attempt $($i+1)/$maxRetries failed..."
               if ($i -eq $maxRetries - 1) {
-                Write-Host "`n🔍 Service Status:"
-                sc.exe query "${{ env.SERVICE_NAME }}"
-
-                if (Test-Path "install.log") {
-                  Write-Host "`n📋 Install Log (last 50 lines):"
-                  Get-Content install.log -Tail 50
-                }
-
                 throw "Service failed to start after $($maxRetries * $delay) seconds"
               }
-
               Start-Sleep $delay
             }
           }
@@ -447,16 +437,20 @@ jobs:
           $script | Out-File screenshot.js -Encoding UTF8
           node screenshot.js
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload UI Proof
+        if: env.ENABLE_PAPARAZZI == 'true'
+        uses: actions/upload-artifact@v4
         with:
-          name: ui-proof-${{ matrix.arch }}
-          path: ui-proof-${{ matrix.arch }}.png
+          name: ${{ steps.paparazzi.outputs.artifact_name }}
+          path: ${{ steps.paparazzi.outputs.file_path }}
           retention-days: 14
 
       - name: 🧹 Cleanup
         if: always()
         shell: pwsh
         run: |
+          Stop-Service "${{ env.SERVICE_NAME }}" -Force -ErrorAction SilentlyContinue
+          Start-Sleep 2
           sc.exe delete "${{ env.SERVICE_NAME }}" *>$null
 
   summary:
