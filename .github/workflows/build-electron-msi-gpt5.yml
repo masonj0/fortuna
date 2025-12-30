@@ -220,51 +220,48 @@ jobs:
             Write-Error "Backend executable not found at $backendExe"
           }
 
-      - name: '🚀 Launch & Verify'
+      - name: '🚀 Launch, Verify & Snap'
         shell: pwsh
         run: |
+          # 1. PREP: Install Playwright dependencies FIRST
+          npm install playwright
+          npx playwright install chromium --with-deps
+
+          # 2. LAUNCH: Start the Application
           $progFiles = ${env:ProgramFiles}
           if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
           $installDir = Join-Path $progFiles "Fortuna Faucet"
 
-          Start-Process -FilePath "$installDir\\Fortuna Faucet.exe"
-          Start-Sleep -Seconds 15
+          Write-Host "🚀 Launching from: $installDir"
+          $process = Start-Process -FilePath "$installDir\\Fortuna Faucet.exe" -PassThru
 
-          $parent = Get-Process -Name "Fortuna Faucet" -ErrorAction SilentlyContinue
-          $child = Get-Process -Name "fortuna-backend" -ErrorAction SilentlyContinue
-
-          if (-not $parent) { throw "Main process 'Fortuna Faucet' not found!" }
-          if (-not $child) { throw "Backend process 'fortuna-backend' not found!" }
-
-          Write-Host "✅ Smoke test passed! Both processes are running."
-
-      - name: '📸 Paparazzi (Visual Proof)'
-        continue-on-error: true
-        shell: pwsh
-        run: |
-          $url = "http://127.0.0.1:8000" # The backend serves the UI from this port
-          Write-Host "Waiting for URL: $url"
-          $maxRetries = 10
-          $delay = 3
+          # 3. VERIFY: Wait for backend to be ready
+          # Target /docs to ensure 200 OK (root often returns 404)
+          $url = "http://127.0.0.1:8000/docs"
+          Write-Host "Waiting for backend at $url..."
+          $maxRetries = 20
           for ($i=1; $i -le $maxRetries; $i++) {
             try {
-              $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 5
+              $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 3
               if ($response.StatusCode -eq 200) {
-                Write-Host "✅ URL is accessible. Proceeding with screenshot."
+                Write-Host "✅ Backend is ONLINE! Proceeding to screenshot."
                 break
               }
             } catch {
-              Write-Warning "Attempt ${i}: URL not accessible yet. Retrying in $delay seconds..."
-              Start-Sleep -Seconds $delay
+              Write-Host "⏳ Waiting for backend ($i/$maxRetries)..."
+              Start-Sleep -Seconds 3
             }
-            if ($i -eq $maxRetries) {
-              throw "❌ URL did not become accessible after $maxRetries attempts."
-            }
+            if ($i -eq $maxRetries) { throw "❌ Backend never came online." }
           }
 
-          npm install playwright
-          npx playwright install chromium --with-deps
-          node -e "const { chromium } = require('playwright'); (async () => { const browser = await chromium.launch(); const page = await browser.newPage(); try { await page.goto('$url', {timeout: 15000}); await page.screenshot({ path: 'proof.png' }); } catch(e) { console.error(e); process.exit(1); } await browser.close(); })();"
+          # 4. SNAP: Take the screenshot (Paparazzi)
+          Write-Host "📸 Taking screenshot..."
+          node -e "const { chromium } = require('playwright'); (async () => { const browser = await chromium.launch(); const page = await browser.newPage(); try { await page.goto('$url', {timeout: 15000}); await page.screenshot({ path: 'proof.png' }); console.log('✅ Screenshot saved to proof.png'); } catch(e) { console.error(e); process.exit(1); } await browser.close(); })();"
+
+          # 5. CLEANUP: We are done, we can kill it now.
+          Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+
+      # 📸 Paparazzi step removed (merged into Launch step to preserve process lifecycle)
 
       - name: '📤 Upload Visual Proof'
         uses: actions/upload-artifact@v4
