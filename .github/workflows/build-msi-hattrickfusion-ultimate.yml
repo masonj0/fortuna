@@ -360,64 +360,40 @@ jobs:
               Stop-Process -Id $process.Id -Force
           }
 
-      - name: 🚀 Start Service
+      - name: '🚀 Start, Verify & Snap'
         shell: pwsh
         run: |
-          Start-Service -Name "FortunaWebService"
-          Start-Sleep -Seconds 10
-
-      - name: 🩺 Health Check
-        shell: pwsh
-        run: |
-          $maxRetries = 5
-          $delay = 5
-          $success = $false
-          For ($i=0; $i -lt $maxRetries; $i++) {
-            try {
-              $response = Invoke-WebRequest -Uri "http://localhost:${{ env.SERVICE_PORT }}/health" -UseBasicParsing
-              if ($response.StatusCode -eq 200) {
-                Write-Host "✅ Health check PASSED."
-                $success = $true
-                break
-              }
-            } catch { Write-Host "Attempt $($i+1) failed. Retrying in $delay seconds..." }
-            Start-Sleep -Seconds $delay
-          }
-          if (-not $success) {
-            throw "Health check failed after $maxRetries attempts."
-          }
-      # ---------------------------------------------------------
-      # 💉 INJECT: PAPARAZZI (Subroutine #4)
-      # ---------------------------------------------------------
-      - name: '📸 Paparazzi (Visual Proof)'
-        if: success()
-        continue-on-error: true
-        shell: pwsh
-        run: |
-          $url = "http://127.0.0.1:8000/docs"
-          Write-Host "Waiting for URL: $url"
-          $maxRetries = 10
-          $delay = 3
-          for ($i=1; $i -le $maxRetries; $i++) {
-            try {
-              $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 5
-              if ($response.StatusCode -eq 200) {
-                Write-Host "✅ URL is accessible. Proceeding with screenshot."
-                break
-              }
-            } catch {
-              Write-Warning "Attempt ${i}: URL not accessible yet. Retrying in $delay seconds..."
-              Start-Sleep -Seconds $delay
-            }
-            if ($i -eq $maxRetries) {
-              throw "❌ URL did not become accessible after $maxRetries attempts."
-            }
-          }
-
+          # 1. PREP: Install Playwright
           npm install playwright
           npx playwright install chromium
 
-          $nodeScript = "const { chromium } = require('playwright'); (async () => { const browser = await chromium.launch(); const page = await browser.newPage(); try { await page.goto('$url', { timeout: 10000 }); await page.screenshot({ path: 'proof-of-life.png', fullPage: true }); console.log('✅ Screenshot captured!'); } catch (e) { console.error('❌ Failed to capture screenshot:', e); process.exit(1); } await browser.close(); })();"
+          # 2. LAUNCH: Start the Service
+          Start-Service -Name "FortunaWebService"
+          Start-Sleep -Seconds 10
+
+          # 3. VERIFY: Health Check
+          $healthUrl = "http://localhost:${{ env.SERVICE_PORT }}/health"
+          $maxRetries = 5
+          $delay = 5
+          for ($i=1; $i -le $maxRetries; $i++) {
+            try {
+              $response = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing
+              if ($response.StatusCode -eq 200) {
+                Write-Host "✅ Health check PASSED."
+                break
+              }
+            } catch {
+              Write-Host "Attempt $($i) failed. Retrying in $delay seconds..."
+              Start-Sleep -Seconds $delay
+            }
+            if ($i -eq $maxRetries) {
+              throw "Health check failed after $maxRetries attempts."
+            }
+          }
+
+          # 4. SNAP: Take Screenshot
+          $docsUrl = "http://127.0.0.1:${{ env.SERVICE_PORT }}/docs"
+          $nodeScript = "const { chromium } = require('playwright'); (async () => { const browser = await chromium.launch(); const page = await browser.newPage(); try { await page.goto('$docsUrl', { timeout: 10000 }); await page.screenshot({ path: 'proof-of-life.png', fullPage: true }); console.log('✅ Screenshot captured!'); } catch (e) { console.error('❌ Failed to capture screenshot:', e); process.exit(1); } await browser.close(); })();"
           node -e $nodeScript
 
       - name: 📤 Upload Visual Proof

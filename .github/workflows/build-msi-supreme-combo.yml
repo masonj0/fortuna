@@ -307,66 +307,45 @@ jobs:
           Start-Service "FortunaWebService"
           Start-Sleep 10
 
-      - name: 🩺 Health Check
+      - name: '🚀 Launch, Verify & Snap'
         shell: pwsh
         run: |
+          # 1. PREP: Install Playwright
+          npm install playwright
+          npx playwright install chromium --with-deps
+
+          # 2. LAUNCH: Start the Service (already started in previous step)
+          # We just need to give it a moment to stabilize
+          Start-Sleep -Seconds 5
+
+          # 3. VERIFY: Health Check
+          $healthUrl = "http://localhost:${{ env.SERVICE_PORT }}/health"
           $maxRetries = 5
           $delay = 2 # Initial delay in seconds
           for ($i=1; $i -le $maxRetries; $i++) {
             try {
-              $response = Invoke-WebRequest -Uri "http://127.0.0.1:${{ env.SERVICE_PORT }}/health" -UseBasicParsing -TimeoutSec 5
+              $response = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 5
               if ($response.StatusCode -eq 200) {
                 Write-Host "✅ Health check PASSED on attempt $i."
-                exit 0
-              } else {
-                Write-Warning "Attempt $i: Received status code $($response.StatusCode)"
-              }
-            } catch {
-              Write-Warning "Attempt $i: Health check failed. Error: $($_.Exception.Message)"
-            }
-            if ($i -lt $maxRetries) {
-              $currentDelay = [math]::Pow($delay, $i)
-              Write-Host "Waiting for $currentDelay seconds before retry..."
-              Start-Sleep -Seconds $currentDelay
-            }
-          }
-          throw "❌ Service health check failed after $maxRetries attempts."
-
-      - name: 📸 Paparazzi (Visual Proof)
-        continue-on-error: true
-        shell: pwsh
-        run: |
-          $url = "http://127.0.0.1:${{ env.SERVICE_PORT }}/docs"
-          Write-Host "Waiting for URL: $url"
-          $maxRetries = 10
-          $delay = 3
-          for ($i=1; $i -le $maxRetries; $i++) {
-            try {
-              $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 5
-              if ($response.StatusCode -eq 200) {
-                Write-Host "✅ URL is accessible. Proceeding with screenshot."
                 break
               }
             } catch {
-              Write-Warning "Attempt ${i}: URL not accessible yet. Retrying in $delay seconds..."
-              Start-Sleep -Seconds $delay
+              Write-Warning "Attempt $i: Health check failed."
+            }
+            if ($i -lt $maxRetries) {
+              $currentDelay = [math]::Pow($delay, $i)
+              Write-Host "Waiting for $currentDelay seconds..."
+              Start-Sleep -Seconds $currentDelay
             }
             if ($i -eq $maxRetries) {
-              throw "❌ URL did not become accessible after $maxRetries attempts."
+              throw "❌ Service health check failed after $maxRetries attempts."
             }
           }
 
-          npm install playwright
-          npx playwright install chromium --with-deps
-          node -e "const { chromium } = require('playwright'); (async () => {
-            const browser = await chromium.launch();
-            const page = await browser.newPage();
-            try {
-              await page.goto('$url', {timeout: 15000});
-              await page.screenshot({ path: 'proof.png' });
-            } catch(e) { console.error(e); process.exit(1); }
-            await browser.close();
-          })();"
+          # 4. SNAP: Take Screenshot
+          $docsUrl = "http://127.0.0.1:${{ env.SERVICE_PORT }}/docs"
+          Write-Host "📸 Taking screenshot of $docsUrl..."
+          node -e "const { chromium } = require('playwright'); (async () => { const browser = await chromium.launch(); const page = await browser.newPage(); try { await page.goto('$docsUrl', {timeout: 15000}); await page.screenshot({ path: 'proof.png' }); console.log('✅ Screenshot saved.'); } catch(e) { console.error(e); process.exit(1); } await browser.close(); })();"
 
       - name: '🕵️ CSI: Windows Post-Mortem (On Failure)'
         if: failure()
