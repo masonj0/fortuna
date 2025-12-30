@@ -31,8 +31,6 @@ def _configure_sys_path():
         paths_to_add = [
             project_root,
             os.path.join(project_root, "python_service"),
-            # Add web_service path to find the shared compat module
-            os.path.join(project_root, "web_service"),
         ]
 
         # Insert paths at the beginning of sys.path in reverse order
@@ -49,11 +47,6 @@ def _configure_sys_path():
             sys.path.insert(0, project_root)
             print(f"INFO: Added project root to sys.path: {project_root}")
 
-# CRITICAL: This must be called before any other application imports.
-_configure_sys_path()
-
-
-
 
 def main():
     """
@@ -62,15 +55,19 @@ def main():
     It's crucial to launch the app this way to ensure PyInstaller's bootloader
     can correctly resolve the package context.
     """
+    # CRITICAL: This must be called before any other application imports.
+    _configure_sys_path()
+
     # When packaged, we need to ensure multiprocessing works correctly.
     if getattr(sys, "frozen", False):
         # CRITICAL for multiprocessing support in frozen mode on Windows.
         freeze_support()
 
-        # Apply the asyncio policy for Windows PyInstaller builds
+        # ✅ CRITICAL FIX: Set event loop policy BEFORE any imports that use asyncio
         if sys.platform == "win32":
+            import asyncio
             asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-            print("[BOOT] Applied WindowsSelectorEventLoopPolicy", file=sys.stderr)
+            print("[BOOT] ✅ Applied WindowsSelectorEventLoopPolicy for PyInstaller", file=sys.stderr)
 
     from python_service.config import get_settings
     from fastapi.staticfiles import StaticFiles

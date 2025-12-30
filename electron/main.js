@@ -106,9 +106,6 @@ async startBackend() {
       this.backendState = 'error';
       this.isBackendStarting = false;
       this.sendBackendStatusUpdate();
-      if (errorOutput.includes('ModuleNotFoundError')) {
-        dialog.showErrorBox('Critical Error', 'Backend failed to load dependencies. See logs.');
-      }
     });
 
     this.backendProcess.on('exit', (code) => {
