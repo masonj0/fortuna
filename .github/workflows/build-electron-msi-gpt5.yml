@@ -78,12 +78,20 @@ jobs:
         shell: pwsh
         run: |
           pip install --upgrade pip setuptools wheel
-          pip install -r ${{ env.BACKEND_DIR }}/requirements.txt -c ${{ steps.constraints.outputs.file }}
+          # Install dependencies WITHOUT constraints first
+          pip install -r ${{ env.BACKEND_DIR }}/requirements.txt
+
+          # THEN apply constraints ONLY to specific packages if needed
+          # But let PyInstaller see the full dependency tree
           pip install pyinstaller==6.6.0 pywin32
 
-          # FIXED: Use the dedicated Electron spec file.
-          # This ensures we build main.py (Uvicorn) for the desktop app, not the Service Wrapper.
+          # Build the executable
           pyinstaller --noconfirm --clean fortuna-backend-electron.spec
+
+          # Verify critical modules were bundled
+          if (-not (Test-Path "dist/fortuna-backend.exe")) {
+              throw "PyInstaller build failed - executable not found"
+          }
 
       - name: 🔍 Sanity Check Executable
         shell: pwsh

@@ -66,17 +66,31 @@ async startBackend() {
         backendCommand = path.join(__dirname, '..', '.venv', 'Scripts', 'python.exe');
         backendCwd = path.join(__dirname, '..', 'web_service', 'backend');
     } else {
-        // ✅ CORRECTED PATH: The workflow stages the executable at resources/fortuna-backend/fortuna-backend.exe
         const backendFolder = path.join(process.resourcesPath, 'fortuna-backend');
         backendCommand = path.join(backendFolder, 'fortuna-backend.exe');
         backendCwd = backendFolder;
-        console.log(`[Electron] Production mode detected. Setting backend path to: ${backendCommand}`);
+
+        // DEBUG: Log the path we're looking for
+        console.log(`[Backend] Looking for executable at: ${backendCommand}`);
+        console.log(`[Backend] Directory exists: ${fs.existsSync(backendFolder)}`);
+        console.log(`[Backend] Executable exists: ${fs.existsSync(backendCommand)}`);
     }
 
     if (!fs.existsSync(backendCommand)) {
-        dialog.showErrorBox('Backend Missing', `Executable not found at: ${backendCommand}`);
+        const errorMsg = `Backend executable not found at: ${backendCommand}`;
+        console.error(`[Backend] ${errorMsg}`);
+        this.backendLogs.push(`ERROR: ${errorMsg}`);
+        this.backendState = 'error';
+
+        // Show user a helpful error dialog
+        dialog.showErrorBox(
+            'Backend Launch Failed',
+            `Could not find backend executable.\n\nExpected location:\n${backendCommand}`
+        );
         return;
     }
+
+    console.log(`[Backend] Executable found, attempting to spawn...`);
 
     console.log(`[Electron] Spawning backend: ${backendCommand}`);
     console.log(`[Electron] Backend CWD: ${backendCwd}`);
@@ -120,13 +134,28 @@ async startBackend() {
       this.sendBackendStatusUpdate();
     });
 
+    this.backendProcess.on('error', (err) => {
+        const errorMsg = `Failed to spawn backend process: ${err.message}`;
+        console.error(`[Backend] ${errorMsg}`);
+        this.backendLogs.push(`ERROR: ${errorMsg}`);
+        this.backendState = 'error';
+        this.isBackendStarting = false;
+        this.sendBackendStatusUpdate();
+    });
+
     this.backendProcess.on('exit', (code) => {
       if (code !== 0 && this.backendState !== 'stopped') {
-        const errorMsg = `Backend process exited unexpectedly with code ${code}`;
+        const errorMsg = `Backend exited with code ${code}. Last logs:\n${this.backendLogs.slice(-5).join('\n')}`;
         console.error(errorMsg);
         this.backendLogs.push(errorMsg);
         this.backendState = 'error';
         this.isBackendStarting = false;
+
+        // Save logs to file for debugging
+        const logsPath = path.join(os.homedir(), '.fortuna', 'backend_crash.log');
+        fs.writeFileSync(logsPath, this.backendLogs.join('\n'));
+        console.log(`[Backend] Crash logs saved to: ${logsPath}`);
+
         this.sendBackendStatusUpdate();
       }
     });
