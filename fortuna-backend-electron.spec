@@ -41,6 +41,15 @@ hiddenimports.update([
     'python_multipart',
     'numpy',
     'pandas',
+    'uvicorn',
+    'fastapi',
+    'starlette',
+    'anyio',
+    'pydantic',
+    'uvicorn.logging',
+    'uvicorn.loops.auto',
+    'uvicorn.protocols.http.auto',
+    'win32timezone'
 ])
 
 a = Analysis(
