@@ -56,6 +56,24 @@ class FortunaDesktopApp {
     });
   }
 
+async waitForBackend(maxRetries = 30) {
+    const port = process.env.FORTUNA_PORT || 8000;
+    const url = `http://localhost:${port}/docs`;
+    for (let i = 0; i < maxRetries; i++) {
+        try {
+            const response = await fetch(url);
+            if (response.ok) {
+                console.log('✅ Backend is ready!');
+                return true;
+            }
+        } catch (e) {
+            console.log(`⏳ Waiting for backend at ${url} (${i}/${maxRetries})...`);
+            await new Promise(r => setTimeout(r, 1000));
+        }
+    }
+    throw new Error(`Backend failed to start at ${url} after 30 seconds`);
+}
+
 async startBackend() {
     const isDev = !app.isPackaged;
     let backendCommand;
@@ -186,9 +204,6 @@ getFrontendPath() {
  backgroundColor: '#1a1a2e'
  });
 
- const frontendUrl = this.getFrontendPath();
- this.mainWindow.loadURL(frontendUrl);
-
  if (!app.isPackaged) {
  this.mainWindow.webContents.openDevTools();
  }
@@ -212,6 +227,17 @@ getFrontendPath() {
  this.createMainWindow();
  this.createSystemTray();
  this.startBackend();
+
+  // Wait for backend to be ready before loading frontend
+  this.waitForBackend()
+    .then(() => {
+      const frontendUrl = this.getFrontendPath();
+      this.mainWindow.loadURL(frontendUrl);
+    })
+    .catch((err) => {
+      console.error('Backend startup failed:', err);
+      dialog.showErrorBox('Backend Error', 'Failed to start backend service');
+    });
 
  // Check for updates
  autoUpdater.checkForUpdatesAndNotify();
