@@ -1,24 +1,28 @@
+# python_service/logging_config.py
 import logging
 import sys
+
 import structlog
 
-def configure_logging():
-    """
-    Configures structured logging for the application using structlog.
-    """
-    logging.basicConfig(level=logging.INFO, stream=sys.stdout, format="%(message)s")
 
+def configure_logging(log_level: str = "INFO"):
+    """Configures structlog for structured, JSON-formatted logging."""
+    logging.basicConfig(
+        level=log_level,
+        format="%(message)s",
+        stream=sys.stdout,
+    )
+
+    # Keep the processor chain simple for maximum reliability in bundled executables.
+    # More complex processors like StackInfoRenderer can cause issues in
+    # constrained environments.
     structlog.configure(
         processors=[
             structlog.stdlib.filter_by_level,
-            structlog.stdlib.add_logger_name,
             structlog.stdlib.add_log_level,
-            structlog.stdlib.PositionalArgumentsFormatter(),
             structlog.processors.TimeStamper(fmt="iso"),
-            structlog.processors.StackInfoRenderer(),
             structlog.processors.format_exc_info,
-            structlog.processors.UnicodeDecoder(),
-            structlog.processors.JSONRenderer()
+            structlog.processors.JSONRenderer(),
         ],
         context_class=dict,
         logger_factory=structlog.stdlib.LoggerFactory(),
