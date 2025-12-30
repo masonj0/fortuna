@@ -70,7 +70,7 @@ env:
 jobs:
   preflight:
     name: 🔍 Preflight
-    runs-on: windows-2022
+    runs-on: windows-latest
     timeout-minutes: 10
     outputs:
       semver: ${{ steps.ver.outputs.semver }}
@@ -133,7 +133,7 @@ jobs:
   build-frontend:
     name: ⚛️ Frontend
     needs: preflight
-    runs-on: windows-2022
+    runs-on: windows-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -156,14 +156,14 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: frontend-dist-windows-2022
+          name: frontend-dist-windows-latest
           path: web_platform/frontend/out
           retention-days: 7
 
   build-backend:
     name: 🐍 Backend (${{ matrix.arch }})
     needs: [preflight, build-frontend]
-    runs-on: windows-2022
+    runs-on: windows-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -173,7 +173,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: frontend-dist-windows-2022
+          name: frontend-dist-windows-latest
           path: electron/out
 
       - uses: actions/setup-python@v5
@@ -185,8 +185,8 @@ jobs:
       - name: 📦 Dependencies & Build
         shell: pwsh
         run: |
-          uv pip install -r web_service/backend/requirements.txt
-          uv pip install pyinstaller
+          pip install -r web_service/backend/requirements.txt
+          pip install pyinstaller
 
           pyinstaller --noconfirm --onedir --clean --name fortuna-backend `
             --additional-hooks-dir fortuna-backend-hooks `
@@ -206,7 +206,7 @@ jobs:
   package-msi:
     name: 📦 MSI (${{ matrix.arch }})
     needs: [preflight, build-backend]
-    runs-on: windows-2022
+    runs-on: windows-latest
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -281,7 +281,7 @@ jobs:
   smoke-test:
     name: 🚬 Smoke (${{ matrix.arch }})
     needs: [preflight, package-msi]
-    runs-on: windows-2022
+    runs-on: windows-latest
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -368,31 +368,74 @@ jobs:
             }
           }
 
-          # Paparazzi
-          if ("${{ env.ENABLE_PAPARAZZI }}" -eq "true") {
-            npm install playwright
-            npx playwright install chromium --with-deps
-            $script = @(
-              "const { chromium } = require('playwright');",
-              "(async () => {",
-              "  const browser = await chromium.launch();",
-              "  const page = await browser.newPage();",
-              "  await page.goto('http://127.0.0.1:${{ env.SERVICE_PORT }}/docs');",
-              "  await page.waitForTimeout(2000);",
-              "  await page.screenshot({ path: 'ui-proof-${{ matrix.arch }}.png', fullPage: true });",
-              "  await browser.close();",
-              "  console.log('✅ Screenshot captured');",
-              "})();"
-            )
-            $script | Out-File screenshot.js -Encoding UTF8
-            node screenshot.js
+      - name: 🧹 Cleanup
+        if: always()
+        shell: pwsh
+        run: |
+          Stop-Service "${{ env.SERVICE_NAME }}" -Force -ErrorAction SilentlyContinue
+          Start-Sleep 2
+          sc.exe delete "${{ env.SERVICE_NAME }}" *>$null
 
-            # Upload Artifact
-            $artifactName = "ui-proof-${{ matrix.arch }}"
-            $filePath = "ui-proof-${{ matrix.arch }}.png"
-            echo "::set-output name=artifact_name::$artifactName"
-            echo "::set-output name=file_path::$filePath"
-          }
+  ui-proof:
+    name: 📸 Paparazzi (${{ matrix.arch }})
+    needs: [preflight, smoke-test]
+    if: github.event.inputs.enable_paparazzi == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, x86]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: msi-${{ matrix.arch }}
+
+      - name: 💿 Install for UI Test
+        shell: pwsh
+        run: |
+          $msi = "Fortuna-${{ needs.preflight.outputs.semver }}-${{ matrix.arch }}.msi"
+          Start-Process msiexec.exe -ArgumentList "/i `"$msi`" /quiet /norestart" -Wait
+          Start-Sleep 15
+
+      - name: 🟢 Setup Node & Playwright
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
+      - name: 📸 Capture Screenshot
+        shell: pwsh
+        run: |
+          npm install playwright
+          npx playwright install chromium --with-deps
+
+          $script = @(
+            "const { chromium } = require('playwright');",
+            "(async () => {",
+            "  const browser = await chromium.launch();",
+            "  const page = await browser.newPage();",
+            "  await page.goto('http://127.0.0.1:${{ env.SERVICE_PORT }}/docs');",
+            "  await page.waitForTimeout(2000);",
+            "  await page.screenshot({",
+            "    path: 'ui-proof-${{ matrix.arch }}.png',",
+            "    fullPage: true",
+            "  });",
+            "  await browser.close();",
+            "  console.log('✅ Screenshot captured');",
+            "})();"
+          )
+
+          $script | Out-File screenshot.js -Encoding UTF8
+          node screenshot.js
 
       - name: Upload UI Proof
         if: env.ENABLE_PAPARAZZI == 'true'
@@ -414,7 +457,7 @@ jobs:
     name: 📋 Summary
     needs: [preflight, smoke-test]
     if: always()
-    runs-on: windows-2022
+    runs-on: windows-latest
     steps:
       - name: 📊 Build Report
         shell: pwsh
