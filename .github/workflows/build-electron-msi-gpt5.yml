@@ -53,19 +53,18 @@ jobs:
         id: constraints
         shell: pwsh
         run: |
-          $file = "constraints.txt"
+          $constraintFile = "constraints.txt"
           if ('${{ matrix.arch }}' -eq 'x86') {
-            Write-Host "🛡️ ACTIVATING X86 SAFE MODE"
+            Write-Host "🛡️ ACTIVATING X86 SAFE MODE (SIMPLE)"
             @(
               "numpy==1.23.5",
               "pandas==1.5.3",
+              "greenlet==3.0.3",
               "--only-binary=:all:"
-            ) | Set-Content $file
-            Write-Host "✅ x86 constraints: numpy 1.23.5, pandas 1.5.3, wheel-only"
-          } else {
-            New-Item $file -ItemType File -Force
-          }
-          "file=$file" | Out-File $env:GITHUB_OUTPUT -Append
+            ) | Set-Content $constraintFile
+            Write-Host "✅ Constraints: numpy, pandas, greenlet==3.0.3"
+          } else { New-Item $constraintFile -ItemType File -Force }
+          "file=$constraintFile" | Out-File $env:GITHUB_OUTPUT -Append
 
       - name: 💾 Create required directories
         shell: pwsh
@@ -74,12 +73,13 @@ jobs:
           New-Item -ItemType Directory -Path "python_service/json" -Force
           New-Item -ItemType Directory -Path "python_service/adapters" -Force
 
-      - name: 📦 Build Binary
+      - name: 📦 Install Dependencies & Build
         shell: pwsh
         run: |
-          pip install --upgrade pip setuptools wheel
-          pip install -r ${{ env.BACKEND_DIR }}/requirements.txt -c ${{ steps.constraints.outputs.file }}
-          pip install pyinstaller==6.6.0 pywin32
+          pip install --upgrade pip
+          pip install uv
+          uv pip install --system -r ${{ env.BACKEND_DIR }}/requirements.txt -c ${{ steps.constraints.outputs.file }}
+          uv pip install --system pyinstaller==6.6.0
           pyinstaller --noconfirm --clean fortuna-backend-electron.spec
 
       - name: 🔍 Sanity Check Executable
