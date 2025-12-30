@@ -1,5 +1,5 @@
 # System Timestamp: 2025-12-21 14:04:35
-name: 🧟 🏛️ Fortuna Web Service MSI (The Veteran Reborn)
+name: 🧟 🏛️ Fortuna Web Service MSI (The Veteran Reborn) - UNIFIED
 
 on:
   push:
@@ -16,18 +16,15 @@ env:
   DOTNET_VERSION: '8.0.x'
   WIX_VERSION: '4.0.5'
   FORTUNA_PORT: '8102'
-  # Mock Keys to prevent backend crash
   API_KEY: mock_key
   TVG_API_KEY: mock
   GREYHOUND_API_URL: http://mock
   FORTUNA_ENV: smoke-test
-  # Paths
   FRONTEND_DIR: 'web_platform/frontend'
   BACKEND_DIR: 'web_service/backend'
   WIX_DIR: 'build_wix'
 
 jobs:
-  # 1. BUILD FRONTEND (Architecture Neutral)
   build-frontend:
     name: '🎨 Build Frontend'
     runs-on: windows-2022
@@ -39,24 +36,20 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
           cache-dependency-path: '${{ env.FRONTEND_DIR }}/package-lock.json'
-
       - name: Install & Build
         run: |
           cd ${{ env.FRONTEND_DIR }}
           npm ci --prefer-offline --no-audit
           npm run build
-
       - uses: actions/upload-artifact@v4
         with:
           name: frontend-dist-${{ github.run_id }}
           path: ${{ env.FRONTEND_DIR }}/out
 
-  # 2. BUILD BACKEND (Matrix: x64 & x86)
   build-backend:
     name: '🐍 Build Backend (${{ matrix.arch }})'
     runs-on: windows-2022
     needs: build-frontend
-    continue-on-error: ${{ matrix.arch == 'x86' }}
     strategy:
       matrix:
         arch: [x64, x86]
@@ -65,15 +58,13 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: frontend-dist-${{ github.run_id }}
-          path: ${{ env.FRONTEND_DIR }}/out
-
+          path: staging/ui
       - name: 🐍 Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: ${{ env.PYTHON_VERSION }}
           architecture: '${{ matrix.arch }}'
           cache: 'pip'
-
       - name: 🧾 Create Architecture Constraints
         id: constraints
         shell: pwsh
@@ -81,40 +72,23 @@ jobs:
           $file = "constraints.txt"
           if ('${{ matrix.arch }}' -eq 'x86') {
             "numpy==1.23.5`r`npandas==1.5.3`r`n--only-binary=:all:" | Set-Content $file
-            Write-Host "✅ Created x86 constraints (Safe Mode)"
           } else {
             New-Item $file -ItemType File -Force
           }
           "file=$file" | Out-File $env:GITHUB_OUTPUT -Append
-
-      - name: CACHE-PYI Cache PyInstaller Build
-        id: cache-pyi-build
-        uses: actions/cache@v4
-        with:
-          path: dist/fortuna-webservice
-          key: ${{ runner.os }}-${{ matrix.arch }}-pyi-${{ hashFiles('web_service/backend/**/*.py', 'fortuna-unified.spec', 'web_service/backend/requirements*.txt') }}
-      - name: Install Dependencies
+      - name: 📦 Install Dependencies & Build
         shell: pwsh
         run: |
           python -m pip install --upgrade pip
           pip install uv
           uv pip install --system -r ${{ env.BACKEND_DIR }}/requirements.txt -c ${{ steps.constraints.outputs.file }}
           uv pip install --system pyinstaller==6.6.0 pywin32
-
-
-      - name: Build Backend (PyInstaller)
-        if: steps.cache-pyi-build.outputs.cache-hit != 'true'
-        env:
-          PYTHONUTF8: '1'
-        run: |
           pyinstaller --noconfirm --clean --log-level INFO fortuna-unified.spec
-
       - uses: actions/upload-artifact@v4
         with:
           name: backend-dist-${{ matrix.arch }}-${{ github.run_id }}
           path: dist/fortuna-webservice/
 
-  # 3. PREFLIGHT CHECK
   preflight-check:
     name: '🔍 Preflight Check'
     runs-on: windows-2022
@@ -127,15 +101,12 @@ jobs:
         shell: pwsh
         run: |
           $semver = "0.0.${{ github.run_number }}"
-          Write-Host "Build Version: $semver"
           "semver=$semver" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
-  # 4. PACKAGE MSI
   package-msi:
     name: '💿 Package MSI (${{ matrix.arch }})'
     runs-on: windows-2022
     needs: [build-backend, preflight-check]
-    continue-on-error: ${{ matrix.arch == 'x86' }}
     strategy:
       matrix:
         arch: [x64, x86]
@@ -145,44 +116,19 @@ jobs:
         with:
           name: backend-dist-${{ matrix.arch }}-${{ github.run_id }}
           path: staging/backend
-
-      - name: Create Restart Service Batch Script
-        shell: cmd
-        run: |
-          echo @echo off > staging\backend\restart_service.bat
-          echo net stop FortunaWebService >> staging\backend\restart_service.bat
-          echo net start FortunaWebService >> staging\backend\restart_service.bat
-
-      - name: '⚖️ The Dietician (Size Analysis)'
-        shell: pwsh
-        run: |
-          $size = (Get-ChildItem staging -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB
-          Write-Host "Total Payload: $([math]::Round($size, 2)) MB"
-
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
-
       - name: Prepare WiX Project
         shell: pwsh
         run: |
-          Set-StrictMode -Version Latest
-          $sourceDir = "staging/backend"
-          $targetExe = "fortuna-webservice.exe"
-
-          if (Test-Path (Join-Path $sourceDir "fortuna-webservice.exe")) {
-              Write-Host "✅ Found fortuna-webservice.exe, no rename needed."
-          } else {
-              Write-Host "##[error]Could not find fortuna-webservice.exe in the staging directory."
-              Get-ChildItem -Path $sourceDir -Recurse
-              exit 1
+          if (-not (Test-Path 'build_wix/license.rtf')) {
+             Set-Content -Path 'build_wix/license.rtf' -Value '{\rtf1\ansi Placeholder License}' -Encoding Ascii
           }
+          Copy-Item "build_wix/Product_WithService.wxs" "build_wix/Product.wxs" -Force
           $proj = @(
             '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">',
             '  <PropertyGroup>',
-            '    <Version Condition="''$(Version)'' == ''''">0.0.1</Version>',
-            '    <ServicePort Condition="''$(ServicePort)'' == ''''">8102</ServicePort>',
-            '    <SourceDir Condition="''$(SourceDir)'' == ''''">staging/backend</SourceDir>',
             '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>',
             '    <OutputType>Package</OutputType>',
             '    <Platforms>x64;x86</Platforms>',
@@ -194,28 +140,22 @@ jobs:
             '    <PackageReference Include="WixToolset.Util.wixext" Version="${{ env.WIX_VERSION }}" />',
             '  </ItemGroup>',
             '  <ItemGroup>',
-            '    <Compile Include="Product_WebService.wxs" />',
+            '    <Compile Include="Product.wxs" />',
             '  </ItemGroup>',
             '</Project>'
           )
           Set-Content "${{ env.WIX_DIR }}/Fortuna.wixproj" -Value ($proj -join "`r`n") -Encoding utf8
-
       - name: Build MSI
         working-directory: ${{ env.WIX_DIR }}
-        run: |
-          dotnet build Fortuna.wixproj -c Release -p:Platform=${{ matrix.arch }} -p:Version="${{ needs.preflight-check.outputs.semver }}" -p:SourceDir="../staging/backend" -p:ServicePort="${{ env.FORTUNA_PORT }}"
-
+        run: dotnet build Fortuna.wixproj -c Release -p:Platform=${{ matrix.arch }} -p:Version="${{ needs.preflight-check.outputs.semver }}" -p:SourceDir="../staging/backend" -p:ServicePort="${{ env.FORTUNA_PORT }}"
       - name: Rename & Hash
         run: |
           $releaseDir = "${{ env.WIX_DIR }}/bin/${{ matrix.arch }}/Release"
           $msi = Get-ChildItem -Path $releaseDir -Filter "*.msi" | Select -First 1
-          $target = "FortunaService-${{ matrix.arch }}-${{ needs.preflight-check.outputs.semver }}.msi"
+          $target = "Revived-${{ matrix.arch }}-${{ needs.preflight-check.outputs.semver }}.msi"
           Move-Item $msi.FullName -Destination "$releaseDir/$target" -Force
-          Write-Host "✅ MSI Ready: $target"
           $hash = (Get-FileHash "$releaseDir/$target" -Algorithm SHA256).Hash
           Set-Content -Path "$releaseDir/$target.sha256" -Value $hash
-          Write-Host "✅ SHA-256: $hash"
-
       - uses: actions/upload-artifact@v4
         with:
           name: msi-${{ matrix.arch }}-${{ github.run_id }}
@@ -223,12 +163,10 @@ jobs:
             ${{ env.WIX_DIR }}/bin/${{ matrix.arch }}/Release/*.msi
             ${{ env.WIX_DIR }}/bin/${{ matrix.arch }}/Release/*.sha256
 
-  # 5. SMOKE TEST
   smoke-test:
     name: '🔬 Smoke Test (${{ matrix.arch }})'
     runs-on: windows-2022
-    needs: [package-msi, preflight-check]
-    continue-on-error: ${{ matrix.arch == 'x86' }}
+    needs: [package-msi]
     strategy:
       matrix:
         arch: [x64, x86]
@@ -237,57 +175,19 @@ jobs:
         with:
           name: msi-${{ matrix.arch }}-${{ github.run_id }}
           path: installer
-
-      - name: Install MSI
-        run: |
-          $msi = Get-ChildItem installer/*.msi | Select -First 1
-          Start-Process msiexec.exe -ArgumentList "/i `"$($msi.FullName)`" /qn /L*v install.log" -Wait
-
-      - name: Verify Service & Port
+      - name: Install & Verify
         shell: pwsh
         run: |
+          $msi = (Get-ChildItem installer/*.msi | Select -First 1).FullName
+          if ($null -ne (Get-Service -Name "FortunaWebService" -ErrorAction SilentlyContinue)) { sc.exe delete "FortunaWebService" }
+          Start-Process msiexec.exe -ArgumentList "/i `"$msi`" /qn /L*v install.log" -Wait
           $progFiles = if ('${{ matrix.arch }}' -eq 'x86') { ${env:ProgramFiles(x86)} } else { ${env:ProgramFiles} }
           $installRoot = Join-Path $progFiles "Fortuna Faucet Service"
-
-          if (-not (Test-Path $installRoot)) { throw "❌ Install dir not found at $installRoot" }
-
-          Write-Host "Waiting for service..."
-          Start-Sleep -Seconds 10
-
-          Start-Service -Name "FortunaWebService" -ErrorAction SilentlyContinue
-
+          New-Item -Path "$installRoot\data", "$installRoot\json", "$installRoot\logs" -ItemType Directory -Force | Out-Null
+          Start-Service "FortunaWebService"
+          Start-Sleep 15
           $response = Invoke-WebRequest -Uri "http://localhost:8000/health" -UseBasicParsing
-          if ($response.StatusCode -eq 200) { Write-Host "✅ Service Healthy" } else { throw "❌ Service Failed" }
-
-      - name: '📸 Paparazzi (Visual Proof)'
-        continue-on-error: true
-        run: |
-          $url = "http://127.0.0.1:8000/docs"
-          Write-Host "Waiting for URL: $url"
-          $maxRetries = 10
-          $delay = 3
-          for ($i=1; $i -le $maxRetries; $i++) {
-            try {
-              $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 5
-              if ($response.StatusCode -eq 200) {
-                Write-Host "✅ URL is accessible. Proceeding with screenshot."
-                break
-              }
-            } catch {
-              Write-Warning "Attempt ${i}: URL not accessible yet. Retrying in $delay seconds..."
-              Start-Sleep -Seconds $delay
-            }
-            if ($i -eq $maxRetries) {
-              throw "❌ URL did not become accessible after $maxRetries attempts."
-            }
-          }
-
-          npm install playwright
-          npx playwright install chromium --with-deps
-          node -e "const { chromium } = require('playwright'); (async () => { const browser = await chromium.launch(); const page = await browser.newPage(); await page.goto('$url'); await page.screenshot({ path: 'proof.png' }); await browser.close(); })();"
-
-      - uses: actions/upload-artifact@v4
+          if ($response.StatusCode -ne 200) { throw "Service health check failed." }
+      - name: Cleanup
         if: always()
-        with:
-          name: proof-${{ matrix.arch }}
-          path: proof.png
+        run: sc.exe delete "FortunaWebService" 2>$null

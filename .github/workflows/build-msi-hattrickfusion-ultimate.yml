@@ -17,6 +17,9 @@ env:
   WIX_VERSION: '4.0.5'
   SERVICE_PORT: '8101'
   FORTUNA_ENV: smoke-test
+  FRONTEND_DIR: 'web_platform/frontend'
+  BACKEND_DIR: 'web_service/backend'
+  WIX_DIR: 'build_wix'
 
 jobs:
   preflight-check:

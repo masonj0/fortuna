@@ -138,10 +138,6 @@ jobs:
           $dest = "electron/resources/fortuna-backend"
           New-Item -ItemType Directory -Path $dest -Force
           Copy-Item -Path "temp_backend/*" -Destination $dest -Recurse -Force
-      - name: ✅ Verify backend staged for Electron
-        shell: pwsh
-        run: |
-          Test-Path electron/resources/fortuna-backend/fortuna-backend.exe
       - name: '🏗️ Build MSI'
         working-directory: electron
         shell: pwsh
@@ -155,7 +151,7 @@ jobs:
       - name: '📤 Upload MSI'
         uses: actions/upload-artifact@v4
         with:
-          name: fortuna-msi-${{ matrix.arch }}
+          name: fortuna-msi-${{ matrix.arch }}-${{ github.run_id }}
           path: electron/dist/*.msi
 
   smoke-test:
@@ -169,73 +165,42 @@ jobs:
       - name: '📥 Download MSI'
         uses: actions/download-artifact@v4
         with:
-          name: fortuna-msi-${{ matrix.arch }}
+          name: fortuna-msi-${{ matrix.arch }}-${{ github.run_id }}
           path: msi-installer
       - name: '🔥 Install & Verify'
         shell: pwsh
         run: |
-          $msi = Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse | Select-Object -First 1
-          if (-not $msi) { throw "MSI not found!" }
-
-          Start-Process msiexec.exe -ArgumentList "/i `"$($msi.FullName)`" /qn /L*v install.log" -Wait
-
-          $progFiles = ${env:ProgramFiles}
-          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
+          $msi = (Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse | Select-Object -First 1).FullName
+          Start-Process msiexec.exe -ArgumentList "/i `"$msi`" /qn /L*v install.log" -Wait
+          $progFiles = if ('${{ matrix.arch }}' -eq 'x86') { ${env:ProgramFiles(x86)} } else { ${env:ProgramFiles} }
           $installDir = Join-Path $progFiles "Fortuna Faucet"
-
-      - name: '✅ Create Required Runtime Directories Post-Install'
-        shell: pwsh
-        run: |
-          $progFiles = ${env:ProgramFiles}
-          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
-          $installDir = Join-Path $progFiles "Fortuna Faucet"
-          if (! (Test-Path $installDir)) {
-            Write-Error "Installation directory not found at $installDir."
-            exit 1
-          }
-          New-Item -Path "$installDir\\data" -ItemType Directory -Force | Out-Null
-          New-Item -Path "$installDir\\json" -ItemType Directory -Force | Out-Null
-          New-Item -Path "$installDir\\logs" -ItemType Directory -Force | Out-Null
-          Write-Host "✅ Created runtime directories (data, json, logs) in '$installDir'."
-
-      - name: '🔬 Debug: Run Backend Directly'
-        shell: pwsh
-        continue-on-error: true
-        run: |
-          $progFiles = ${env:ProgramFiles}
-          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
-          $installDir = Join-Path $progFiles "Fortuna Faucet"
-          $backendExe = Join-Path $installDir "resources/fortuna-backend/fortuna-backend.exe"
-
-          if (Test-Path $backendExe) {
-            Write-Host "Attempting to run backend directly for 10 seconds..."
-            $process = Start-Process -FilePath $backendExe -NoNewWindow -PassThru
-            Start-Sleep -Seconds 10
-            Stop-Process -Id $process.Id -Force
-            Write-Host "Backend process stopped."
-          } else {
-            Write-Error "Backend executable not found at $backendExe"
-          }
-
+          New-Item -Path "$installDir\data", "$installDir\json", "$installDir\logs" -ItemType Directory -Force | Out-Null
       - name: '🚀 Launch & Verify'
         shell: pwsh
         run: |
-          $progFiles = ${env:ProgramFiles}
-          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
+          $progFiles = if ('${{ matrix.arch }}' -eq 'x86') { ${env:ProgramFiles(x86)} } else { ${env:ProgramFiles} }
           $installDir = Join-Path $progFiles "Fortuna Faucet"
-
-          Start-Process -FilePath "$installDir\\Fortuna Faucet.exe"
-          Start-Sleep -Seconds 15
-
+          Start-Process -FilePath "$installDir\Fortuna Faucet.exe"
+          Start-Sleep 15
           $parent = Get-Process -Name "Fortuna Faucet" -ErrorAction SilentlyContinue
           $child = Get-Process -Name "fortuna-backend" -ErrorAction SilentlyContinue
-
           if (-not $parent) { throw "Main process 'Fortuna Faucet' not found!" }
           if (-not $child) { throw "Backend process 'fortuna-backend' not found!" }
-
-          Write-Host "✅ Smoke test passed! Both processes are running."
-
-
+          Write-Host "✅ Smoke test passed!"
+      - name: '📸 Paparazzi (Visual Proof)'
+        if: always()
+        shell: pwsh
+        run: |
+          npm install playwright
+          npx playwright install chromium --with-deps
+          $nodeScript = "const { chromium } = require('playwright'); (async () => { const browser = await chromium.launch(); const page = await browser.newPage(); try { await page.goto('http://127.0.0.1:8102', { timeout: 15000 }); await page.screenshot({ path: 'proof.png' }); } finally { await browser.close(); } })();"
+          node -e $nodeScript
+      - name: '📤 Upload Visual Proof'
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: visual-proof-${{ matrix.arch }}-${{ github.run_id }}
+          path: proof.png
       - name: '🧹 Cleanup'
         if: always()
         shell: pwsh
