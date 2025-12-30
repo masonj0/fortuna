@@ -58,7 +58,7 @@ class FortunaDesktopApp {
 
 async waitForBackend(maxRetries = 30) {
     const port = process.env.FORTUNA_PORT || 8000;
-    const url = `http://127.0.0.1:${port}/api/docs`;
+    const url = `http://localhost:${port}/docs`;
     for (let i = 0; i < maxRetries; i++) {
         try {
             const response = await fetch(url);
