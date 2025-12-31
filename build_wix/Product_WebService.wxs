@@ -57,7 +57,7 @@
         <ServiceInstall Id="ServiceInstaller" Type="ownProcess" Name="FortunaWebService"
                         DisplayName="Fortuna Web Service" Description="Background service for Fortuna Faucet"
                         Start="auto" Account="LocalSystem" ErrorControl="normal" Vital="yes" />
-        <ServiceControl Id="StartService" Stop="both" Remove="uninstall" Name="FortunaWebService" Wait="no" />
+        <ServiceControl Id="StartService" Start="install" Stop="both" Remove="uninstall" Name="FortunaWebService" Wait="no" />
         <fire:FirewallException Id="FirewallRule" Name="Fortuna Faucet" Port="$(var.ServicePort)" Protocol="tcp" Scope="any" />
       </Component>
     </ComponentGroup>
