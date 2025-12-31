@@ -1,0 +1,43 @@
+name: 🧪 Build Monolith (Experimental)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-monolith:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: 🎨 Build Frontend
+        shell: pwsh
+        run: |
+          cd web_platform/frontend
+          npm ci
+          npm run build
+          if (-not (Test-Path out/index.html)) { throw "Frontend build failed" }
+
+      - name: 📦 Install Backend Dependencies
+        shell: pwsh
+        run: |
+          pip install --upgrade pip wheel
+          pip install -r web_service/backend/requirements.txt
+          # Install the magic glue for Single EXE
+          pip install pywebview[cef] pyinstaller==6.6.0 pywin32
+
+      - name: 🏗️ Build Single EXE
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean fortuna-monolith.spec
+
+      - name: 📤 Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FortunaMonolith-EXE
+          path: dist/FortunaMonolith.exe
