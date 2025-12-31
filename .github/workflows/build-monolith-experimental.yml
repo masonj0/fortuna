@@ -2,6 +2,9 @@ name: 🧪 Build Monolith (Experimental)
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
 jobs:
   build-monolith:
@@ -22,22 +25,85 @@ jobs:
           npm ci
           npm run build
           if (-not (Test-Path out/index.html)) { throw "Frontend build failed" }
+          Write-Host "✅ Frontend built successfully"
 
       - name: 📦 Install Backend Dependencies
         shell: pwsh
         run: |
           pip install --upgrade pip wheel
           pip install -r web_service/backend/requirements.txt
-          # Install the magic glue for Single EXE
-          pip install pywebview[cef] pyinstaller==6.6.0 pywin32
+          # Install the magic ingredients
+          pip install pywebview[cef] pyinstaller==6.6.0 pywin32 playwright
+          # Install Playwright browsers
+          playwright install chromium
+          Write-Host "✅ Dependencies installed"
 
       - name: 🏗️ Build Single EXE
         shell: pwsh
+        env:
+          PYTHONUTF8: '1'
         run: |
           pyinstaller --noconfirm --clean fortuna-monolith.spec
+          if (-not (Test-Path dist/FortunaMonolith.exe)) {
+            throw "PyInstaller build failed"
+          }
+          Write-Host "✅ Monolith EXE built successfully"
 
-      - name: 📤 Upload Artifact
+      - name: 🚀 Test Monolith
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          Write-Host "🚀 Launching Monolith for testing..."
+
+          # Define the absolute path for the screenshot
+          $screenshotPath = Join-Path (Get-Location) "monolith-screenshot.png"
+          $env:SCREENSHOT_PATH = $screenshotPath
+
+          # Run Monolith in background
+          $process = Start-Process -FilePath "dist/FortunaMonolith.exe" -PassThru -NoNewWindow
+
+          # Give it time to launch and capture screenshot
+          Start-Sleep -Seconds 8
+
+          # Check if process is still alive
+          if ($process.HasExited) {
+            throw "❌ Monolith process exited prematurely"
+          }
+
+          Write-Host "✅ Monolith started successfully"
+
+          # Kill the process cleanly
+          Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+          Write-Host "✅ Monolith test complete"
+
+      - name: 📸 Collect Paparazzi
+        shell: pwsh
+        run: |
+          # The monolith-screenshot.png should have been created by Playwright
+          if (Test-Path "monolith-screenshot.png") {
+            Write-Host "✅ Screenshot captured successfully"
+          } else {
+            throw "❌ Screenshot not found!"
+          }
+
+      - name: 📤 Upload Monolith EXE
         uses: actions/upload-artifact@v4
         with:
           name: FortunaMonolith-EXE
           path: dist/FortunaMonolith.exe
+          retention-days: 30
+
+      - name: 📤 Upload Screenshot
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: monolith-paparazzi-${{ matrix.arch || 'x64' }}
+          path: monolith-screenshot.png
+          retention-days: 7
+
+      - name: 🧹 Cleanup
+        if: always()
+        shell: pwsh
+        run: |
+          Stop-Process -Name "FortunaMonolith" -Force -ErrorAction SilentlyContinue
+          Write-Host "✅ Cleanup complete"

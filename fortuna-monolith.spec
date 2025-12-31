@@ -1,19 +1,26 @@
 # -*- mode: python ; coding: utf-8 -*-
 from pathlib import Path
+import os
 from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 
 block_cipher = None
-project_root = Path(SPECPATH).parent
+
+# Use absolute paths to avoid confusion
+project_root = Path(os.getcwd()).absolute()
 backend_root = project_root / 'web_service' / 'backend'
 frontend_dist = project_root / 'web_platform' / 'frontend' / 'out'
 
+print(f"[SPEC] Project Root: {project_root}")
+print(f"[SPEC] Frontend Dist: {frontend_dist}")
+
 datas = []
 
-# 1. Bundle the React Frontend (Must be built first!)
+# 1. Bundle Frontend
 if frontend_dist.exists():
     datas.append((str(frontend_dist), 'frontend_dist'))
+    print("[SPEC] Added frontend_dist")
 else:
-    print("WARNING: Frontend dist not found. Run 'npm run build' first!")
+    print("[SPEC] ❌ WARNING: Frontend dist NOT found at expected path!")
 
 # 2. Bundle Backend Assets
 for folder in ['data', 'json', 'adapters']:
@@ -21,11 +28,12 @@ for folder in ['data', 'json', 'adapters']:
     if source_path.exists():
         datas.append((str(source_path), folder))
 
-# 3. Collect Dependencies
+# 3. Dependencies
 hiddenimports = [
     'uvicorn', 'fastapi', 'starlette', 'pydantic', 'structlog',
-    'webview', 'webview.platforms.winforms', # PyWebView dependencies
-    'clr', # Python.NET for Windows Forms
+    'webview', 'webview.platforms.winforms', 'clr',
+    'tenacity', 'redis', 'sqlalchemy', 'greenlet',
+    'playwright', 'playwright.sync_api'
 ] + collect_submodules('web_service.backend')
 
 a = Analysis(
@@ -50,10 +58,9 @@ exe = EXE(
     debug=False,
     strip=False,
     upx=True,
-    console=False, # No console window, purely GUI
+    console=False,
     disable_windowed_traceback=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None # Add icon path here if available
 )
