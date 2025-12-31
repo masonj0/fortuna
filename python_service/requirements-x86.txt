@@ -7,7 +7,7 @@
 --only-binary=:all:
 aiosqlite==0.21.0
     # via -r python_service/requirements.in
-altgraph==0.17.4
+altgraph==0.17.5
     # via pyinstaller
 annotated-doc==0.0.4
     # via fastapi
