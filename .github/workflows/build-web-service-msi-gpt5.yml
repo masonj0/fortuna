@@ -214,6 +214,13 @@ jobs:
       - run: echo C:\Users\runneradmin\.dotnet\tools >> $GITHUB_PATH
         shell: bash
 
+      - name: Create Required WiX Files
+        shell: pwsh
+        run: |
+          Set-Content -Path "build_wix/license.rtf" -Value '{\rtf1\ansi Placeholder License}' -Encoding Ascii
+          $scriptContent = "@echo off`r`necho Requesting Admin privileges to restart FortunaWebService...`r`nnet stop FortunaWebService`r`nnet start FortunaWebService`r`necho Service Restarted.`r`npause"
+          Set-Content -Path "staging/backend/restart_service.bat" -Value $scriptContent -Encoding Ascii
+
       - name: Prepare WiX Project
         shell: pwsh
         run: |
