@@ -245,7 +245,7 @@ jobs:
 
           # 3. VERIFY: Wait for backend to be ready
           # Target /docs to ensure 200 OK (root often returns 404)
-          $url = "http://127.0.0.1:8000/docs"
+          $url = "http://localhost:8000/docs"
           Write-Host "Waiting for backend at $url..."
           $maxRetries = 20
           for ($i=1; $i -le $maxRetries; $i++) {
