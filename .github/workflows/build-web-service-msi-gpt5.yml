@@ -214,22 +214,47 @@ jobs:
       - run: echo C:\Users\runneradmin\.dotnet\tools >> $GITHUB_PATH
         shell: bash
 
-      - name: 🏗️ Build MSI
+      - name: Prepare WiX Project
         shell: pwsh
         run: |
-          wix build ${{ needs.preflight-check.outputs.wix_proj }} `
-            -arch ${{ matrix.arch }} `
-            -o "Fortuna-${{ needs.preflight-check.outputs.semver }}-${{ matrix.arch }}.msi" `
-            -d Version="${{ needs.preflight-check.outputs.semver }}" `
-            -d SourceDir="staging/backend" `
-            -d Platform="${{ matrix.arch }}" `
-            -d ServicePort="${{ env.SERVICE_PORT }}"
+          Copy-Item "${{ needs.preflight-check.outputs.wix_proj }}" "build_wix/Product.wxs" -Force
+          $proj = @(
+            '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">',
+            '  <PropertyGroup>',
+            '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>',
+            '    <OutputType>Package</OutputType>',
+            '    <Platforms>x64;x86</Platforms>',
+            '    <DefineConstants>Version=$(Version);SourceDir=$(SourceDir);ServicePort=$(ServicePort);Platform=$(Platform)</DefineConstants>',
+            '  </PropertyGroup>',
+            '  <ItemGroup>',
+            '    <PackageReference Include="WixToolset.UI.wixext" Version="${{ env.WIX_VERSION }}" />',
+            '    <PackageReference Include="WixToolset.Firewall.wixext" Version="${{ env.WIX_VERSION }}" />',
+            '    <PackageReference Include="WixToolset.Util.wixext" Version="${{ env.WIX_VERSION }}" />',
+            '  </ItemGroup>',
+            '  <ItemGroup>',
+            '    <Compile Include="Product.wxs" />',
+            '  </ItemGroup>',
+            '</Project>'
+          )
+          Set-Content "build_wix/Fortuna.wixproj" -Value ($proj -join "`r`n") -Encoding utf8
+
+      - name: Build and Rename MSI
+        working-directory: build_wix
+        shell: pwsh
+        run: |
+          dotnet build Fortuna.wixproj -c Release -p:Platform=${{ matrix.arch }} -p:Version="${{ needs.preflight-check.outputs.semver }}" -p:SourceDir="../staging/backend" -p:ServicePort="${{ env.SERVICE_PORT }}"
+          $ver = "${{ needs.preflight-check.outputs.semver }}"
+          $releaseDir = "bin/${{ matrix.arch }}/Release"
+          $msiFound = Get-ChildItem -Path $releaseDir -Filter "*.msi" | Select-Object -First 1
+          $targetName = "Fortuna-${ver}-${{ matrix.arch }}.msi"
+          $newPath = Join-Path $releaseDir $targetName
+          Move-Item -Path $msiFound.FullName -Destination $newPath -Force
 
       - name: 📤 Upload MSI Artifact
         uses: actions/upload-artifact@v4
         with:
           name: msi-dist-${{ matrix.arch }}-${{ needs.preflight-check.outputs.build_id }}
-          path: Fortuna-${{ needs.preflight-check.outputs.semver }}-${{ matrix.arch }}.msi
+          path: build_wix/bin/${{ matrix.arch }}/Release/Fortuna-${{ needs.preflight-check.outputs.semver }}-${{ matrix.arch }}.msi
           retention-days: 1
 
   # =========================================================
