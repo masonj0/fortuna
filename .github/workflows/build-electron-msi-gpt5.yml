@@ -59,49 +59,50 @@ jobs:
             @(
               "numpy==1.23.5",
               "pandas==1.5.3",
+              "greenlet==3.1.1",
+              "scipy==1.10.1",
               "--only-binary=:all:"
             ) | Set-Content $file
-            Write-Host "✅ x86 constraints: numpy 1.23.5, pandas 1.5.3, wheel-only"
+            Write-Host "✅ x86 constraints: numpy 1.23.5, pandas 1.5.3, greenlet 3.1.1, scipy 1.10.1"
           } else {
             New-Item $file -ItemType File -Force
+            Write-Host "✅ x64 build: no constraints needed"
           }
           "file=$file" | Out-File $env:GITHUB_OUTPUT -Append
-
       - name: 💾 Create required directories
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path "python_service/data" -Force
           New-Item -ItemType Directory -Path "python_service/json" -Force
           New-Item -ItemType Directory -Path "python_service/adapters" -Force
-
-      - name: Install Python dependencies
+      - name: 📦 Install Dependencies
         shell: pwsh
         run: |
-          pip install --upgrade pip
-          if ('${{ matrix.arch }}' -eq 'x86') {
-            pip install -r python_service/requirements-x86.txt
-          } else {
-            pip install -r python_service/requirements.txt
-          }
-      - name: Build with PyInstaller
+          pip install --upgrade pip setuptools wheel
+          pip install -r python_service/requirements.txt -c ${{ steps.constraints.outputs.file }}
+          pip install pyinstaller==6.6.0 pywin32 -c ${{ steps.constraints.outputs.file }}
+      - name: 🏗️ Build with PyInstaller
+        shell: pwsh
         run: |
-          pip install pyinstaller==6.6.0 pywin32
           pyinstaller --noconfirm --clean fortuna-backend-electron.spec
-
-      - name: Test x86 executable directly
+          Write-Host "✅ Backend built for ${{ matrix.arch }}"
+      - name: 🧪 Verify Backend Works
         shell: pwsh
         run: |
-          & "dist/fortuna-backend.exe" --help 2>&1 | Select-Object -First 20
-          if ($LASTEXITCODE -ne 0) {
-            throw "❌ Backend executable failed to run"
+          try {
+            & "dist/fortuna-backend.exe" --help 2>&1 | Write-Host
+            if ($LASTEXITCODE -ne 0) {
+              throw "❌ Backend executable failed to run with non-zero exit code."
+            }
+            Write-Host "✅ Executable runs without import errors and with zero exit code."
+          } catch {
+            throw "❌ Backend executable failed: $_"
           }
-          Write-Host "✅ Executable works"
-
       - name: 📤 Upload
         uses: actions/upload-artifact@v4
         with:
           name: python-service-${{ matrix.arch }}
-          path: dist/fortuna-backend.exe
+          path: dist/fortuna-backend
 
   build-frontend:
     name: 🎨 Build Web Frontend
