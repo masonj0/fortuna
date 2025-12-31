@@ -24,8 +24,9 @@ for folder in ['data', 'json', 'adapters']:
 # 3. Collect Dependencies
 hiddenimports = [
     'uvicorn', 'fastapi', 'starlette', 'pydantic', 'structlog',
-    'webview', 'webview.platforms.winforms', # PyWebView dependencies
-    'clr', # Python.NET for Windows Forms
+    'webview', 'webview.platforms.winforms',  # PyWebView dependencies
+    'clr',  # Python.NET for Windows Forms
+    'playwright', 'playwright.sync_api',  # Playwright for screenshots
 ] + collect_submodules('web_service.backend')
 
 a = Analysis(
@@ -43,17 +44,19 @@ a = Analysis(
     cipher=block_cipher,
     noarchive=False,
 )
+
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+
 exe = EXE(
     pyz, a.scripts, a.binaries, a.zipfiles, a.datas,
     name='FortunaMonolith',
     debug=False,
     strip=False,
     upx=True,
-    console=False, # No console window, purely GUI
+    console=False,
     disable_windowed_traceback=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None # Add icon path here if available
+    icon=None
 )
