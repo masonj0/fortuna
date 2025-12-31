@@ -98,6 +98,7 @@ def main():
         host=run_host,
         port=settings.FORTUNA_PORT,
         log_level="info",
+        reload=False,
     )
 
 if __name__ == "__main__":

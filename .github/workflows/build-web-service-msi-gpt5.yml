@@ -220,18 +220,17 @@ jobs:
           Set-Content -Path "build_wix/license.rtf" -Value '{\rtf1\ansi Placeholder License}' -Encoding Ascii
           $scriptContent = "@echo off`r`necho Requesting Admin privileges to restart FortunaWebService...`r`nnet stop FortunaWebService`r`nnet start FortunaWebService`r`necho Service Restarted.`r`npause"
           Set-Content -Path "staging/backend/restart_service.bat" -Value $scriptContent -Encoding Ascii
-          $readmeContent = @"
-Welcome to Fortuna Faucet!
-
-The Fortuna Faucet service has been installed and is now running in the background.
-
-To access the application, please open your web browser and navigate to:
-
-http://localhost:${{ env.SERVICE_PORT }}
-
-Enjoy the races!
-"@
-          Set-Content -Path "staging/backend/README.txt" -Value $readmeContent -Encoding utf8
+          $readme = @()
+          $readme += "Welcome to Fortuna Faucet!"
+          $readme += ""
+          $readme += "The Fortuna Faucet service has been installed and is now running in the background."
+          $readme += ""
+          $readme += "To access the application, please open your web browser and navigate to:"
+          $readme += ""
+          $readme += "http://localhost:${{ env.SERVICE_PORT }}"
+          $readme += ""
+          $readme += "Enjoy the races!"
+          Set-Content -Path "staging/backend/README.txt" -Value ($readme -join "`r`n") -Encoding utf8
 
       - name: Prepare WiX Project
         shell: pwsh
