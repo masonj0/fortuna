@@ -53,11 +53,15 @@ jobs:
         run: |
           Write-Host "🚀 Launching Monolith for testing..."
 
+          # Define the absolute path for the screenshot
+          $screenshotPath = Join-Path (Get-Location) "monolith-screenshot.png"
+          $env:SCREENSHOT_PATH = $screenshotPath
+
           # Run Monolith in background
           $process = Start-Process -FilePath "dist/FortunaMonolith.exe" -PassThru -NoNewWindow
 
-          # Give it 5 seconds to launch and capture screenshot
-          Start-Sleep -Seconds 5
+          # Give it time to launch and capture screenshot
+          Start-Sleep -Seconds 8
 
           # Check if process is still alive
           if ($process.HasExited) {
@@ -77,7 +81,7 @@ jobs:
           if (Test-Path "monolith-screenshot.png") {
             Write-Host "✅ Screenshot captured successfully"
           } else {
-            Write-Host "⚠️  Screenshot not found (may have been created in process working directory)"
+            throw "❌ Screenshot not found!"
           }
 
       - name: 📤 Upload Monolith EXE
