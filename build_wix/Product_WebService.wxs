@@ -26,6 +26,11 @@
     <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Launch Fortuna Dashboard" />
     <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
     <Property Id="WixShellExecTarget" Value="http://localhost:$(var.ServicePort)" />
+    <CustomAction Id="LaunchBrowser" ExeCommand="explorer &quot;http://localhost:$(var.ServicePort)&quot;" Return="asyncNoWait" />
+
+    <InstallExecuteSequence>
+        <Custom Action="LaunchBrowser" After="InstallFinalize"><![CDATA[WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 AND NOT Installed]]></Custom>
+    </InstallExecuteSequence>
 
     <?if $(var.Platform) = x64 ?>
       <StandardDirectory Id="ProgramFiles64Folder">
@@ -65,6 +70,9 @@
     <ComponentGroup Id="ScriptComponents" Directory="INSTALLFOLDER">
       <Component Id="RestartScriptComponent" Guid="F8A2D7B1-6E9A-4E1D-9B6C-7264871E9D5B">
         <File Id="RestartScript" Source="$(var.SourceDir)/restart_service.bat" KeyPath="yes" />
+      </Component>
+      <Component Id="ReadmeComponent" Guid="*">
+        <File Id="ReadmeFile" Source="$(var.SourceDir)/README.txt" KeyPath="yes" />
       </Component>
     </ComponentGroup>
 
