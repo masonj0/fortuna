@@ -56,6 +56,40 @@ class FortunaDesktopApp {
     });
   }
 
+async waitForBackend(maxRetries = 30) {
+    const port = process.env.FORTUNA_PORT || 8000;
+    const url = `http://localhost:${port}/docs`;
+
+    console.log(`[Backend Check] Starting health check at: ${url}`);
+
+    for (let i = 0; i < maxRetries; i++) {
+        try {
+            const response = await fetch(url, { timeout: 3000 });
+            console.log(`[Backend Check] Attempt ${i}: Status ${response.status}`);
+
+            if (response.ok) {
+                console.log('✅ Backend is ready!');
+                return true;
+            }
+        } catch (e) {
+            console.log(`[Backend Check] Attempt ${i} failed: ${e.message}`);
+
+            // Log if backend process is still alive
+            if (this.backendProcess && !this.backendProcess.killed) {
+                console.log(`[Backend Check] Process still running (PID: ${this.backendProcess.pid})`);
+            } else {
+                console.error(`[Backend Check] ⚠️ Backend process is DEAD!`);
+                console.error(`[Backend Check] Last logs:`, this.backendLogs.slice(-5));
+                throw new Error(`Backend process died. Last logs:\n${this.backendLogs.slice(-5).join('\n')}`);
+            }
+
+            await new Promise(r => setTimeout(r, 1000));
+        }
+    }
+
+    throw new Error(`Backend failed to respond at ${url} after 30 seconds`);
+}
+
 async startBackend() {
     const isDev = !app.isPackaged;
     let backendCommand;
@@ -145,17 +179,18 @@ async startBackend() {
 
     this.backendProcess.on('exit', (code) => {
       if (code !== 0 && this.backendState !== 'stopped') {
-        const errorMsg = `Backend exited with code ${code}. Last logs:\n${this.backendLogs.slice(-5).join('\n')}`;
-        console.error(errorMsg);
-        this.backendLogs.push(errorMsg);
+        console.error(`[CRITICAL] Backend process exited with code: ${code}`);
+        console.error(`[CRITICAL] Last 10 logs:`, this.backendLogs.slice(-10));
+
+        // Save logs immediately
+        const fs = require('fs');
+        const path = require('path');
+        const logFile = path.join(require('os').homedir(), '.fortuna', 'backend_crash.log');
+        fs.mkdirSync(path.dirname(logFile), { recursive: true });
+        fs.writeFileSync(logFile, this.backendLogs.join('\n'));
+        console.error(`[CRITICAL] Full logs saved to: ${logFile}`);
         this.backendState = 'error';
         this.isBackendStarting = false;
-
-        // Save logs to file for debugging
-        const logsPath = path.join(os.homedir(), '.fortuna', 'backend_crash.log');
-        fs.writeFileSync(logsPath, this.backendLogs.join('\n'));
-        console.log(`[Backend] Crash logs saved to: ${logsPath}`);
-
         this.sendBackendStatusUpdate();
       }
     });
@@ -186,9 +221,6 @@ getFrontendPath() {
  backgroundColor: '#1a1a2e'
  });
 
- const frontendUrl = this.getFrontendPath();
- this.mainWindow.loadURL(frontendUrl);
-
  if (!app.isPackaged) {
  this.mainWindow.webContents.openDevTools();
  }
@@ -212,6 +244,17 @@ getFrontendPath() {
  this.createMainWindow();
  this.createSystemTray();
  this.startBackend();
+
+  // Wait for backend to be ready before loading frontend
+  this.waitForBackend()
+    .then(() => {
+      const frontendUrl = this.getFrontendPath();
+      this.mainWindow.loadURL(frontendUrl);
+    })
+    .catch((err) => {
+      console.error('Backend startup failed:', err);
+      dialog.showErrorBox('Backend Error', 'Failed to start backend service');
+    });
 
  // Check for updates
  autoUpdater.checkForUpdatesAndNotify();

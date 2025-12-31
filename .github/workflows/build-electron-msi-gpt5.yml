@@ -74,29 +74,23 @@ jobs:
           New-Item -ItemType Directory -Path "python_service/json" -Force
           New-Item -ItemType Directory -Path "python_service/adapters" -Force
 
-      - name: 📦 Build Binary
-        shell: pwsh
+      - name: Install Python dependencies
         run: |
-          pip install --upgrade pip setuptools wheel
-          # Install dependencies WITHOUT constraints first
-          pip install -r ${{ env.BACKEND_DIR }}/requirements.txt
-
-          # THEN apply constraints ONLY to specific packages if needed
-          # But let PyInstaller see the full dependency tree
+          pip install --upgrade pip
+          pip install -r python_service/requirements.txt
+      - name: Build with PyInstaller
+        run: |
           pip install pyinstaller==6.6.0 pywin32
-
-          # Build the executable
           pyinstaller --noconfirm --clean fortuna-backend-electron.spec
 
-          # Verify critical modules were bundled
-          if (-not (Test-Path "dist/fortuna-backend.exe")) {
-              throw "PyInstaller build failed - executable not found"
-          }
-
-      - name: 🔍 Sanity Check Executable
+      - name: Test x86 executable directly
         shell: pwsh
         run: |
-          dist/fortuna-backend.exe --help
+          & "dist/fortuna-backend.exe" --help 2>&1 | Select-Object -First 20
+          if ($LASTEXITCODE -ne 0) {
+            throw "❌ Backend executable failed to run"
+          }
+          Write-Host "✅ Executable works"
 
       - name: 📤 Upload
         uses: actions/upload-artifact@v4
@@ -245,7 +239,7 @@ jobs:
 
           # 3. VERIFY: Wait for backend to be ready
           # Target /docs to ensure 200 OK (root often returns 404)
-          $url = "http://127.0.0.1:8000/docs"
+          $url = "http://localhost:8000/docs"
           Write-Host "Waiting for backend at $url..."
           $maxRetries = 20
           for ($i=1; $i -le $maxRetries; $i++) {
