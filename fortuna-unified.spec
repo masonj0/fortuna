@@ -64,7 +64,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=True,
+    console=False,
 )
 
 # --- COLLECT Object for Directory-Based Build ---
