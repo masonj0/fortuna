@@ -75,9 +75,14 @@ jobs:
           New-Item -ItemType Directory -Path "python_service/adapters" -Force
 
       - name: Install Python dependencies
+        shell: pwsh
         run: |
           pip install --upgrade pip
-          pip install -r python_service/requirements.txt
+          if ('${{ matrix.arch }}' -eq 'x86') {
+            pip install -r python_service/requirements-x86.txt
+          } else {
+            pip install -r python_service/requirements.txt
+          }
       - name: Build with PyInstaller
         run: |
           pip install pyinstaller==6.6.0 pywin32
