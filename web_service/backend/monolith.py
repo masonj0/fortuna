@@ -4,8 +4,34 @@ import threading
 import time
 import uvicorn
 import webview
+from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from web_service.backend.main import app
+from fastapi.middleware.cors import CORSMiddleware
+
+# 1. Define the Monolith App directly (Decoupled from main.py)
+app = FastAPI(title="Fortuna Monolith")
+
+# Add CORS to allow the frontend to talk to the backend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# 2. Try to import existing routers (Optional)
+try:
+    # Attempt to import the API router from the backend package
+    # Adjust this import path based on your actual structure if needed
+    from web_service.backend.api import router as api_router
+    app.include_router(api_router, prefix="/api")
+    print("[MONOLITH] ✅ Loaded API routers")
+except ImportError as e:
+    print(f"[MONOLITH] ⚠️ Could not load API routers: {e}")
+    @app.get("/api/health")
+    def health():
+        return {"status": "ok", "mode": "monolith_fallback", "error": str(e)}
 
 def resource_path(relative_path):
     """Get absolute path to resource, works for dev and for PyInstaller"""
@@ -45,13 +71,15 @@ def capture_screenshot_with_playwright(url):
         return False
 
 def start_monolith():
+    # 3. Mount the bundled Frontend
     static_dir = resource_path("frontend_dist")
     if os.path.exists(static_dir):
         app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
         print(f"[MONOLITH] ✅ Serving frontend from {static_dir}")
     else:
-        print("[MONOLITH] ⚠️  WARNING: Frontend dist not found. API only mode.")
+        print(f"[MONOLITH] ❌ Frontend dist not found at {static_dir}")
 
+    # 4. Start Server & Window
     port = 8000
     url = f"http://127.0.0.1:{port}"
 
@@ -60,17 +88,15 @@ def start_monolith():
             app,
             host="127.0.0.1",
             port=port,
-            log_level="error"
+            log_level="info"
         )
 
     server_thread = threading.Thread(target=run_server, daemon=True)
     server_thread.start()
-    print(f"[MONOLITH] 🚀 Backend server starting on {url}")
 
     time.sleep(2)
 
-    print("[MONOLITH] 🪟 Opening native window...")
-    webview.create_window('Fortuna Faucet (Monolith)', url, width=1280, height=800)
+    webview.create_window('Fortuna Faucet', url, width=1280, height=800)
 
     screenshot_thread = threading.Thread(
         target=capture_screenshot_with_playwright,
@@ -85,5 +111,4 @@ if __name__ == '__main__':
     if sys.platform == 'win32':
         import multiprocessing
         multiprocessing.freeze_support()
-
     start_monolith()
