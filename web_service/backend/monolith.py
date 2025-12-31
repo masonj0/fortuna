@@ -44,30 +44,48 @@ def capture_screenshot_with_playwright(url):
     Use Playwright to capture a screenshot of the running Monolith.
     This runs AFTER the window opens, proving the app is alive.
     """
-    output_path = os.environ.get("SCREENSHOT_PATH", "monolith-screenshot.png")
+    screenshot_env_var = os.environ.get("SCREENSHOT_PATH")
+    output_path = screenshot_env_var or "monolith-screenshot.png"
+
+    print("--- Paparazzi Diagnostics ---")
+    print(f"SCREENSHOT_PATH env var: {screenshot_env_var}")
+    print(f"Final output path: {output_path}")
+    print(f"Target URL: {url}")
+    print("-----------------------------")
+
     try:
         from playwright.sync_api import sync_playwright
 
-        print(f"[MONOLITH] 📸 Launching Playwright for screenshot...")
+        print("[MONOLITH] 📸 Launching Playwright for screenshot...")
 
         with sync_playwright() as p:
+            print("[Playwright] Launching browser...")
             browser = p.chromium.launch(headless=True)
             page = browser.new_page()
 
-            print(f"[MONOLITH] Navigating to {url}...")
+            print(f"[Playwright] Navigating to {url}...")
             page.goto(url, wait_until="networkidle", timeout=15000)
 
+            print("[Playwright] Waiting for 2 seconds...")
             time.sleep(2)
 
+            print(f"[Playwright] Taking screenshot to {output_path}...")
             page.screenshot(path=output_path, full_page=True)
 
             print(f"[MONOLITH] ✅ Screenshot saved to {output_path}")
 
             browser.close()
+            print("[Playwright] Browser closed.")
             return True
 
+    except ImportError as e:
+        print(f"[MONOLITH] ❌ Screenshot failed: Playwright not installed? {e}")
+        return False
     except Exception as e:
-        print(f"[MONOLITH] ❌ Screenshot failed: {e}")
+        print(f"[MONOLITH] ❌ Screenshot failed with an unexpected error: {e}")
+        # Also print traceback for more details
+        import traceback
+        traceback.print_exc()
         return False
 
 def start_monolith():

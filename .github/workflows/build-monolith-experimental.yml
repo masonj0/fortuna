@@ -78,6 +78,7 @@ jobs:
 
       - name: 📸 Collect Paparazzi
         shell: pwsh
+        continue-on-error: true
         run: |
           # The monolith-screenshot.png should have been created by Playwright
           if (Test-Path "monolith-screenshot.png") {
