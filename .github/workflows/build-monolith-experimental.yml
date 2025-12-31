@@ -40,6 +40,8 @@ jobs:
 
       - name: 🏗️ Build Single EXE
         shell: pwsh
+        env:
+          PYTHONUTF8: '1'
         run: |
           pyinstaller --noconfirm --clean fortuna-monolith.spec
           if (-not (Test-Path dist/FortunaMonolith.exe)) {

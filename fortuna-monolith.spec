@@ -18,7 +18,7 @@ datas = []
 # 1. Bundle Frontend
 if frontend_dist.exists():
     datas.append((str(frontend_dist), 'frontend_dist'))
-    print("[SPEC] ✅ Added frontend_dist")
+    print("[SPEC] Added frontend_dist")
 else:
     print("[SPEC] ❌ WARNING: Frontend dist NOT found at expected path!")
 
