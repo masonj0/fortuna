@@ -26,11 +26,6 @@
     <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Launch Fortuna Dashboard" />
     <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
     <Property Id="WixShellExecTarget" Value="http://localhost:$(var.ServicePort)" />
-    <CustomAction Id="LaunchBrowser" ExeCommand="explorer &quot;http://localhost:$(var.ServicePort)&quot;" Return="asyncNoWait" />
-
-    <InstallExecuteSequence>
-        <Custom Action="LaunchBrowser" After="InstallFinalize"><![CDATA[WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 AND NOT Installed]]></Custom>
-    </InstallExecuteSequence>
 
     <?if $(var.Platform) = x64 ?>
       <StandardDirectory Id="ProgramFiles64Folder">

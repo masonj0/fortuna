@@ -128,7 +128,7 @@ jobs:
           if (-not (Test-Path 'build_wix/license.rtf')) {
              Set-Content -Path 'build_wix/license.rtf' -Value '{\rtf1\ansi Placeholder License}' -Encoding Ascii
           }
-          Copy-Item "build_wix/Product_WithService.wxs" "build_wix/Product.wxs" -Force
+          Copy-Item "build_wix/Product_WebService.wxs" "build_wix/Product.wxs" -Force
           $proj = @(
             '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">',
             '  <PropertyGroup>',
