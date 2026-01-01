@@ -309,35 +309,40 @@ jobs:
             Get-Content install.log | Write-Error
             throw "MSI installation failed with exit code $($proc.ExitCode)"
           }
-      - name: 🚀 Start Service & Create Runtime Dirs
+      - name: 🚀 Install, Start, and Verify Service
         shell: pwsh
         run: |
-          $progFiles = ${env:ProgramFiles}
-          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
-          $installRoot = Join-Path $progFiles "Fortuna Faucet Service"
-          if (-not (Test-Path $installRoot)) { throw "❌ Install dir not found at $installRoot" }
-          New-Item -Path "$installRoot\data", "$installRoot\json", "$installRoot\logs" -ItemType Directory -Force | Out-Null
           Start-Service "FortunaWebService"
-          Start-Sleep -Seconds 15
 
-      - name: 🩺 Health Check with Retry
-        shell: pwsh
-        run: |
-          $maxRetries = 5
-          $delay = 3
-          for ($i=1; $i -le $maxRetries; $i++) {
+          $maxRetries = 10
+          $retryDelay = 3
+          $healthUrl = "http://localhost:${{ env.SERVICE_PORT }}/health"
+
+          for ($i = 1; $i -le $maxRetries; $i++) {
             try {
-              $response = Invoke-WebRequest -Uri "http://127.0.0.1:${{ env.SERVICE_PORT }}/health" -UseBasicParsing -TimeoutSec 5
+              $response = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 5
               if ($response.StatusCode -eq 200) {
                 Write-Host "✅ Health check PASSED on attempt $i."
-                exit 0
+                break
               }
             } catch {
-              Write-Warning "Attempt $i: Health check failed. Error: $($_.Exception.Message)"
+              Write-Host "Health check attempt $i failed. Retrying in $retryDelay seconds..."
+              Start-Sleep -Seconds $retryDelay
             }
-            if ($i -lt $maxRetries) { Start-Sleep -Seconds ($delay * $i) }
+            if ($i -eq $maxRetries) {
+              $progFiles = if ('${{ matrix.arch }}' -eq 'x86') { ${env:ProgramFiles(x86)} } else { ${env:ProgramFiles} }
+              $logDir = Join-Path $progFiles "Fortuna Faucet Service\logs"
+              if (Test-Path $logDir) {
+                Get-ChildItem -Path $logDir -Filter "*.log" | ForEach-Object {
+                  Write-Host "--- Log file: $($_.FullName) ---"
+                  Get-Content $_.FullName | Write-Host
+                }
+              }
+              Get-Content install.log -Tail 50 | Write-Host
+              throw "Health check failed after $maxRetries attempts."
+            }
           }
-          throw "❌ Service health check failed after $maxRetries attempts."
+          Write-Host "✅ Smoke Test Passed"
 
       - name: '🕵️ CSI: Windows Post-Mortem (On Failure)'
         if: failure()
