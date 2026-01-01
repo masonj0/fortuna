@@ -603,6 +603,10 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = "Stop"
+          $msi = (Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse | Select-Object -First 1).FullName
+          if (-not $msi) { throw "MSI not found!" }
+          Start-Process msiexec.exe -ArgumentList "/i `"$msi`" /qn /L*v install.log" -Wait
+          Start-Sleep 10 # Give service time to register
 
           # Determine install path based on architecture
           $progFiles = ${env:ProgramFiles}
