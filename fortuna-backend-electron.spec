@@ -4,60 +4,28 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 block_cipher = None
 project_root = Path(SPECPATH).parent
+# FIXED: Target the consolidated backend
+backend_root = project_root / 'web_service' / 'backend'
 
-# Helper function to include data files
-def include(rel_path: str, target: str, store: list):
-    absolute = project_root / rel_path
-    if absolute.exists():
-        store.append((str(absolute), target))
-    else:
-        print(f"[spec] WARNING: Skipping missing include: {absolute}")
-
+# Collect data folders
 datas = []
-hiddenimports = set()
+for folder in ['data', 'json', 'adapters']:
+    source_path = backend_root / folder
+    if source_path.exists():
+        datas.append((str(source_path), folder))
 
-# Include necessary data directories
-include('python_service/data', 'data', datas)
-include('python_service/json', 'json', datas)
-include('python_service/adapters', 'adapters', datas)
-
-# Automatically collect submodules and data files for key libraries
-datas += collect_data_files('uvicorn')
-datas += collect_data_files('fastapi')
-datas += collect_data_files('starlette')
-hiddenimports.update(collect_submodules('python_service'))
-hiddenimports.update(collect_submodules('uvicorn'))
-hiddenimports.update(collect_submodules('fastapi'))
-hiddenimports.update(collect_submodules('starlette'))
-hiddenimports.update(collect_submodules('anyio'))
-hiddenimports.update([
-    'asyncio',
-    'asyncio.windows_events',
-    'asyncio.selector_events',
-    'pydantic_core',
-    'pydantic_settings.sources',
-    'httpcore',
-    'httpx',
-    'python_multipart',
-    'numpy',
-    'pandas',
-    'uvicorn',
-    'fastapi',
-    'starlette',
-    'anyio',
-    'pydantic',
-    'uvicorn.logging',
-    'uvicorn.loops.auto',
-    'uvicorn.protocols.http.auto',
-    'win32timezone'
-])
+# Collect dependencies
+hiddenimports = [
+    'uvicorn', 'fastapi', 'starlette', 'pydantic', 'structlog',
+    'tenacity', 'redis', 'sqlalchemy', 'greenlet', 'win32timezone'
+] + collect_submodules('web_service.backend')
 
 a = Analysis(
-    ['python_service/main.py'],
+    ['web_service/backend/main.py'], # FIXED: Entry point
     pathex=[str(project_root)],
     binaries=[],
     datas=datas,
-    hiddenimports=sorted(hiddenimports),
+    hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -68,26 +36,15 @@ a = Analysis(
     noarchive=False,
 )
 
-# ☢️ PYZ INJECTION: Force __init__ files into the PYZ archive as modules
-# This is the definitive fix for ModuleNotFoundError at runtime.
-a.pure += [
-    ('python_service', str(project_root / 'python_service/__init__.py'), 'PYMODULE'),
-]
-
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 exe = EXE(
-    pyz,
-    a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
+    pyz, a.scripts, a.binaries, a.zipfiles, a.datas,
     name='fortuna-backend',
     debug=False,
-    bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=False,
+    console=True, # Keep console for Electron backend debugging
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
