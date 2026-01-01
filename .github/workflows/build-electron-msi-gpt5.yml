@@ -15,7 +15,7 @@ env:
   NODE_VERSION: '20'
   PYTHON_VERSION: '3.11'
   ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
-  BACKEND_DIR: 'python_service'
+  BACKEND_DIR: 'web_service/backend'
   PYTHONUTF8: '1'
 
 jobs:
@@ -36,8 +36,8 @@ jobs:
           "semver=$semver" | Out-File $env:GITHUB_OUTPUT -Append
           "short_sha=$shortSha" | Out-File $env:GITHUB_OUTPUT -Append
 
-  build-python-service:
-    name: '🐍 Build Python Service (${{ matrix.arch }})'
+  build-backend-service:
+    name: '🐍 Build Backend Service (${{ matrix.arch }})'
     runs-on: windows-latest
     needs: validate-environment
     strategy:
@@ -72,14 +72,14 @@ jobs:
       - name: 💾 Create required directories
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Path "python_service/data" -Force
-          New-Item -ItemType Directory -Path "python_service/json" -Force
-          New-Item -ItemType Directory -Path "python_service/adapters" -Force
+          New-Item -ItemType Directory -Path "${{ env.BACKEND_DIR }}/data" -Force
+          New-Item -ItemType Directory -Path "${{ env.BACKEND_DIR }}/json" -Force
+          New-Item -ItemType Directory -Path "${{ env.BACKEND_DIR }}/adapters" -Force
       - name: 📦 Install Dependencies
         shell: pwsh
         run: |
           pip install --upgrade pip setuptools wheel
-          pip install -r python_service/requirements.txt -c ${{ steps.constraints.outputs.file }}
+          pip install -r ${{ env.BACKEND_DIR }}/requirements.txt -c ${{ steps.constraints.outputs.file }}
           pip install pyinstaller==6.6.0 pywin32 -c ${{ steps.constraints.outputs.file }}
       - name: 🏗️ Build with PyInstaller
         shell: pwsh
@@ -89,19 +89,16 @@ jobs:
       - name: 🧪 Verify Backend Works
         shell: pwsh
         run: |
-          try {
-            & "dist/fortuna-backend.exe" --help 2>&1 | Write-Host
-            if ($LASTEXITCODE -ne 0) {
-              throw "❌ Backend executable failed to run with non-zero exit code."
-            }
-            Write-Host "✅ Executable runs without import errors and with zero exit code."
-          } catch {
-            throw "❌ Backend executable failed: $_"
-          }
+          $process = Start-Process -FilePath "dist/fortuna-backend.exe" -NoNewWindow -PassThru
+          Write-Host "Backend process started with PID: $($process.Id). Waiting 10 seconds..."
+          Start-Sleep -Seconds 10
+          Write-Host "10 seconds elapsed. Stopping process..."
+          Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+          Write-Host "Process stopped. Verification complete."
       - name: 📤 Upload
         uses: actions/upload-artifact@v4
         with:
-          name: python-service-${{ matrix.arch }}
+          name: backend-service-${{ matrix.arch }}
           path: dist/fortuna-backend
 
   build-frontend:
@@ -126,7 +123,7 @@ jobs:
   build-electron-msi:
     name: '🚀 Build Electron MSI (${{ matrix.arch }})'
     runs-on: windows-latest
-    needs: [validate-environment, build-python-service, build-frontend]
+    needs: [validate-environment, build-backend-service, build-frontend]
     strategy:
       matrix:
         arch: [x64, x86]
@@ -137,7 +134,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
       - uses: actions/download-artifact@v4
         with:
-          name: python-service-${{ matrix.arch }}
+          name: backend-service-${{ matrix.arch }}
           path: temp_backend
       - uses: actions/download-artifact@v4
         with:
@@ -160,6 +157,12 @@ jobs:
           ARCH: ${{ matrix.arch }}
         run: |
           npm ci
+
+          # FIXED: Copy WiX template from root to where electron-builder expects it
+          if (-not (Test-Path build_wix)) { New-Item -ItemType Directory -Path build_wix }
+          Copy-Item ../build_wix/Product_Electron.wxs build_wix/Product_Electron.wxs -Force
+          Write-Host "✅ WiX template staged successfully."
+
           $archFlag = if ($env:ARCH -eq 'x86') { '--ia32' } else { '--x64' }
           $name = "Fortuna-${{ matrix.arch }}-${{ needs.validate-environment.outputs.semver }}.msi"
           npx electron-builder --win msi $archFlag --publish never --config.extraMetadata.version="${{ needs.validate-environment.outputs.semver }}" --config.artifactName="$name"

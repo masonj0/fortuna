@@ -598,59 +598,111 @@ jobs:
         with:
           name: fortuna-service-msi-${{ matrix.arch }}-${{ github.run_id }}
           path: msi-installer
-      - name: '✅ Create Required Runtime Directories & Start Service'
+      - name: '🔬 Execute 3-Layer Smoke Test'
         shell: pwsh
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = "Stop"
 
-          # Determine install path based on architecture
+          # --- Layer 1: Installation & Registration ---
+          Write-Host "--- 🛡️ Layer 1: Installation & Registration ---"
+          $serviceName = "FortunaWebService"
+
+          Write-Host "Attempting pre-emptive service cleanup..."
+          sc.exe delete $serviceName 2>$null # Redirect stderr to prevent error if service doesn't exist
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "✅ Service '$serviceName' pre-emptively deleted."
+          } else {
+            Write-Host "ℹ️ Service '$serviceName' did not exist. No cleanup needed."
+          }
+          Start-Sleep -Seconds 3
+
+          $msi = (Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse | Select-Object -First 1).FullName
+          if (-not $msi) { throw "MSI not found!" }
+          Start-Process msiexec.exe -ArgumentList "/i `"$msi`" /qn /L*v install.log" -Wait
+          if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 3010) { # 3010 is reboot required
+            throw "MSI installation failed with exit code $LASTEXITCODE"
+          }
+          Write-Host "✅ MSI installation complete (Exit Code: $LASTEXITCODE)."
+
+          # Verify registry entry for the service
+          $registryPath = "HKLM:\\SYSTEM\\CurrentControlSet\\Services\\$serviceName"
+          $maxRetries = 5
+          $delay = 2
+          for ($i=0; $i -lt $maxRetries; $i++) {
+            if (Test-Path $registryPath) {
+              Write-Host "✅ Service '$serviceName' found in registry."
+              break
+            }
+            Write-Host "⏳ Waiting for service registration... (Attempt $($i+1)/$maxRetries)"
+            Start-Sleep -Seconds $delay
+            if ($i -eq ($maxRetries - 1)) { throw "Service registration failed." }
+          }
+
+          # --- Layer 2: Process Startup ---
+          Write-Host "`n--- 🚀 Layer 2: Process Startup ---"
           $progFiles = ${env:ProgramFiles}
           if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
           $installDir = Join-Path $progFiles "Fortuna Faucet Service"
+          if (-not (Test-Path $installDir)) { throw "Installation directory not found." }
 
-          if (-not (Test-Path $installDir)) {
-            throw "❌ Installation directory not found at $installDir"
+          # Create runtime directories
+          @('data', 'json', 'logs') | ForEach-Object {
+            $path = Join-Path $installDir $_
+            New-Item -ItemType Directory -Path $path -Force | Out-Null
           }
+          Write-Host "✅ Runtime directories created."
 
-          # CRITICAL: Create runtime directories that service needs
-          $dirs = @('data', 'json', 'logs')
-          foreach ($dir in $dirs) {
-            $fullPath = Join-Path $installDir $dir
-            New-Item -ItemType Directory -Path $fullPath -Force | Out-Null
-            # Grant LocalSystem (the service account) full control
-            icacls $fullPath /grant "NT AUTHORITY\SYSTEM:(OI)(CI)F" /T 2>&1 | Out-Null
-          }
-          Write-Host "✅ Created runtime directories with proper permissions"
+          Start-Service -Name $serviceName
+          Write-Host "✅ Service start command issued."
 
-          # CRITICAL: Explicitly start the service (WiX removed auto-start)
-          Write-Host "Starting FortunaWebService..."
-          Start-Service -Name "FortunaWebService" -ErrorAction Stop
-          Start-Sleep -Seconds 10
-
-          # Verify service is running
-          $svc = Get-Service -Name "FortunaWebService"
-          if ($svc.Status -ne 'Running') {
-            throw "❌ Service failed to start. Status: $($svc.Status)"
-          }
-          Write-Host "✅ Service started successfully"
-      - name: 🩺 Health Check
-        shell: pwsh
-        run: |
-          $maxRetries = 5
-          $delay = 5
-          For ($i=0; $i -lt $maxRetries; $i++) {
+          # --- Layer 3: Network Health Check ---
+          Write-Host "`n--- 🩺 Layer 3: Network Health Check ---"
+          $url = "http://localhost:${{ env.SERVICE_PORT }}/health"
+          $maxRetries = 8
+          $baseDelay = 1.5
+          for ($i=0; $i -lt $maxRetries; $i++) {
             try {
-              $response = Invoke-WebRequest -Uri "http://localhost:${{ env.SERVICE_PORT }}/health" -UseBasicParsing
+              $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 5
               if ($response.StatusCode -eq 200) {
-                Write-Host "✅ Health check PASSED."
-                Stop-Service -Name "FortunaWebService"
+                Write-Host "✅ Health check PASSED on attempt $($i+1)."
+                Stop-Service -Name $serviceName
                 exit 0
               }
-            } catch { Write-Host "Attempt $($i+1) failed. Retrying..." }
-            Start-Sleep -Seconds $delay
+            } catch {
+              Write-Host "⏳ Health check attempt $($i+1) failed. Retrying in $([math]::Pow($baseDelay, $i)) seconds..."
+            }
+            Start-Sleep -Seconds ([math]::Pow($baseDelay, $i))
           }
-          throw "Health check failed."
+          throw "Health check failed after $maxRetries attempts."
+
+      - name: '📸 Emergency Forensics on Failure'
+        if: failure()
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "SilentlyContinue"
+          Write-Host "🔥 A failure was detected. Capturing emergency forensics..."
+          $forensicsDir = "forensics"
+          New-Item -ItemType Directory -Path $forensicsDir -Force
+          Get-Service | Out-File "$forensicsDir/service-status.log"
+          netstat -anob > "$forensicsDir/netstat.log"
+          Get-Process | Out-File "$forensicsDir/process-list.log"
+          if (Test-Path "install.log") { Copy-Item "install.log" -Destination "$forensicsDir/install.log" }
+          $progFiles = ${env:ProgramFiles}
+          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
+          $installDir = Join-Path $progFiles "Fortuna Faucet Service"
+          if (Test-Path "$installDir/logs") { Copy-Item -Path "$installDir/logs" -Destination "$forensicsDir/app-logs" -Recurse -Force }
+          if (Test-Path $installDir) { tree /F $installDir | Out-File "$forensicsDir/install-dir-tree.log" }
+          Write-Host "✅ Forensics captured in '$forensicsDir' directory."
+
+      - name: '📤 Upload Forensic Artifacts'
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forensic-logs-${{ matrix.arch }}-${{ github.run_id }}
+          path: forensics/
+          retention-days: 14
 
 
   package-msi-service:
