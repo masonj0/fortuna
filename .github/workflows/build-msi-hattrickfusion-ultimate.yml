@@ -224,6 +224,8 @@ jobs:
           if (Test-Path staging/backend/fortuna-core-service.exe) {
             Move-Item staging/backend/fortuna-core-service.exe staging/backend/fortuna-webservice.exe -Force
           }
+          # The WiX installer requires a README.txt file to be present in the staging directory.
+          Set-Content -Path "staging/backend/README.txt" -Value "This file is required by the WiX installer."
           $proj = @(
             '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">',
             '  <PropertyGroup>',
