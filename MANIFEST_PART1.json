@@ -28,7 +28,6 @@
     "web_platform/frontend/.gitignore",
     "web_platform/frontend/app/Providers.tsx",
     "web_platform/frontend/postcss.config.js",
-    "web_platform/frontend/public/workbox-4754cb34.js",
     "web_platform/frontend/src/components/LiveModeToggle.tsx",
     "web_platform/frontend/src/components/RaceFilters.tsx",
     "web_platform/frontend/src/components/TrifectaFactors.tsx",
@@ -55,5 +54,6 @@
     "web_service/frontend/app/hooks/useWebSocket.ts",
     "web_service/frontend/app/types/racing.ts",
     "web_service/frontend/package-lock.json",
+    "web_service/frontend/public/workbox-4754cb34.js",
     "web_service/frontend/tailwind.config.ts"
 ]

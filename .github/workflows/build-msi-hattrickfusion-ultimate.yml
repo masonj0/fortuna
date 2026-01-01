@@ -224,6 +224,8 @@ jobs:
           if (Test-Path staging/backend/fortuna-core-service.exe) {
             Move-Item staging/backend/fortuna-core-service.exe staging/backend/fortuna-webservice.exe -Force
           }
+          # The WiX installer requires a README.txt file to be present in the staging directory.
+          Set-Content -Path "staging/backend/README.txt" -Value "This file is required by the WiX installer."
           $proj = @(
             '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">',
             '  <PropertyGroup>',
@@ -318,6 +320,15 @@ jobs:
 
           Write-Host "✅ Installation verified and permissions granted."
 
+      - name: '🔬 Verify Service Registration'
+        shell: pwsh
+        run: |
+          $service = Get-Service -Name "FortunaWebService" -ErrorAction SilentlyContinue
+          if ($null -eq $service) {
+            throw "❌ Service 'FortunaWebService' not found in registry."
+          }
+          Write-Host "✅ Service 'FortunaWebService' is registered."
+
       - name: '🕵️ DLL Dependency Forensics'
         shell: pwsh
         run: |
@@ -374,7 +385,7 @@ jobs:
           # 3. VERIFY: Health Check
           $healthUrl = "http://localhost:${{ env.SERVICE_PORT }}/health"
           $maxRetries = 5
-          $delay = 5
+          $delay = 2
           for ($i=1; $i -le $maxRetries; $i++) {
             try {
               $response = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing
@@ -383,8 +394,8 @@ jobs:
                 break
               }
             } catch {
-              Write-Host "Attempt $($i) failed. Retrying in $delay seconds..."
-              Start-Sleep -Seconds $delay
+              Write-Host "Attempt $($i) failed. Retrying in $($delay * $i) seconds..."
+              Start-Sleep -Seconds ($delay * $i)
             }
             if ($i -eq $maxRetries) {
               throw "Health check failed after $maxRetries attempts."
