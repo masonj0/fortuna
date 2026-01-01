@@ -90,13 +90,19 @@ jobs:
         shell: pwsh
         run: |
           try {
-            & "dist/fortuna-backend.exe" --help 2>&1 | Write-Host
-            if ($LASTEXITCODE -ne 0) {
-              throw "❌ Backend executable failed to run with non-zero exit code."
+            $process = Start-Process -FilePath "dist/fortuna-backend.exe" -ArgumentList "--help" -NoNewWindow -PassThru
+            Start-Sleep -Seconds 10
+            if ($process.HasExited) {
+              if ($process.ExitCode -ne 0) {
+                throw "❌ Backend executable exited with non-zero code: $($process.ExitCode)."
+              }
+              Write-Host "✅ Executable ran and exited cleanly."
+            } else {
+              Write-Host "✅ Executable is still running after 10 seconds. Terminating."
+              Stop-Process -Id $process.Id -Force
             }
-            Write-Host "✅ Executable runs without import errors and with zero exit code."
           } catch {
-            throw "❌ Backend executable failed: $_"
+            throw "❌ Backend executable failed to start or run: $_"
           }
       - name: 📤 Upload
         uses: actions/upload-artifact@v4

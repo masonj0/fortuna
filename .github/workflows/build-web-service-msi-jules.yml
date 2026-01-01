@@ -624,6 +624,11 @@ jobs:
           Write-Host "✅ Created runtime directories with proper permissions"
 
           # CRITICAL: Explicitly start the service (WiX removed auto-start)
+          Write-Host "Verifying service registration..."
+          $service = Get-Service -Name "FortunaWebService" -ErrorAction SilentlyContinue
+          if ($null -eq $service) {
+            throw "❌ Service 'FortunaWebService' not found in registry."
+          }
           Write-Host "Starting FortunaWebService..."
           Start-Service -Name "FortunaWebService" -ErrorAction Stop
           Start-Sleep -Seconds 10
@@ -638,7 +643,7 @@ jobs:
         shell: pwsh
         run: |
           $maxRetries = 5
-          $delay = 5
+          $delay = 2
           For ($i=0; $i -lt $maxRetries; $i++) {
             try {
               $response = Invoke-WebRequest -Uri "http://localhost:${{ env.SERVICE_PORT }}/health" -UseBasicParsing
@@ -648,7 +653,7 @@ jobs:
                 exit 0
               }
             } catch { Write-Host "Attempt $($i+1) failed. Retrying..." }
-            Start-Sleep -Seconds $delay
+            Start-Sleep -Seconds ($delay * ($i + 1))
           }
           throw "Health check failed."
 

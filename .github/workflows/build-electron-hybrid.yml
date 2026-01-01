@@ -177,6 +177,8 @@ jobs:
           $child = Get-Process -Name "fortuna-backend" -ErrorAction SilentlyContinue
           if (-not $parent) { throw "Main process 'Fortuna Faucet' not found!" }
           if (-not $child) { throw "Backend process 'fortuna-backend' not found!" }
+          $response = Invoke-WebRequest -Uri "http://localhost:${{ env.FORTUNA_PORT }}/health" -UseBasicParsing
+          if ($response.StatusCode -ne 200) { throw "Service health check failed." }
       - name: Cleanup
         if: always()
         run: Stop-Process -Name "Fortuna Faucet", "fortuna-backend" -Force -ErrorAction SilentlyContinue
