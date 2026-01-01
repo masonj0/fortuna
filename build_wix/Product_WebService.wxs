@@ -71,18 +71,21 @@
       </Component>
     </ComponentGroup>
 
-    <ComponentGroup Id="RuntimeDirectoryComponents" Directory="INSTALLFOLDER">
-        <Component Id="DataDirectoryComponent" Guid="BA521E2F-4752-4C82-9658-3E2A40E5E0B3">
-            <CreateFolder Directory="Dir_Data" />
-            <RegistryValue Root="HKCU" Key="Software\Fortuna Faucet\Directories" Name="Data" Type="string" Value="1" KeyPath="yes" />
+    <ComponentGroup Id="RuntimeDirectoryComponents">
+        <Component Id="DataDirectoryComponent" Directory="Dir_Data" Guid="*">
+            <CreateFolder />
+            <RemoveFile Id="RemoveDataDir" Name="*.*" On="uninstall" />
+            <RegistryValue Root="HKLM" Key="Software\Fortuna" Name="DataDir" Type="string" Value="1" KeyPath="yes" />
         </Component>
-        <Component Id="JsonDirectoryComponent" Guid="C38E22D1-5B9C-4E7B-8B41-2A1B16F4A8E4">
-            <CreateFolder Directory="Dir_Json" />
-            <RegistryValue Root="HKCU" Key="Software\Fortuna Faucet\Directories" Name="Json" Type="string" Value="1" KeyPath="yes" />
+        <Component Id="JsonDirectoryComponent" Directory="Dir_Json" Guid="*">
+            <CreateFolder />
+            <RemoveFile Id="RemoveJsonDir" Name="*.*" On="uninstall" />
+            <RegistryValue Root="HKLM" Key="Software\Fortuna" Name="JsonDir" Type="string" Value="1" KeyPath="yes" />
         </Component>
-        <Component Id="LogsDirectoryComponent" Guid="D9A7C5F3-8E2D-4C6A-A9F2-3B4C5D6E7F89">
-            <CreateFolder Directory="Dir_Logs" />
-            <RegistryValue Root="HKCU" Key="Software\Fortuna Faucet\Directories" Name="Logs" Type="string" Value="1" KeyPath="yes" />
+        <Component Id="LogsDirectoryComponent" Directory="Dir_Logs" Guid="*">
+            <CreateFolder />
+            <RemoveFile Id="RemoveLogsDir" Name="*.*" On="uninstall" />
+            <RegistryValue Root="HKLM" Key="Software\Fortuna" Name="LogsDir" Type="string" Value="1" KeyPath="yes" />
         </Component>
     </ComponentGroup>
 
