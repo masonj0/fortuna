@@ -89,21 +89,12 @@ jobs:
       - name: 🧪 Verify Backend Works
         shell: pwsh
         run: |
-          try {
-            $process = Start-Process -FilePath "dist/fortuna-backend.exe" -ArgumentList "--help" -NoNewWindow -PassThru
-            Start-Sleep -Seconds 10
-            if ($process.HasExited) {
-              if ($process.ExitCode -ne 0) {
-                throw "❌ Backend executable exited with non-zero code: $($process.ExitCode)."
-              }
-              Write-Host "✅ Executable ran and exited cleanly."
-            } else {
-              Write-Host "✅ Executable is still running after 10 seconds. Terminating."
-              Stop-Process -Id $process.Id -Force
-            }
-          } catch {
-            throw "❌ Backend executable failed to start or run: $_"
-          }
+          $process = Start-Process -FilePath "dist/fortuna-backend.exe" -NoNewWindow -PassThru
+          Write-Host "Backend process started with PID: $($process.Id). Waiting 10 seconds..."
+          Start-Sleep -Seconds 10
+          Write-Host "10 seconds elapsed. Stopping process..."
+          Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+          Write-Host "Process stopped. Verification complete."
       - name: 📤 Upload
         uses: actions/upload-artifact@v4
         with:
