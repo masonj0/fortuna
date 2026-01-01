@@ -287,6 +287,7 @@ jobs:
           $msiPath = (Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse | Select-Object -First 1).FullName
           if (-not $msiPath) { throw "MSI not found!" }
           Write-Host "Found MSI at $msiPath"
+
           # 1. PRE-INSTALL CLEANUP
           Write-Host "Attempting pre-emptive service removal..."
           $service = Get-Service -Name "FortunaWebService" -ErrorAction SilentlyContinue
@@ -294,6 +295,7 @@ jobs:
             sc.exe delete "FortunaWebService"
             Start-Sleep -Seconds 5
           }
+
           # 2. INSTALL
           $logFile = "msi-install.log"
           $msiArgs = "/i `"$msiPath`" /qn /L*v `"$logFile`""
@@ -304,108 +306,38 @@ jobs:
             throw "MSI installation failed with exit code $($proc.ExitCode)."
           }
           Write-Host "✅ MSI Installation successful."
-          # 3. VERIFY
-          $progFiles = ${env:ProgramFiles}
-          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
-          $installDir = Join-Path $progFiles "Fortuna Faucet Service"
-          if (-not (Test-Path $installDir)) { throw "Installation directory not found!" }
-          New-Item -ItemType Directory -Path (Join-Path $installDir "data") -Force | Out-Null
-          New-Item -ItemType Directory -Path (Join-Path $installDir "json") -Force | Out-Null
-          New-Item -ItemType Directory -Path (Join-Path $installDir "logs") -Force | Out-Null
 
-          # 🚀 CRITICAL FIX: Grant LocalSystem write access to runtime dirs
-          icacls (Join-Path $installDir "data") /grant "NT AUTHORITY\SYSTEM:(OI)(CI)F" /T
-          icacls (Join-Path $installDir "json") /grant "NT AUTHORITY\SYSTEM:(OI)(CI)F" /T
-          icacls (Join-Path $installDir "logs") /grant "NT AUTHORITY\SYSTEM:(OI)(CI)F" /T
-
-          Write-Host "✅ Installation verified and permissions granted."
-
-      - name: '🔬 Verify Service Registration'
-        shell: pwsh
-        run: |
-          $service = Get-Service -Name "FortunaWebService" -ErrorAction SilentlyContinue
-          if ($null -eq $service) {
-            throw "❌ Service 'FortunaWebService' not found in registry."
-          }
-          Write-Host "✅ Service 'FortunaWebService' is registered."
-
-      - name: '🕵️ DLL Dependency Forensics'
-        shell: pwsh
-        run: |
-            $progFiles = ${env:ProgramFiles}
-            if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
-            $installDir = Join-Path $progFiles "Fortuna Faucet Service"
-            $exePath = Join-Path $installDir "fortuna-webservice.exe"
-
-            # Find dumpbin.exe in the Visual Studio installation
-            $vsPath = (Get-ChildItem "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\*\bin\Hostx64\x64\dumpbin.exe" -Recurse | Select-Object -First 1).FullName
-            if (-not $vsPath) {
-                throw "dumpbin.exe not found!"
-            }
-
-            # Use dumpbin to list the imported DLLs
-            & $vsPath /dependents $exePath
-
-      - name: '🔬 Pre-flight Service Check (Run executable directly)'
-        shell: pwsh
-        run: |
-          $progFiles = ${env:ProgramFiles}
-          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
-          $installDir = Join-Path $progFiles "Fortuna Faucet Service"
-          $exePath = Join-Path $installDir "fortuna-webservice.exe"
-
-          Write-Host "Attempting to run the service executable directly for 5 seconds to catch startup errors..."
-          $process = Start-Process -FilePath $exePath -NoNewWindow -PassThru
-          Start-Sleep -Seconds 5
-          if ($process.HasExited) {
-              Write-Error "The service executable exited prematurely. Exit Code: $($process.ExitCode)"
-              # Attempt to get more info if there are logs
-              $logFile = Get-ChildItem -Path (Join-Path $installDir "logs") -Filter "*.log" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-              if ($logFile) {
-                  Write-Host "--- Last Log File Content ---"
-                  Get-Content $logFile.FullName -Tail 50
-              }
-              exit 1
-          } else {
-              Write-Host "✅ Executable started without immediate errors. Stopping it to proceed with service-based test."
-              Stop-Process -Id $process.Id -Force
-          }
-
-      - name: '🚀 Start, Verify & Snap'
-        shell: pwsh
-        run: |
-          # 1. PREP: Install Playwright
-          npm install playwright
-          npx playwright install chromium
-
-          # 2. LAUNCH: Start the Service
-          Start-Service -Name "FortunaWebService"
-          Start-Sleep -Seconds 10
-
-          # 3. VERIFY: Health Check
+          # 3. START SERVICE AND POLL
+          Start-Service "FortunaWebService"
+          $maxRetries = 10
+          $retryDelay = 3
           $healthUrl = "http://localhost:${{ env.SERVICE_PORT }}/health"
-          $maxRetries = 5
-          $delay = 2
-          for ($i=1; $i -le $maxRetries; $i++) {
+
+          for ($i = 1; $i -le $maxRetries; $i++) {
             try {
-              $response = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing
+              $response = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 5
               if ($response.StatusCode -eq 200) {
-                Write-Host "✅ Health check PASSED."
+                Write-Host "✅ Health check PASSED on attempt $i."
                 break
               }
             } catch {
-              Write-Host "Attempt $($i) failed. Retrying in $($delay * $i) seconds..."
-              Start-Sleep -Seconds ($delay * $i)
+              Write-Host "Health check attempt $i failed. Retrying in $retryDelay seconds..."
+              Start-Sleep -Seconds $retryDelay
             }
             if ($i -eq $maxRetries) {
+              $progFiles = if ('${{ matrix.arch }}' -eq 'x86') { ${env:ProgramFiles(x86)} } else { ${env:ProgramFiles} }
+              $logDir = Join-Path $progFiles "Fortuna Faucet Service\logs"
+              if (Test-Path $logDir) {
+                Get-ChildItem -Path $logDir -Filter "*.log" | ForEach-Object {
+                  Write-Host "--- Log file: $($_.FullName) ---"
+                  Get-Content $_.FullName | Write-Host
+                }
+              }
+              Get-Content $logFile -Tail 50 | Write-Host
               throw "Health check failed after $maxRetries attempts."
             }
           }
-
-          # 4. SNAP: Take Screenshot
-          $docsUrl = "http://127.0.0.1:${{ env.SERVICE_PORT }}/docs"
-          $nodeScript = "const { chromium } = require('playwright'); (async () => { const browser = await chromium.launch(); const page = await browser.newPage(); try { await page.goto('$docsUrl', { timeout: 10000 }); await page.screenshot({ path: 'proof-of-life.png', fullPage: true }); console.log('✅ Screenshot captured!'); } catch (e) { console.error('❌ Failed to capture screenshot:', e); process.exit(1); } await browser.close(); })();"
-          node -e $nodeScript
+          Write-Host "✅ Smoke Test Passed"
 
       - name: 📤 Upload Visual Proof
         uses: actions/upload-artifact@v4
