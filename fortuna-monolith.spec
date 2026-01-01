@@ -54,6 +54,11 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
+# Define the icon path dynamically and absolutely
+icon_path = project_root / 'electron' / 'assets' / 'icons' / 'icon.ico'
+if not icon_path.exists():
+    raise FileNotFoundError(f"Icon not found at calculated path: {icon_path}")
+
 exe = EXE(
     pyz, a.scripts, a.binaries, a.zipfiles, a.datas,
     name='FortunaMonolith',
@@ -65,4 +70,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=str(icon_path)
 )

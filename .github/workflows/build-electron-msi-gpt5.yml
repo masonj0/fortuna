@@ -266,13 +266,33 @@ jobs:
           }
 
           # 4. SNAP: Take the screenshot (Paparazzi)
-          Write-Host "📸 Taking screenshot..."
-          node -e "const { chromium } = require('playwright'); (async () => { const browser = await chromium.launch(); const page = await browser.newPage(); try { await page.goto('$url', {timeout: 15000}); await page.screenshot({ path: 'proof.png' }); console.log('✅ Screenshot saved to proof.png'); } catch(e) { console.error(e); process.exit(1); } await browser.close(); })();"
+          # The frontend is served on port 3000 by default in the Electron app.
+          $frontendUrl = "http://localhost:3000"
+          Write-Host "📸 Taking screenshot of frontend at $frontendUrl..."
+          $scriptLines = @(
+            "const { chromium } = require('playwright');",
+            "(async () => {",
+            "  const browser = await chromium.launch();",
+            "  const page = await browser.newPage();",
+            "  try {",
+            "    await page.goto('$frontendUrl', { timeout: 20000, waitUntil: 'networkidle' });",
+            "    await page.waitForSelector('#data-grid-container', { timeout: 15000 });",
+            "    await page.screenshot({ path: 'proof.png', fullPage: true });",
+            "    console.log('✅ Screenshot saved to proof.png');",
+            "  } catch(e) {",
+            "    console.error('Failed to take screenshot:', e);",
+            "    process.exit(1);",
+            "  } finally {",
+            "    await browser.close();",
+            "  }",
+            "})();"
+          )
+          $nodeScript = $scriptLines -join [System.Environment]::NewLine
+          # Execute the Node.js script
+          node -e $nodeScript
 
           # 5. CLEANUP: We are done, we can kill it now.
           Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-
-      # 📸 Paparazzi step removed (merged into Launch step to preserve process lifecycle)
 
       - name: '📤 Upload Visual Proof'
         uses: actions/upload-artifact@v4
