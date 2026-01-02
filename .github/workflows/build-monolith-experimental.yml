@@ -79,7 +79,7 @@ jobs:
                 return
               }
             } catch {
-              Write-Warning "Attempt ${{i}}: Health check failed. Retrying in $delay seconds..."
+              Write-Warning "Attempt ${i}: Health check failed. Retrying in $delay seconds..."
             }
             Start-Sleep -Seconds $delay
           }
