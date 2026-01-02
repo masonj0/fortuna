@@ -24,7 +24,8 @@ param(
     [switch]$NoFrontend,
     [switch]$Production,
     [switch]$Clean,
-    [switch]$Help
+    [switch]$Help,
+    [string]$PythonExecutable
 )
 
 $ErrorActionPreference = "Stop"
@@ -33,7 +34,7 @@ $ErrorActionPreference = "Stop"
 $PROJECT_ROOT = Resolve-Path "$PSScriptRoot\.."
 $BACKEND_DIR  = Join-Path $PROJECT_ROOT "web_service\backend"
 $FRONTEND_DIR = Join-Path $PROJECT_ROOT "web_platform\frontend"
-$PYTHON_CMD   = "py -3.11" # Assumes python is in PATH. Use 'py -3.11' if needed.
+$PYTHON_CMD   = if ($PythonExecutable) { $PythonExecutable } else { "py -3.11" }
 
 # --- Helper Functions ---
 function Show-Step($msg) { Write-Host "`n🔵 $msg" -ForegroundColor Cyan }
