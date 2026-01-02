@@ -68,5 +68,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='electron/assets/icon.ico'
+    icon=os.path.join(project_root, 'electron/assets/icon.ico')
 )
