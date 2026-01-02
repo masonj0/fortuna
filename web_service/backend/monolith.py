@@ -29,7 +29,7 @@ except Exception as e:
     # FIXED: Removed emojis to prevent UnicodeEncodeError on Windows consoles
     print(f"[MONOLITH] [WARN] Could not load API routers: {e}")
 
-    @app.get("/health")
+    @app.get("/api/health")
     def health():
         return {"status": "ok", "mode": "monolith_fallback", "error": str(e)}
 
