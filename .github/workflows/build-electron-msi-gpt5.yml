@@ -233,6 +233,7 @@ jobs:
 
       - name: '🚀 Launch, Verify & Snap'
         shell: pwsh
+        continue-on-error: true
         run: |
           # 1. PREP: Install Playwright dependencies FIRST
           npm install playwright

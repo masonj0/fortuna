@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Product_Monolith.wxs
+
+  This WiX template is specifically designed to package the 'monolith.exe'
+  artifact into a user-friendly MSI installer.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+
+  <Package Name="Fortuna Monolith"
+           Manufacturer="Fortuna Project"
+           Version="$(var.Version)"
+           UpgradeCode="1C725A62-F787-4E05-9B2D-00A939886992"
+           Compressed="true">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+    <MediaTemplate EmbedCab="true" />
+
+    <Feature Id="Main">
+      <ComponentGroupRef Id="MonolithAppComponents" />
+      <ComponentGroupRef Id="Shortcuts" />
+    </Feature>
+
+    <UI>
+      <ui:WixUI Id="WixUI_InstallDir"
+                InstallDirectory="INSTALLFOLDER"
+                ApplicationFolderName="Fortuna Monolith" />
+    </UI>
+
+    <WixVariable Id="WixUILicenseRtf" Value="license.rtf" />
+
+  </Package>
+
+  <Fragment>
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Fortuna Monolith" />
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+        <Directory Id="ApplicationProgramsFolder" Name="Fortuna Monolith"/>
+    </StandardDirectory>
+
+    <ComponentGroup Id="MonolithAppComponents" Directory="INSTALLFOLDER">
+      <!-- 1. The main executable -->
+      <Component>
+        <File Source="$(var.SourceDir)\FortunaMonolith.exe" KeyPath="true" />
+      </Component>
+
+      <!-- 2. Create the required empty directories -->
+      <Component Id="CreateDataDir">
+        <CreateFolder Directory="DataDir" />
+        <RegistryValue Root="HKCU" Key="Software\Fortuna\Monolith" Name="DataDir" Type="string" Value="1" KeyPath="true" />
+      </Component>
+      <Component Id="CreateJsonDir">
+        <CreateFolder Directory="JsonDir" />
+        <RegistryValue Root="HKCU" Key="Software\Fortuna\Monolith" Name="JsonDir" Type="string" Value="1" KeyPath="true" />
+      </Component>
+      <Component Id="CreateLogsDir">
+        <CreateFolder Directory="LogsDir" />
+        <RegistryValue Root="HKCU" Key="Software\Fortuna\Monolith" Name="LogsDir" Type="string" Value="1" KeyPath="true" />
+      </Component>
+    </ComponentGroup>
+
+    <DirectoryRef Id="INSTALLFOLDER">
+        <Directory Id="DataDir" Name="data" />
+        <Directory Id="JsonDir" Name="json" />
+        <Directory Id="LogsDir" Name="logs" />
+    </DirectoryRef>
+
+    <ComponentGroup Id="Shortcuts" Directory="ApplicationProgramsFolder">
+      <Component>
+        <!-- The shortcut to run the console application and keep the window open -->
+        <Shortcut Id="ApplicationShortcut"
+                  Name="Fortuna Monolith Console"
+                  Description="Starts the Fortuna Monolith application"
+                  Target="[System64Folder]cmd.exe"
+                  Arguments='/K "[INSTALLFOLDER]FortunaMonolith.exe"'
+                  WorkingDirectory="INSTALLFOLDER" />
+
+        <!-- The uninstall shortcut -->
+        <Shortcut Id="UninstallShortcut"
+                  Name="Uninstall Fortuna Monolith"
+                  Description="Removes the application"
+                  Target="[System64Folder]msiexec.exe"
+                  Arguments="/x [ProductCode]" />
+
+        <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall"/>
+        <RegistryValue Root="HKCU" Key="Software\Fortuna\Monolith" Name="Installed" Type="integer" Value="1" KeyPath="true" />
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+</Wix>
