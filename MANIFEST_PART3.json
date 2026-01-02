@@ -2,7 +2,7 @@
     ".github/dependabot.yml",
     ".github/workflows/build-bundle.yml",
     ".github/workflows/build-msi-revived.yml",
-    ".github/workflows/formerly-the-core-of-reusable.yml",
+    ".github/workflows/test-quickstart.yml",
     "PSEUDOCODE.MD",
     "electron/main.js",
     "electron/secure-settings-manager.js",
