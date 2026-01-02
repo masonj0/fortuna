@@ -55,7 +55,7 @@ a = Analysis(
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 # Define the icon path dynamically and absolutely
-icon_path = project_root / 'electron' / 'assets' / 'icons' / 'icon.ico'
+icon_path = project_root / 'electron' / 'assets' / 'icon.ico'
 if not icon_path.exists():
     raise FileNotFoundError(f"Icon not found at calculated path: {icon_path}")
 
