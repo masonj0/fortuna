@@ -309,6 +309,16 @@ jobs:
             Get-Content install.log | Write-Error
             throw "MSI installation failed with exit code $($proc.ExitCode)"
           }
+      - name: '✅ Create Required Runtime Directories Post-Install'
+        shell: pwsh
+        run: |
+          $progFiles = if ('${{ matrix.arch }}' -eq 'x86') { ${env:ProgramFiles(x86)} } else { ${env:ProgramFiles} }
+          $installDir = Join-Path $progFiles "Fortuna Faucet Service"
+          New-Item -Path "$installDir\data" -ItemType Directory -Force | Out-Null
+          New-Item -Path "$installDir\json" -ItemType Directory -Force | Out-Null
+          New-Item -Path "$installDir\logs" -ItemType Directory -Force | Out-Null
+          Write-Host "✅ Created runtime directories in '$installDir'."
+
       - name: '🚀 Start and Verify Service Health'
         shell: pwsh
         run: |
