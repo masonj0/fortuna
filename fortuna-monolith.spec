@@ -15,12 +15,18 @@ print(f"[SPEC] Frontend Dist: {frontend_dist}")
 
 datas = []
 
-# 1. Bundle Frontend
+# 1. Bundle Frontend (CRITICAL)
 if frontend_dist.exists():
     datas.append((str(frontend_dist), 'frontend_dist'))
-    print("[SPEC] Added frontend_dist")
+    print("[SPEC] SUCCESS: Found and added frontend_dist")
 else:
-    print("[SPEC] ❌ WARNING: Frontend dist NOT found at expected path!")
+    # Fallback: Try to find it if the CWD is different
+    alt_dist = Path('web_platform/frontend/out').absolute()
+    if alt_dist.exists():
+         datas.append((str(alt_dist), 'frontend_dist'))
+         print("[SPEC] SUCCESS: Found frontend_dist at alternate path")
+    else:
+         print("[SPEC] FATAL WARNING: Frontend dist NOT found! The UI will be missing.")
 
 # 2. Bundle Backend Assets
 for folder in ['data', 'json', 'adapters']:
@@ -32,8 +38,7 @@ for folder in ['data', 'json', 'adapters']:
 hiddenimports = [
     'uvicorn', 'fastapi', 'starlette', 'pydantic', 'structlog',
     'webview', 'webview.platforms.winforms', 'clr',
-    'tenacity', 'redis', 'sqlalchemy', 'greenlet',
-    'playwright', 'playwright.sync_api'
+    'tenacity', 'redis', 'sqlalchemy', 'greenlet'
 ] + collect_submodules('web_service.backend')
 
 a = Analysis(
@@ -51,24 +56,17 @@ a = Analysis(
     cipher=block_cipher,
     noarchive=False,
 )
-
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
-
-# Define the icon path dynamically and absolutely
-icon_path = project_root / 'electron' / 'assets' / 'icon.ico'
-if not icon_path.exists():
-    raise FileNotFoundError(f"Icon not found at calculated path: {icon_path}")
-
 exe = EXE(
     pyz, a.scripts, a.binaries, a.zipfiles, a.datas,
     name='FortunaMonolith',
     debug=False,
     strip=False,
     upx=True,
-    console=False,
+    console=False, # GUI Mode
     disable_windowed_traceback=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=str(icon_path)
+    icon='electron/assets/icon.ico'
 )
