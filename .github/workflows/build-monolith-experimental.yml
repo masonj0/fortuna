@@ -49,6 +49,13 @@ jobs:
           }
           Write-Host "✅ Monolith EXE built successfully"
 
+      - name: 📤 Upload Monolith EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: FortunaMonolith-EXE
+          path: dist/FortunaMonolith.exe
+          retention-days: 30
+
       - name: 🔬 Smoke Test Monolith and Capture Screenshot
         shell: pwsh
         timeout-minutes: 5
@@ -86,13 +93,6 @@ jobs:
           # Clean up
           Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
           Write-Host "✅ Monolith test complete."
-
-      - name: 📤 Upload Monolith EXE
-        uses: actions/upload-artifact@v4
-        with:
-          name: FortunaMonolith-EXE
-          path: dist/FortunaMonolith.exe
-          retention-days: 30
 
       - name: 📤 Upload Screenshot
         uses: actions/upload-artifact@v4
