@@ -338,11 +338,11 @@ jobs:
             try {
               $response = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 10
               if ($response.StatusCode -eq 200) {
-                Write-Host "✅ Backend health check PASSED on attempt $i."
+                Write-Host "✅ Backend health check PASSED on attempt ${i}."
                 return
               }
             } catch {
-              Write-Warning "Attempt $i: Health check failed. Retrying in $delay seconds..."
+              Write-Warning "Attempt ${i}: Health check failed. Retrying in $delay seconds..."
             }
             Start-Sleep -Seconds $delay
           }
