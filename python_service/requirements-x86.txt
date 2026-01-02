@@ -109,7 +109,7 @@ pathspec==0.12.1
     # via black
 pip-tools==7.5.1
     # via -r python_service/requirements.in
-platformdirs==4.5.0
+platformdirs==4.5.1
     # via black
 pluggy==1.6.0
     # via pytest
