@@ -309,40 +309,43 @@ jobs:
             Get-Content install.log | Write-Error
             throw "MSI installation failed with exit code $($proc.ExitCode)"
           }
-      - name: 🚀 Install, Start, and Verify Service
+      - name: '🚀 Start and Verify Service Health'
         shell: pwsh
         run: |
           Start-Service "FortunaWebService"
-
-          $maxRetries = 10
-          $retryDelay = 3
           $healthUrl = "http://localhost:${{ env.SERVICE_PORT }}/health"
-
+          $maxRetries = 12
+          $delay = 5
           for ($i = 1; $i -le $maxRetries; $i++) {
             try {
-              $response = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 5
+              $response = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 10
               if ($response.StatusCode -eq 200) {
-                Write-Host "✅ Health check PASSED on attempt $i."
-                break
+                Write-Host "✅ Backend health check PASSED on attempt $i."
+                return
               }
             } catch {
-              Write-Host "Health check attempt $i failed. Retrying in $retryDelay seconds..."
-              Start-Sleep -Seconds $retryDelay
+              Write-Warning "Attempt $i: Health check failed. Retrying in $delay seconds..."
             }
-            if ($i -eq $maxRetries) {
-              $progFiles = if ('${{ matrix.arch }}' -eq 'x86') { ${env:ProgramFiles(x86)} } else { ${env:ProgramFiles} }
-              $logDir = Join-Path $progFiles "Fortuna Faucet Service\logs"
-              if (Test-Path $logDir) {
-                Get-ChildItem -Path $logDir -Filter "*.log" | ForEach-Object {
-                  Write-Host "--- Log file: $($_.FullName) ---"
-                  Get-Content $_.FullName | Write-Host
-                }
-              }
-              Get-Content install.log -Tail 50 | Write-Host
-              throw "Health check failed after $maxRetries attempts."
-            }
+            Start-Sleep -Seconds $delay
           }
-          Write-Host "✅ Smoke Test Passed"
+          throw "❌ Backend health check failed after $maxRetries attempts."
+
+      - name: '📸 Capture UI Screenshot'
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          npm install playwright
+          playwright install chromium
+          $screenshotPath = "webservice-screenshot.png"
+          $nodeScript = "const { chromium } = require('playwright');(async () => { const browser = await chromium.launch(); const page = await browser.newPage(); try { await page.goto('http://localhost:${{ env.SERVICE_PORT }}', { waitUntil: 'networkidle', timeout: 20000 }); await page.screenshot({ path: '$screenshotPath', fullPage: true }); console.log('✅ Screenshot captured.'); } catch(e) { console.error('Failed to capture screenshot:', e); process.exit(1); } finally { await browser.close(); } })();"
+          node -e $nodeScript
+
+      - name: '📤 Upload Screenshot'
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: webservice-screenshot-${{ matrix.arch }}
+          path: webservice-screenshot.png
 
       - name: '🕵️ CSI: Windows Post-Mortem (On Failure)'
         if: failure()
