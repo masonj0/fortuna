@@ -49,6 +49,13 @@ jobs:
           }
           Write-Host "✅ Monolith EXE built successfully"
 
+      - name: 📤 Upload Monolith EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: FortunaMonolith-EXE
+          path: dist/FortunaMonolith.exe
+          retention-days: 30
+
       - name: 🔬 Smoke Test Monolith and Capture Screenshot
         shell: pwsh
         timeout-minutes: 5
@@ -87,13 +94,6 @@ jobs:
           Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
           Write-Host "✅ Monolith test complete."
 
-      - name: 📤 Upload Monolith EXE
-        uses: actions/upload-artifact@v4
-        with:
-          name: FortunaMonolith-EXE
-          path: dist/FortunaMonolith.exe
-          retention-days: 30
-
       - name: 📤 Upload Screenshot
         uses: actions/upload-artifact@v4
         if: always()
@@ -108,3 +108,43 @@ jobs:
         run: |
           Stop-Process -Name "FortunaMonolith" -Force -ErrorAction SilentlyContinue
           Write-Host "✅ Cleanup complete"
+
+  package-msi:
+    name: '💿 Package Monolith MSI'
+    runs-on: windows-latest
+    needs: build-monolith
+    steps:
+      - uses: actions/checkout@v4
+      - name: 📥 Download Monolith EXE
+        uses: actions/download-artifact@v4
+        with:
+          name: FortunaMonolith-EXE
+          path: staging
+
+      - name: 🔧 Setup WiX Toolset
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - run: dotnet tool install --global wix --version 4.0.5
+      - run: echo C:\Users\runneradmin\.dotnet\tools >> $GITHUB_PATH
+        shell: bash
+
+      - name: 📄 Create License File
+        shell: pwsh
+        run: |
+          if (-not (Test-Path build_wix)) { New-Item -ItemType Directory -Path build_wix | Out-Null }
+          Set-Content -Path "build_wix/license.rtf" -Value '{\rtf1\ansi Placeholder License}' -Encoding Ascii
+
+      - name: 🏗️ Build MSI
+        working-directory: build_wix
+        shell: pwsh
+        run: |
+          $ver = "0.0.${{ github.run_number }}"
+          wix build Product_Monolith.wxs -o "FortunaMonolith-${ver}.msi" -d Version=$ver -d SourceDir="../staging"
+          Write-Host "✅ MSI built successfully"
+
+      - name: 📤 Upload MSI Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FortunaMonolith-MSI
+          path: build_wix/FortunaMonolith-*.msi
