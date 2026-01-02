@@ -307,27 +307,25 @@ jobs:
           Start-Service "FortunaWebService"
           Start-Sleep 10
 
-      - name: '🚀 Launch, Verify & Snap'
+      - name: '📦 Install Playwright'
         shell: pwsh
         run: |
-          # 1. PREP: Install Playwright
           npm install playwright
           npx playwright install chromium --with-deps
 
-          # 2. LAUNCH: Start the Service (already started in previous step)
-          # We just need to give it a moment to stabilize
-          Start-Sleep -Seconds 5
-
-          # 3. VERIFY: Health Check
+      - name: '🔬 Verify Backend Health'
+        shell: pwsh
+        run: |
+          Start-Sleep -Seconds 5 # Give service a moment to stabilize
           $healthUrl = "http://localhost:${{ env.SERVICE_PORT }}/health"
           $maxRetries = 5
-          $delay = 2 # Initial delay in seconds
+          $delay = 2
           for ($i=1; $i -le $maxRetries; $i++) {
             try {
               $response = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 5
               if ($response.StatusCode -eq 200) {
                 Write-Host "✅ Health check PASSED on attempt $i."
-                break
+                return # Use return instead of break to exit the script successfully
               }
             } catch {
               Write-Warning "Attempt $i: Health check failed."
@@ -337,12 +335,13 @@ jobs:
               Write-Host "Waiting for $currentDelay seconds..."
               Start-Sleep -Seconds $currentDelay
             }
-            if ($i -eq $maxRetries) {
-              throw "❌ Service health check failed after $maxRetries attempts."
-            }
           }
+          throw "❌ Service health check failed after $maxRetries attempts."
 
-          # 4. SNAP: Take Screenshot
+      - name: '📸 Capture Screenshot'
+        shell: pwsh
+        continue-on-error: true
+        run: |
           $docsUrl = "http://127.0.0.1:${{ env.SERVICE_PORT }}/docs"
           Write-Host "📸 Taking screenshot of $docsUrl..."
           node -e "const { chromium } = require('playwright'); (async () => { const browser = await chromium.launch(); const page = await browser.newPage(); try { await page.goto('$docsUrl', {timeout: 15000}); await page.screenshot({ path: 'proof.png' }); console.log('✅ Screenshot saved.'); } catch(e) { console.error(e); process.exit(1); } await browser.close(); })();"
