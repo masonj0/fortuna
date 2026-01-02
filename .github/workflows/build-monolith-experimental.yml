@@ -49,43 +49,43 @@ jobs:
           }
           Write-Host "✅ Monolith EXE built successfully"
 
-      - name: 🚀 Test Monolith
+      - name: 🔬 Smoke Test Monolith and Capture Screenshot
         shell: pwsh
         timeout-minutes: 5
         run: |
-          Write-Host "🚀 Launching Monolith for testing..."
-
-          # Define the absolute path for the screenshot
-          $screenshotPath = Join-Path (Get-Location) "monolith-screenshot.png"
-          $env:SCREENSHOT_PATH = $screenshotPath
-
-          # Run Monolith in background
+          Write-Host "🚀 Launching Monolith for smoke test..."
           $process = Start-Process -FilePath "dist/FortunaMonolith.exe" -PassThru -NoNewWindow
 
-          # Give it time to launch and capture screenshot
-          Start-Sleep -Seconds 8
-
-          # Check if process is still alive
-          if ($process.HasExited) {
-            throw "❌ Monolith process exited prematurely"
+          # Wait for the main window to appear by polling the process list
+          $maxRetries = 10
+          $found = $false
+          for ($i = 1; $i -le $maxRetries; $i++) {
+            Write-Host "Attempt ${i}: Checking for 'Fortuna Faucet' window..."
+            $mainWindow = Get-Process | Where-Object { $_.MainWindowTitle -eq "Fortuna Faucet" }
+            if ($null -ne $mainWindow) {
+              Write-Host "✅ Main window found!"
+              $found = $true
+              break
+            }
+            Start-Sleep -Seconds 2
+          }
+          if (-not $found) {
+            throw "❌ Timed out waiting for the Monolith main window to appear."
           }
 
-          Write-Host "✅ Monolith started successfully"
+          # Now that the window is up, take a screenshot
+          $screenshotPath = "monolith-screenshot.png"
+          $nodeScript = "const { chromium } = require('playwright');(async () => { const browser = await chromium.launch(); const page = await browser.newPage(); await page.goto('http://127.0.0.1:8000', { waitUntil: 'networkidle' }); await page.screenshot({ path: '$screenshotPath', fullPage: true }); await browser.close(); })();"
+          node -e $nodeScript
 
-          # Kill the process cleanly
+          if (-not (Test-Path $screenshotPath)) {
+            throw "❌ Screenshot was not created!"
+          }
+          Write-Host "✅ Screenshot captured successfully."
+
+          # Clean up
           Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-          Write-Host "✅ Monolith test complete"
-
-      - name: 📸 Collect Paparazzi
-        shell: pwsh
-        continue-on-error: true
-        run: |
-          # The monolith-screenshot.png should have been created by Playwright
-          if (Test-Path "monolith-screenshot.png") {
-            Write-Host "✅ Screenshot captured successfully"
-          } else {
-            throw "❌ Screenshot not found!"
-          }
+          Write-Host "✅ Monolith test complete."
 
       - name: 📤 Upload Monolith EXE
         uses: actions/upload-artifact@v4
