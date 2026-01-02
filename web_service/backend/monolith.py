@@ -28,7 +28,7 @@ try:
 except Exception as e:
     # If it fails, DO NOT CRASH. Load a fallback route.
     print(f"[MONOLITH] WARNING: Could not load API routers: {e}")
-    @app.get("/api/health")
+    @app.get("/health")
     def health():
         return {"status": "ok", "mode": "monolith_fallback", "error": str(e)}
 
