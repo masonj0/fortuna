@@ -309,6 +309,7 @@ jobs:
 
       - name: '📦 Install Playwright'
         shell: pwsh
+        continue-on-error: true
         run: |
           npm install playwright
           npx playwright install chromium --with-deps
