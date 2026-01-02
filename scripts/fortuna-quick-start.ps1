@@ -154,23 +154,29 @@ if ($env:CI) {
 
     Show-Success "Backend job started (Job ID: $($job.Id))"
 
-    # Wait for port 8000 to open (up to 30 seconds)
-    Write-Host "   Waiting for backend to bind to port 8000..." -NoNewline
+    # Wait for the backend to become healthy (up to 30 seconds)
+    $healthCheckUrl = "http://localhost:8000/health/ping"
+    Write-Host "   Pinging backend health endpoint ($healthCheckUrl)..." -NoNewline
     $timeout = 30
     $start = Get-Date
-    $portOpen = $false
+    $healthy = $false
     while ((Get-Date) -lt $start.AddSeconds($timeout)) {
-        if (Test-NetConnection -ComputerName localhost -Port 8000 -InformationLevel Quiet) {
-            Write-Host " OK" -ForegroundColor Green
-            Show-Success "Backend is live on Port 8000"
-            $portOpen = $true
-            break
+        try {
+            $response = Invoke-WebRequest -Uri $healthCheckUrl -UseBasicParsing -TimeoutSec 2
+            if ($response.StatusCode -eq 200) {
+                Write-Host " OK" -ForegroundColor Green
+                Show-Success "Backend is healthy and responding."
+                $healthy = $true
+                break
+            }
+        } catch {
+            # Catch exceptions for connection refused, etc.
         }
         Start-Sleep -Seconds 1
         Write-Host "." -NoNewline
     }
 
-    if (-not $portOpen) {
+    if (-not $healthy) {
         Write-Host " FAILED" -ForegroundColor Red
         Show-Fail "Backend did not start within the $timeout-second timeout."
         Receive-Job $job # Display any output from the failed job
