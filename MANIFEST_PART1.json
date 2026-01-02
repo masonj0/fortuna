@@ -1,7 +1,7 @@
 [
     ".github/actions/run-smoke-test/action.yml",
     ".github/workflows/build-monolith-experimental.yml",
-    ".github/workflows/build-web-service-msi-jules.yml",
+    ".github/workflows/codeql.yml",
     "ARCHITECTURAL_MANDATE.md",
     "WISDOM.md",
     "electron/electron-builder-config.yml",

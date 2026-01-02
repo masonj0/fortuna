@@ -1,7 +1,7 @@
 [
     ".github/actions/setup/action.yml",
     ".github/workflows/build-msi-hattrickfusion-ultimate.yml",
-    ".github/workflows/codeql.yml",
+    ".github/workflows/formerly-the-core-of-reusable.yml",
     "HISTORY.md",
     "electron/package.json",
     "electron/preload.js",

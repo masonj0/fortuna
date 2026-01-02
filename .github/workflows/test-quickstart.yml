@@ -1,0 +1,77 @@
+name: 🧪 Test Developer Quick-Start
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'scripts/fortuna-quick-start.ps1'
+
+jobs:
+  test-bootstrapper:
+    name: '🏃 Run Quick-Start PS1'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        id: setup-python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: 🟢 Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: web_platform/frontend/package-lock.json
+
+      - name: 🔍 Syntax Validation
+        shell: pwsh
+        run: |
+          try {
+            $script = Get-Content "scripts/fortuna-quick-start.ps1" -Raw
+            [void][System.Management.Automation.PSParser]::Tokenize($script, [ref]$null)
+            Write-Host "✅ PowerShell Syntax is valid."
+          } catch {
+            Write-Error "❌ Syntax Error: $_"
+            exit 1
+          }
+
+      - name: 🚀 Execute Bootstrapper
+        shell: pwsh
+        run: |
+          Write-Host "Starting script in CI mode..."
+          # Run with -Clean to test dependency installation
+          # Run with -NoFrontend to focus on Backend health first (faster feedback)
+          ./scripts/fortuna-quick-start.ps1 -Clean -NoFrontend -PythonExecutable "${{ steps.setup-python.outputs.python-path }}"
+
+      - name: 🩺 Verify Backend Health
+        shell: pwsh
+        run: |
+          $url = "http://127.0.0.1:8000/docs"
+          Write-Host "⏳ Waiting for Backend at $url..."
+
+          # Give it up to 60 seconds to install deps and start
+          for ($i=0; $i -lt 20; $i++) {
+            try {
+              $resp = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 2
+              if ($resp.StatusCode -eq 200) {
+                Write-Host "✅ Backend is UP and responding! The script works."
+                return
+              }
+            } catch {
+              Write-Host "... ping failed, retrying ($i/20)"
+              Start-Sleep -Seconds 3
+            }
+          }
+          throw "❌ Backend failed to start within timeout."
+
+      - name: 🧹 Cleanup
+        if: always()
+        shell: pwsh
+        run: |
+          # The script spawns 'pwsh' and 'python' processes. Kill them.
+          Stop-Process -Name "uvicorn", "python", "pwsh" -Force -ErrorAction SilentlyContinue
+          Write-Host "✅ Cleanup complete."

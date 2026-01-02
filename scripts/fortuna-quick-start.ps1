@@ -24,7 +24,8 @@ param(
     [switch]$NoFrontend,
     [switch]$Production,
     [switch]$Clean,
-    [switch]$Help
+    [switch]$Help,
+    [string]$PythonExecutable
 )
 
 $ErrorActionPreference = "Stop"
@@ -33,7 +34,7 @@ $ErrorActionPreference = "Stop"
 $PROJECT_ROOT = Resolve-Path "$PSScriptRoot\.."
 $BACKEND_DIR  = Join-Path $PROJECT_ROOT "web_service\backend"
 $FRONTEND_DIR = Join-Path $PROJECT_ROOT "web_platform\frontend"
-$PYTHON_CMD   = "python" # Assumes python is in PATH. Use 'py -3.11' if needed.
+$PYTHON_CMD   = if ($PythonExecutable) { $PythonExecutable } else { "py -3.11" }
 
 # --- Helper Functions ---
 function Show-Step($msg) { Write-Host "`n🔵 $msg" -ForegroundColor Cyan }
@@ -141,20 +142,14 @@ if (-not $NoFrontend) {
 Show-Step "Launching Services..."
 
 # Launch Backend
-$backendScript = @"
-cd "$BACKEND_DIR"
-$PYTHON_CMD -m uvicorn main:app --reload --port 8000
-"@
+$backendScript = "cd `"$BACKEND_DIR`"; & $PYTHON_CMD -m uvicorn main:app --reload --port 8000"
 Start-Process pwsh -ArgumentList "-NoExit", "-Command", $backendScript -WindowStyle Normal
 Show-Success "Backend launched on Port 8000"
 
 # Launch Frontend
 if (-not $NoFrontend) {
     $cmd = if ($Production) { "start" } else { "dev" }
-    $frontendScript = @"
-    cd "$FRONTEND_DIR"
-    npm run $cmd
-    "@
+    $frontendScript = "cd `"$FRONTEND_DIR`"; npm run $cmd"
     Start-Process pwsh -ArgumentList "-NoExit", "-Command", $frontendScript -WindowStyle Normal
     Show-Success "Frontend launched on Port 3000 ($cmd mode)"
 }
