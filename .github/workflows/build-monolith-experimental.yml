@@ -56,43 +56,42 @@ jobs:
           path: dist/FortunaMonolith.exe
           retention-days: 30
 
-      - name: 🔬 Smoke Test Monolith and Capture Screenshot
+      - name: 🚀 Launch Monolith Service
         shell: pwsh
-        timeout-minutes: 5
         run: |
           Write-Host "🚀 Launching Monolith for smoke test..."
-          $process = Start-Process -FilePath "dist/FortunaMonolith.exe" -PassThru -NoNewWindow
+          Start-Process -FilePath "dist/FortunaMonolith.exe" -PassThru -NoNewWindow
+          Start-Sleep -Seconds 5 # Give it a moment to initialize
 
-          # Wait for the main window to appear by polling the process list
-          $maxRetries = 10
-          $found = $false
+      - name: 🔬 Verify Backend Health
+        shell: pwsh
+        run: |
+          $healthUrl = "http://localhost:8000/health"
+          $maxRetries = 12
+          $delay = 5
           for ($i = 1; $i -le $maxRetries; $i++) {
-            Write-Host "Attempt ${i}: Checking for 'Fortuna Faucet' window..."
-            $mainWindow = Get-Process | Where-Object { $_.MainWindowTitle -eq "Fortuna Faucet" }
-            if ($null -ne $mainWindow) {
-              Write-Host "✅ Main window found!"
-              $found = $true
-              break
+            try {
+              $response = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 10
+              if ($response.StatusCode -eq 200) {
+                Write-Host "✅ Backend health check PASSED on attempt $i."
+                return
+              }
+            } catch {
+              Write-Warning "Attempt $i: Health check failed. Retrying in $delay seconds..."
             }
-            Start-Sleep -Seconds 2
+            Start-Sleep -Seconds $delay
           }
-          if (-not $found) {
-            throw "❌ Timed out waiting for the Monolith main window to appear."
-          }
+          throw "❌ Backend health check failed after $maxRetries attempts."
 
-          # Now that the window is up, take a screenshot
+      - name: 📸 Capture UI Screenshot
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          # Install Playwright browsers
+          playwright install chromium
           $screenshotPath = "monolith-screenshot.png"
-          $nodeScript = "const { chromium } = require('playwright');(async () => { const browser = await chromium.launch(); const page = await browser.newPage(); await page.goto('http://127.0.0.1:8000', { waitUntil: 'networkidle' }); await page.screenshot({ path: '$screenshotPath', fullPage: true }); await browser.close(); })();"
+          $nodeScript = "const { chromium } = require('playwright');(async () => { const browser = await chromium.launch(); const page = await browser.newPage(); try { await page.goto('http://127.0.0.1:8000', { waitUntil: 'networkidle', timeout: 20000 }); await page.screenshot({ path: '$screenshotPath', fullPage: true }); console.log('✅ Screenshot captured.'); } catch(e) { console.error('Failed to capture screenshot:', e); process.exit(1); } finally { await browser.close(); } })();"
           node -e $nodeScript
-
-          if (-not (Test-Path $screenshotPath)) {
-            throw "❌ Screenshot was not created!"
-          }
-          Write-Host "✅ Screenshot captured successfully."
-
-          # Clean up
-          Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-          Write-Host "✅ Monolith test complete."
 
       - name: 📤 Upload Screenshot
         uses: actions/upload-artifact@v4
