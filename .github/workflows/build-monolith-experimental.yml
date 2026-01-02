@@ -60,7 +60,7 @@ jobs:
           $maxRetries = 10
           $found = $false
           for ($i = 1; $i -le $maxRetries; $i++) {
-            Write-Host "Attempt $i: Checking for 'Fortuna Faucet' window..."
+            Write-Host "Attempt ${i}: Checking for 'Fortuna Faucet' window..."
             $mainWindow = Get-Process | Where-Object { $_.MainWindowTitle -eq "Fortuna Faucet" }
             if ($null -ne $mainWindow) {
               Write-Host "✅ Main window found!"
