@@ -58,6 +58,8 @@ jobs:
 
       - name: 🚀 Launch Monolith Service
         shell: pwsh
+        env:
+          PYTHONUTF8: '1'
         run: |
           Write-Host "🚀 Launching Monolith for smoke test..."
           Start-Process -FilePath "dist/FortunaMonolith.exe" -PassThru -NoNewWindow
@@ -77,7 +79,7 @@ jobs:
                 return
               }
             } catch {
-              Write-Warning "Attempt $i: Health check failed. Retrying in $delay seconds..."
+              Write-Warning "Attempt ${{i}}: Health check failed. Retrying in $delay seconds..."
             }
             Start-Sleep -Seconds $delay
           }
