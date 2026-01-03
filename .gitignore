@@ -53,6 +53,9 @@ ReviewableJSON/
 # Image files
 *.png
 
+# Generated reports
+race-report.html
+
 # Executables
 *.exe
 fortuna-backend.exe
