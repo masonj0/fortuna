@@ -155,7 +155,7 @@ if ($env:CI) {
     Show-Success "Backend job started (Job ID: $($job.Id))"
 
     # Wait for the backend to become healthy (up to 30 seconds)
-    $healthCheckUrl = "http://localhost:8000/health/ping"
+    $healthCheckUrl = "http://localhost:8000/health"
     Write-Host "   Pinging backend health endpoint ($healthCheckUrl)..." -NoNewline
     $timeout = 30
     $start = Get-Date
