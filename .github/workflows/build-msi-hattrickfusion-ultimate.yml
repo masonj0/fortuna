@@ -267,109 +267,8 @@ jobs:
           name: hat-trick-msi-${{ matrix.arch }}
           path: build_wix/bin/${{ matrix.arch }}/Release/*
 
-  smoke-test:
-    name: '🔬 Smoke Test (${{ matrix.arch }})'
-    runs-on: windows-latest
-    needs: package-msi
-    strategy:
-      matrix:
-        arch: [x64, x86]
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: hat-trick-msi-${{ matrix.arch }}
-          path: msi-installer
-      - name: 🧹 Pre-emptive Service Cleanup
-        shell: pwsh
-        run: |
-          $serviceName = "FortunaWebService"
-          $svc = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
-          if ($svc) {
-            Write-Host "⚠️ Service found. Stopping and deleting..."
-            Stop-Service -Name $serviceName -Force -ErrorAction SilentlyContinue
-            sc.exe delete $serviceName | Out-Null
-            Write-Host "✅ Service deleted."
-          } else {
-            Write-Host "✅ System is clean (Service not found)."
-          }
-      - name: 🔥 Install & Verify
-        shell: pwsh
-        run: |
-          Set-StrictMode -Version Latest
-          $ErrorActionPreference = "Stop"
-          $msiPath = (Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse | Select-Object -First 1).FullName
-          if (-not $msiPath) { throw "MSI not found!" }
-          Write-Host "Found MSI at $msiPath"
-          # 2. INSTALL
-          $logFile = "msi-install.log"
-          $msiArgs = "/i `"$msiPath`" /qn /L*v `"$logFile`""
-          Write-Host "Running: msiexec.exe $msiArgs"
-          $proc = Start-Process msiexec.exe -ArgumentList $msiArgs -Wait -PassThru
-          if ($proc.ExitCode -ne 0 -and $proc.ExitCode -ne 3010) {
-            Get-Content $logFile -Tail 50
-            throw "MSI installation failed with exit code $($proc.ExitCode)."
-          }
-          Write-Host "✅ MSI Installation successful."
-
-      - name: '✅ Create Required Runtime Directories Post-Install'
-        shell: pwsh
-        run: |
-          $progFiles = if ('${{ matrix.arch }}' -eq 'x86') { ${env:ProgramFiles(x86)} } else { ${env:ProgramFiles} }
-          $installDir = Join-Path $progFiles "Fortuna Faucet Service"
-          New-Item -Path "$installDir\data" -ItemType Directory -Force | Out-Null
-          New-Item -Path "$installDir\json" -ItemType Directory -Force | Out-Null
-          New-Item -Path "$installDir\logs" -ItemType Directory -Force | Out-Null
-          Write-Host "✅ Created runtime directories in '$installDir'."
-
-          # 3. START SERVICE AND POLL
-          Start-Service "FortunaWebService"
-          $maxRetries = 10
-          $retryDelay = 3
-          $healthUrl = "http://localhost:${{ env.SERVICE_PORT }}/health"
-
-          for ($i = 1; $i -le $maxRetries; $i++) {
-            try {
-              $response = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 5
-              if ($response.StatusCode -eq 200) {
-                Write-Host "✅ Health check PASSED on attempt $i."
-                break
-              }
-            } catch {
-              Write-Host "Health check attempt $i failed. Retrying in $retryDelay seconds..."
-              Start-Sleep -Seconds $retryDelay
-            }
-            if ($i -eq $maxRetries) {
-              $progFiles = if ('${{ matrix.arch }}' -eq 'x86') { ${env:ProgramFiles(x86)} } else { ${env:ProgramFiles} }
-              $logDir = Join-Path $progFiles "Fortuna Faucet Service\logs"
-              if (Test-Path $logDir) {
-                Get-ChildItem -Path $logDir -Filter "*.log" | ForEach-Object {
-                  Write-Host "--- Log file: $($_.FullName) ---"
-                  Get-Content $_.FullName | Write-Host
-                }
-              }
-              Get-Content $logFile -Tail 50 | Write-Host
-              throw "Health check failed after $maxRetries attempts."
-            }
-          }
-          Write-Host "✅ Smoke Test Passed"
-
-      - name: 📤 Upload Visual Proof
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: visual-proof-${{ matrix.arch || 'x64' }}
-          path: proof-of-life.png
-      - name: '🕵️ CSI: Windows Post-Mortem (On Failure)'
-        if: failure()
-        shell: pwsh
-        run: |
-          Get-Process | Where-Object { $_.ProcessName -match "fortuna" }
-          Get-EventLog -LogName Application -Newest 50 -EntryType Error,Warning
-      - name: 🧹 Stop Service
-        if: always()
-        shell: pwsh
-        run: |
-          Stop-Service -Name "FortunaWebService" -ErrorAction SilentlyContinue
+  # ✂️ SMOKE TEST JOB REMOVED FOR HARVEST MODE
+  # The build stops here. Download the MSI to test manually.
 
   generate-sbom:
     name: '📜 Generate SBOM (${{ matrix.arch }})'
@@ -395,7 +294,7 @@ jobs:
     name: '🚀 Create Release'
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [smoke-test, generate-sbom]
+    needs: [package-msi, generate-sbom]
     timeout-minutes: 30
     permissions:
       contents: write

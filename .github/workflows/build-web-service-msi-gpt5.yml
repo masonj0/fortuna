@@ -276,118 +276,17 @@ jobs:
           retention-days: 1
 
   # =========================================================
-  # PHASE 4: SMOKE TEST
+  # PHASE 4: SMOKE TEST (REMOVED)
   # =========================================================
-  smoke-test:
-    name: 🚬 Smoke Test Installation (${{ matrix.arch }})
-    needs: [package-msi, preflight-check]
-    runs-on: windows-2022
-    strategy:
-      matrix:
-        arch: [x64, x86]
-    steps:
-      - uses: actions/checkout@v4
-      - name: 📥 Download MSI Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: msi-dist-${{ matrix.arch }}-${{ needs.preflight-check.outputs.build_id }}
-          path: msi-installer
-
-      - name: 🧹 Pre-emptive Service Cleanup
-        shell: pwsh
-        run: |
-          $serviceName = "FortunaWebService"
-          $svc = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
-          if ($svc) {
-            Write-Host "⚠️ Service found. Stopping and deleting..."
-            Stop-Service -Name $serviceName -Force -ErrorAction SilentlyContinue
-            sc.exe delete $serviceName | Out-Null
-            Write-Host "✅ Service deleted."
-          } else {
-            Write-Host "✅ System is clean (Service not found)."
-          }
-
-      - name: 💿 Install MSI Silently
-        shell: pwsh
-        run: |
-          $msi = Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse | Select-Object -First 1
-          if (-not $msi) { throw "MSI not found in msi-installer directory!" }
-          $proc = Start-Process msiexec.exe -ArgumentList "/i `"$($msi.FullName)`" /quiet /norestart /L*v install.log" -Wait -PassThru
-          if ($proc.ExitCode -ne 0 -and $proc.ExitCode -ne 3010) {
-            Get-Content install.log | Write-Error
-            throw "MSI installation failed with exit code $($proc.ExitCode)"
-          }
-      - name: '✅ Create Required Runtime Directories Post-Install'
-        shell: pwsh
-        run: |
-          $progFiles = if ('${{ matrix.arch }}' -eq 'x86') { ${env:ProgramFiles(x86)} } else { ${env:ProgramFiles} }
-          $installDir = Join-Path $progFiles "Fortuna Faucet Service"
-          New-Item -Path "$installDir\data" -ItemType Directory -Force | Out-Null
-          New-Item -Path "$installDir\json" -ItemType Directory -Force | Out-Null
-          New-Item -Path "$installDir\logs" -ItemType Directory -Force | Out-Null
-          Write-Host "✅ Created runtime directories in '$installDir'."
-
-      - name: '🚀 Start and Verify Service Health'
-        shell: pwsh
-        run: |
-          Start-Service "FortunaWebService"
-          $healthUrl = "http://localhost:${{ env.SERVICE_PORT }}/health"
-          $maxRetries = 12
-          $delay = 5
-          for ($i = 1; $i -le $maxRetries; $i++) {
-            try {
-              $response = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 10
-              if ($response.StatusCode -eq 200) {
-                Write-Host "✅ Backend health check PASSED on attempt ${i}."
-                return
-              }
-            } catch {
-              Write-Warning "Attempt ${i}: Health check failed. Retrying in $delay seconds..."
-            }
-            Start-Sleep -Seconds $delay
-          }
-          throw "❌ Backend health check failed after $maxRetries attempts."
-
-      - name: '📸 Capture UI Screenshot'
-        shell: pwsh
-        continue-on-error: true
-        run: |
-          npm install playwright
-          playwright install chromium
-          $screenshotPath = "webservice-screenshot.png"
-          $nodeScript = "const { chromium } = require('playwright');(async () => { const browser = await chromium.launch(); const page = await browser.newPage(); try { await page.goto('http://localhost:${{ env.SERVICE_PORT }}', { waitUntil: 'networkidle', timeout: 20000 }); await page.screenshot({ path: '$screenshotPath', fullPage: true }); console.log('✅ Screenshot captured.'); } catch(e) { console.error('Failed to capture screenshot:', e); process.exit(1); } finally { await browser.close(); } })();"
-          node -e $nodeScript
-
-      - name: '📤 Upload Screenshot'
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: webservice-screenshot-${{ matrix.arch }}
-          path: webservice-screenshot.png
-
-      - name: '🕵️ CSI: Windows Post-Mortem (On Failure)'
-        if: failure()
-        shell: pwsh
-        run: |
-          Get-Process | Where-Object { $_.ProcessName -like "fortuna*" }
-          Get-EventLog -LogName Application -Newest 50 -EntryType Error,Warning
-          Get-Content "C:\Program Files\Fortuna Faucet Service\logs\*.log" -ErrorAction SilentlyContinue
-
-      - name: 📤 Upload Diagnostic Logs (On Failure)
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: smoke-test-logs-${{ needs.preflight-check.outputs.build_id }}
-          path: |
-            install.log
-            C:\Program Files\Fortuna Faucet Service\logs\*.log
+  # ✂️ SMOKE TEST JOB REMOVED FOR HARVEST MODE
+  # The build stops here. Download the MSI to test manually.
 
   # =========================================================
   # PHASE 5: RELEASE
   # =========================================================
   release:
     name: 🚀 Publish Release
-    needs: smoke-test
+    needs: package-msi
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
