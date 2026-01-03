@@ -50,7 +50,6 @@ jobs:
       if: matrix.language == 'javascript'
       run: |
         npm install --prefix web_platform/frontend
-        npm install --prefix web_service/frontend
         npm install --prefix electron
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v3
