@@ -19,12 +19,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 2. Robust Router Import
+# 2. Robust API Mounting
 try:
-    # Try to import the real API
-    from web_service.backend.api import router as api_router
-    app.include_router(api_router, prefix="/api")
-    print("[MONOLITH] Loaded API routers successfully.")
+    # Import the entire API app and mount it as a sub-application
+    from web_service.backend.api import app as api_app
+    app.mount("/api", api_app)
+    print("[MONOLITH] Mounted main API application successfully.")
 except Exception as e:
     # If it fails, DO NOT CRASH. Load a fallback route.
     print(f"[MONOLITH] WARNING: Could not load API routers: {e}")

@@ -141,17 +141,73 @@ if (-not $NoFrontend) {
 # 4. Launch Sequence
 Show-Step "Launching Services..."
 
-# Launch Backend
-$backendScript = "cd `"$BACKEND_DIR`"; & $PYTHON_CMD -m uvicorn main:app --reload --port 8000"
-Start-Process pwsh -ArgumentList "-NoExit", "-Command", $backendScript -WindowStyle Normal
-Show-Success "Backend launched on Port 8000"
+# In CI, we need to use Start-Job to get process output and add a wait
+# loop to ensure the service is ready before tests run.
+if ($env:CI) {
+    Show-Warn "CI environment detected. Using Start-Job for backend..."
+    $job = Start-Job -ScriptBlock {
+        # This script block runs in a separate process
+        param($path, $cmd)
+        Set-Location $path
+        & $cmd -m uvicorn main:app --port 8000 --host 0.0.0.0
+    } -ArgumentList $BACKEND_DIR, $PYTHON_CMD
 
-# Launch Frontend
-if (-not $NoFrontend) {
-    $cmd = if ($Production) { "start" } else { "dev" }
-    $frontendScript = "cd `"$FRONTEND_DIR`"; npm run $cmd"
-    Start-Process pwsh -ArgumentList "-NoExit", "-Command", $frontendScript -WindowStyle Normal
-    Show-Success "Frontend launched on Port 3000 ($cmd mode)"
+    Show-Success "Backend job started (Job ID: $($job.Id))"
+
+    # Wait for the backend to become healthy (up to 30 seconds)
+    $healthCheckUrl = "http://localhost:8000/health/ping"
+    Write-Host "   Pinging backend health endpoint ($healthCheckUrl)..." -NoNewline
+    $timeout = 30
+    $start = Get-Date
+    $healthy = $false
+    while ((Get-Date) -lt $start.AddSeconds($timeout)) {
+        try {
+            $response = Invoke-WebRequest -Uri $healthCheckUrl -UseBasicParsing -TimeoutSec 2
+            if ($response.StatusCode -eq 200) {
+                Write-Host " OK" -ForegroundColor Green
+                Show-Success "Backend is healthy and responding."
+                $healthy = $true
+                break
+            }
+        } catch {
+            # Catch exceptions for connection refused, etc.
+        }
+        Start-Sleep -Seconds 1
+        Write-Host "." -NoNewline
+    }
+
+    if (-not $healthy) {
+        Write-Host " FAILED" -ForegroundColor Red
+        Show-Fail "Backend did not start within the $timeout-second timeout."
+        Receive-Job $job # Display any output from the failed job
+        Stop-Job $job
+        exit 1
+    }
+
+} else {
+    # -- LOCAL DEVELOPMENT (Existing Logic) --
+    $backendScript = "cd `"$BACKEND_DIR`"; & $PYTHON_CMD -m uvicorn main:app --reload --port 8000"
+    Start-Process pwsh -ArgumentList "-NoExit", "-Command", $backendScript -WindowStyle Normal
+    Show-Success "Backend launched on Port 8000"
 }
 
-Write-Host "`n✨ Fortuna is running! Press Ctrl+C in the popup windows to stop." -ForegroundColor Cyan
+# Launch Frontend (No changes needed here for now)
+if (-not $NoFrontend) {
+    if ($env:CI) {
+        # In CI, we would typically build and serve statically, but for this
+        # script's purpose, we'll assume the backend handles the UI
+        Show-Warn "Frontend launch skipped in CI mode for this script."
+    } else {
+        $cmd = if ($Production) { "start" } else { "dev" }
+        $frontendScript = "cd `"$FRONTEND_DIR`"; npm run $cmd"
+        Start-Process pwsh -ArgumentList "-NoExit", "-Command", $frontendScript -WindowStyle Normal
+        Show-Success "Frontend launched on Port 3000 ($cmd mode)"
+    }
+}
+
+# Keep script running if interactive, otherwise exit for CI
+if ($env:CI) {
+    Write-Host "`n✨ CI run complete. Exiting." -ForegroundColor Cyan
+} else {
+    Write-Host "`n✨ Fortuna is running! Press Ctrl+C in the popup windows to stop." -ForegroundColor Cyan
+}
