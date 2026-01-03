@@ -13,7 +13,7 @@ jobs:
     secrets: inherit
 
   build-web-service-msi:
-    uses: ./.github/workflows/build-msi-hat-trick-fusion.yml
+    uses: ./.github/workflows/build-msi-hattrickfusion-ultimate.yml
     secrets: inherit
 
   package-bundle:

@@ -28,6 +28,7 @@ hiddenimports.extend(collect_submodules('starlette'))
 hiddenimports.extend(collect_submodules('anyio'))
 hiddenimports.append('win32timezone') # Critical for Windows service operation
 hiddenimports.extend(['pydantic_settings.sources']) # For settings management
+hiddenimports.extend(['win32serviceutil', 'win32service', 'win32event', 'servicemanager'])
 
 a = Analysis(
     [str(backend_root / 'service_entry.py')], # Entry point is the service wrapper
