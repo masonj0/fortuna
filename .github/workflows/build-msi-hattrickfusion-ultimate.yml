@@ -46,10 +46,24 @@ jobs:
           name: frontend-dist-${{ github.run_id }}
           path: ${{ env.FRONTEND_DIR }}/out
 
+  backend-quality:
+    name: '🧯 Backend Quality Gates'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: build-frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - name: Install Dependencies
+        run: |
+          pip install -r web_service/backend/requirements-dev.txt
+      - name: Run Pytest
+        run: |
+          pytest web_service/backend/tests
   build-backend:
     name: '🐍 Build Backend (${{ matrix.arch }})'
     runs-on: windows-2022
-    needs: build-frontend
+    needs: [build-frontend, backend-quality]
     strategy:
       matrix:
         arch: [x64, x86]
