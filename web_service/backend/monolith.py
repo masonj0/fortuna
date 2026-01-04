@@ -53,4 +53,10 @@ if __name__ == '__main__':
 
     # Start Frontend Window (Native)
     webview.create_window("Fortuna Faucet", "http://127.0.0.1:8000", width=1200, height=800)
-    webview.start()
+
+    # Enable debug mode if FORTUNA_DEBUG is set to '1' for easier frontend troubleshooting.
+    # This allows right-clicking to inspect the webview.
+    debug_mode = os.getenv('FORTUNA_DEBUG') == '1'
+    if debug_mode:
+        print("[MONOLITH] Debug mode is ON. Right-click in the app and choose 'Inspect' to open the developer console.")
+    webview.start(debug=debug_mode)
