@@ -330,12 +330,78 @@ jobs:
           merge-multiple: true
       - name: Generate Checksums
         run: |
-          cd assets
-          sha256sum * > SHASUMS256.txt
-      - name: Publish Release
-        uses: softprops/action-gh-release@v1
+          $msi = Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse | Select-Object -First 1
+          if (-not $msi) { throw "MSI not found in msi-installer directory!" }
+          Start-Process msiexec.exe -ArgumentList "/i `"$($msi.FullName)`" /quiet /norestart /L*v install.log" -Wait
+          Start-Sleep 10
+
+      - name: 🔍 Dynamic Path Verification
+        shell: pwsh
+        run: |
+          $progFiles = if ('${{ matrix.arch }}' -eq 'x86') { ${env:ProgramFiles(x86)} } else { $env:ProgramFiles }
+          $installRoot = Join-Path $progFiles "Fortuna Faucet Service"
+          if (-not (Test-Path $installRoot)) { throw "❌ Install dir not found at $installRoot" }
+          Write-Host "✅ Found install at $installRoot"
+          New-Item -Path "$installRoot\data", "$installRoot\json", "$installRoot\logs" -ItemType Directory -Force | Out-Null
+          Start-Service "FortunaWebService"
+          Start-Sleep 10
+
+      - name: '📦 Install Playwright'
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          npm install playwright
+          npx playwright install chromium --with-deps
+
+      - name: '🔬 Verify Backend Health'
+        shell: pwsh
+        run: |
+          Start-Sleep -Seconds 5
+          $healthUrl = "http://localhost:${{ env.SERVICE_PORT }}/health"
+          $maxRetries = 5
+          $delay = 2
+          for ($i=1; $i -le $maxRetries; $i++) {
+            try {
+              $response = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 5
+              if ($response.StatusCode -eq 200) {
+                Write-Host "✅ Health check PASSED on attempt $i."
+                return
+              }
+            } catch {
+              Write-Warning "Attempt $i: Health check failed."
+            }
+            if ($i -lt $maxRetries) {
+              $currentDelay = [math]::Pow($delay, $i)
+              Write-Host "Waiting for $currentDelay seconds..."
+              Start-Sleep -Seconds $currentDelay
+            }
+          }
+          throw "❌ Service health check failed after $maxRetries attempts."
+
+      - name: '📸 Capture Screenshot'
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $docsUrl = "http://127.0.0.1:${{ env.SERVICE_PORT }}/docs"
+          Write-Host "📸 Taking screenshot of $docsUrl..."
+          node -e "const { chromium } = require('playwright'); (async () => { const browser = await chromium.launch(); const page = await browser.newPage(); try { await page.goto('$docsUrl', {timeout: 15000}); await page.screenshot({ path: 'proof.png' }); console.log('✅ Screenshot saved.'); } catch(e) { console.error(e); process.exit(1); } await browser.close(); })();"
+
+      - name: '🕵️ CSI: Windows Post-Mortem (On Failure)'
+        if: failure()
+        shell: pwsh
+        run: |
+          Get-Process | Where-Object { $_.ProcessName -match "fortuna" }
+          Get-EventLog -LogName Application -Newest 50 -EntryType Error,Warning
+          if (Test-Path install.log) {
+            Write-Host "--- Installation Log ---"
+            Get-Content install.log -Tail 50
+          }
+
+      - name: 📤 Upload Proof & Logs
+        uses: actions/upload-artifact@v4
+        if: always()
         with:
-          files: |
-            assets/*
-          draft: false
-          prerelease: false
+          name: smoke-proof-${{ matrix.arch }}
+          path: |
+            proof.png
+            install.log
