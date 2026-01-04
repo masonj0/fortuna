@@ -44,8 +44,19 @@ jobs:
         run: |
           Write-Host "Starting script in CI mode..."
           # Run with -Clean to test dependency installation
-          # Run with -NoFrontend to focus on Backend health first (faster feedback)
-          ./scripts/fortuna-quick-start.ps1 -Clean -NoFrontend -PythonExecutable "${{ steps.setup-python.outputs.python-path }}"
+          # Run with -NoFrontend to focus on Backend health first
+          # *>&1 combines stdout/stderr, Tee-Object saves to file AND shows in console
+          ./scripts/fortuna-quick-start.ps1 -Clean -NoFrontend *>&1 | Tee-Object -FilePath "bootstrapper_log.txt"
+
+      - name: 📤 Upload Debug Logs
+        if: always() # CRITICAL: Run this even if the bootstrapper crashes
+        uses: actions/upload-artifact@v4
+        with:
+          name: quickstart-debug-logs
+          path: |
+            bootstrapper_log.txt
+            web_service/backend/*.log
+            web_service/backend/logs/*.log
 
       - name: 🩺 Verify Backend Health
         shell: pwsh

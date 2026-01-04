@@ -1,15 +1,10 @@
 # System Timestamp: 2025-12-21 14:04:35
 name: 🎩 HatTrick Fusion (Ultimate)
+
 on:
-  workflow_dispatch:
-    inputs:
-      cache-bust:
-        description: 'Force a clean build by ignoring all caches'
-        required: false
-        type: boolean
-        default: false
   push:
     branches: ["main"]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -21,64 +16,36 @@ env:
   DOTNET_VERSION: '8.0.x'
   WIX_VERSION: '4.0.5'
   SERVICE_PORT: '8102'
-  FRONTEND_PORT: '3000'
-  MSI_NAME: 'HatTrickFusion.msi'
-  FIREWALL_RULE: 'HatTrickFusion-Port'
-  UPGRADE_CODE: 'FA689549-366B-4C5C-A482-1132F9A34B10'
-  FORTUNA_PORT: '8102'
-  # Mock API keys for service startup
   API_KEY: mock_key
   TVG_API_KEY: mock
   GREYHOUND_API_URL: http://mock
   FORTUNA_ENV: smoke-test
+  FRONTEND_DIR: 'web_platform/frontend'
+  BACKEND_DIR: 'web_service/backend'
+  WIX_DIR: 'build_wix'
 
 jobs:
-  # 1. Build Frontend First (so Backend can bundle it)
   build-frontend:
-    name: Build Frontend
-    runs-on: windows-latest
-    timeout-minutes: 30
+    name: '🎨 Build Frontend'
+    runs-on: windows-2022
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup
-      - name: Cache Build Output
-        id: cache-frontend
-        uses: actions/cache@v4
+      - uses: actions/setup-node@v4
         with:
-          path: web_platform/frontend/out
-          key: ${{ runner.os }}-frontend-${{ hashFiles('**/package-lock.json', 'web_platform/frontend/**/*.js', 'web_platform/frontend/**/*.ts', 'web_platform/frontend/**/*.tsx', 'web_platform/frontend/**/*.css') }}${{ inputs.cache-bust && format('-{0}', github.run_id) || '' }}
-          restore-keys: |
-            ${{ runner.os }}-frontend-
-      - name: Install and Build
-        if: steps.cache-frontend.outputs.cache-hit != 'true'
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: '${{ env.FRONTEND_DIR }}/package-lock.json'
+      - name: Install & Build
         run: |
-          cd web_platform/frontend
-          npm ci --prefer-offline --no-audit --no-fund
+          cd ${{ env.FRONTEND_DIR }}
+          npm ci --prefer-offline --no-audit
           npm run build
-      - name: Generate Artifact Manifest
-        shell: pwsh
-        working-directory: web_platform/frontend
-        run: |
-          Set-StrictMode -Version Latest
-          $outDir = Resolve-Path "out"
-          $manifestPath = "frontend-manifest.tsv"
-          "RelativePath`tSizeBytes`tSHA256" | Out-File $manifestPath -Encoding utf8
-          $files = Get-ChildItem -Path $outDir -Recurse -File
-          foreach ($f in $files) {
-            $rel = $f.FullName.Substring($outDir.Path.Length) -replace '^[\\\/]', ''
-            $hash = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.Substring(0,16)
-            "$rel`t$($f.Length)`t$hash" | Out-File $manifestPath -Encoding utf8 -Append
-          }
-          Write-Host "✅ Generated frontend artifact manifest."
-      - name: Upload Frontend
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: frontend-build
-          path: |
-            web_platform/frontend/out
-            web_platform/frontend/frontend-manifest.tsv
+          name: frontend-dist-${{ github.run_id }}
+          path: ${{ env.FRONTEND_DIR }}/out
 
-  # 2. Build Backend (Downloads Frontend to bundle it)
   backend-quality:
     name: '🧯 Backend Quality Gates'
     runs-on: ubuntu-latest
@@ -95,145 +62,91 @@ jobs:
           pytest web_service/backend/tests
   build-backend:
     name: '🐍 Build Backend (${{ matrix.arch }})'
-    runs-on: windows-latest
+    runs-on: windows-2022
     needs: [build-frontend, backend-quality]
-    timeout-minutes: 30
     strategy:
       matrix:
         arch: [x64, x86]
-    outputs:
-      semver: ${{ steps.meta.outputs.semver }}
-      short_sha: ${{ steps.meta.outputs.short_sha }}
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup
-        with:
-          architecture: ${{ matrix.arch }}
       - uses: actions/download-artifact@v4
         with:
-          name: frontend-build
-          path: web_platform/frontend/out
-      - id: meta
-        shell: pwsh
-        run: |
-          $ver = if ("${{ github.ref }}" -match 'refs/tags/v(.*)') { $Matches[1] } else { "0.0.${{ github.run_number }}" }
-          "semver=$ver" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          $shortSha = "${{ github.sha }}".Substring(0,7)
-          "short_sha=$shortSha" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "backend_dir=web_service/backend" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "module_path=web_service.backend" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          name: frontend-dist-${{ github.run_id }}
+          path: staging/ui
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          architecture: '${{ matrix.arch }}'
+          cache: 'pip'
       - name: 🧾 Create Architecture Constraints
         id: constraints
         shell: pwsh
         run: |
-          $constraintDir = "temp-constraints"
-          New-Item -ItemType Directory -Path $constraintDir -Force | Out-Null
-          $constraintFile = Join-Path $constraintDir "constraint-${{ matrix.arch }}.txt"
+          $file = "constraints.txt"
           if ('${{ matrix.arch }}' -eq 'x86') {
-            Write-Host "🛡️ ACTIVATING X86 SAFE MODE"
-            @(
-              "numpy==1.23.5",
-              "pandas==1.5.3",
-              "--only-binary=:all:"
-            ) | Set-Content $constraintFile
-            Write-Host "✅ x86 constraints: numpy 1.23.5, pandas 1.5.3, wheel-only"
-          } else { New-Item $constraintFile -ItemType File -Force }
-          "file=$constraintFile" | Out-File $env:GITHUB_OUTPUT -Append
-      - name: Install Dependencies
+            "numpy==1.23.5`r`npandas==1.5.3`r`n--only-binary=:all:" | Set-Content $file
+          } else {
+            New-Item $file -ItemType File -Force
+          }
+          "file=$file" | Out-File $env:GITHUB_OUTPUT -Append
+      - name: 📦 Install Dependencies & Build
+        shell: pwsh
         run: |
           python -m pip install --upgrade pip
-          pip install -r web_service/backend/requirements.txt -c ${{ steps.constraints.outputs.file }}
-          pip install pyinstaller==6.6.0 pywin32 -c ${{ steps.constraints.outputs.file }}
-      - name: 🔮 Generate Spec & Build
-        env:
-          PYTHONUTF8: '1'
-        run: |
-          python scripts/generate_spec_dual.py --mode svc
-      - name: Upload Backend
-        uses: actions/upload-artifact@v4
+          pip install uv
+          uv pip install --system -r ${{ env.BACKEND_DIR }}/requirements.txt -c ${{ steps.constraints.outputs.file }}
+          uv pip install --system pyinstaller==6.6.0 pywin32
+          pyinstaller --noconfirm --clean --log-level INFO fortuna-unified.spec
+      - uses: actions/upload-artifact@v4
         with:
-          name: backend-dist-${{ matrix.arch }}
-          path: dist/fortuna-core-service/
+          name: backend-dist-${{ matrix.arch }}-${{ github.run_id }}
+          path: dist/fortuna-webservice/
+
+  derive-version:
+    name: '🏷️ Derive Version'
+    runs-on: windows-2022
+    outputs:
+      semver: ${{ steps.git_version.outputs.semver }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: '🏷️ Derive SemVer'
+        id: git_version
+        shell: pwsh
+        run: |
+          $semver = "0.0.${{ github.run_number }}"
+          "semver=$semver" | Out-File $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
   package-msi:
     name: '💿 Package MSI (${{ matrix.arch }})'
-    runs-on: windows-latest
-    needs: [build-backend]
-    timeout-minutes: 30
+    runs-on: windows-2022
+    needs: [build-backend, derive-version]
     strategy:
       matrix:
         arch: [x64, x86]
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/download-artifact@v4
         with:
-          name: backend-dist-${{ matrix.arch }}
+          name: backend-dist-${{ matrix.arch }}-${{ github.run_id }}
           path: staging/backend
-      # ---------------------------------------------------------
-      # 💉 INJECT: THE DIETICIAN (Subroutine #3)
-      # ---------------------------------------------------------
-      - name: '⚖️ The Dietician (Size Analysis)'
-        shell: pwsh
-        run: |
-          $stagingDir = "staging" # Adjust if your staging folder is named differently
-          if (Test-Path $stagingDir) {
-            $size = (Get-ChildItem $stagingDir -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB
-            $sizeRounded = [math]::Round($size, 2)
-            Write-Host "📊 Total Payload Size: $sizeRounded MB"
-
-            if ($size -gt 300) {
-              Write-Warning "⚠️ BLOAT ALERT: Payload exceeds 300MB!"
-            }
-          } else {
-            Write-Warning "Staging directory not found, skipping diet check."
-          }
-      - name: Create Restart Service Batch Script
-        shell: pwsh
-        run: |
-          $scriptContent = "@echo off`r`necho Requesting Admin privileges to restart fortuna-core-service...`r`nnet stop fortuna-core-service`r`nnet start fortuna-core-service`r`necho Service Restarted.`r`npause"
-          Set-Content -Path "staging/backend/restart_service.bat" -Value $scriptContent -Encoding Ascii
-          Write-Host "✅ Created restart_service.bat script."
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
-      - name: 📄 Ensure WiX License Exists
+      - name: Prepare WiX Project
         shell: pwsh
         run: |
-          if (-not (Test-Path build_wix)) { New-Item -ItemType Directory -Path build_wix | Out-Null }
-          $licensePath = 'build_wix/license.rtf'
-          $rtfLines = @(
-            '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\f0\fs24 END USER LICENSE AGREEMENT\par\par This is a placeholder license for Fortuna Faucet. Please replace with actual terms.}\0'
-          )
-          Set-Content -Path $licensePath -Value ($rtfLines -join "`r`n") -Encoding Ascii
-          Write-Host '✅ Robust license.rtf created.'
-      - name: Prepare WiX
-        shell: pwsh
-        run: |
-          Set-StrictMode -Version Latest
-          if (-not (Test-Path build_wix)) { New-Item -ItemType Directory -Path build_wix | Out-Null }
-          Copy-Item build_wix/Product_WebService.wxs build_wix/Product.wxs -Force
-          $wxsPath = 'build_wix/Product.wxs'
-          $wxsContent = [xml](Get-Content $wxsPath -Raw)
-          $serviceControl = $wxsContent.SelectSingleNode("//*[local-name()='ServiceControl']")
-          if ($serviceControl -and $serviceControl.HasAttribute("Start")) {
-              $serviceControl.RemoveAttribute("Start")
-              $wxsContent.Save($wxsPath)
-              Write-Host "✅ Dynamically removed 'Start=install' attribute from WiX template."
+          if (-not (Test-Path 'build_wix/license.rtf')) {
+             Set-Content -Path 'build_wix/license.rtf' -Value '{\rtf1\ansi Placeholder License}' -Encoding Ascii
           }
-          if (Test-Path staging/backend/fortuna-core-service.exe) {
-            Move-Item staging/backend/fortuna-core-service.exe staging/backend/fortuna-webservice.exe -Force
-          }
-          # The WiX installer requires a README.txt file to be present in the staging directory.
-          Set-Content -Path "staging/backend/README.txt" -Value "This file is required by the WiX installer."
+          Copy-Item "build_wix/Product_WebService.wxs" "build_wix/Product.wxs" -Force
           $proj = @(
             '<Project Sdk="WixToolset.Sdk/${{ env.WIX_VERSION }}">',
             '  <PropertyGroup>',
             '    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>',
             '    <OutputType>Package</OutputType>',
             '    <Platforms>x64;x86</Platforms>',
-            '    <!-- Platform is set via -p:Platform in build command, NOT in DefineConstants -->',
-            '    <DefineConstants>Version=$(Version);SourceDir=$(SourceDir);ServicePort=$(ServicePort)</DefineConstants>',
+            '    <DefineConstants>Version=$(Version);SourceDir=$(SourceDir);ServicePort=$(ServicePort);Platform=$(Platform)</DefineConstants>',
             '  </PropertyGroup>',
             '  <ItemGroup>',
             '    <PackageReference Include="WixToolset.UI.wixext" Version="${{ env.WIX_VERSION }}" />',
@@ -245,68 +158,174 @@ jobs:
             '  </ItemGroup>',
             '</Project>'
           )
-          Set-Content build_wix/Fortuna.wixproj ($proj -join "`r`n") -Encoding utf8
+          Set-Content "${{ env.WIX_DIR }}/Fortuna.wixproj" -Value ($proj -join "`r`n") -Encoding utf8
       - name: Build MSI
-        working-directory: build_wix
+        working-directory: ${{ env.WIX_DIR }}
+        run: dotnet build Fortuna.wixproj -c Release -p:Platform=${{ matrix.arch }} -p:Version="${{ needs.derive-version.outputs.semver }}" -p:SourceDir="../staging/backend" -p:ServicePort="${{ env.FORTUNA_PORT }}"
+      - name: Rename & Hash
         run: |
-          dotnet build Fortuna.wixproj -c Release -p:Platform=${{ matrix.arch }} -p:Version="${{ needs.build-backend.outputs.semver }}" -p:SourceDir="../staging/backend" -p:ServicePort="${{ env.SERVICE_PORT }}"
-      - name: Rename & Hash MSI
+          $releaseDir = "${{ env.WIX_DIR }}/bin/${{ matrix.arch }}/Release"
+          $msi = Get-ChildItem -Path $releaseDir -Filter "*.msi" | Select -First 1
+          $target = "Ultimate-${{ matrix.arch }}-${{ needs.derive-version.outputs.semver }}.msi"
+          Move-Item $msi.FullName -Destination "$releaseDir/$target" -Force
+          $hash = (Get-FileHash "$releaseDir/$target" -Algorithm SHA256).Hash
+          Set-Content -Path "$releaseDir/$target.sha256" -Value $hash
+      - name: '🦜 The Canary (Malware Scan)'
+        shell: pwsh
         run: |
-          $ver = "${{ needs.build-backend.outputs.semver }}"
-          $sha = "${{ needs.build-backend.outputs.short_sha }}"
-          $releaseDir = "build_wix/bin/${{ matrix.arch }}/Release"
-          $msiFound = Get-ChildItem -Path $releaseDir -Filter "*.msi" | Select-Object -First 1
-          if (-not $msiFound) { throw "MSI not found in $releaseDir" }
-          $targetName = "HatTrickFusion-${{ matrix.arch }}-${ver}-${sha}.msi"
-          $newPath = Join-Path $releaseDir $targetName
-          Move-Item -Path $msiFound.FullName -Destination $newPath -Force
-          Write-Host "✅ MSI Ready: $targetName"
-      - name: Upload MSI
-        uses: actions/upload-artifact@v4
+          $msi = "Ultimate-${{ matrix.arch }}-${{ needs.derive-version.outputs.semver }}.msi"
+          $path = "${{ env.WIX_DIR }}/bin/${{ matrix.arch }}/Release/$msi"
+          if (Test-Path "C:\\Program Files\\Windows Defender\\MpCmdRun.exe") {
+            Write-Host "🛡️ Scanning $msi with Windows Defender..."
+            & "C:\\Program Files\\Windows Defender\\MpCmdRun.exe" -Scan -ScanType 3 -File "$path"
+            if ($LASTEXITCODE -ne 0) { throw "🦠 MALWARE DETECTED in MSI!" }
+          }
+      - uses: actions/upload-artifact@v4
         with:
-          name: hat-trick-msi-${{ matrix.arch }}
-          path: build_wix/bin/${{ matrix.arch }}/Release/*
+          name: msi-${{ matrix.arch }}-${{ github.run_id }}
+          path: |
+            ${{ env.WIX_DIR }}/bin/${{ matrix.arch }}/Release/*.msi
+            ${{ env.WIX_DIR }}/bin/${{ matrix.arch }}/Release/*.sha256
 
-  # ✂️ SMOKE TEST JOB REMOVED FOR HARVEST MODE
-  # The build stops here. Download the MSI to test manually.
-
-  generate-sbom:
-    name: '📜 Generate SBOM (${{ matrix.arch }})'
-    runs-on: ubuntu-latest
-    needs: [build-backend]
-    timeout-minutes: 30
+  smoke-test:
+    name: '🚬 Smoke Test (${{ matrix.arch }})'
+    runs-on: windows-latest
+    needs: package-msi
     strategy:
       matrix:
         arch: [x64, x86]
     steps:
-      - uses: actions/download-artifact@v4
+      - name: '📥 Download MSI Artifact'
+        uses: actions/download-artifact@v4
         with:
-          name: backend-dist-${{ matrix.arch }}
-          path: backend
-      - name: Create SBOM
-        uses: anchore/sbom-action@v0
+          name: msi-${{ matrix.arch }}-${{ github.run_id }}
+          path: msi-installer
+
+      - name: '🛡️ Triple-Loop Synthesis Smoke Test'
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "Stop"
+
+          $msiPath = (Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse | Select-Object -First 1).FullName
+          if (-not $msiPath) {
+              throw "MSI file not found in downloaded artifact."
+          }
+
+          # --- 1. Pre-Install Cleanup ---
+          Write-Host "--- 🧹 Pre-Install Cleanup ---"
+          sc.exe delete "FortunaWebService" *>$null
+          Start-Sleep -Seconds 3
+
+          # --- 2. Installation ---
+          Write-Host "--- 💿 Installing MSI ---"
+          $logFile = "install.log"
+          Start-Process msiexec.exe -ArgumentList "/i `"$msiPath`" /qn /L*v `"$logFile`"" -Wait
+
+          # --- Loop 1: Verify File Installation ---
+          Write-Host "--- 🔍 Loop 1: Verifying File Installation ---"
+          $progFiles = if ('${{ matrix.arch }}' -eq 'x86') { ${env:ProgramFiles(x86)} } else { $env:ProgramFiles }
+          $installRoot = Join-Path $progFiles "Fortuna Faucet Service"
+          $exePath = Join-Path $installRoot "fortuna-webservice.exe"
+          $loop1Success = $false
+          for ($i = 0; $i -lt 10; $i++) {
+              if (Test-Path $exePath) {
+                  Write-Host "✅ File installation confirmed at $exePath"
+                  $loop1Success = $true
+                  break
+              }
+              Write-Host "... waiting for file installation ($($i+1)/10)"
+              Start-Sleep -Seconds 2
+          }
+          if (-not $loop1Success) { throw "File installation verification failed." }
+
+          # Create runtime directories
+          New-Item -Path "$installRoot\data", "$installRoot\json", "$installRoot\logs" -ItemType Directory -Force | Out-Null
+
+          # --- Loop 2: Verify Service Registration ---
+          Write-Host "--- 🔍 Loop 2: Verifying Service Registration ---"
+          $serviceName = "FortunaWebService"
+          $loop2Success = $false
+          for ($i = 0; $i -lt 10; $i++) {
+              $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+              if ($service) {
+                  Write-Host "✅ Service '$($serviceName)' is registered."
+                  $loop2Success = $true
+                  break
+              }
+              Write-Host "... waiting for service registration ($($i+1)/10)"
+              Start-Sleep -Seconds 2
+          }
+          if (-not $loop2Success) { throw "Service registration verification failed." }
+
+          # --- 3. Start Service & Health Check ---
+          Write-Host "--- 🚀 Starting Service & Initiating Health Check ---"
+          Start-Service -Name $serviceName
+          Start-Sleep -Seconds 5 # Give it a moment to start
+
+          # --- Loop 3: Verify Health Endpoint ---
+          $healthUrl = "http://localhost:${{ env.SERVICE_PORT }}/health"
+          $loop3Success = $false
+          for ($i = 0; $i -lt 30; $i++) { # 30 retries * 3s = 90s timeout
+              try {
+                  $response = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 2
+                  if ($response.StatusCode -eq 200) {
+                      $health = $response.Content | ConvertFrom-Json
+                      if ($health.status -eq 'ok') {
+                        Write-Host "✅ Health check PASSED on attempt $($i+1) with status 'ok'."
+                        $loop3Success = $true
+                        break
+                      } else {
+                        Write-Warning "Health check returned status '$($health.status)'..."
+                      }
+                  }
+              } catch {
+                  if ($_.Exception.Response -and $_.Exception.Response.StatusCode.value__ -eq 503) {
+                      Write-Host "... service is starting up (503), waiting ($($i+1)/30)"
+                  } else {
+                      Write-Host "... waiting for health endpoint ($($i+1)/30)"
+                  }
+                  Start-Sleep -Seconds 3
+              }
+          }
+          if (-not $loop3Success) { throw "Service health check failed after multiple attempts." }
+
+          Write-Host "🎉 Smoke Test Fully Passed!"
+
+      - name: '🕵️ CSI: Windows Post-Mortem (On Failure)'
+        if: failure()
+        shell: pwsh
+        run: |
+          Write-Host "--- 🕵️ Emergency Diagnostics ---"
+          Get-Process | Where-Object { $_.ProcessName -match "fortuna" } | Format-Table
+          Get-EventLog -LogName Application -Newest 50 -EntryType Error,Warning | Format-List
+          if (Test-Path "install.log") {
+            Write-Host "--- Installation Log (Last 100 lines) ---"
+            Get-Content install.log -Tail 100
+          }
+          netstat -anob
+
+      - name: '📤 Upload Diagnostic Artifacts'
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          path: backend
-          artifact-name: sbom-${{ matrix.arch }}-${{ github.run_id }}
-          format: spdx-json
+          name: smoke-test-diagnostics-${{ matrix.arch }}
+          path: |
+            install.log
+          if-no-files-found: ignore
 
   release:
     name: '🚀 Create Release'
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [package-msi, generate-sbom]
+    needs: [package-msi]
     timeout-minutes: 30
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
-          pattern: hat-trick-msi-*
-          path: assets
-          merge-multiple: true
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: sbom-*
+          pattern: msi-*
           path: assets
           merge-multiple: true
       - name: Generate Checksums

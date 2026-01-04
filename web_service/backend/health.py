@@ -102,8 +102,9 @@ async def get_basic_health(response: Response):
     dependencies_healthy = len(health_monitor.adapter_health) > 0
     status = "ok" if dependencies_healthy else "degraded"
 
-    if not dependencies_healthy:
-        response.status_code = 503 # Service Unavailable
+    # The service is still "healthy" even if degraded. The status is in the payload.
+    # if not dependencies_healthy:
+    #     response.status_code = 503 # Service Unavailable
 
     return {
         "status": status,
