@@ -103,8 +103,8 @@ jobs:
           name: backend-dist-${{ matrix.arch }}-${{ github.run_id }}
           path: dist/fortuna-webservice/
 
-  preflight-check:
-    name: '🔍 Preflight Check'
+  derive-version:
+    name: '🏷️ Derive Version'
     runs-on: windows-2022
     outputs:
       semver: ${{ steps.git_version.outputs.semver }}
@@ -120,7 +120,7 @@ jobs:
   package-msi:
     name: '💿 Package MSI (${{ matrix.arch }})'
     runs-on: windows-2022
-    needs: [build-backend, preflight-check]
+    needs: [build-backend, derive-version]
     strategy:
       matrix:
         arch: [x64, x86]
@@ -161,15 +161,25 @@ jobs:
           Set-Content "${{ env.WIX_DIR }}/Fortuna.wixproj" -Value ($proj -join "`r`n") -Encoding utf8
       - name: Build MSI
         working-directory: ${{ env.WIX_DIR }}
-        run: dotnet build Fortuna.wixproj -c Release -p:Platform=${{ matrix.arch }} -p:Version="${{ needs.preflight-check.outputs.semver }}" -p:SourceDir="../staging/backend" -p:ServicePort="${{ env.FORTUNA_PORT }}"
+        run: dotnet build Fortuna.wixproj -c Release -p:Platform=${{ matrix.arch }} -p:Version="${{ needs.derive-version.outputs.semver }}" -p:SourceDir="../staging/backend" -p:ServicePort="${{ env.FORTUNA_PORT }}"
       - name: Rename & Hash
         run: |
           $releaseDir = "${{ env.WIX_DIR }}/bin/${{ matrix.arch }}/Release"
           $msi = Get-ChildItem -Path $releaseDir -Filter "*.msi" | Select -First 1
-          $target = "Ultimate-${{ matrix.arch }}-${{ needs.preflight-check.outputs.semver }}.msi"
+          $target = "Ultimate-${{ matrix.arch }}-${{ needs.derive-version.outputs.semver }}.msi"
           Move-Item $msi.FullName -Destination "$releaseDir/$target" -Force
           $hash = (Get-FileHash "$releaseDir/$target" -Algorithm SHA256).Hash
           Set-Content -Path "$releaseDir/$target.sha256" -Value $hash
+      - name: '🦜 The Canary (Malware Scan)'
+        shell: pwsh
+        run: |
+          $msi = "Ultimate-${{ matrix.arch }}-${{ needs.derive-version.outputs.semver }}.msi"
+          $path = "${{ env.WIX_DIR }}/bin/${{ matrix.arch }}/Release/$msi"
+          if (Test-Path "C:\\Program Files\\Windows Defender\\MpCmdRun.exe") {
+            Write-Host "🛡️ Scanning $msi with Windows Defender..."
+            & "C:\\Program Files\\Windows Defender\\MpCmdRun.exe" -Scan -ScanType 3 -File "$path"
+            if ($LASTEXITCODE -ne 0) { throw "🦠 MALWARE DETECTED in MSI!" }
+          }
       - uses: actions/upload-artifact@v4
         with:
           name: msi-${{ matrix.arch }}-${{ github.run_id }}
@@ -185,39 +195,140 @@ jobs:
       matrix:
         arch: [x64, x86]
     steps:
-      - name: Pre-Flight - Clear Zombie Ports
-        shell: powershell
-        run: |
-          Write-Host "Checking for zombie processes on ports 3000 and 8000..."
-          $ports = @(3000, 8000, ${{ env.SERVICE_PORT }})
-          foreach ($port in $ports) {
-            $tcp = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue
-            if ($tcp) {
-              Write-Host "Killing process on port $port (PID $($tcp.OwningProcess))..."
-              Stop-Process -Id $tcp.OwningProcess -Force -ErrorAction SilentlyContinue
-            }
-          }
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4 # Needed for Playwright
-
-      - uses: actions/download-artifact@v4
+      - name: '📥 Download MSI Artifact'
+        uses: actions/download-artifact@v4
         with:
           name: msi-${{ matrix.arch }}-${{ github.run_id }}
           path: msi-installer
 
-      - name: '🧪 Basic Integrity Check'
+      - name: '🛡️ Triple-Loop Synthesis Smoke Test'
         shell: pwsh
         run: |
-            Get-ChildItem -Path "msi-installer" -Recurse
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "Stop"
 
-      - name: 🧹 Pre-Install Cleanup
-        shell: pwsh
-        run: |
+          $msiPath = (Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse | Select-Object -First 1).FullName
+          if (-not $msiPath) {
+              throw "MSI file not found in downloaded artifact."
+          }
+
+          # --- 1. Pre-Install Cleanup ---
+          Write-Host "--- 🧹 Pre-Install Cleanup ---"
           sc.exe delete "FortunaWebService" *>$null
-          Start-Sleep -Seconds 2
+          Start-Sleep -Seconds 3
 
-      - name: 💿 Install MSI
+          # --- 2. Installation ---
+          Write-Host "--- 💿 Installing MSI ---"
+          $logFile = "install.log"
+          Start-Process msiexec.exe -ArgumentList "/i `"$msiPath`" /qn /L*v `"$logFile`"" -Wait
+
+          # --- Loop 1: Verify File Installation ---
+          Write-Host "--- 🔍 Loop 1: Verifying File Installation ---"
+          $progFiles = if ('${{ matrix.arch }}' -eq 'x86') { ${env:ProgramFiles(x86)} } else { $env:ProgramFiles }
+          $installRoot = Join-Path $progFiles "Fortuna Faucet Service"
+          $exePath = Join-Path $installRoot "fortuna-webservice.exe"
+          $loop1Success = $false
+          for ($i = 0; $i -lt 10; $i++) {
+              if (Test-Path $exePath) {
+                  Write-Host "✅ File installation confirmed at $exePath"
+                  $loop1Success = $true
+                  break
+              }
+              Write-Host "... waiting for file installation ($($i+1)/10)"
+              Start-Sleep -Seconds 2
+          }
+          if (-not $loop1Success) { throw "File installation verification failed." }
+
+          # Create runtime directories
+          New-Item -Path "$installRoot\data", "$installRoot\json", "$installRoot\logs" -ItemType Directory -Force | Out-Null
+
+          # --- Loop 2: Verify Service Registration ---
+          Write-Host "--- 🔍 Loop 2: Verifying Service Registration ---"
+          $serviceName = "FortunaWebService"
+          $loop2Success = $false
+          for ($i = 0; $i -lt 10; $i++) {
+              $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+              if ($service) {
+                  Write-Host "✅ Service '$($serviceName)' is registered."
+                  $loop2Success = $true
+                  break
+              }
+              Write-Host "... waiting for service registration ($($i+1)/10)"
+              Start-Sleep -Seconds 2
+          }
+          if (-not $loop2Success) { throw "Service registration verification failed." }
+
+          # --- 3. Start Service & Health Check ---
+          Write-Host "--- 🚀 Starting Service & Initiating Health Check ---"
+          Start-Service -Name $serviceName
+          Start-Sleep -Seconds 5 # Give it a moment to start
+
+          # --- Loop 3: Verify Health Endpoint ---
+          $healthUrl = "http://localhost:${{ env.SERVICE_PORT }}/health"
+          $loop3Success = $false
+          for ($i = 0; $i -lt 30; $i++) { # 30 retries * 3s = 90s timeout
+              try {
+                  $response = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 2
+                  if ($response.StatusCode -eq 200) {
+                      $health = $response.Content | ConvertFrom-Json
+                      if ($health.status -eq 'ok') {
+                        Write-Host "✅ Health check PASSED on attempt $($i+1) with status 'ok'."
+                        $loop3Success = $true
+                        break
+                      } else {
+                        Write-Warning "Health check returned status '$($health.status)'..."
+                      }
+                  }
+              } catch {
+                  if ($_.Exception.Response -and $_.Exception.Response.StatusCode.value__ -eq 503) {
+                      Write-Host "... service is starting up (503), waiting ($($i+1)/30)"
+                  } else {
+                      Write-Host "... waiting for health endpoint ($($i+1)/30)"
+                  }
+                  Start-Sleep -Seconds 3
+              }
+          }
+          if (-not $loop3Success) { throw "Service health check failed after multiple attempts." }
+
+          Write-Host "🎉 Smoke Test Fully Passed!"
+
+      - name: '🕵️ CSI: Windows Post-Mortem (On Failure)'
+        if: failure()
         shell: pwsh
+        run: |
+          Write-Host "--- 🕵️ Emergency Diagnostics ---"
+          Get-Process | Where-Object { $_.ProcessName -match "fortuna" } | Format-Table
+          Get-EventLog -LogName Application -Newest 50 -EntryType Error,Warning | Format-List
+          if (Test-Path "install.log") {
+            Write-Host "--- Installation Log (Last 100 lines) ---"
+            Get-Content install.log -Tail 100
+          }
+          netstat -anob
+
+      - name: '📤 Upload Diagnostic Artifacts'
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-test-diagnostics-${{ matrix.arch }}
+          path: |
+            install.log
+          if-no-files-found: ignore
+
+  release:
+    name: '🚀 Create Release'
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [package-msi]
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: msi-*
+          path: assets
+          merge-multiple: true
+      - name: Generate Checksums
         run: |
           $msi = Get-ChildItem -Path "msi-installer" -Filter "*.msi" -Recurse | Select-Object -First 1
           if (-not $msi) { throw "MSI not found in msi-installer directory!" }
