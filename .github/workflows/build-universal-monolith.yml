@@ -39,6 +39,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          architecture: x86
           cache: 'pip'
 
       - name: 📦 Install Backend Dependencies
@@ -112,7 +113,7 @@ jobs:
               '    console=False, # GUI Mode (No black box)',
               '    disable_windowed_traceback=False,',
               '    argv_emulation=False,',
-              '    target_arch=None,',
+              "    target_arch='x86',",
               '    codesign_identity=None,',
               '    entitlements_file=None,',
               ')'
@@ -126,7 +127,7 @@ jobs:
       - name: 📤 Upload The App
         uses: actions/upload-artifact@v4
         with:
-          name: FortunaApp-SingleFile
+          name: FortunaApp-SingleFile-x86
           path: dist/FortunaApp.exe
 
       - name: 🧪 Smoke Test
