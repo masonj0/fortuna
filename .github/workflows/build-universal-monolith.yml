@@ -1,0 +1,142 @@
+name: 💎 Build Universal Monolith (Single EXE)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+
+jobs:
+  build-the-monolith:
+    name: '🏗️ Build All-in-One EXE'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- PHASE 1: THE FRONTEND ---
+      - name: 🟢 Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 🎨 Build Frontend
+        shell: pwsh
+        run: |
+          Write-Host "Building React Frontend..."
+          cd web_platform/frontend
+          npm ci
+          npm run build
+
+          # Validation
+          if (-not (Test-Path out/index.html)) { throw "Frontend build failed!" }
+
+          # Stage it for the Backend to grab
+          $root = "$env:GITHUB_WORKSPACE"
+          Copy-Item -Path "out" -Destination "$root/frontend_dist" -Recurse -Force
+          Write-Host "✅ Frontend built and staged at $root/frontend_dist"
+
+      # --- PHASE 2: THE BACKEND ---
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          architecture: x86
+          cache: 'pip'
+
+      - name: 📦 Install Backend Dependencies
+        shell: pwsh
+        run: |
+          pip install --upgrade pip wheel
+          pip install -r web_service/backend/requirements.txt
+          pip install pywebview[cef] pyinstaller==6.6.0 pywin32
+
+      # --- PHASE 3: THE MERGE (PyInstaller) ---
+      - name: 📁 Create Required Data Dirs
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "web_service/backend/data"
+          New-Item -ItemType Directory -Force -Path "web_service/backend/json"
+          Write-Host "✅ Ensured data directories exist for PyInstaller."
+
+      - name: 🔮 Generate Spec & Build
+        shell: pwsh
+        run: |
+          $specContent = @(
+              '# -*- mode: python ; coding: utf-8 -*-',
+              'from PyInstaller.utils.hooks import collect_submodules, collect_data_files',
+              'import os',
+              '',
+              'block_cipher = None',
+              '',
+              "# Include the Staged Frontend",
+              "datas = [('frontend_dist', 'frontend_dist')]",
+              '',
+              "# Include Backend Data",
+              "datas += [('web_service/backend/data', 'data'),",
+              "          ('web_service/backend/json', 'json'),",
+              "          ('web_service/backend/adapters', 'adapters')]",
+              '',
+              "# Collect Imports",
+              "hiddenimports = ['uvicorn', 'fastapi', 'starlette', 'pydantic', 'structlog',",
+              "                 'webview', 'webview.platforms.winforms', 'clr',",
+              "                 'tenacity', 'redis', 'sqlalchemy', 'greenlet']",
+              "hiddenimports += collect_submodules('web_service.backend')",
+              '',
+              'a = Analysis(',
+              "    ['web_service/backend/monolith.py'],",
+              '    pathex=[],',
+              '    binaries=[],',
+              '    datas=datas,',
+              '    hiddenimports=hiddenimports,',
+              '    hookspath=[],',
+              '    hooksconfig={},',
+              '    runtime_hooks=[],',
+              '    excludes=[],',
+              '    win_no_prefer_redirects=False,',
+              '    win_private_assemblies=False,',
+              '    cipher=block_cipher,',
+              '    noarchive=False,',
+              ')',
+              'pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)',
+              'exe = EXE(',
+              '    pyz,',
+              '    a.scripts,',
+              '    a.binaries,',
+              '    a.zipfiles,',
+              '    a.datas,',
+              "    name='FortunaApp',",
+              '    debug=False,',
+              '    bootloader_ignore_signals=False,',
+              '    strip=False,',
+              '    upx=True,',
+              '    upx_exclude=[],',
+              '    runtime_tmpdir=None,',
+              '    console=False, # GUI Mode (No black box)',
+              '    disable_windowed_traceback=False,',
+              '    argv_emulation=False,',
+              "    target_arch='x86',",
+              '    codesign_identity=None,',
+              '    entitlements_file=None,',
+              ')'
+          )
+          $specContent -join "`n" | Set-Content -Path "universal.spec"
+
+          # Build it
+          pyinstaller --noconfirm --clean universal.spec
+
+      # --- PHASE 4: THE REWARD & VERIFICATION ---
+      - name: 📤 Upload The App
+        uses: actions/upload-artifact@v4
+        with:
+          name: FortunaApp-SingleFile-x86
+          path: dist/FortunaApp.exe
+
+      - name: 🧪 Smoke Test
+        shell: pwsh
+        timeout-minutes: 2
+        run: |
+          Start-Process "dist/FortunaApp.exe"
+          Start-Sleep -Seconds 10
+          $process = Get-Process -Name "FortunaApp" -ErrorAction SilentlyContinue
+          if ($null -eq $process) { throw "App didn't start!" }
+          Stop-Process -Name "FortunaApp" -Force
+          Write-Host "✅ App started successfully"

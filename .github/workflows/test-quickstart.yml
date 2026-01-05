@@ -1,10 +1,9 @@
-name: 🧪 Test Developer Quick-Start
+name: 🧪 Backend CI & Quick-Start Test
 
 on:
   workflow_dispatch:
   push:
-    paths:
-      - 'scripts/fortuna-quick-start.ps1'
+    branches: ["main"]
 
 jobs:
   test-bootstrapper:
@@ -27,6 +26,19 @@ jobs:
           cache: 'npm'
           cache-dependency-path: web_platform/frontend/package-lock.json
 
+      - name: 📦 Install Python Dependencies
+        shell: pwsh
+        run: |
+          pip install --upgrade pip
+          pip install -r web_service/backend/requirements.txt
+          pip install -r web_service/backend/requirements-dev.txt
+
+      - name: 🧪 Run Backend Unit Tests
+        shell: pwsh
+        run: |
+          $env:PYTHONPATH = "$env:PYTHONPATH;${env:GITHUB_WORKSPACE}/web_service/backend"
+          python -m pytest web_service/backend/tests/
+
       - name: 🔍 Syntax Validation
         shell: pwsh
         run: |
@@ -42,6 +54,13 @@ jobs:
       - name: 🚀 Execute Bootstrapper
         shell: pwsh
         run: |
+          # Explicitly add the Python directory to the PATH for the script's environment.
+          # This is necessary because the script may not inherit the PATH set by setup-python.
+          $pythonDir = Split-Path -Parent "${{ steps.setup-python.outputs.python-path }}"
+          $pythonScriptsDir = Join-Path $pythonDir "Scripts"
+          $env:PATH = "$pythonDir;$pythonScriptsDir;$($env:PATH)"
+          Write-Host "Ensured Python is on PATH for the script."
+
           Write-Host "Starting script in CI mode..."
           # Run with -Clean to test dependency installation
           # Run with -NoFrontend to focus on Backend health first

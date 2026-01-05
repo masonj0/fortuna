@@ -2,63 +2,61 @@ import sys
 import os
 import threading
 import uvicorn
-import webview
+import webview  # PyWebView (The lightweight browser wrapper)
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
-# 1. Define the Monolith App
+# 1. Setup the App
 app = FastAPI(title="Fortuna Monolith")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-# Allow all origins to prevent CORS issues
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# 2. Robust API Mounting
+# 2. Import your existing API logic
 try:
-    # Import the entire API app and mount it as a sub-application
-    from web_service.backend.api import app as api_app
-    app.mount("/api", api_app)
-    print("[MONOLITH] Mounted main API application successfully.")
+    from web_service.backend.api import router as api_router
+    app.include_router(api_router, prefix="/api")
 except Exception as e:
-    # If it fails, DO NOT CRASH. Load a fallback route.
-    print(f"[MONOLITH] WARNING: Could not load API routers: {e}")
-    @app.get("/api/health")
-    def health():
-        return {"status": "ok", "mode": "monolith_fallback", "error": str(e)}
+    print(f"[MONOLITH] Warning: API router not found ({e}). Running in UI-only mode.")
 
-def resource_path(relative_path):
-    """ Get absolute path to resource, works for dev and for PyInstaller """
+# 3. The Magic: Serve the Frontend from INSIDE the EXE
+def get_asset_path():
+    """ Returns the path to the bundled frontend assets """
     if hasattr(sys, '_MEIPASS'):
-        return os.path.join(sys._MEIPASS, relative_path)
-    return os.path.join(os.path.abspath("."), relative_path)
-
-def start_monolith():
-    # 3. Mount the Frontend (if bundled)
-    static_dir = resource_path("frontend_dist")
-    if os.path.exists(static_dir):
-        app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
-        print(f"[MONOLITH] Serving frontend from {static_dir}")
+        # Running as a PyInstaller EXE
+        return os.path.join(sys._MEIPASS, "frontend_dist")
     else:
-        print(f"[MONOLITH] ERROR: Frontend dist not found at {static_dir}")
+        # Running as a script (Dev mode)
+        return os.path.join(os.path.abspath("."), "frontend_dist")
 
-    # 4. Start Server & Window
-    # Use port 0 to let the OS pick a free port, avoiding conflicts
-    port = 8000
-    t = threading.Thread(target=uvicorn.run, args=(app,), kwargs={"host": "127.0.0.1", "port": port, "log_level": "info"})
-    t.daemon = True
-    t.start()
+static_dir = get_asset_path()
 
-    webview.create_window('Fortuna Faucet', f'http://127.0.0.1:{port}')
-    webview.start()
+if os.path.exists(static_dir):
+    # Serve the React App at the root URL
+    app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
+    print(f"[MONOLITH] Serving UI from: {static_dir}")
+else:
+    print(f"[MONOLITH] UI not found at {static_dir}. API only.")
+
+# 4. Launch Logic
+def start_server():
+    # Run Uvicorn on a specific port
+    uvicorn.run(app, host="127.0.0.1", port=8000, log_level="error")
 
 if __name__ == '__main__':
     if sys.platform == 'win32':
         import multiprocessing
         multiprocessing.freeze_support()
-    start_monolith()
+
+    # Start Backend in Thread
+    t = threading.Thread(target=start_server, daemon=True)
+    t.start()
+
+    # Start Frontend Window (Native)
+    webview.create_window("Fortuna Faucet", "http://127.0.0.1:8000", width=1200, height=800)
+
+    # Enable debug mode if FORTUNA_DEBUG is set to '1' for easier frontend troubleshooting.
+    # This allows right-clicking to inspect the webview.
+    debug_mode = os.getenv('FORTUNA_DEBUG') == '1'
+    if debug_mode:
+        print("[MONOLITH] Debug mode is ON. Right-click in the app and choose 'Inspect' to open the developer console.")
+    webview.start(debug=debug_mode)
