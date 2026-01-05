@@ -49,6 +49,13 @@ jobs:
           pip install pywebview[cef] pyinstaller==6.6.0 pywin32
 
       # --- PHASE 3: THE MERGE (PyInstaller) ---
+      - name: 📁 Create Required Data Dirs
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "web_service/backend/data"
+          New-Item -ItemType Directory -Force -Path "web_service/backend/json"
+          Write-Host "✅ Ensured data directories exist for PyInstaller."
+
       - name: 🔮 Generate Spec & Build
         shell: pwsh
         run: |
