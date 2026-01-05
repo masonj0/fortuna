@@ -54,6 +54,13 @@ jobs:
       - name: 🚀 Execute Bootstrapper
         shell: pwsh
         run: |
+          # Explicitly add the Python directory to the PATH for the script's environment.
+          # This is necessary because the script may not inherit the PATH set by setup-python.
+          $pythonDir = Split-Path -Parent "${{ steps.setup-python.outputs.python-path }}"
+          $pythonScriptsDir = Join-Path $pythonDir "Scripts"
+          $env:PATH = "$pythonDir;$pythonScriptsDir;$($env:PATH)"
+          Write-Host "Ensured Python is on PATH for the script."
+
           Write-Host "Starting script in CI mode..."
           # Run with -Clean to test dependency installation
           # Run with -NoFrontend to focus on Backend health first
