@@ -101,7 +101,7 @@ jobs:
               '    binaries=[],',
               '    datas=datas,',
               '    hiddenimports=hiddenimports,',
-              '    hookspath=[],',
+              "    hookspath=['fortuna-backend-hooks'],",
               '    hooksconfig={},',
               '    runtime_hooks=[],',
               '    excludes=[],',
