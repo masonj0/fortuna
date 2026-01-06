@@ -13,8 +13,8 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 # 2. Import your existing API logic
 try:
-    from web_service.backend.api import router as api_router
-    app.include_router(api_router, prefix="/api")
+    from web_service.backend.api import router
+    app.include_router(router, prefix="/api")
 except Exception as e:
     print(f"[MONOLITH] Warning: API router not found ({e}). Running in UI-only mode.")
 
