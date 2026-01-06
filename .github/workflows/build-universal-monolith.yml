@@ -56,43 +56,43 @@ jobs:
           New-Item -ItemType Directory -Force -Path "fortuna-backend-hooks"
 
           # Custom Uvicorn Hook (CRITICAL for fixing ModuleNotFoundError)
-          $uvicornHook = @'
-"""
-Custom PyInstaller hook for Uvicorn
-Resolves: ModuleNotFoundError: No module named 'uvicorn'
-"""
-from PyInstaller.utils.hooks import collect_submodules, collect_data_files
-
-# Collect ALL uvicorn submodules (including runtime-loaded ones)
-hiddenimports = collect_submodules('uvicorn')
-datas = collect_data_files('uvicorn')
-
-# Explicit critical imports that PyInstaller's auto-detection misses
-hiddenimports += [
-    'uvicorn.logging',
-    'uvicorn.loops.auto',
-    'uvicorn.loops.asyncio',
-    'uvicorn.loops.uvloop',
-    'uvicorn.protocols.http.auto',
-    'uvicorn.protocols.http.h11_impl',
-    'uvicorn.protocols.http.httptools_impl',
-    'uvicorn.protocols.websockets.auto',
-    'uvicorn.protocols.websockets.websockets_impl',
-    'uvicorn.protocols.websockets.wsproto_impl',
-    'uvicorn.lifespan.on',
-    'uvicorn.lifespan.off',
-]
-'@
+          $uvicornHook = @(
+            '"""',
+            'Custom PyInstaller hook for Uvicorn',
+            "Resolves: ModuleNotFoundError: No module named 'uvicorn'",
+            '"""',
+            'from PyInstaller.utils.hooks import collect_submodules, collect_data_files',
+            '',
+            '# Collect ALL uvicorn submodules (including runtime-loaded ones)',
+            "hiddenimports = collect_submodules('uvicorn')",
+            "datas = collect_data_files('uvicorn')",
+            '',
+            "# Explicit critical imports that PyInstaller's auto-detection misses",
+            "hiddenimports += [",
+            "    'uvicorn.logging',",
+            "    'uvicorn.loops.auto',",
+            "    'uvicorn.loops.asyncio',",
+            "    'uvicorn.loops.uvloop',",
+            "    'uvicorn.protocols.http.auto',",
+            "    'uvicorn.protocols.http.h11_impl',",
+            "    'uvicorn.protocols.http.httptools_impl',",
+            "    'uvicorn.protocols.websockets.auto',",
+            "    'uvicorn.protocols.websockets.websockets_impl',",
+            "    'uvicorn.protocols.websockets.wsproto_impl',",
+            "    'uvicorn.lifespan.on',",
+            "    'uvicorn.lifespan.off',",
+            "]"
+          )
           $uvicornHook | Set-Content -Path "fortuna-backend-hooks/hook-uvicorn.py"
 
           # Custom FastAPI Hook (Belt & Suspenders)
-          $fastapiHook = @'
-"""Custom PyInstaller hook for FastAPI"""
-from PyInstaller.utils.hooks import collect_submodules, collect_data_files
-
-hiddenimports = collect_submodules('fastapi')
-datas = collect_data_files('fastapi')
-'@
+          $fastapiHook = @(
+            '"""Custom PyInstaller hook for FastAPI"""',
+            'from PyInstaller.utils.hooks import collect_submodules, collect_data_files',
+            '',
+            "hiddenimports = collect_submodules('fastapi')",
+            "datas = collect_data_files('fastapi')"
+          )
           $fastapiHook | Set-Content -Path "fortuna-backend-hooks/hook-fastapi.py"
 
           Write-Host "✅ Custom PyInstaller hooks created:"
@@ -110,150 +110,150 @@ datas = collect_data_files('fastapi')
       - name: 🔮 Generate Enhanced Spec & Build
         shell: pwsh
         run: |
-          $specContent = @'
-# -*- mode: python ; coding: utf-8 -*-
-"""
-Fortuna Universal Monolith Spec
-Single EXE with embedded frontend and backend
-FIXED: Enhanced uvicorn imports to resolve ModuleNotFoundError
-"""
-from PyInstaller.utils.hooks import collect_submodules, collect_data_files
-import os
-
-block_cipher = None
-
-# ====================================================================
-# DATA FILES (Frontend + Backend)
-# ====================================================================
-datas = [
-    ('frontend_dist', 'frontend_dist'),  # Staged React frontend
-]
-
-# Framework data files
-datas += collect_data_files('uvicorn')
-datas += collect_data_files('fastapi')
-datas += collect_data_files('starlette')
-
-# Backend data
-datas += [
-    ('web_service/backend/data', 'data'),
-    ('web_service/backend/json', 'json'),
-    ('web_service/backend/adapters', 'adapters')
-]
-
-# ====================================================================
-# HIDDEN IMPORTS (ENHANCED for Uvicorn)
-# ====================================================================
-hiddenimports = [
-    # === UVICORN (COMPLETE SET) ===
-    'uvicorn',
-    'uvicorn.logging',
-    'uvicorn.loops',
-    'uvicorn.loops.auto',
-    'uvicorn.loops.asyncio',
-    'uvicorn.loops.uvloop',
-    'uvicorn.protocols',
-    'uvicorn.protocols.http',
-    'uvicorn.protocols.http.auto',
-    'uvicorn.protocols.http.h11_impl',
-    'uvicorn.protocols.http.httptools_impl',
-    'uvicorn.protocols.websockets',
-    'uvicorn.protocols.websockets.auto',
-    'uvicorn.protocols.websockets.websockets_impl',
-    'uvicorn.protocols.websockets.wsproto_impl',
-    'uvicorn.lifespan',
-    'uvicorn.lifespan.on',
-    'uvicorn.lifespan.off',
-
-    # === FASTAPI & STARLETTE ===
-    'fastapi',
-    'starlette',
-    'starlette.routing',
-    'starlette.middleware',
-    'starlette.middleware.cors',
-    'pydantic',
-    'pydantic_core',
-    'pydantic_settings',
-    'pydantic_settings.sources',
-
-    # === WEBVIEW (for GUI) ===
-    'webview',
-    'webview.platforms.winforms',
-    'clr',
-
-    # === WINDOWS SERVICES ===
-    'win32timezone',
-    'win32serviceutil',
-    'win32service',
-    'win32event',
-    'servicemanager',
-
-    # === OTHER DEPS ===
-    'structlog',
-    'tenacity',
-    'redis',
-    'sqlalchemy',
-    'greenlet',
-]
-
-# Collect ALL submodules (belt & suspenders approach)
-hiddenimports += collect_submodules('web_service.backend')
-hiddenimports += collect_submodules('anyio')
-hiddenimports += collect_submodules('uvicorn')
-hiddenimports += collect_submodules('fastapi')
-hiddenimports += collect_submodules('starlette')
-
-# ====================================================================
-# ANALYSIS
-# ====================================================================
-a = Analysis(
-    ['web_service/backend/monolith.py'],
-    pathex=[],
-    binaries=[],
-    datas=datas,
-    hiddenimports=hiddenimports,
-    hookspath=['fortuna-backend-hooks'],  # Use our custom hooks
-    hooksconfig={},
-    runtime_hooks=[],
-    excludes=[],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
-    cipher=block_cipher,
-    noarchive=False,
-)
-
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
-
-# ====================================================================
-# SINGLE FILE EXECUTABLE
-# ====================================================================
-exe = EXE(
-    pyz,
-    a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    name='FortunaApp',
-    debug=False,
-    bootloader_ignore_signals=False,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    runtime_tmpdir=None,
-    console=False,  # GUI Mode (No console window)
-    disable_windowed_traceback=False,
-    argv_emulation=False,
-    target_arch='x86',
-    codesign_identity=None,
-    entitlements_file=None,
-)
-'@
+          $specContent = @(
+            '# -*- mode: python ; coding: utf-8 -*-',
+            '"""',
+            'Fortuna Universal Monolith Spec',
+            'Single EXE with embedded frontend and backend',
+            'FIXED: Enhanced uvicorn imports to resolve ModuleNotFoundError',
+            '"""',
+            'from PyInstaller.utils.hooks import collect_submodules, collect_data_files',
+            'import os',
+            '',
+            'block_cipher = None',
+            '',
+            '# ====================================================================',
+            '# DATA FILES (Frontend + Backend)',
+            '# ====================================================================',
+            "datas = [",
+            "    ('frontend_dist', 'frontend_dist'),  # Staged React frontend",
+            "]",
+            '',
+            '# Framework data files',
+            "datas += collect_data_files('uvicorn')",
+            "datas += collect_data_files('fastapi')",
+            "datas += collect_data_files('starlette')",
+            '',
+            '# Backend data',
+            "datas += [",
+            "    ('web_service/backend/data', 'data'),",
+            "    ('web_service/backend/json', 'json'),",
+            "    ('web_service/backend/adapters', 'adapters')",
+            "]",
+            '',
+            '# ====================================================================',
+            '# HIDDEN IMPORTS (ENHANCED for Uvicorn)',
+            '# ====================================================================',
+            "hiddenimports = [",
+            "    # === UVICORN (COMPLETE SET) ===",
+            "    'uvicorn',",
+            "    'uvicorn.logging',",
+            "    'uvicorn.loops',",
+            "    'uvicorn.loops.auto',",
+            "    'uvicorn.loops.asyncio',",
+            "    'uvicorn.loops.uvloop',",
+            "    'uvicorn.protocols',",
+            "    'uvicorn.protocols.http',",
+            "    'uvicorn.protocols.http.auto',",
+            "    'uvicorn.protocols.http.h11_impl',",
+            "    'uvicorn.protocols.http.httptools_impl',",
+            "    'uvicorn.protocols.websockets',",
+            "    'uvicorn.protocols.websockets.auto',",
+            "    'uvicorn.protocols.websockets.websockets_impl',",
+            "    'uvicorn.protocols.websockets.wsproto_impl',",
+            "    'uvicorn.lifespan',",
+            "    'uvicorn.lifespan.on',",
+            "    'uvicorn.lifespan.off',",
+            "    ",
+            "    # === FASTAPI & STARLETTE ===",
+            "    'fastapi',",
+            "    'starlette',",
+            "    'starlette.routing',",
+            "    'starlette.middleware',",
+            "    'starlette.middleware.cors',",
+            "    'pydantic',",
+            "    'pydantic_core',",
+            "    'pydantic_settings',",
+            "    'pydantic_settings.sources',",
+            "    ",
+            "    # === WEBVIEW (for GUI) ===",
+            "    'webview',",
+            "    'webview.platforms.winforms',",
+            "    'clr',",
+            "    ",
+            "    # === WINDOWS SERVICES ===",
+            "    'win32timezone',",
+            "    'win32serviceutil',",
+            "    'win32service',",
+            "    'win32event',",
+            "    'servicemanager',",
+            "    ",
+            "    # === OTHER DEPS ===",
+            "    'structlog',",
+            "    'tenacity',",
+            "    'redis',",
+            "    'sqlalchemy',",
+            "    'greenlet',",
+            "]",
+            '',
+            "# Collect ALL submodules (belt & suspenders approach)",
+            "hiddenimports += collect_submodules('web_service.backend')",
+            "hiddenimports += collect_submodules('anyio')",
+            "hiddenimports += collect_submodules('uvicorn')",
+            "hiddenimports += collect_submodules('fastapi')",
+            "hiddenimports += collect_submodules('starlette')",
+            '',
+            '# ====================================================================',
+            '# ANALYSIS',
+            '# ====================================================================',
+            "a = Analysis(",
+            "    ['web_service/backend/monolith.py'],",
+            "    pathex=[],",
+            "    binaries=[],",
+            "    datas=datas,",
+            "    hiddenimports=hiddenimports,",
+            "    hookspath=['fortuna-backend-hooks'],  # Use our custom hooks",
+            "    hooksconfig={},",
+            "    runtime_hooks=[],",
+            "    excludes=[],",
+            "    win_no_prefer_redirects=False,",
+            "    win_private_assemblies=False,",
+            "    cipher=block_cipher,",
+            "    noarchive=False,",
+            ")",
+            '',
+            "pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)",
+            '',
+            '# ====================================================================',
+            '# SINGLE FILE EXECUTABLE',
+            '# ====================================================================',
+            "exe = EXE(",
+            "    pyz,",
+            "    a.scripts,",
+            "    a.binaries,",
+            "    a.zipfiles,",
+            "    a.datas,",
+            "    name='FortunaApp',",
+            "    debug=False,",
+            "    bootloader_ignore_signals=False,",
+            "    strip=False,",
+            "    upx=True,",
+            "    upx_exclude=[],",
+            "    runtime_tmpdir=None,",
+            "    console=False,  # GUI Mode (No console window)",
+            "    disable_windowed_traceback=False,",
+            "    argv_emulation=False,",
+            "    target_arch='x86',",
+            "    codesign_identity=None,",
+            "    entitlements_file=None,",
+            ")"
+          )
           $specContent | Set-Content -Path "universal.spec"
           Write-Host "✅ Enhanced spec file generated"
 
           # Build it
           Write-Host "🔨 Building single EXE (this takes ~5 minutes)..."
-          pyinstaller --noconfirm --clean universal.spec
+          pyinstaller --noconfirm --clean --additional-hooks-dir=fortuna-backend-hooks universal.spec
 
       # --- PHASE 5: VERIFICATION ---
       - name: 🔍 Verify Build Output
