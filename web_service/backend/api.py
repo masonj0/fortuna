@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from typing import List, Optional
 
 import structlog
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, WebSocket
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, WebSocket
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -47,6 +47,7 @@ async def lifespan(app: FastAPI):
     log.info("Lifespan: Shutdown sequence complete.")
 
 # --- FastAPI App Initialization ---
+router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(
     title="Fortuna Faucet Web Service API",
@@ -114,7 +115,7 @@ def get_engine(request: Request) -> OddsEngine:
 
 # --- API Endpoints (Restored and Adapted) ---
 
-@app.get("/api/races", response_model=AggregatedResponse)
+@router.get("/races", response_model=AggregatedResponse)
 @limiter.limit("30/minute")
 async def get_races(
     request: Request,
@@ -126,7 +127,7 @@ async def get_races(
     """Fetches all race data for a given date from all or a specific source."""
     return await engine.fetch_all_odds(race_date, source)
 
-@app.get("/api/races/qualified/{analyzer_name}", response_model=QualifiedRacesResponse)
+@router.get("/races/qualified/{analyzer_name}", response_model=QualifiedRacesResponse)
 @limiter.limit("120/minute")
 async def get_qualified_races(
     analyzer_name: str,
@@ -145,7 +146,7 @@ async def get_qualified_races(
     races = [Race(**r) for r in response.get("races", [])]
     return QualifiedRacesResponse(qualified_races=races, analysis_metadata={"analyzer": analyzer_name})
 
-@app.get("/api/adapters/status")
+@router.get("/adapters/status")
 @limiter.limit("60/minute")
 async def get_all_adapter_statuses(
     request: Request,
@@ -156,3 +157,5 @@ async def get_all_adapter_statuses(
     return engine.get_all_adapter_statuses()
 
 # Add other endpoints as needed, following the pattern above.
+
+app.include_router(router, prefix="/api")

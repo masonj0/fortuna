@@ -20,6 +20,8 @@ jobs:
 
       - name: 🎨 Build Frontend
         shell: pwsh
+        env:
+          NEXT_PUBLIC_API_URL: http://127.0.0.1:8000
         run: |
           cd web_platform/frontend
           npm ci
@@ -56,5 +58,67 @@ jobs:
           path: dist/FortunaMonolith.exe
           retention-days: 30
 
-      # ✂️ LAUNCH & VERIFY STEPS REMOVED FOR HARVEST MODE
-      # The build stops here. Download the EXE to test manually.
+  smoke-test:
+    needs: build-monolith
+    runs-on: windows-latest
+    steps:
+      - name: ⬇️ Download Monolith EXE
+        uses: actions/download-artifact@v4
+        with:
+          name: FortunaMonolith-EXE
+          path: ./dist
+
+      - name: 🐍 Setup Python for Test
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 📦 Install Verification Dependencies
+        shell: pwsh
+        run: |
+          pip install requests
+
+      - name: 🚀 Launch & Verify Monolith
+        shell: pwsh
+        run: |
+          $env:FORTUNA_DEBUG = '1'
+          Start-Process -FilePath "./dist/FortunaMonolith.exe" -WindowStyle Hidden -RedirectStandardOutput "monolith-stdout.log" -RedirectStandardError "monolith-stderr.log"
+
+          $scriptLines = @(
+              'import requests',
+              'import time',
+              'import sys',
+              'url = "http://127.0.0.1:8000/api/health"',
+              'print(f"Polling {url}...")',
+              'for i in range(20):',
+              '    try:',
+              '        response = requests.get(url, timeout=2)',
+              '        print(f"Attempt {i+1}/20: Status Code: {response.status_code}")',
+              '        if response.status_code == 200:',
+              '            try:',
+              '                data = response.json()',
+              '                print(f"Response JSON: {data}")',
+              '            except Exception as json_e:',
+              '                print(f"Failed to parse JSON: {json_e}")',
+              '                print(f"Response Text: {response.text}")',
+              '                data = {}',
+              '            if data.get("status") == "ok":',
+              '                print("✅ Smoke test passed!")',
+              '                sys.exit(0)',
+              '    except requests.exceptions.RequestException as e:',
+              '        print(f"Attempt {i+1}/20 failed: {e}")',
+              '    time.sleep(1)',
+              'print("❌ Smoke test failed: Server did not respond correctly in time.")',
+              'sys.exit(1)'
+          )
+          $scriptLines | Out-File -FilePath "verify_script.py" -Encoding utf8
+          python verify_script.py
+
+      - name: 🔍 Display Logs on Failure
+        if: failure()
+        shell: pwsh
+        run: |
+          Write-Host "## 📄 Monolith STDOUT Log ##"
+          Get-Content monolith-stdout.log -ErrorAction SilentlyContinue
+          Write-Host "## 📄 Monolith STDERR Log ##"
+          Get-Content monolith-stderr.log -ErrorAction SilentlyContinue
