@@ -20,6 +20,8 @@ jobs:
 
       - name: 🎨 Build Frontend
         shell: pwsh
+        env:
+          NEXT_PUBLIC_API_URL: http://127.0.0.1:8000
         run: |
           cd web_platform/frontend
           npm ci
@@ -79,7 +81,8 @@ jobs:
       - name: 🚀 Launch & Verify Monolith
         shell: pwsh
         run: |
-          Start-Process -FilePath "./dist/FortunaMonolith.exe" -WindowStyle Hidden
+          $env:FORTUNA_DEBUG = '1'
+          Start-Process -FilePath "./dist/FortunaMonolith.exe" -WindowStyle Hidden -RedirectStandardOutput "monolith-stdout.log" -RedirectStandardError "monolith-stderr.log"
 
           $scriptLines = @(
               'import requests',
@@ -105,3 +108,12 @@ jobs:
           )
           $scriptLines | Out-File -FilePath "verify_script.py" -Encoding utf8
           python verify_script.py
+
+      - name: 🔍 Display Logs on Failure
+        if: failure()
+        shell: pwsh
+        run: |
+          Write-Host "## 📄 Monolith STDOUT Log ##"
+          Get-Content monolith-stdout.log -ErrorAction SilentlyContinue
+          Write-Host "## 📄 Monolith STDERR Log ##"
+          Get-Content monolith-stderr.log -ErrorAction SilentlyContinue
