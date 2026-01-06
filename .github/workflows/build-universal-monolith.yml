@@ -219,7 +219,7 @@ jobs:
             "    binaries=[],",
             "    datas=datas,",
             "    hiddenimports=hiddenimports,",
-            "    hookspath=['fortuna-backend-hooks'],  # Use our custom hooks",
+            "    hookspath=[os.path.abspath('fortuna-backend-hooks')],  # Use our custom hooks",
             "    hooksconfig={},",
             "    runtime_hooks=[],",
             "    excludes=[],",
