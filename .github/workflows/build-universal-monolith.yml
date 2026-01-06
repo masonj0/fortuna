@@ -42,12 +42,19 @@ jobs:
           architecture: x86
           cache: 'pip'
 
+      - name: 🧾 Create x86 Architecture Constraints
+        shell: pwsh
+        run: |
+          "numpy==1.23.5" | Set-Content -Path "constraints.txt"
+          "pandas==1.5.3" | Add-Content -Path "constraints.txt"
+          Write-Host "✅ Created constraints.txt for x86 build."
+
       - name: 📦 Install Backend Dependencies
         shell: pwsh
         run: |
           pip install --upgrade pip wheel
-          pip install -r web_service/backend/requirements.txt
-          pip install pywebview[cef] pyinstaller==6.6.0 pywin32
+          pip install -r web_service/backend/requirements.txt -c constraints.txt
+          pip install pywebview[cef] pyinstaller==6.6.0 pywin32 -c constraints.txt
 
       # --- PHASE 2.5: SETUP HOOKS (NEW) ---
       - name: 🪝 Create PyInstaller Custom Hooks
