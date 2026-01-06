@@ -7,7 +7,7 @@ on:
 
 jobs:
   build-the-monolith:
-    name: '🏗️ Build All-in-One EXE'
+    name: '🗿 Build All-in-One EXE'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -42,14 +42,70 @@ jobs:
           architecture: x86
           cache: 'pip'
 
+      - name: 🧾 Create x86 Architecture Constraints
+        shell: pwsh
+        run: |
+          "numpy==1.23.5" | Set-Content -Path "constraints.txt"
+          "pandas==1.5.3" | Add-Content -Path "constraints.txt"
+          Write-Host "✅ Created constraints.txt for x86 build."
+
       - name: 📦 Install Backend Dependencies
         shell: pwsh
         run: |
           pip install --upgrade pip wheel
-          pip install -r web_service/backend/requirements.txt
-          pip install pywebview[cef] pyinstaller==6.6.0 pywin32
+          pip install -r web_service/backend/requirements.txt -c constraints.txt
+          pip install pywebview[cef] pyinstaller==6.6.0 pywin32 -c constraints.txt
 
-      # --- PHASE 3: THE MERGE (PyInstaller) ---
+      # --- PHASE 2.5: SETUP HOOKS (NEW) ---
+      - name: 🪝 Create PyInstaller Custom Hooks
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "fortuna-backend-hooks"
+
+          # Custom Uvicorn Hook (CRITICAL for fixing ModuleNotFoundError)
+          $uvicornHook = @(
+            '"""',
+            'Custom PyInstaller hook for Uvicorn',
+            "Resolves: ModuleNotFoundError: No module named 'uvicorn'",
+            '"""',
+            'from PyInstaller.utils.hooks import collect_submodules, collect_data_files',
+            '',
+            '# Collect ALL uvicorn submodules (including runtime-loaded ones)',
+            "hiddenimports = collect_submodules('uvicorn')",
+            "datas = collect_data_files('uvicorn')",
+            '',
+            "# Explicit critical imports that PyInstaller's auto-detection misses",
+            "hiddenimports += [",
+            "    'uvicorn.logging',",
+            "    'uvicorn.loops.auto',",
+            "    'uvicorn.loops.asyncio',",
+            "    'uvicorn.loops.uvloop',",
+            "    'uvicorn.protocols.http.auto',",
+            "    'uvicorn.protocols.http.h11_impl',",
+            "    'uvicorn.protocols.http.httptools_impl',",
+            "    'uvicorn.protocols.websockets.auto',",
+            "    'uvicorn.protocols.websockets.websockets_impl',",
+            "    'uvicorn.protocols.websockets.wsproto_impl',",
+            "    'uvicorn.lifespan.on',",
+            "    'uvicorn.lifespan.off',",
+            "]"
+          )
+          $uvicornHook | Set-Content -Path "fortuna-backend-hooks/hook-uvicorn.py"
+
+          # Custom FastAPI Hook (Belt & Suspenders)
+          $fastapiHook = @(
+            '"""Custom PyInstaller hook for FastAPI"""',
+            'from PyInstaller.utils.hooks import collect_submodules, collect_data_files',
+            '',
+            "hiddenimports = collect_submodules('fastapi')",
+            "datas = collect_data_files('fastapi')"
+          )
+          $fastapiHook | Set-Content -Path "fortuna-backend-hooks/hook-fastapi.py"
+
+          Write-Host "✅ Custom PyInstaller hooks created:"
+          Get-ChildItem "fortuna-backend-hooks" | ForEach-Object { Write-Host "   - $($_.Name)" }
+
+      # --- PHASE 3: THE DATA DIRECTORIES ---
       - name: 📁 Create Required Data Dirs
         shell: pwsh
         run: |
@@ -57,86 +113,193 @@ jobs:
           New-Item -ItemType Directory -Force -Path "web_service/backend/json"
           Write-Host "✅ Ensured data directories exist for PyInstaller."
 
-      - name: 🔮 Generate Spec & Build
+      # --- PHASE 4: THE MERGE (PyInstaller) ---
+      - name: 🔮 Generate Enhanced Spec & Build
         shell: pwsh
         run: |
           $specContent = @(
-              '# -*- mode: python ; coding: utf-8 -*-',
-              'from PyInstaller.utils.hooks import collect_submodules, collect_data_files',
-              'import os',
-              '',
-              'block_cipher = None',
-              '',
-              "# Include the Staged Frontend",
-              "datas = [('frontend_dist', 'frontend_dist')]",
-              '',
-              "# Include Backend Data",
-              "datas += [('web_service/backend/data', 'data'),",
-              "          ('web_service/backend/json', 'json'),",
-              "          ('web_service/backend/adapters', 'adapters')]",
-              '',
-              "# Collect Imports",
-              "hiddenimports = ['uvicorn', 'fastapi', 'starlette', 'pydantic', 'structlog',",
-              "                 'webview', 'webview.platforms.winforms', 'clr',",
-              "                 'tenacity', 'redis', 'sqlalchemy', 'greenlet']",
-              "hiddenimports += collect_submodules('web_service.backend')",
-              '',
-              'a = Analysis(',
-              "    ['web_service/backend/monolith.py'],",
-              '    pathex=[],',
-              '    binaries=[],',
-              '    datas=datas,',
-              '    hiddenimports=hiddenimports,',
-              '    hookspath=[],',
-              '    hooksconfig={},',
-              '    runtime_hooks=[],',
-              '    excludes=[],',
-              '    win_no_prefer_redirects=False,',
-              '    win_private_assemblies=False,',
-              '    cipher=block_cipher,',
-              '    noarchive=False,',
-              ')',
-              'pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)',
-              'exe = EXE(',
-              '    pyz,',
-              '    a.scripts,',
-              '    a.binaries,',
-              '    a.zipfiles,',
-              '    a.datas,',
-              "    name='FortunaApp',",
-              '    debug=False,',
-              '    bootloader_ignore_signals=False,',
-              '    strip=False,',
-              '    upx=True,',
-              '    upx_exclude=[],',
-              '    runtime_tmpdir=None,',
-              '    console=False, # GUI Mode (No black box)',
-              '    disable_windowed_traceback=False,',
-              '    argv_emulation=False,',
-              "    target_arch='x86',",
-              '    codesign_identity=None,',
-              '    entitlements_file=None,',
-              ')'
+            '# -*- mode: python ; coding: utf-8 -*-',
+            '"""',
+            'Fortuna Universal Monolith Spec',
+            'Single EXE with embedded frontend and backend',
+            'FIXED: Enhanced uvicorn imports to resolve ModuleNotFoundError',
+            '"""',
+            'from PyInstaller.utils.hooks import collect_submodules, collect_data_files',
+            'import os',
+            '',
+            'block_cipher = None',
+            '',
+            '# ====================================================================',
+            '# DATA FILES (Frontend + Backend)',
+            '# ====================================================================',
+            "datas = [",
+            "    ('frontend_dist', 'frontend_dist'),  # Staged React frontend",
+            "]",
+            '',
+            '# Framework data files',
+            "datas += collect_data_files('uvicorn')",
+            "datas += collect_data_files('fastapi')",
+            "datas += collect_data_files('starlette')",
+            '',
+            '# Backend data',
+            "datas += [",
+            "    ('web_service/backend/data', 'data'),",
+            "    ('web_service/backend/json', 'json'),",
+            "    ('web_service/backend/adapters', 'adapters')",
+            "]",
+            '',
+            '# ====================================================================',
+            '# HIDDEN IMPORTS (ENHANCED for Uvicorn)',
+            '# ====================================================================',
+            "hiddenimports = [",
+            "    # === UVICORN (COMPLETE SET) ===",
+            "    'uvicorn',",
+            "    'uvicorn.logging',",
+            "    'uvicorn.loops',",
+            "    'uvicorn.loops.auto',",
+            "    'uvicorn.loops.asyncio',",
+            "    'uvicorn.loops.uvloop',",
+            "    'uvicorn.protocols',",
+            "    'uvicorn.protocols.http',",
+            "    'uvicorn.protocols.http.auto',",
+            "    'uvicorn.protocols.http.h11_impl',",
+            "    'uvicorn.protocols.http.httptools_impl',",
+            "    'uvicorn.protocols.websockets',",
+            "    'uvicorn.protocols.websockets.auto',",
+            "    'uvicorn.protocols.websockets.websockets_impl',",
+            "    'uvicorn.protocols.websockets.wsproto_impl',",
+            "    'uvicorn.lifespan',",
+            "    'uvicorn.lifespan.on',",
+            "    'uvicorn.lifespan.off',",
+            "    ",
+            "    # === FASTAPI & STARLETTE ===",
+            "    'fastapi',",
+            "    'starlette',",
+            "    'starlette.routing',",
+            "    'starlette.middleware',",
+            "    'starlette.middleware.cors',",
+            "    'pydantic',",
+            "    'pydantic_core',",
+            "    'pydantic_settings',",
+            "    'pydantic_settings.sources',",
+            "    ",
+            "    # === WEBVIEW (for GUI) ===",
+            "    'webview',",
+            "    'webview.platforms.winforms',",
+            "    'clr',",
+            "    ",
+            "    # === WINDOWS SERVICES ===",
+            "    'win32timezone',",
+            "    'win32serviceutil',",
+            "    'win32service',",
+            "    'win32event',",
+            "    'servicemanager',",
+            "    ",
+            "    # === OTHER DEPS ===",
+            "    'structlog',",
+            "    'tenacity',",
+            "    'redis',",
+            "    'sqlalchemy',",
+            "    'greenlet',",
+            "]",
+            '',
+            "# Collect ALL submodules (belt & suspenders approach)",
+            "hiddenimports += collect_submodules('web_service.backend')",
+            "hiddenimports += collect_submodules('anyio')",
+            "hiddenimports += collect_submodules('uvicorn')",
+            "hiddenimports += collect_submodules('fastapi')",
+            "hiddenimports += collect_submodules('starlette')",
+            '',
+            '# ====================================================================',
+            '# ANALYSIS',
+            '# ====================================================================',
+            "a = Analysis(",
+            "    ['web_service/backend/monolith.py'],",
+            "    pathex=[],",
+            "    binaries=[],",
+            "    datas=datas,",
+            "    hiddenimports=hiddenimports,",
+            "    hookspath=['fortuna-backend-hooks'],  # Use our custom hooks",
+            "    hooksconfig={},",
+            "    runtime_hooks=[],",
+            "    excludes=[],",
+            "    win_no_prefer_redirects=False,",
+            "    win_private_assemblies=False,",
+            "    cipher=block_cipher,",
+            "    noarchive=False,",
+            ")",
+            '',
+            "pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)",
+            '',
+            '# ====================================================================',
+            '# SINGLE FILE EXECUTABLE',
+            '# ====================================================================',
+            "exe = EXE(",
+            "    pyz,",
+            "    a.scripts,",
+            "    a.binaries,",
+            "    a.zipfiles,",
+            "    a.datas,",
+            "    name='FortunaApp',",
+            "    debug=False,",
+            "    bootloader_ignore_signals=False,",
+            "    strip=False,",
+            "    upx=True,",
+            "    upx_exclude=[],",
+            "    runtime_tmpdir=None,",
+            "    console=False,  # GUI Mode (No console window)",
+            "    disable_windowed_traceback=False,",
+            "    argv_emulation=False,",
+            "    target_arch='x86',",
+            "    codesign_identity=None,",
+            "    entitlements_file=None,",
+            ")"
           )
-          $specContent -join "`n" | Set-Content -Path "universal.spec"
+          $specContent | Set-Content -Path "universal.spec"
+          Write-Host "✅ Enhanced spec file generated"
 
           # Build it
-          pyinstaller --noconfirm --clean universal.spec
+          Write-Host "🔨 Building single EXE (this takes ~5 minutes)..."
+          pyinstaller --noconfirm --clean --additional-hooks-dir=fortuna-backend-hooks universal.spec
 
-      # --- PHASE 4: THE REWARD & VERIFICATION ---
-      - name: 📤 Upload The App
-        uses: actions/upload-artifact@v4
-        with:
-          name: FortunaApp-SingleFile-x86
-          path: dist/FortunaApp.exe
+      # --- PHASE 5: VERIFICATION ---
+      - name: 🔍 Verify Build Output
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "dist/FortunaApp.exe")) {
+            throw "❌ Build failed - FortunaApp.exe not found"
+          }
 
-      - name: 🧪 Smoke Test
+          $fileInfo = Get-Item "dist/FortunaApp.exe"
+          Write-Host "✅ Build successful:"
+          Write-Host "   Size: $([math]::Round($fileInfo.Length / 1MB, 2)) MB"
+          Write-Host "   Path: dist/FortunaApp.exe"
+
+      # --- PHASE 6: SMOKE TEST ---
+      - name: 🧪 Smoke Test (Launch & Kill)
         shell: pwsh
         timeout-minutes: 2
         run: |
+          Write-Host "🚀 Starting FortunaApp.exe..."
           Start-Process "dist/FortunaApp.exe"
+
+          Write-Host "⏳ Waiting 10 seconds for startup..."
           Start-Sleep -Seconds 10
+
           $process = Get-Process -Name "FortunaApp" -ErrorAction SilentlyContinue
-          if ($null -eq $process) { throw "App didn't start!" }
+          if ($null -eq $process) {
+            throw "❌ App didn't start - check for missing modules"
+          }
+
+          Write-Host "✅ App is running (PID: $($process.Id))"
+
           Stop-Process -Name "FortunaApp" -Force
-          Write-Host "✅ App started successfully"
+          Write-Host "✅ Smoke test passed"
+
+      # --- PHASE 7: ARTIFACT UPLOAD ---
+      - name: 📤 Upload The Monolith
+        uses: actions/upload-artifact@v4
+        with:
+          name: FortunaApp-Universal-x86
+          path: dist/FortunaApp.exe
+          retention-days: 30
