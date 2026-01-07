@@ -90,7 +90,7 @@ more-itertools==10.8.0
     #   jaraco-functools
 mypy-extensions==1.1.0
     # via black
-numpy==2.4.0
+numpy==1.23.5
     # via
     #   -r web_service/backend/requirements.in
     #   pandas
@@ -103,7 +103,7 @@ packaging==25.0
     #   pyinstaller
     #   pyinstaller-hooks-contrib
     #   pytest
-pandas==2.3.3
+pandas==1.5.3
     # via -r web_service/backend/requirements.in
 pathspec==0.12.1
     # via black
