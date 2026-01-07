@@ -1,11 +1,26 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'export',  // Critical for static HTML export
+  // CRITICAL: Export as static HTML
+  output: 'export',
+
+  // Export to 'out' directory
   distDir: 'out',
-  trailingSlash: true,
+
+  // Disable image optimization (doesn't work in static export)
   images: {
-    unoptimized: true  // Required for static export
+    unoptimized: true,
   },
+
+  // Ensure trailing slashes work
+  trailingSlash: true,
+
+  // Base path (none for monolith)
+  basePath: '',
+
+  // Asset prefix (none for monolith)
+  assetPrefix: '',
+
+  // API proxy for development (not used in monolith)
   async rewrites() {
     return [
       {
