@@ -1,0 +1,14 @@
+name: 📞 Caller for SPA Builder
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-the-spa:
+    name: '🚀 Build a SPA Monolith'
+    uses: ./.github/workflows/formerly-the-core-of-reusable.yml
+    with:
+      backend_dir: 'web_service/backend'
+      entry_script: 'web_service/backend/monolith.py'
+      artifact_name: 'WebService-SPA-Monolith'
+      python_version: '3.11'
