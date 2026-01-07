@@ -274,7 +274,7 @@ jobs:
 
           # Build it
           Write-Host "🔨 Building single EXE (this takes ~5 minutes)..."
-          pyinstaller --noconfirm --clean universal.spec
+          pyinstaller --noconfirm --clean --additional-hooks-dir=fortuna-backend-hooks universal.spec
 
       # --- PHASE 5: VERIFICATION ---
       - name: 🔍 Verify Build Output
