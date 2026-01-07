@@ -80,6 +80,8 @@ jobs:
 
       - name: 🚀 Launch & Verify Monolith
         shell: pwsh
+        env:
+          PYTHONUTF8: '1'
         run: |
           $env:FORTUNA_DEBUG = '1'
           Start-Process -FilePath "./dist/FortunaMonolith.exe" -WindowStyle Hidden -RedirectStandardOutput "monolith-stdout.log" -RedirectStandardError "monolith-stderr.log"

@@ -63,7 +63,7 @@ app.add_middleware(SlowAPIMiddleware)
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(UserFriendlyException, user_friendly_exception_handler)
-app.include_router(health_router)
+router.include_router(health_router)
 
 # Add CORS middleware for frontend development
 app.add_middleware(
