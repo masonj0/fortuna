@@ -48,9 +48,9 @@ def create_app():
     if frontend_path.exists():
         # List files to verify structure
         if (frontend_path / "index.html").exists():
-            print("[MONOLITH] ✅ Found index.html")
+            print("[MONOLITH] Found index.html")
         else:
-            print("[MONOLITH] ⚠️  index.html not found!")
+            print("[MONOLITH] WARNING: index.html not found!")
             print(f"[MONOLITH] Contents: {list(frontend_path.iterdir())}")
 
         # Mount static files for assets (_next, images, etc.)
@@ -85,9 +85,9 @@ def create_app():
             else:
                 return {"error": "index.html not found", "path": str(index_path)}
 
-        print("[MONOLITH] ✅ Frontend routing configured")
+        print("[MONOLITH] Frontend routing configured")
     else:
-        print("[MONOLITH] ❌ Frontend files not found!")
+        print("[MONOLITH] ERROR: Frontend files not found!")
 
         @app.get("/")
         async def root():
@@ -108,14 +108,14 @@ def run_backend():
 
 def main():
     """Main entry point"""
-    print("[MONOLITH] 🍀 Starting Fortuna Monolith...")
+    print("[MONOLITH] Starting Fortuna Monolith...")
 
     # Start backend thread
     backend_thread = threading.Thread(target=run_backend, daemon=True)
     backend_thread.start()
 
     # Wait for backend
-    print("[MONOLITH] ⏳ Waiting for backend...")
+    print("[MONOLITH] Waiting for backend...")
     time.sleep(3)
 
     # Verify backend is ready
@@ -125,14 +125,14 @@ def main():
             # Try health endpoint (in your backend API)
             response = requests.get("http://127.0.0.1:8000/api/health", timeout=1)
             if response.status_code == 200:
-                print("[MONOLITH] ✅ Backend ready!")
+                print("[MONOLITH] Backend ready!")
                 break
         except:
-            print(f"[MONOLITH] ⏳ Waiting... ({i+1}/10)")
+            print(f"[MONOLITH] Waiting... ({i+1}/10)")
             time.sleep(1)
 
     # Launch webview
-    print("[MONOLITH] 🚀 Launching UI...")
+    print("[MONOLITH] Launching UI...")
     webview.create_window(
         title="Fortuna Faucet",
         url="http://127.0.0.1:8000",
@@ -146,7 +146,7 @@ def main():
     )
 
     webview.start()
-    print("[MONOLITH] 👋 Closed")
+    print("[MONOLITH] Closed")
 
 if __name__ == "__main__":
     main()
