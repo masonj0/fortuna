@@ -144,7 +144,7 @@ def main():
         background_color='#1a1a1a'
     )
 
-    webview.start()
+    webview.start(debug=True)
     print("[MONOLITH] Closed")
 
 if __name__ == "__main__":
