@@ -1,478 +1,117 @@
-name: 🧬 FormerlyTheCoreOfReusable
+name: 🧬 Reusable Monolith SPA Builder
 
 on:
-  push:
-    branches: [main, develop]
-    tags: ['v*']
-  #pull_request:
-  #  branches: [main]
-  workflow_dispatch:
+  workflow_call:
     inputs:
-      # --- RUNTIME VERSION CONTROL (GPT-5 Pattern) ---
-      node_version:
-        description: 'Node.js version to use'
+      backend_dir:
+        description: 'Path to the backend source directory (e.g., web_service/backend)'
+        required: true
         type: string
-        default: '20'
+      entry_script:
+        description: 'Path to the main Python entry script (e.g., web_service/backend/monolith.py)'
+        required: true
+        type: string
+      artifact_name:
+        description: 'Name for the final executable artifact'
+        required: false
+        type: string
+        default: 'Fortuna-SPA-Monolith'
       python_version:
-        description: 'Python version to use'
+        description: 'Python version to use for the build'
+        required: false
         type: string
         default: '3.11'
-      wix_version:
-        description: 'WiX Toolset version'
-        type: string
-        default: '4.0.5'
-
-      # --- OPTIONAL FEATURES (Claude Pattern) ---
-      enable_dietician:
-        description: 'Run pre-package size analysis'
-        type: boolean
-        default: false
-      enable_canary:
-        description: 'Run Windows Defender malware scan'
-        type: boolean
-        default: false
-      enable_paparazzi:
-        description: 'Run Playwright visual verification'
-        type: boolean
-        default: false
-      enable_forensics:
-        description: 'Run deep asset verification pre-flight'
-        type: boolean
-        default: true
-
-      # --- CONFIG ---
-      service_port:
-        description: 'Localhost port for the backend service'
-        type: string
-        default: '8102'
-
-permissions:
-  contents: read
-
-env:
-  # Dynamic defaults (GPT-5's elegant pattern)
-  NODE_VERSION: ${{ github.event.inputs.node_version || '20' }}
-  PYTHON_VERSION: ${{ github.event.inputs.python_version || '3.11' }}
-  WIX_VERSION: ${{ github.event.inputs.wix_version || '4.0.5' }}
-  SERVICE_PORT: ${{ github.event.inputs.service_port || '8102' }}
-
-  # Static configuration (Claude's centralized approach)
-  DOTNET_VERSION: '8.0.x'
-  SERVICE_NAME: 'FortunaWebService'
-  FORTUNA_ENV: 'smoke-test'
-
-  # Feature flags (converted to env for cleaner conditionals)
-  ENABLE_DIETICIAN: ${{ github.event.inputs.enable_dietician == 'true' }}
-  ENABLE_CANARY: ${{ github.event.inputs.enable_canary == 'true' }}
-  ENABLE_PAPARAZZI: ${{ github.event.inputs.enable_paparazzi == 'true' }}
-  ENABLE_FORENSICS: ${{ github.event.inputs.enable_forensics == 'true' || github.event_name != 'workflow_dispatch' }}
+    outputs:
+      artifact_path:
+        description: "Path to the built executable artifact"
+        value: ${{ jobs.build-monolith.outputs.artifact_path }}
 
 jobs:
-  preflight:
-    name: 🔍 Preflight
+  build-monolith:
+    name: '🗿 Build Python SPA Monolith'
     runs-on: windows-latest
-    timeout-minutes: 10
     outputs:
-      semver: ${{ steps.ver.outputs.semver }}
-      build_id: ${{ steps.ver.outputs.build_id }}
-      short_sha: ${{ steps.ver.outputs.short_sha }}
+      artifact_path: ${{ steps.verify.outputs.artifact_path }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: 🏷️ Version & Metadata
-        id: ver
+      # --- Frontend Build ---
+      - name: 🎨 Build Frontend
         shell: pwsh
         run: |
-          $tag = git describe --tags --abbrev=0 2>$null
-          if (-not $tag) { $tag = "v0.0.0" }
-          $semver = $tag -replace '^v',''
-          $shortSha = git rev-parse --short HEAD
+          cd web_platform/frontend
+          npm ci
+          npm run build
+          if (-not (Test-Path out/index.html)) { throw "Frontend build failed" }
+          Copy-Item -Path "out" -Destination "${{ github.workspace }}/frontend_dist" -Recurse -Force
 
-          "semver=$semver" >> $env:GITHUB_OUTPUT
-          "build_id=${{ github.run_id }}" >> $env:GITHUB_OUTPUT
-          "short_sha=$shortSha" >> $env:GITHUB_OUTPUT
-
-          Write-Host "✅ Version: $semver | Build: ${{ github.run_id }} | SHA: $shortSha"
-
-      - name: ✅ Config Validation
-        shell: pwsh
-        run: |
-          if (-not "${{ env.NODE_VERSION }}" -match '^\d+$') { throw "Invalid NODE_VERSION" }
-          if (-not "${{ env.PYTHON_VERSION }}" -match '^\d+\.\d+$') { throw "Invalid PYTHON_VERSION" }
-          Write-Host "✅ Configuration valid"
-
-      - name: 🧪 Version Sanity Check
-        shell: pwsh
-        run: |
-          $testedNode = @("18", "20")
-          $testedPython = @("3.10", "3.11")
-
-          if ("${{ env.NODE_VERSION }}" -notin $testedNode) {
-            Write-Warning "Untested Node.js version ('${{ env.NODE_VERSION }}') selected. Expected one of: $($testedNode -join ', ')"
-          } else {
-            Write-Host "✅ Node.js version is on the tested list."
-          }
-
-          if ("${{ env.PYTHON_VERSION }}" -notin $testedPython) {
-            Write-Warning "Untested Python version ('${{ env.PYTHON_VERSION }}') selected. Expected one of: $($testedPython -join ', ')"
-          } else {
-            Write-Host "✅ Python version is on the tested list."
-          }
-
-      - name: 🔎 Forensic Assets
-        if: env.ENABLE_FORENSICS == 'true'
-        shell: pwsh
-        run: |
-          $files = @("electron/package.json", "web_service/backend/requirements.txt", "build_wix/Product_WebService.wxs")
-          $missing = $files | Where-Object { -not (Test-Path $_) }
-          if ($missing) { throw "Missing: $($missing -join ', ')" }
-          Write-Host "✅ Assets verified"
-
-  build-frontend:
-    name: ⚛️ Frontend
-    needs: preflight
-    runs-on: windows-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      # --- Backend Build ---
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: 'web_platform/frontend/package-lock.json'
-
-      - name: 🔍 Verify Build Script
-        shell: pwsh
-        working-directory: web_platform/frontend
-        run: |
-          $pkg = Get-Content package.json | ConvertFrom-Json
-          if (-not $pkg.scripts.build) { throw "Missing 'build' script" }
-
-      - name: 🏗️ Build
-        working-directory: web_platform/frontend
-        run: npm ci && npm run build
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: frontend-dist-windows-latest
-          path: web_platform/frontend/out
-          retention-days: 7
-
-  build-backend:
-    name: 🐍 Backend (${{ matrix.arch }})
-    needs: [preflight, build-frontend]
-    runs-on: windows-latest
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        arch: [x64, x86]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: frontend-dist-windows-latest
-          path: electron/out
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          architecture: ${{ matrix.arch }}
+          python-version: ${{ inputs.python_version }}
           cache: 'pip'
 
-      - name: 📦 Dependencies & Build
+      - name: 📦 Install Backend Dependencies
         shell: pwsh
         run: |
-          pip install -r web_service/backend/requirements.txt
-          pip install pyinstaller
+          pip install --upgrade pip wheel
+          pip install -r ${{ inputs.backend_dir }}/requirements.txt
+          pip install pywebview[cef] pyinstaller==6.6.0 pywin32
 
-          pyinstaller --noconfirm --onedir --clean --name fortuna-backend `
-            --additional-hooks-dir fortuna-backend-hooks `
-            --hidden-import=win32timezone --hidden-import=win32serviceutil `
-            --add-data "web_service/backend;backend" `
-            --add-data "electron/out;ui" `
-            web_service/backend/service_entry.py
-
-          Write-Host "✅ Backend built for ${{ matrix.arch }}"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: backend-${{ matrix.arch }}
-          path: dist/fortuna-backend
-          retention-days: 7
-
-  package-msi:
-    name: 📦 MSI (${{ matrix.arch }})
-    needs: [preflight, build-backend]
-    runs-on: windows-latest
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        arch: [x64, x86]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: backend-${{ matrix.arch }}
-          path: staging/backend
-
-      - name: 📝 Generate Service Scripts
+      - name: 📁 Create Required Data Dirs
         shell: pwsh
         run: |
-          $scriptContent = @(
-            "net stop ${{ env.SERVICE_NAME }}",
-            "net start ${{ env.SERVICE_NAME }}"
+          New-Item -ItemType Directory -Force -Path "${{ inputs.backend_dir }}/data"
+          New-Item -ItemType Directory -Force -Path "${{ inputs.backend_dir }}/json"
+
+      # --- PyInstaller Build ---
+      - name: 🔮 Generate Spec & Build
+        shell: pwsh
+        run: |
+          $specContent = @(
+            '# -*- mode: python ; coding: utf-8 -*-',
+            'import os',
+            'block_cipher = None',
+            "datas = [('frontend_dist', 'frontend_dist')]",
+            "hiddenimports = ['webview', 'webview.platforms.winforms', 'clr', 'win32timezone']",
+            "a = Analysis(",
+            "    ['${{ inputs.entry_script }}'],",
+            "    pathex=[],",
+            "    binaries=[],",
+            "    datas=datas,",
+            "    hiddenimports=hiddenimports,",
+            "    hookspath=[],",
+            "    runtime_hooks=[],",
+            "    excludes=[],",
+            "    cipher=block_cipher,",
+            ")",
+            "pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)",
+            "exe = EXE(",
+            "    pyz, a.scripts, a.binaries, a.zipfiles, a.datas,",
+            "    name='${{ inputs.artifact_name }}',",
+            "    console=False,",
+            "    icon='electron/assets/icon.ico'",
+            ")"
           )
-          $scriptContent | Out-File -FilePath staging/backend/restart_service.bat -Encoding ASCII
+          $specContent | Set-Content -Path "generated.spec"
+          pyinstaller --noconfirm --clean generated.spec
 
-      - name: ⚖️ The Dietician
-        if: env.ENABLE_DIETICIAN == 'true'
+      # --- Verification & Output ---
+      - name: 🔍 Verify Build and Set Output
+        id: verify
         shell: pwsh
         run: |
-          $sizeMB = [math]::Round((Get-ChildItem staging -Recurse -File | Measure-Object -Sum Length).Sum / 1MB, 2)
-          Write-Host "📊 Payload: $sizeMB MB"
-          if ($sizeMB -gt 500) { Write-Warning "⚠️  Exceeds 500MB threshold" }
-
-      - name: 🔧 Setup WiX
-        shell: pwsh
-        run: |
-          dotnet tool install --global wix --version ${{ env.WIX_VERSION }}
-          "$env:USERPROFILE\.dotnet\tools" >> $env:GITHUB_PATH
-
-      - name: 🏗️ Build MSI
-        shell: pwsh
-        run: |
-          $msiName = "Fortuna-${{ needs.preflight.outputs.semver }}-${{ matrix.arch }}.msi"
-          wix build build_wix/Product_WebService.wxs `
-            -arch ${{ matrix.arch }} -o $msiName `
-            -d Version="${{ needs.preflight.outputs.semver }}" -d SourceDir="staging" `
-            -d ServicePort="${{ env.SERVICE_PORT }}" `
-            -d Platform=${{ matrix.arch }} `
-            -ext WixToolset.UI.wixext `
-            -ext WixToolset.Firewall.wixext `
-            -ext WixToolset.Util.wixext
-          Write-Host "✅ Built: $msiName"
-
-      - name: 🦜 The Canary
-        if: env.ENABLE_CANARY == 'true'
-        shell: pwsh
-        run: |
-          $defender = "C:\Program Files\Windows Defender\MpCmdRun.exe"
-          if (Test-Path $defender) {
-            try {
-              & $defender -Scan -ScanType 3 -File "Fortuna-${{ needs.preflight.outputs.semver }}-${{ matrix.arch }}.msi"
-              Write-Host "✅ Canary passed"
-            } catch {
-              Write-Warning "⚠️  Scan issue: $_"
-            }
-          } else {
-            Write-Host "ℹ️  Defender unavailable"
+          $exePath = "dist/${{ inputs.artifact_name }}.exe"
+          if (-not (Test-Path $exePath)) {
+            throw "PyInstaller build failed - EXE not found at $exePath"
           }
+          "artifact_path=$exePath" >> $env:GITHUB_OUTPUT
+          Write-Host "✅ Monolith built successfully at $exePath"
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: msi-${{ matrix.arch }}
-          path: Fortuna-${{ needs.preflight.outputs.semver }}-${{ matrix.arch }}.msi
-          retention-days: 30
-
-  smoke-test:
-    name: 🚬 Smoke (${{ matrix.arch }})
-    needs: [preflight, package-msi]
-    runs-on: windows-latest
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        arch: [x64, x86]
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: msi-${{ matrix.arch }}
-
-      - name: 🧹 Clean Environment
-        shell: pwsh
-        run: |
-          $svc = Get-Service "${{ env.SERVICE_NAME }}" -ErrorAction SilentlyContinue
-          if ($svc) {
-            Stop-Service "${{ env.SERVICE_NAME }}" -Force -ErrorAction SilentlyContinue
-            Start-Sleep 3
-            sc.exe delete "${{ env.SERVICE_NAME }}"
-            Start-Sleep 5
-          }
-
-      - name: 💿 Install MSI
-        shell: pwsh
-        run: |
-          $msi = "Fortuna-${{ needs.preflight.outputs.semver }}-${{ matrix.arch }}.msi"
-          Start-Process msiexec.exe -ArgumentList "/i `"$msi`" /quiet /norestart /l*v install.log" -Wait
-          Start-Sleep 10
-
-      - name: '✅ Create Required Runtime Directories & Start Service'
-        shell: pwsh
-        run: |
-          Set-StrictMode -Version Latest
-          $ErrorActionPreference = "Stop"
-
-          # Determine install path based on architecture
-          $progFiles = ${env:ProgramFiles}
-          if ('${{ matrix.arch }}' -eq 'x86') { $progFiles = ${env:ProgramFiles(x86)} }
-          $installDir = Join-Path $progFiles "Fortuna Faucet Service"
-
-          if (-not (Test-Path $installDir)) {
-            throw "❌ Installation directory not found at $installDir"
-          }
-
-          # CRITICAL: Create runtime directories that service needs
-          $dirs = @('data', 'json', 'logs')
-          foreach ($dir in $dirs) {
-            $fullPath = Join-Path $installDir $dir
-            New-Item -ItemType Directory -Path $fullPath -Force | Out-Null
-            # Grant LocalSystem (the service account) full control
-            icacls $fullPath /grant "NT AUTHORITY\SYSTEM:(OI)(CI)F" /T 2>&1 | Out-Null
-          }
-          Write-Host "✅ Created runtime directories with proper permissions"
-
-          # CRITICAL: Explicitly start the service (WiX removed auto-start)
-          Write-Host "Starting FortunaWebService..."
-          Start-Service -Name "FortunaWebService" -ErrorAction Stop
-          Start-Sleep -Seconds 10
-
-          # Verify service is running
-          $svc = Get-Service -Name "FortunaWebService"
-          if ($svc.Status -ne 'Running') {
-            throw "❌ Service failed to start. Status: $($svc.Status)"
-          }
-          Write-Host "✅ Service started successfully"
-
-      - name: '🚀 Health Check & Paparazzi'
-        shell: pwsh
-        run: |
-          # Health Check
-          $maxRetries = 10; $delay = 3; $url = "http://127.0.0.1:${{ env.SERVICE_PORT }}/health"
-          for ($i = 0; $i -lt $maxRetries; $i++) {
-            try {
-              $response = Invoke-RestMethod -Uri $url -TimeoutSec 5
-              if ($response.status -eq "ok") {
-                Write-Host "✅ Healthy after $($i * $delay)s"
-                break
-              }
-            } catch {
-              Write-Host "Attempt $($i+1)/$maxRetries failed..."
-              if ($i -eq $maxRetries - 1) {
-                throw "Service failed to start after $($maxRetries * $delay) seconds"
-              }
-              Start-Sleep $delay
-            }
-          }
-
-      - name: 🧹 Cleanup
-        if: always()
-        shell: pwsh
-        run: |
-          Stop-Service "${{ env.SERVICE_NAME }}" -Force -ErrorAction SilentlyContinue
-          Start-Sleep 2
-          sc.exe delete "${{ env.SERVICE_NAME }}" *>$null
-
-  ui-proof:
-    name: 📸 Paparazzi (${{ matrix.arch }})
-    needs: [preflight, smoke-test]
-    if: github.event.inputs.enable_paparazzi == 'true'
-    runs-on: windows-latest
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        arch: [x64, x86]
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: msi-${{ matrix.arch }}
-
-      - name: 💿 Install for UI Test
-        shell: pwsh
-        run: |
-          $msi = "Fortuna-${{ needs.preflight.outputs.semver }}-${{ matrix.arch }}.msi"
-          Start-Process msiexec.exe -ArgumentList "/i `"$msi`" /quiet /norestart" -Wait
-          Start-Sleep 15
-
-      - name: 🟢 Setup Node & Playwright
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Cache Playwright browsers
-        uses: actions/cache@v4
-        id: playwright-cache
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-playwright-
-
-      - name: 📸 Capture Screenshot
-        shell: pwsh
-        run: |
-          npm install playwright
-          npx playwright install chromium --with-deps
-
-          $script = @(
-            "const { chromium } = require('playwright');",
-            "(async () => {",
-            "  const browser = await chromium.launch();",
-            "  const page = await browser.newPage();",
-            "  await page.goto('http://127.0.0.1:${{ env.SERVICE_PORT }}/docs');",
-            "  await page.waitForTimeout(2000);",
-            "  await page.screenshot({",
-            "    path: 'ui-proof-${{ matrix.arch }}.png',",
-            "    fullPage: true",
-            "  });",
-            "  await browser.close();",
-            "  console.log('✅ Screenshot captured');",
-            "})();"
-          )
-
-          $script | Out-File screenshot.js -Encoding UTF8
-          node screenshot.js
-
-      - name: Upload UI Proof
-        if: env.ENABLE_PAPARAZZI == 'true'
+      - name: 📤 Upload Monolith Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.paparazzi.outputs.artifact_name }}
-          path: ${{ steps.paparazzi.outputs.file_path }}
-          retention-days: 14
-
-      - name: 🧹 Cleanup
-        if: always()
-        shell: pwsh
-        run: |
-          Stop-Service "${{ env.SERVICE_NAME }}" -Force -ErrorAction SilentlyContinue
-          Start-Sleep 2
-          sc.exe delete "${{ env.SERVICE_NAME }}" *>$null
-
-  summary:
-    name: 📋 Summary
-    needs: [preflight, smoke-test]
-    if: always()
-    runs-on: windows-latest
-    steps:
-      - name: 📊 Build Report
-        shell: pwsh
-        run: |
-          Write-Host ""
-          Write-Host "╔════════════════════════════════════════════════════════╗"
-          Write-Host "║         🧬 FormerlyTheCoreOfReusable                   ║"
-          Write-Host "╠════════════════════════════════════════════════════════╣"
-          Write-Host "║  Version:     ${{ needs.preflight.outputs.semver }}"
-          Write-Host "║  Build ID:    ${{ needs.preflight.outputs.build_id }}"
-          Write-Host "║  Commit:      ${{ needs.preflight.outputs.short_sha }}"
-          Write-Host "║  Status:      ${{ needs.smoke-test.result }}"
-          Write-Host "║  Node:        ${{ env.NODE_VERSION }}"
-          Write-Host "║  Python:      ${{ env.PYTHON_VERSION }}"
-          Write-Host "║  WiX:         ${{ env.WIX_VERSION }}"
-          Write-Host "╚════════════════════════════════════════════════════════╝"
-          Write-Host ""
-          Write-Host "Artifacts: msi-{x64,x86}"
+          name: ${{ inputs.artifact_name }}
+          path: ${{ steps.verify.outputs.artifact_path }}
+          retention-days: 7

@@ -158,7 +158,6 @@ jobs:
             "    'uvicorn.loops',",
             "    'uvicorn.loops.auto',",
             "    'uvicorn.loops.asyncio',",
-            "    'uvicorn.loops.uvloop',",
             "    'uvicorn.protocols',",
             "    'uvicorn.protocols.http',",
             "    'uvicorn.protocols.http.auto',",
@@ -172,16 +171,30 @@ jobs:
             "    'uvicorn.lifespan.on',",
             "    'uvicorn.lifespan.off',",
             "    ",
+            "    # === UVICORN DEPENDENCIES (often missed) ===",
+            "    'h11',",
+            "    'httptools',",
+            "    'wsproto',",
+            "    'click',",
+            "    ",
+            "    # === ANYIO BACKENDS ===",
+            "    'anyio._backends._asyncio',",
+            "    ",
             "    # === FASTAPI & STARLETTE ===",
             "    'fastapi',",
             "    'starlette',",
             "    'starlette.routing',",
             "    'starlette.middleware',",
             "    'starlette.middleware.cors',",
+            "    'starlette.responses',",
             "    'pydantic',",
             "    'pydantic_core',",
             "    'pydantic_settings',",
             "    'pydantic_settings.sources',",
+            "    ",
+            "    # === EMAIL (Starlette responses) ===",
+            "    'email.mime.multipart',",
+            "    'email.mime.text',",
             "    ",
             "    # === WEBVIEW (for GUI) ===",
             "    'webview',",
@@ -200,6 +213,7 @@ jobs:
             "    'tenacity',",
             "    'redis',",
             "    'sqlalchemy',",
+            "    'sqlalchemy.dialects.sqlite',",
             "    'greenlet',",
             "]",
             '',
@@ -219,7 +233,7 @@ jobs:
             "    binaries=[],",
             "    datas=datas,",
             "    hiddenimports=hiddenimports,",
-            "    hookspath=['fortuna-backend-hooks'],  # Use our custom hooks",
+            "    hookspath=[os.path.abspath('fortuna-backend-hooks')],  # Use our custom hooks",
             "    hooksconfig={},",
             "    runtime_hooks=[],",
             "    excludes=[],",
@@ -283,15 +297,29 @@ jobs:
           Write-Host "🚀 Starting FortunaApp.exe..."
           Start-Process "dist/FortunaApp.exe"
 
-          Write-Host "⏳ Waiting 10 seconds for startup..."
-          Start-Sleep -Seconds 10
+          Write-Host "⏳ Waiting for server..."
+          $maxAttempts = 20
+          $attempt = 0
+          $success = $false
 
-          $process = Get-Process -Name "FortunaApp" -ErrorAction SilentlyContinue
-          if ($null -eq $process) {
-            throw "❌ App didn't start - check for missing modules"
+          while ($attempt -lt $maxAttempts -and -not $success) {
+            Start-Sleep -Seconds 1
+            $attempt++
+            try {
+              $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/health" -TimeoutSec 2 -ErrorAction Stop
+              if ($response.StatusCode -eq 200) {
+                $success = $true
+                Write-Host "✅ Server responded on attempt $attempt"
+              }
+            } catch {
+              Write-Host "   Attempt $attempt - waiting..."
+            }
           }
 
-          Write-Host "✅ App is running (PID: $($process.Id))"
+          if (-not $success) {
+            # Grab any error output before killing
+            throw "❌ Server never responded - likely missing module"
+          }
 
           Stop-Process -Name "FortunaApp" -Force
           Write-Host "✅ Smoke test passed"
