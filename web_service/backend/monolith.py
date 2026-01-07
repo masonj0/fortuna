@@ -1,62 +1,152 @@
+# web_service/backend/monolith.py
+"""
+Fortuna Monolith Entry Point
+FIXED: Proper static file serving for Next.js exports
+"""
 import sys
-import os
 import threading
+import time
+from pathlib import Path
 import uvicorn
-import webview  # PyWebView (The lightweight browser wrapper)
+import webview
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
-# 1. Setup the App
-app = FastAPI(title="Fortuna Monolith")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-
-# 2. Import your existing API logic
-try:
-    from web_service.backend.api import router
-    app.include_router(router, prefix="/api")
-except Exception as e:
-    print(f"[MONOLITH] Warning: API router not found ({e}). Running in UI-only mode.")
-
-# 3. The Magic: Serve the Frontend from INSIDE the EXE
-def get_asset_path():
-    """ Returns the path to the bundled frontend assets """
-    if hasattr(sys, '_MEIPASS'):
-        # Running as a PyInstaller EXE
-        return os.path.join(sys._MEIPASS, "frontend_dist")
+def get_resource_path(relative_path: str) -> Path:
+    """Get absolute path to resource, works for dev and PyInstaller"""
+    if getattr(sys, 'frozen', False):
+        base_path = Path(sys._MEIPASS)
     else:
-        # Running as a script (Dev mode)
-        return os.path.join(os.path.abspath("."), "frontend_dist")
+        base_path = Path(__file__).parent.parent.parent
+    return base_path / relative_path
 
-static_dir = get_asset_path()
+def create_app():
+    """Create FastAPI app with proper routing for Next.js export"""
+    from web_service.backend.api import app as backend_app
 
-if os.path.exists(static_dir):
-    # Serve the React App at the root URL
-    app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
-    print(f"[MONOLITH] Serving UI from: {static_dir}")
-else:
-    print(f"[MONOLITH] UI not found at {static_dir}. API only.")
+    app = FastAPI(title="Fortuna Monolith")
 
-# 4. Launch Logic
-def start_server():
-    # Run Uvicorn on a specific port
-    uvicorn.run(app, host="127.0.0.1", port=8000, log_level="error")
+    # CRITICAL: Enable CORS
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
-if __name__ == '__main__':
-    if sys.platform == 'win32':
-        import multiprocessing
-        multiprocessing.freeze_support()
+    # Mount backend API FIRST (higher priority)
+    app.mount("/api", backend_app, name="backend")
 
-    # Start Backend in Thread
-    t = threading.Thread(target=start_server, daemon=True)
-    t.start()
+    # Get frontend path
+    frontend_path = get_resource_path('frontend_dist')
+    print(f"[MONOLITH] Frontend path: {frontend_path}")
+    print(f"[MONOLITH] Frontend exists: {frontend_path.exists()}")
 
-    # Start Frontend Window (Native)
-    webview.create_window("Fortuna Faucet", "http://127.0.0.1:8000", width=1200, height=800)
+    if frontend_path.exists():
+        # List files to verify structure
+        if (frontend_path / "index.html").exists():
+            print("[MONOLITH] ✅ Found index.html")
+        else:
+            print("[MONOLITH] ⚠️  index.html not found!")
+            print(f"[MONOLITH] Contents: {list(frontend_path.iterdir())}")
 
-    # Enable debug mode if FORTUNA_DEBUG is set to '1' for easier frontend troubleshooting.
-    # This allows right-clicking to inspect the webview.
-    debug_mode = os.getenv('FORTUNA_DEBUG') == '1'
-    if debug_mode:
-        print("[MONOLITH] Debug mode is ON. Right-click in the app and choose 'Inspect' to open the developer console.")
-    webview.start(debug=debug_mode)
+        # Mount static files for assets (_next, images, etc.)
+        app.mount("/_next", StaticFiles(directory=str(frontend_path / "_next")), name="next-static")
+
+        # Serve root and all other routes with index.html (SPA behavior)
+        @app.get("/{full_path:path}")
+        async def serve_frontend(full_path: str):
+            """
+            Serve Next.js static export
+            - If file exists, serve it
+            - Otherwise, serve index.html (for client-side routing)
+            """
+            # Don't interfere with API routes (already mounted at /api)
+            if full_path.startswith("api/"):
+                return {"error": "API route should be handled by backend"}
+
+            # Try to serve the exact file
+            file_path = frontend_path / full_path
+            if file_path.is_file():
+                return FileResponse(file_path)
+
+            # Try with .html extension
+            html_path = frontend_path / f"{full_path}.html"
+            if html_path.is_file():
+                return FileResponse(html_path)
+
+            # Default to index.html for all other routes (SPA)
+            index_path = frontend_path / "index.html"
+            if index_path.exists():
+                return FileResponse(index_path)
+            else:
+                return {"error": "index.html not found", "path": str(index_path)}
+
+        print("[MONOLITH] ✅ Frontend routing configured")
+    else:
+        print("[MONOLITH] ❌ Frontend files not found!")
+
+        @app.get("/")
+        async def root():
+            return {
+                "error": "Frontend not found",
+                "path": str(frontend_path),
+                "expected_files": ["index.html", "_next/"],
+                "help": "Rebuild with 'npm run build' in web_platform/frontend"
+            }
+
+    return app
+
+def run_backend():
+    """Run the backend server"""
+    app = create_app()
+    print("[MONOLITH] Starting backend on http://127.0.0.1:8000")
+    uvicorn.run(app, host="127.0.0.1", port=8000, log_level="info")
+
+def main():
+    """Main entry point"""
+    print("[MONOLITH] 🍀 Starting Fortuna Monolith...")
+
+    # Start backend thread
+    backend_thread = threading.Thread(target=run_backend, daemon=True)
+    backend_thread.start()
+
+    # Wait for backend
+    print("[MONOLITH] ⏳ Waiting for backend...")
+    time.sleep(3)
+
+    # Verify backend is ready
+    import requests
+    for i in range(10):
+        try:
+            # Try health endpoint (in your backend API)
+            response = requests.get("http://127.0.0.1:8000/api/health", timeout=1)
+            if response.status_code == 200:
+                print("[MONOLITH] ✅ Backend ready!")
+                break
+        except:
+            print(f"[MONOLITH] ⏳ Waiting... ({i+1}/10)")
+            time.sleep(1)
+
+    # Launch webview
+    print("[MONOLITH] 🚀 Launching UI...")
+    webview.create_window(
+        title="Fortuna Faucet",
+        url="http://127.0.0.1:8000",
+        width=1400,
+        height=900,
+        resizable=True,
+        fullscreen=False,
+        min_size=(800, 600),
+        background_color='#1a1a1a',
+        debug=True  # Enable dev tools
+    )
+
+    webview.start()
+    print("[MONOLITH] 👋 Closed")
+
+if __name__ == "__main__":
+    main()
