@@ -141,11 +141,10 @@ def main():
         resizable=True,
         fullscreen=False,
         min_size=(800, 600),
-        background_color='#1a1a1a',
-        debug=True  # Enable dev tools
+        background_color='#1a1a1a'
     )
 
-    webview.start()
+    webview.start(debug=True)
     print("[MONOLITH] Closed")
 
 if __name__ == "__main__":
