@@ -139,7 +139,7 @@ exe = EXE(
     a.binaries,
     a.zipfiles,
     a.datas,
-    name='fortuna-monolith',
+    name='FortunaMonolith',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
