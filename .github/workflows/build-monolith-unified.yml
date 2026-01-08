@@ -61,8 +61,8 @@ jobs:
         run: |
           pip install --upgrade pip wheel
           pip install -r web_service/backend/requirements.txt
-          pip install pywebview[cef] pyinstaller==6.6.0 pywin32 requests
-          Write-Host "✅ Backend dependencies installed"
+          pip install pywebview[cef] pyinstaller==6.6.0 pywin32 requests uvicorn[standard] websockets wsproto
+          Write-Host "✅ Backend dependencies installed including WebSocket support"
 
       # --- BUILD ---
       - name: 🔨 Build Monolith EXE

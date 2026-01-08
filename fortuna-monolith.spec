@@ -47,6 +47,7 @@ backend_data_dirs = [
     ('web_service/backend/adapters', 'adapters'),
     ('web_service/backend/config', 'config'),
     ('web_service/backend/prompts', 'prompts'),
+    ('web_service/backend', 'backend'),  # Add root backend dir for full imports
 ]
 
 for source, dest in backend_data_dirs:
@@ -92,6 +93,8 @@ hiddenimports = [
     # Logging
     'structlog',
     'logging.config',
+    'websockets',
+    'wsproto',
 ]
 
 # Add collected hidden imports

@@ -4,22 +4,36 @@ import os
 from pathlib import Path
 import logging
 
-# Setup logging FIRST
-def setup_logging():
-    if getattr(sys, 'frozen', False):
-        log_dir = Path(os.environ.get('TEMP', '.'))
-    else:
-        log_dir = Path('.')
+import io
 
-    log_file = log_dir / 'fortuna-monolith.log'
+def _force_utf8_stream(stream):
+    """Ensure the given text stream uses UTF-8, even on Windows/CP1252."""
+    if hasattr(stream, "reconfigure"):
+        stream.reconfigure(encoding="utf-8", errors="replace")
+        return stream
+    buffer = getattr(stream, "buffer", None)
+    if buffer is None:
+        return stream  # Likely already text-only, best effort
+    return io.TextIOWrapper(buffer, encoding="utf-8", errors="replace")
+
+def setup_logging():
+    if getattr(sys, "frozen", False):
+        log_dir = Path(os.environ.get("TEMP", "."))
+    else:
+        log_dir = Path(".")
+
+    log_file = log_dir / "fortuna-monolith.log"
+
+    stdout = _force_utf8_stream(sys.stdout)
+    stderr = _force_utf8_stream(sys.stderr)
+
+    file_handler = logging.FileHandler(log_file, mode="w", encoding="utf-8")
+    console_handler = logging.StreamHandler(stdout)
 
     logging.basicConfig(
         level=logging.DEBUG,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler(log_file, mode='w', encoding='utf-8'),
-            logging.StreamHandler(sys.stdout)
-        ]
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=[file_handler, console_handler],
     )
 
     logger = logging.getLogger(__name__)
@@ -56,8 +70,7 @@ def get_resource_path(relative_path: str) -> Path:
 
 def create_minimal_backend_api():
     """
-    Create a minimal backend API WITHOUT importing the full backend
-    This avoids import issues with PyInstaller
+    Create a minimal backend API WITH fallback endpoints if full import fails.
     """
     api = FastAPI(title="Fortuna Backend API")
 
@@ -66,22 +79,33 @@ def create_minimal_backend_api():
     async def health():
         return {"status": "ok", "service": "fortuna-monolith"}
 
-    # If you need the full API, try to import it
-    # But catch errors and continue with minimal API
+    # Try to import full backend
     try:
         logger.info("[MONOLITH] Attempting to load full backend API...")
         from web_service.backend.api import app as full_backend
+        from web_service.backend import races  # Explicit import for /api/races
 
-        # Mount all routes from full backend
+        # Mount routes from full backend
         for route in full_backend.routes:
             api.routes.append(route)
 
-        logger.info("[MONOLITH] ✅ Full backend API loaded")
-    except Exception as e:
-        logger.warning(f"[MONOLITH] ⚠️  Could not load full backend API: {e}")
-        logger.warning("[MONOLITH] Running with minimal API only")
+        # Ensure /api/races is available
+        if not any(str(r.path) == "/races" for r in api.routes):
+            from web_service.backend.api import router as races_router
+            api.include_router(races_router, prefix="/api")
 
-        # Add stub endpoints for testing
+        logger.info("[MONOLITH] ✅ Full backend API loaded with races endpoint")
+    except ImportError as e:
+        logger.warning(f"[MONOLITH] ⚠️ Full backend import failed: {e}. Using minimal API with stubs.")
+
+        # Stub for /api/races (return sample data)
+        @api.get("/races")
+        async def get_races():
+            return [
+                {"id": 1, "name": "Sample Race 1", "status": "active"},
+                {"id": 2, "name": "Sample Race 2", "status": "completed"}
+            ]
+
         @api.get("/")
         async def root():
             return {"message": "Fortuna Monolith (Minimal Mode)", "error": str(e)}
