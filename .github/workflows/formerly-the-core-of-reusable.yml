@@ -100,6 +100,13 @@ jobs:
           }
           Write-Host "✅ Monolith built successfully at $exePath"
 
+      - name: 📤 Upload Monolith Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Fortuna-SPA-Monolith
+          path: dist/Fortuna-SPA-Monolith.exe
+          retention-days: 7
+
       - name: 🧪 Smoke Test
         shell: pwsh
         timeout-minutes: 2
