@@ -58,6 +58,7 @@ def setup_logging():
         level=logging.DEBUG,
         handlers=[file_handler, console_handler],
     )
+    return logging.getLogger(__name__)
 
     logger = logging.getLogger("fortuna-monolith")
     return logger
