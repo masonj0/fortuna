@@ -73,11 +73,11 @@ jobs:
 
           pyinstaller --clean --noconfirm fortuna-monolith.spec
 
-          if (-not (Test-Path "dist/FortunaMonolith.exe")) {
+          if (-not (Test-Path "dist/fortuna-monolith.exe")) {
             throw "Build failed - EXE not found"
           }
 
-          $size = (Get-Item "dist/FortunaMonolith.exe").Length / 1MB
+          $size = (Get-Item "dist/fortuna-monolith.exe").Length / 1MB
           Write-Host "✅ Build successful: $([math]::Round($size, 2)) MB"
 
       # --- TEST ---
@@ -85,10 +85,10 @@ jobs:
         shell: pwsh
         timeout-minutes: 3
         run: |
-          Write-Host "🚀 Launching FortunaMonolith.exe..."
+          Write-Host "🚀 Launching fortuna-monolith.exe..."
 
           # Start process and capture output
-          $process = Start-Process "dist/FortunaMonolith.exe" -PassThru -RedirectStandardOutput "monolith-output.log" -RedirectStandardError "monolith-error.log"
+          $process = Start-Process "dist/fortuna-monolith.exe" -PassThru -RedirectStandardOutput "monolith-output.log" -RedirectStandardError "monolith-error.log"
 
           Write-Host "⏳ Waiting for backend (30 seconds)..."
           Start-Sleep -Seconds 10
@@ -133,5 +133,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: FortunaMonolith-${{ github.sha }}
-          path: dist/FortunaMonolith.exe
+          path: dist/fortuna-monolith.exe
           retention-days: 30

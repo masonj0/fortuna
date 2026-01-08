@@ -114,7 +114,7 @@ print(f"[SPEC] Total hidden imports: {len(hiddenimports)}")
 # ====================================================================
 a = Analysis(
     ['web_service/backend/monolith.py'],
-    pathex=[],
+    pathex=['.'],
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
