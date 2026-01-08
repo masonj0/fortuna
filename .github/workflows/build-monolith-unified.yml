@@ -1,0 +1,137 @@
+name: 🍀 Fortuna Monolith (Unified)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+    paths:
+      - 'web_service/**'
+      - 'web_platform/**'
+      - '.github/workflows/build-monolith-*.yml'
+
+jobs:
+  build-monolith:
+    name: 'Build Universal Monolith'
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- FRONTEND ---
+      - name: 🎨 Build Frontend
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 📦 Install & Build Frontend
+        shell: pwsh
+        run: |
+          cd web_platform/frontend
+
+          # Ensure next.config.js is configured for static export
+          $config = @(
+            "module.exports = {",
+            "  output: 'export',",
+            "  distDir: 'out',",
+            "  images: { unoptimized: true },",
+            "  trailingSlash: true,",
+            "}"
+          )
+          $config | Set-Content "next.config.js" -Force
+
+          npm ci
+          npm run build
+
+          if (-not (Test-Path "out/index.html")) {
+            throw "Frontend build failed - index.html not found"
+          }
+
+          Copy-Item -Path "out" -Destination "${{ github.workspace }}/frontend_dist" -Recurse -Force
+          Write-Host "✅ Frontend built and staged"
+
+      # --- BACKEND ---
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: 📦 Install Backend Dependencies
+        shell: pwsh
+        run: |
+          pip install --upgrade pip wheel
+          pip install -r web_service/backend/requirements.txt
+          pip install pywebview[cef] pyinstaller==6.6.0 pywin32 requests
+          Write-Host "✅ Backend dependencies installed"
+
+      # --- BUILD ---
+      - name: 🔨 Build Monolith EXE
+        shell: pwsh
+        run: |
+          # Copy the fixed monolith.py (from Fix 1 above)
+          # Assuming it's already in your repo at web_service/backend/monolith.py
+
+          pyinstaller --clean --noconfirm fortuna-monolith.spec
+
+          if (-not (Test-Path "dist/FortunaMonolith.exe")) {
+            throw "Build failed - EXE not found"
+          }
+
+          $size = (Get-Item "dist/FortunaMonolith.exe").Length / 1MB
+          Write-Host "✅ Build successful: $([math]::Round($size, 2)) MB"
+
+      # --- TEST ---
+      - name: 🧪 Smoke Test
+        shell: pwsh
+        timeout-minutes: 3
+        run: |
+          Write-Host "🚀 Launching FortunaMonolith.exe..."
+
+          # Start process and capture output
+          $process = Start-Process "dist/FortunaMonolith.exe" -PassThru -RedirectStandardOutput "monolith-output.log" -RedirectStandardError "monolith-error.log"
+
+          Write-Host "⏳ Waiting for backend (30 seconds)..."
+          Start-Sleep -Seconds 10
+
+          # Check health endpoint
+          $success = $false
+          for ($i = 1; $i -le 20; $i++) {
+            try {
+              $response = Invoke-RestMethod "http://127.0.0.1:8000/api/health" -TimeoutSec 2
+              Write-Host "✅ Backend responded: $($response | ConvertTo-Json -Compress)"
+              $success = $true
+              break
+            } catch {
+              Write-Host "   Attempt $i/20: Waiting..."
+              Start-Sleep -Seconds 1
+            }
+          }
+
+          # Show logs
+          if (-not $success) {
+            Write-Host "`n❌ SMOKE TEST FAILED - Backend never responded"
+            Write-Host "`n--- STDOUT ---"
+            Get-Content "monolith-output.log" -ErrorAction SilentlyContinue
+            Write-Host "`n--- STDERR ---"
+            Get-Content "monolith-error.log" -ErrorAction SilentlyContinue
+            Write-Host "`n--- LOG FILE ---"
+            $logPath = "$env:TEMP\fortuna-monolith.log"
+            if (Test-Path $logPath) {
+              Get-Content $logPath
+            } else {
+              Write-Host "No log file found at $logPath"
+            }
+            throw "Backend health check failed"
+          }
+
+          # Cleanup
+          Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+          Write-Host "✅ Smoke test passed!"
+
+      # --- UPLOAD ---
+      - name: 📤 Upload Monolith
+        uses: actions/upload-artifact@v4
+        with:
+          name: FortunaMonolith-${{ github.sha }}
+          path: dist/FortunaMonolith.exe
+          retention-days: 30
