@@ -17,7 +17,7 @@ def setup_logging():
         level=logging.DEBUG,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
-            logging.FileHandler(log_file, mode='w'),
+            logging.FileHandler(log_file, mode='w', encoding='utf-8'),
             logging.StreamHandler(sys.stdout)
         ]
     )
