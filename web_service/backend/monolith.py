@@ -82,9 +82,9 @@ try:
     import json
     import requests
 
-    logger.info("✓ Standard library imports successful")
+    logger.info("OK: Standard library imports successful")
 except Exception as e:
-    logger.critical(f"✗ Failed to import standard library: {e}", exc_info=True)
+    logger.critical(f"FAILED: Standard library import: {e}", exc_info=True)
     sys.exit(1)
 
 try:
@@ -95,9 +95,9 @@ try:
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import FileResponse, JSONResponse
 
-    logger.info("✓ FastAPI/Uvicorn/Webview imports successful")
+    logger.info("OK: FastAPI/Uvicorn/Webview imports successful")
 except Exception as e:
-    logger.critical(f"✗ Failed to import FastAPI stack: {e}", exc_info=True)
+    logger.critical(f"FAILED: FastAPI stack import: {e}", exc_info=True)
     sys.exit(1)
 
 # ====================================================================
@@ -123,29 +123,25 @@ def create_backend_api():
     """Create FastAPI backend with fallback endpoints"""
     api = FastAPI(title="Fortuna Backend")
 
-    # Health endpoint (always works)
     @api.get("/health")
     async def health():
         return {"status": "ok", "service": "fortuna-monolith"}
 
-    # Try to load full backend API
     try:
         logger.info("Attempting to load full backend API...")
         from web_service.backend import api as backend_api
 
-        # Mount all routes from full backend
         logger.info(f"Full backend loaded, copying routes...")
         for route in backend_api.app.routes:
             api.routes.append(route)
 
-        logger.info(f"✓ Full backend API loaded ({len(api.routes)} routes)")
+        logger.info(f"OK: Full backend API loaded ({len(api.routes)} routes)")
         return api
 
     except ImportError as e:
         logger.warning(f"Full backend import failed: {e}")
         logger.warning("Using minimal API stub (no races/data endpoints)")
 
-        # Stub endpoints
         @api.get("/races")
         async def get_races():
             return {
@@ -183,7 +179,6 @@ def create_app():
     logger.info("Creating main FastAPI application...")
     app = FastAPI(title="Fortuna Monolith")
 
-    # CORS middleware
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -191,15 +186,13 @@ def create_app():
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    logger.info("✓ CORS middleware configured")
+    logger.info("OK: CORS middleware configured")
 
-    # Mount backend API
     logger.info("Mounting backend API at /api...")
     backend = create_backend_api()
     app.mount("/api", backend, name="backend")
-    logger.info("✓ Backend mounted")
+    logger.info("OK: Backend mounted")
 
-    # Frontend path
     frontend_path = get_resource_path("frontend_dist")
     index_file = frontend_path / "index.html"
 
@@ -219,42 +212,34 @@ def create_app():
 
         return app
 
-    # Mount static assets
     logger.info("Configuring frontend serving...")
 
-    # Mount _next if it exists
     next_dir = frontend_path / "_next"
     if next_dir.exists():
         app.mount("/_next", StaticFiles(directory=str(next_dir)), name="next-static")
-        logger.info(f"✓ Mounted /_next static files ({len(list(next_dir.iterdir()))} items)")
+        logger.info(f"OK: Mounted /_next static files ({len(list(next_dir.iterdir()))} items)")
     else:
         logger.warning("_next directory not found (static assets won't load)")
 
-    # Public assets
     public_dir = frontend_path / "public"
     if public_dir.exists():
         app.mount("/public", StaticFiles(directory=str(public_dir)), name="public")
-        logger.info("✓ Mounted /public")
+        logger.info("OK: Mounted /public")
 
-    # Catch-all SPA routing
     @app.get("/{full_path:path}")
     async def serve_frontend(full_path: str):
-        # Skip API routes
         if full_path.startswith("api/"):
             return JSONResponse({"error": "Not found"}, status_code=404)
 
-        # Exact file
         file_path = frontend_path / full_path
         if file_path.is_file():
             logger.debug(f"Serving file: {full_path}")
             return FileResponse(file_path)
 
-        # Try with .html
         html_path = frontend_path / f"{full_path}.html"
         if html_path.is_file():
             return FileResponse(html_path)
 
-        # SPA fallback to index.html
         if index_file.exists():
             logger.debug(f"SPA fallback for: {full_path}")
             return FileResponse(index_file)
@@ -264,7 +249,7 @@ def create_app():
             status_code=500
         )
 
-    logger.info("✓ Frontend routing configured")
+    logger.info("OK: Frontend routing configured")
     return app
 
 # ====================================================================
@@ -278,8 +263,6 @@ def run_backend():
         logger.info("-" * 70)
 
         app = create_app()
-
-        # Run server
         logger.info("Starting Uvicorn on http://127.0.0.1:8000")
 
         uvicorn.run(
@@ -303,17 +286,14 @@ def main():
         logger.info("STARTING FORTUNA MONOLITH")
         logger.info("-" * 70)
 
-        # Start backend server in daemon thread
         logger.info("Starting backend thread...")
         backend_thread = threading.Thread(target=run_backend, daemon=True)
         backend_thread.start()
-        logger.info("✓ Backend thread started")
+        logger.info("OK: Backend thread started")
 
-        # Wait for backend to initialize
         logger.info("Waiting 4 seconds for backend to start...")
         time.sleep(4)
 
-        # Health check
         logger.info("Testing backend health...")
         backend_ready = False
 
@@ -326,7 +306,7 @@ def main():
 
                 if response.status_code == 200:
                     data = response.json()
-                    logger.info(f"✓ Backend healthy: {data}")
+                    logger.info(f"OK: Backend healthy: {data}")
                     backend_ready = True
                     break
                 else:
@@ -342,7 +322,6 @@ def main():
         if not backend_ready:
             logger.error("Backend failed health check - launching anyway but expect errors")
 
-        # Launch webview
         logger.info("-" * 70)
         logger.info("LAUNCHING WEBVIEW")
         logger.info("-" * 70)
@@ -365,7 +344,6 @@ def main():
     except Exception as e:
         logger.critical(f"Fatal error: {e}", exc_info=True)
 
-        # Try to show error dialog
         try:
             import tkinter as tk
             from tkinter import messagebox

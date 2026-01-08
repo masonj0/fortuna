@@ -74,6 +74,8 @@ jobs:
       # --- BUILD ---
       - name: 🔨 Build Monolith EXE
         shell: pwsh
+        env:
+          PYTHONIOENCODING: utf-8
         run: |
           Write-Host "🔨 Starting PyInstaller build..."
           pyinstaller --clean --noconfirm fortuna-monolith.spec
@@ -151,7 +153,7 @@ jobs:
           }
 
           # Show logs
-          Write-Host "`n📋 Build Log:"
+          Write-Host "`n📋 Build Log (last 50 lines):"
           Get-Content $logFile -ErrorAction SilentlyContinue | Select-Object -Last 50
 
           if (-not $success) {
