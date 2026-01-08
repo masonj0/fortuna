@@ -29,14 +29,14 @@ jobs:
           cd web_platform/frontend
 
           # Ensure next.config.js is configured for static export
-          $config = @'
-module.exports = {
-  output: 'export',
-  distDir: 'out',
-  images: { unoptimized: true },
-  trailingSlash: true,
-}
-'@
+          $config = @(
+            "module.exports = {",
+            "  output: 'export',",
+            "  distDir: 'out',",
+            "  images: { unoptimized: true },",
+            "  trailingSlash: true,",
+            "}"
+          )
           $config | Set-Content "next.config.js" -Force
 
           npm ci
