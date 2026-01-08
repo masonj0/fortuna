@@ -48,26 +48,41 @@ jobs:
         run: |
           $specContent = @(
             '# -*- mode: python ; coding: utf-8 -*-',
+            'from PyInstaller.utils.hooks import collect_submodules, collect_data_files',
             'import os',
             'block_cipher = None',
             "datas = [('frontend_dist', 'frontend_dist')]",
-            "hiddenimports = ['webview', 'webview.platforms.winforms', 'clr', 'win32timezone']",
+            "hiddenimports = [",
+            "    'web_service.backend.api',",
+            "    'web_service.backend.monolith',",
+            "    'uvicorn', 'uvicorn.logging', 'uvicorn.loops', 'uvicorn.loops.auto', 'uvicorn.loops.asyncio',",
+            "    'uvicorn.protocols', 'uvicorn.protocols.http', 'uvicorn.protocols.http.auto', 'uvicorn.protocols.http.h11_impl',",
+            "    'uvicorn.lifespan', 'uvicorn.lifespan.on', 'uvicorn.lifespan.off', 'uvicorn.config', 'uvicorn.server',",
+            "    'h11', 'httptools', 'httpx', 'httpcore',",
+            "    'fastapi', 'starlette',",
+            "    'pydantic', 'pydantic_core', 'pydantic_settings',",
+            "    'webview', 'webview.platforms', 'webview.platforms.winforms', 'clr', 'System',",
+            "    'anyio', 'anyio._backends', 'anyio._backends._asyncio',",
+            "    'structlog', 'logging.config',",
+            "    'tenacity', 'redis', 'sqlalchemy', 'greenlet', 'win32timezone', 'win32api', 'win32con'",
+            "]",
+            "hiddenimports += collect_submodules('web_service.backend')",
+            "hiddenimports += collect_submodules('uvicorn')",
+            "hiddenimports += collect_submodules('fastapi')",
+            "hiddenimports += collect_submodules('starlette')",
             "a = Analysis(",
             "    ['web_service/backend/monolith.py'],",
-            "    pathex=[],",
-            "    binaries=[],",
             "    datas=datas,",
             "    hiddenimports=hiddenimports,",
-            "    hookspath=[],",
             "    runtime_hooks=[],",
             "    excludes=[],",
-            "    cipher=block_cipher,",
+            "    cipher=block_cipher",
             ")",
             "pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)",
             "exe = EXE(",
             "    pyz, a.scripts, a.binaries, a.zipfiles, a.datas,",
             "    name='Fortuna-SPA-Monolith',",
-            "    console=False,",
+            "    console=True,",
             "    icon='electron/assets/icon.ico'",
             ")"
           )
@@ -113,6 +128,13 @@ jobs:
 
           if (-not $success) {
             Write-Host "❌ Server never responded!"
+            $logPath = "$env:TEMP\fortuna-monolith.log"
+            if (Test-Path $logPath) {
+              Write-Host "--- LOG FILE CONTENTS ---"
+              Get-Content $logPath
+            } else {
+              Write-Host "--- LOG FILE NOT FOUND ---"
+            }
             throw "Smoke test failed: Server did not respond at http://127.0.0.1:8000/api/health"
           }
 

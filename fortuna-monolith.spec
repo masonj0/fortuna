@@ -1,72 +1,40 @@
-# -*- mode: python ; coding: utf-8 -*-
-from pathlib import Path
-import os
-from PyInstaller.utils.hooks import collect_submodules, collect_data_files
+# minimal-monolith.spec
+from PyInstaller.utils.hooks import collect_all
 
-block_cipher = None
-
-# Use absolute paths to avoid confusion
-project_root = Path(os.getcwd()).absolute()
-backend_root = project_root / 'web_service' / 'backend'
-frontend_dist = project_root / 'web_platform' / 'frontend' / 'out'
-
-print(f"[SPEC] Project Root: {project_root}")
-print(f"[SPEC] Frontend Dist: {frontend_dist}")
-
-datas = []
-
-# 1. Bundle Frontend (CRITICAL)
-if frontend_dist.exists():
-    datas.append((str(frontend_dist), 'frontend_dist'))
-    print("[SPEC] SUCCESS: Found and added frontend_dist")
-else:
-    # Fallback: Try to find it if the CWD is different
-    alt_dist = Path('web_platform/frontend/out').absolute()
-    if alt_dist.exists():
-         datas.append((str(alt_dist), 'frontend_dist'))
-         print("[SPEC] SUCCESS: Found frontend_dist at alternate path")
-    else:
-         print("[SPEC] FATAL WARNING: Frontend dist NOT found! The UI will be missing.")
-
-# 2. Bundle Backend Assets
-for folder in ['data', 'json', 'adapters']:
-    source_path = backend_root / folder
-    if source_path.exists():
-        datas.append((str(source_path), folder))
-
-# 3. Dependencies
-hiddenimports = [
-    'uvicorn', 'fastapi', 'starlette', 'pydantic', 'structlog',
-    'webview', 'webview.platforms.winforms', 'clr',
-    'tenacity', 'redis', 'sqlalchemy', 'greenlet'
-] + collect_submodules('web_service.backend')
+# Collect EVERYTHING from key packages
+uvicorn_all = collect_all('uvicorn')
+fastapi_all = collect_all('fastapi')
+starlette_all = collect_all('starlette')
+webview_all = collect_all('webview')
 
 a = Analysis(
     ['web_service/backend/monolith.py'],
-    pathex=[str(project_root)],
-    binaries=[],
-    datas=datas,
-    hiddenimports=hiddenimports,
+    pathex=[],
+    binaries=uvicorn_all[1] + fastapi_all[1] + starlette_all[1] + webview_all[1],
+    datas=[('frontend_dist', 'frontend_dist')] + uvicorn_all[0] + fastapi_all[0] + starlette_all[0] + webview_all[0],
+    hiddenimports=uvicorn_all[2] + fastapi_all[2] + starlette_all[2] + webview_all[2] + [
+        'web_service.backend.api',
+        'h11', 'httptools', 'httpx', 'anyio'
+    ],
     hookspath=[],
-    hooksconfig={},
     runtime_hooks=[],
     excludes=[],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
-    cipher=block_cipher,
+    cipher=None,
     noarchive=False,
 )
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+
+pyz = PYZ(a.pure)
+
 exe = EXE(
-    pyz, a.scripts, a.binaries, a.zipfiles, a.datas,
-    name='FortunaMonolith',
+    pyz,
+    a.scripts,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    name='fortuna-monolith',
     debug=False,
-    strip=False,
+    console=True,  # ENABLE CONSOLE
     upx=True,
-    console=False, # GUI Mode
-    disable_windowed_traceback=False,
-    target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
-    icon=os.path.join(project_root, 'electron/assets/icon.ico')
 )

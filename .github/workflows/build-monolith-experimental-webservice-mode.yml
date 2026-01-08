@@ -53,10 +53,20 @@ jobs:
             Write-Host "Smoke test passed"
           } else {
             Write-Host "Smoke test failed with status code $($response.StatusCode)"
+            $logPath = "$env:TEMP\fortuna-monolith.log"
+            if (Test-Path $logPath) {
+              Write-Host "--- LOG FILE CONTENTS ---"
+              Get-Content $logPath
+            }
             exit 1
           }
         } catch {
           Write-Host "Smoke test failed: $_"
+            $logPath = "$env:TEMP\fortuna-monolith.log"
+            if (Test-Path $logPath) {
+              Write-Host "--- LOG FILE CONTENTS ---"
+              Get-Content $logPath
+            }
           exit 1
         } finally {
           Stop-Process -Name "fortuna-monolith" -Force
