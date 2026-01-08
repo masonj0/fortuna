@@ -37,6 +37,7 @@ jobs:
         cd web_service/frontend
         npm ci
         npm run build
+        Copy-Item -Path "out" -Destination "${{ github.workspace }}/frontend_dist" -Recurse -Force
 
     - name: Run PyInstaller
       run: pyinstaller --noconfirm fortuna-monolith.spec
