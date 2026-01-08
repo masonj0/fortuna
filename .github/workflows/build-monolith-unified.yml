@@ -61,8 +61,16 @@ jobs:
         run: |
           pip install --upgrade pip wheel
           pip install -r web_service/backend/requirements.txt
+          # Install Monolith extras + WebSocket support
           pip install pywebview[cef] pyinstaller==6.6.0 pywin32 requests uvicorn[standard] websockets wsproto
-          Write-Host "✅ Backend dependencies installed including WebSocket support"
+
+      - name: 📁 Create Required Data Dirs
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "web_service/backend/data"
+          New-Item -ItemType Directory -Force -Path "web_service/backend/json"
+          New-Item -ItemType Directory -Force -Path "web_service/backend/logs"
+          Write-Host "✅ Ensured data directories exist for PyInstaller."
 
       # --- BUILD ---
       - name: 🔨 Build Monolith EXE
@@ -80,54 +88,6 @@ jobs:
           $size = (Get-Item "dist/fortuna-monolith.exe").Length / 1MB
           Write-Host "✅ Build successful: $([math]::Round($size, 2)) MB"
 
-      # --- TEST ---
-      - name: 🧪 Smoke Test
-        shell: pwsh
-        timeout-minutes: 3
-        run: |
-          Write-Host "🚀 Launching fortuna-monolith.exe..."
-
-          # Start process and capture output
-          $process = Start-Process "dist/fortuna-monolith.exe" -PassThru -RedirectStandardOutput "monolith-output.log" -RedirectStandardError "monolith-error.log"
-
-          Write-Host "⏳ Waiting for backend (30 seconds)..."
-          Start-Sleep -Seconds 10
-
-          # Check health endpoint
-          $success = $false
-          for ($i = 1; $i -le 20; $i++) {
-            try {
-              $response = Invoke-RestMethod "http://127.0.0.1:8000/api/health" -TimeoutSec 2
-              Write-Host "✅ Backend responded: $($response | ConvertTo-Json -Compress)"
-              $success = $true
-              break
-            } catch {
-              Write-Host "   Attempt $i/20: Waiting..."
-              Start-Sleep -Seconds 1
-            }
-          }
-
-          # Show logs
-          if (-not $success) {
-            Write-Host "`n❌ SMOKE TEST FAILED - Backend never responded"
-            Write-Host "`n--- STDOUT ---"
-            Get-Content "monolith-output.log" -ErrorAction SilentlyContinue
-            Write-Host "`n--- STDERR ---"
-            Get-Content "monolith-error.log" -ErrorAction SilentlyContinue
-            Write-Host "`n--- LOG FILE ---"
-            $logPath = "$env:TEMP\fortuna-monolith.log"
-            if (Test-Path $logPath) {
-              Get-Content $logPath
-            } else {
-              Write-Host "No log file found at $logPath"
-            }
-            throw "Backend health check failed"
-          }
-
-          # Cleanup
-          Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-          Write-Host "✅ Smoke test passed!"
-
       # --- UPLOAD ---
       - name: 📤 Upload Monolith
         uses: actions/upload-artifact@v4
@@ -135,3 +95,42 @@ jobs:
           name: FortunaMonolith-${{ github.sha }}
           path: dist/fortuna-monolith.exe
           retention-days: 30
+
+      # --- TEST ---
+      - name: 🧪 Smoke Test
+        shell: pwsh
+        timeout-minutes: 3
+        env:
+          FORTUNA_MODE: webservice # CRITICAL: Forces backend to serve static files
+        run: |
+          Write-Host "🚀 Launching fortuna-monolith.exe..."
+          $process = Start-Process "dist/fortuna-monolith.exe" -PassThru -RedirectStandardOutput "monolith-output.log" -RedirectStandardError "monolith-error.log"
+
+          Write-Host "⏳ Waiting for backend (10 seconds)..."
+          Start-Sleep -Seconds 10
+
+          # Check health endpoint
+          $success = $false
+          for ($i = 1; $i -le 10; $i++) {
+            try {
+              $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/health" -UseBasicParsing
+              if ($response.StatusCode -eq 200) {
+                Write-Host "✅ Backend responded: $($response.Content)"
+                $success = $true
+                break
+              }
+            } catch {
+              Write-Host "   Attempt $i/10: Waiting..."
+              Start-Sleep -Seconds 2
+            }
+          }
+
+          if (-not $success) {
+            Write-Host "❌ SMOKE TEST FAILED - Backend never responded"
+            Get-Content "monolith-output.log" -ErrorAction SilentlyContinue
+            Get-Content "monolith-error.log" -ErrorAction SilentlyContinue
+            throw "Backend health check failed"
+          }
+
+          Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+          Write-Host "✅ Smoke test passed!"

@@ -17,13 +17,10 @@ def _force_utf8_stream(stream):
     return io.TextIOWrapper(buffer, encoding="utf-8", errors="replace")
 
 def setup_logging():
-    if getattr(sys, "frozen", False):
-        log_dir = Path(os.environ.get("TEMP", "."))
-    else:
-        log_dir = Path(".")
-
+    log_dir = Path(os.environ.get("TEMP", ".")) if getattr(sys, "frozen", False) else Path(".")
     log_file = log_dir / "fortuna-monolith.log"
 
+    # Force UTF-8 on stdout/stderr to prevent emoji crashes
     stdout = _force_utf8_stream(sys.stdout)
     stderr = _force_utf8_stream(sys.stderr)
 
@@ -31,14 +28,11 @@ def setup_logging():
     console_handler = logging.StreamHandler(stdout)
 
     logging.basicConfig(
-        level=logging.DEBUG,
+        level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         handlers=[file_handler, console_handler],
     )
-
-    logger = logging.getLogger(__name__)
-    logger.info(f"Logging to: {log_file}")
-    return logger
+    return logging.getLogger(__name__)
 
 logger = setup_logging()
 
@@ -92,7 +86,7 @@ def create_minimal_backend_api():
         # Ensure /api/races is available
         if not any(str(r.path) == "/races" for r in api.routes):
             from web_service.backend.api import router as races_router
-            api.include_router(races_router, prefix="/api")
+            api.include_router(races_router)
 
         logger.info("[MONOLITH] ✅ Full backend API loaded with races endpoint")
     except ImportError as e:
