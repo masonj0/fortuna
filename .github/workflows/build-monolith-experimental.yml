@@ -124,3 +124,10 @@ jobs:
           Get-Content monolith-stdout.log -ErrorAction SilentlyContinue
           Write-Host "## 📄 Monolith STDERR Log ##"
           Get-Content monolith-stderr.log -ErrorAction SilentlyContinue
+          Write-Host "## 📄 Fortuna Monolith App Log ##"
+          $logPath = "$env:TEMP/fortuna-monolith.log"
+          if (Test-Path $logPath) {
+            Get-Content $logPath -ErrorAction SilentlyContinue
+          } else {
+            Write-Host "Log file not found at $logPath"
+          }

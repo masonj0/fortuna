@@ -1,37 +1,14 @@
-name: 🧬 Reusable Monolith SPA Builder
+name: 🧬 Standalone Monolith SPA Builder
 
 on:
-  workflow_call:
-    inputs:
-      backend_dir:
-        description: 'Path to the backend source directory (e.g., web_service/backend)'
-        required: true
-        type: string
-      entry_script:
-        description: 'Path to the main Python entry script (e.g., web_service/backend/monolith.py)'
-        required: true
-        type: string
-      artifact_name:
-        description: 'Name for the final executable artifact'
-        required: false
-        type: string
-        default: 'Fortuna-SPA-Monolith'
-      python_version:
-        description: 'Python version to use for the build'
-        required: false
-        type: string
-        default: '3.11'
-    outputs:
-      artifact_path:
-        description: "Path to the built executable artifact"
-        value: ${{ jobs.build-monolith.outputs.artifact_path }}
+  workflow_dispatch:
+  push:
+    branches: ["main"]
 
 jobs:
   build-monolith:
     name: '🗿 Build Python SPA Monolith'
     runs-on: windows-latest
-    outputs:
-      artifact_path: ${{ steps.verify.outputs.artifact_path }}
     steps:
       - uses: actions/checkout@v4
 
@@ -49,21 +26,21 @@ jobs:
       - name: 🐍 Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ inputs.python_version }}
+          python-version: '3.11'
           cache: 'pip'
 
       - name: 📦 Install Backend Dependencies
         shell: pwsh
         run: |
           pip install --upgrade pip wheel
-          pip install -r ${{ inputs.backend_dir }}/requirements.txt
+          pip install -r web_service/backend/requirements.txt
           pip install pywebview[cef] pyinstaller==6.6.0 pywin32
 
       - name: 📁 Create Required Data Dirs
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path "${{ inputs.backend_dir }}/data"
-          New-Item -ItemType Directory -Force -Path "${{ inputs.backend_dir }}/json"
+          New-Item -ItemType Directory -Force -Path "web_service/backend/data"
+          New-Item -ItemType Directory -Force -Path "web_service/backend/json"
 
       # --- PyInstaller Build ---
       - name: 🔮 Generate Spec & Build
@@ -71,47 +48,108 @@ jobs:
         run: |
           $specContent = @(
             '# -*- mode: python ; coding: utf-8 -*-',
+            'from PyInstaller.utils.hooks import collect_submodules, collect_data_files',
             'import os',
             'block_cipher = None',
             "datas = [('frontend_dist', 'frontend_dist')]",
-            "hiddenimports = ['webview', 'webview.platforms.winforms', 'clr', 'win32timezone']",
+            "hiddenimports = [",
+            "    'web_service.backend.api',",
+            "    'web_service.backend.monolith',",
+            "    'uvicorn', 'uvicorn.logging', 'uvicorn.loops', 'uvicorn.loops.auto', 'uvicorn.loops.asyncio',",
+            "    'uvicorn.protocols', 'uvicorn.protocols.http', 'uvicorn.protocols.http.auto', 'uvicorn.protocols.http.h11_impl',",
+            "    'uvicorn.lifespan', 'uvicorn.lifespan.on', 'uvicorn.lifespan.off', 'uvicorn.config', 'uvicorn.server',",
+            "    'h11', 'httptools', 'httpx', 'httpcore',",
+            "    'fastapi', 'starlette',",
+            "    'pydantic', 'pydantic_core', 'pydantic_settings',",
+            "    'webview', 'webview.platforms', 'webview.platforms.winforms', 'clr', 'System',",
+            "    'anyio', 'anyio._backends', 'anyio._backends._asyncio',",
+            "    'structlog', 'logging.config',",
+            "    'tenacity', 'redis', 'sqlalchemy', 'greenlet', 'win32timezone', 'win32api', 'win32con'",
+            "]",
+            "hiddenimports += collect_submodules('web_service.backend')",
+            "hiddenimports += collect_submodules('uvicorn')",
+            "hiddenimports += collect_submodules('fastapi')",
+            "hiddenimports += collect_submodules('starlette')",
             "a = Analysis(",
-            "    ['${{ inputs.entry_script }}'],",
-            "    pathex=[],",
-            "    binaries=[],",
+            "    ['web_service/backend/monolith.py'],",
             "    datas=datas,",
             "    hiddenimports=hiddenimports,",
-            "    hookspath=[],",
             "    runtime_hooks=[],",
             "    excludes=[],",
-            "    cipher=block_cipher,",
+            "    cipher=block_cipher",
             ")",
             "pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)",
             "exe = EXE(",
             "    pyz, a.scripts, a.binaries, a.zipfiles, a.datas,",
-            "    name='${{ inputs.artifact_name }}',",
-            "    console=False,",
+            "    name='Fortuna-SPA-Monolith',",
+            "    console=True,",
             "    icon='electron/assets/icon.ico'",
             ")"
           )
           $specContent | Set-Content -Path "generated.spec"
           pyinstaller --noconfirm --clean generated.spec
 
-      # --- Verification & Output ---
-      - name: 🔍 Verify Build and Set Output
+      # --- Verification ---
+      - name: 🔍 Verify Build
         id: verify
         shell: pwsh
         run: |
-          $exePath = "dist/${{ inputs.artifact_name }}.exe"
+          $exePath = "dist/Fortuna-SPA-Monolith.exe"
           if (-not (Test-Path $exePath)) {
             throw "PyInstaller build failed - EXE not found at $exePath"
           }
-          "artifact_path=$exePath" >> $env:GITHUB_OUTPUT
           Write-Host "✅ Monolith built successfully at $exePath"
+
+      - name: 🧪 Smoke Test
+        shell: pwsh
+        timeout-minutes: 2
+        run: |
+          Write-Host "🚀 Starting Fortuna-SPA-Monolith.exe..."
+          Start-Process -FilePath "dist/Fortuna-SPA-Monolith.exe"
+
+          Write-Host "⏳ Waiting for server..."
+          $maxAttempts = 20
+          $attempt = 0
+          $success = $false
+
+          while ($attempt -lt $maxAttempts -and -not $success) {
+            Start-Sleep -Seconds 1
+            $attempt++
+            try {
+              $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/health" -TimeoutSec 2 -ErrorAction Stop
+              if ($response.StatusCode -eq 200) {
+                $success = $true
+                Write-Host "✅ Server responded on attempt $attempt"
+              }
+            } catch {
+              Write-Host "   Attempt $attempt - waiting..."
+            }
+          }
+
+          if (-not $success) {
+            Write-Host "❌ Server never responded!"
+            $logPath = "$env:TEMP\fortuna-monolith.log"
+            if (Test-Path $logPath) {
+              Write-Host "--- LOG FILE CONTENTS ---"
+              Get-Content $logPath
+            } else {
+              Write-Host "--- LOG FILE NOT FOUND ---"
+            }
+            throw "Smoke test failed: Server did not respond at http://127.0.0.1:8000/api/health"
+          }
+
+          try {
+            Stop-Process -Name "Fortuna-SPA-Monolith" -Force -ErrorAction Stop
+            Write-Host "🛑 Stopped Fortuna-SPA-Monolith process."
+          } catch {
+            Write-Host "🤔 Process not found, may have already terminated."
+          }
+
+          Write-Host "✅ Smoke test passed"
 
       - name: 📤 Upload Monolith Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ inputs.artifact_name }}
-          path: ${{ steps.verify.outputs.artifact_path }}
+          name: Fortuna-SPA-Monolith
+          path: dist/Fortuna-SPA-Monolith.exe
           retention-days: 7

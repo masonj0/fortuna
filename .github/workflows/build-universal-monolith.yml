@@ -149,9 +149,16 @@ jobs:
             "]",
             '',
             '# ====================================================================',
-            '# HIDDEN IMPORTS (ENHANCED for Uvicorn)',
+            '# HIDDEN IMPORTS (CRITICAL - Missing these causes silent crashes)',
             '# ====================================================================',
             "hiddenimports = [",
+            "    # === CORE BACKEND ===",
+            "    'web_service.backend.api',",
+            "    'web_service.backend.monolith',",
+            "    'web_service.backend.engine',",
+            "    'web_service.backend.cache',",
+            "    'web_service.backend.config',",
+            "    ",
             "    # === UVICORN (COMPLETE SET) ===",
             "    'uvicorn',",
             "    'uvicorn.logging',",
@@ -165,65 +172,75 @@ jobs:
             "    'uvicorn.protocols.http.httptools_impl',",
             "    'uvicorn.protocols.websockets',",
             "    'uvicorn.protocols.websockets.auto',",
-            "    'uvicorn.protocols.websockets.websockets_impl',",
             "    'uvicorn.protocols.websockets.wsproto_impl',",
             "    'uvicorn.lifespan',",
             "    'uvicorn.lifespan.on',",
             "    'uvicorn.lifespan.off',",
+            "    'uvicorn.config',",
+            "    'uvicorn.server',",
             "    ",
-            "    # === UVICORN DEPENDENCIES (often missed) ===",
+            "    # === HTTP LIBRARIES ===",
             "    'h11',",
             "    'httptools',",
-            "    'wsproto',",
-            "    'click',",
-            "    ",
-            "    # === ANYIO BACKENDS ===",
-            "    'anyio._backends._asyncio',",
+            "    'httpx',",
+            "    'httpcore',",
             "    ",
             "    # === FASTAPI & STARLETTE ===",
             "    'fastapi',",
+            "    'fastapi.routing',",
+            "    'fastapi.staticfiles',",
+            "    'fastapi.middleware',",
+            "    'fastapi.middleware.cors',",
             "    'starlette',",
             "    'starlette.routing',",
             "    'starlette.middleware',",
             "    'starlette.middleware.cors',",
             "    'starlette.responses',",
+            "    'starlette.staticfiles',",
+            "    ",
+            "    # === PYDANTIC ===",
             "    'pydantic',",
             "    'pydantic_core',",
             "    'pydantic_settings',",
             "    'pydantic_settings.sources',",
             "    ",
-            "    # === EMAIL (Starlette responses) ===",
-            "    'email.mime.multipart',",
-            "    'email.mime.text',",
-            "    ",
-            "    # === WEBVIEW (for GUI) ===",
+            "    # === WEBVIEW ===",
             "    'webview',",
+            "    'webview.platforms',",
             "    'webview.platforms.winforms',",
             "    'clr',",
+            "    'System',",
+            "    'System.Windows.Forms',",
+            "    'System.Drawing',",
             "    ",
-            "    # === WINDOWS SERVICES ===",
-            "    'win32timezone',",
-            "    'win32serviceutil',",
-            "    'win32service',",
-            "    'win32event',",
-            "    'servicemanager',",
+            "    # === ASYNC ===",
+            "    'anyio',",
+            "    'anyio._backends',",
+            "    'anyio._backends._asyncio',",
+            "    ",
+            "    # === LOGGING ===",
+            "    'structlog',",
+            "    'logging.config',",
             "    ",
             "    # === OTHER DEPS ===",
-            "    'structlog',",
             "    'tenacity',",
             "    'redis',",
             "    'sqlalchemy',",
-            "    'sqlalchemy.dialects.sqlite',",
             "    'greenlet',",
+            "    'win32timezone',",
+            "    'win32api',",
+            "    'win32con',",
             "]",
-            '',
-            "# Collect ALL submodules (belt & suspenders approach)",
+            "",
+            "# Collect ALL submodules (belt and suspenders)",
             "hiddenimports += collect_submodules('web_service.backend')",
-            "hiddenimports += collect_submodules('anyio')",
             "hiddenimports += collect_submodules('uvicorn')",
             "hiddenimports += collect_submodules('fastapi')",
             "hiddenimports += collect_submodules('starlette')",
-            '',
+            "hiddenimports += collect_submodules('anyio')",
+            "hiddenimports += collect_submodules('httpx')",
+            "hiddenimports += collect_submodules('pydantic')",
+            "",
             '# ====================================================================',
             '# ANALYSIS',
             '# ====================================================================',
@@ -289,13 +306,21 @@ jobs:
           Write-Host "   Size: $([math]::Round($fileInfo.Length / 1MB, 2)) MB"
           Write-Host "   Path: dist/FortunaApp.exe"
 
-      # --- PHASE 6: SMOKE TEST ---
+      # --- PHASE 6: ARTIFACT UPLOAD ---
+      - name: 📤 Upload The Monolith
+        uses: actions/upload-artifact@v4
+        with:
+          name: FortunaApp-Universal-x86
+          path: dist/FortunaApp.exe
+          retention-days: 30
+
+      # --- PHASE 7: SMOKE TEST ---
       - name: 🧪 Smoke Test (Launch & Kill)
         shell: pwsh
         timeout-minutes: 2
         run: |
           Write-Host "🚀 Starting FortunaApp.exe..."
-          Start-Process "dist/FortunaApp.exe"
+          Start-Process "dist/FortunaApp.exe" -PassThru
 
           Write-Host "⏳ Waiting for server..."
           $maxAttempts = 20
@@ -306,7 +331,7 @@ jobs:
             Start-Sleep -Seconds 1
             $attempt++
             try {
-              $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/health" -TimeoutSec 2 -ErrorAction Stop
+              $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/health" -TimeoutSec 2 -ErrorAction Stop
               if ($response.StatusCode -eq 200) {
                 $success = $true
                 Write-Host "✅ Server responded on attempt $attempt"
@@ -317,17 +342,26 @@ jobs:
           }
 
           if (-not $success) {
-            # Grab any error output before killing
-            throw "❌ Server never responded - likely missing module"
+            Write-Host "❌ Server never responded!"
+            Write-Host "--- PROCESS LIST ---"
+            Get-Process
+            Write-Host "--- BUILD DIRECTORY ---"
+            ls -Recurse dist
+            $logPath = "$env:TEMP\fortuna-monolith.log"
+            if (Test-Path $logPath) {
+              Write-Host "--- LOG FILE CONTENTS ---"
+              Get-Content $logPath
+            } else {
+              Write-Host "--- LOG FILE NOT FOUND ---"
+            }
+            throw "Smoke test failed: Server did not respond at http://127.0.0.1:8000/api/health"
           }
 
-          Stop-Process -Name "FortunaApp" -Force
-          Write-Host "✅ Smoke test passed"
+          try {
+            Stop-Process -Name "FortunaApp" -Force -ErrorAction Stop
+            Write-Host "🛑 Stopped FortunaApp process."
+          } catch {
+            Write-Host "🤔 FortunaApp process not found, may have already terminated."
+          }
 
-      # --- PHASE 7: ARTIFACT UPLOAD ---
-      - name: 📤 Upload The Monolith
-        uses: actions/upload-artifact@v4
-        with:
-          name: FortunaApp-Universal-x86
-          path: dist/FortunaApp.exe
-          retention-days: 30
+          Write-Host "✅ Smoke test passed"
