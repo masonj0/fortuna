@@ -1,0 +1,136 @@
+name: 🍀 Fortuna Monolith (Unified)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+    paths:
+      - 'web_service/**'
+      - 'web_platform/**'
+      - '.github/workflows/build-monolith-*.yml'
+
+jobs:
+  build-monolith:
+    name: 'Build Universal Monolith'
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- FRONTEND ---
+      - name: 🎨 Build Frontend
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 📦 Install & Build Frontend
+        shell: pwsh
+        run: |
+          cd web_platform/frontend
+
+          # Ensure next.config.js is configured for static export
+          $config = @(
+            "module.exports = {",
+            "  output: 'export',",
+            "  distDir: 'out',",
+            "  images: { unoptimized: true },",
+            "  trailingSlash: true,",
+            "}"
+          )
+          $config | Set-Content "next.config.js" -Force
+
+          npm ci
+          npm run build
+
+          if (-not (Test-Path "out/index.html")) {
+            throw "Frontend build failed - index.html not found"
+          }
+
+          Copy-Item -Path "out" -Destination "${{ github.workspace }}/frontend_dist" -Recurse -Force
+          Write-Host "✅ Frontend built and staged"
+
+      # --- BACKEND ---
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: 📦 Install Backend Dependencies
+        shell: pwsh
+        run: |
+          pip install --upgrade pip wheel
+          pip install -r web_service/backend/requirements.txt
+          # Install Monolith extras + WebSocket support
+          pip install pywebview[cef] pyinstaller==6.6.0 pywin32 requests uvicorn[standard] websockets wsproto
+
+      - name: 📁 Create Required Data Dirs
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "web_service/backend/data"
+          New-Item -ItemType Directory -Force -Path "web_service/backend/json"
+          New-Item -ItemType Directory -Force -Path "web_service/backend/logs"
+          Write-Host "✅ Ensured data directories exist for PyInstaller."
+
+      # --- BUILD ---
+      - name: 🔨 Build Monolith EXE
+        shell: pwsh
+        run: |
+          # Copy the fixed monolith.py (from Fix 1 above)
+          # Assuming it's already in your repo at web_service/backend/monolith.py
+
+          pyinstaller --clean --noconfirm fortuna-monolith.spec
+
+          if (-not (Test-Path "dist/fortuna-monolith.exe")) {
+            throw "Build failed - EXE not found"
+          }
+
+          $size = (Get-Item "dist/fortuna-monolith.exe").Length / 1MB
+          Write-Host "✅ Build successful: $([math]::Round($size, 2)) MB"
+
+      # --- UPLOAD ---
+      - name: 📤 Upload Monolith
+        uses: actions/upload-artifact@v4
+        with:
+          name: FortunaMonolith-${{ github.sha }}
+          path: dist/fortuna-monolith.exe
+          retention-days: 30
+
+      # --- TEST ---
+      - name: 🧪 Smoke Test
+        shell: pwsh
+        timeout-minutes: 3
+        env:
+          FORTUNA_MODE: webservice # CRITICAL: Forces backend to serve static files
+        run: |
+          Write-Host "🚀 Launching fortuna-monolith.exe..."
+          $process = Start-Process "dist/fortuna-monolith.exe" -PassThru -RedirectStandardOutput "monolith-output.log" -RedirectStandardError "monolith-error.log"
+
+          Write-Host "⏳ Waiting for backend (10 seconds)..."
+          Start-Sleep -Seconds 10
+
+          # Check health endpoint
+          $success = $false
+          for ($i = 1; $i -le 10; $i++) {
+            try {
+              $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/health" -UseBasicParsing
+              if ($response.StatusCode -eq 200) {
+                Write-Host "✅ Backend responded: $($response.Content)"
+                $success = $true
+                break
+              }
+            } catch {
+              Write-Host "   Attempt $i/10: Waiting..."
+              Start-Sleep -Seconds 2
+            }
+          }
+
+          if (-not $success) {
+            Write-Host "❌ SMOKE TEST FAILED - Backend never responded"
+            Get-Content "monolith-output.log" -ErrorAction SilentlyContinue
+            Get-Content "monolith-error.log" -ErrorAction SilentlyContinue
+            throw "Backend health check failed"
+          }
+
+          Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+          Write-Host "✅ Smoke test passed!"
