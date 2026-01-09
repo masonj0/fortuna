@@ -54,18 +54,12 @@ jobs:
       - name: 🚀 Execute Bootstrapper
         shell: pwsh
         run: |
-          # Explicitly add the Python directory to the PATH for the script's environment.
-          # This is necessary because the script may not inherit the PATH set by setup-python.
-          $pythonDir = Split-Path -Parent "${{ steps.setup-python.outputs.python-path }}"
-          $pythonScriptsDir = Join-Path $pythonDir "Scripts"
-          $env:PATH = "$pythonDir;$pythonScriptsDir;$($env:PATH)"
-          Write-Host "Ensured Python is on PATH for the script."
-
           Write-Host "Starting script in CI mode..."
+          # Pass the exact python executable path to the script to avoid PATH issues.
           # Run with -Clean to test dependency installation
           # Run with -NoFrontend to focus on Backend health first
           # *>&1 combines stdout/stderr, Tee-Object saves to file AND shows in console
-          ./scripts/fortuna-quick-start.ps1 -Clean -NoFrontend *>&1 | Tee-Object -FilePath "bootstrapper_log.txt"
+          ./scripts/fortuna-quick-start.ps1 -Clean -NoFrontend -PythonExecutable "${{ steps.setup-python.outputs.python-path }}" *>&1 | Tee-Object -FilePath "bootstrapper_log.txt"
 
       - name: 📤 Upload Debug Logs
         if: always() # CRITICAL: Run this even if the bootstrapper crashes

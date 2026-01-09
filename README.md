@@ -68,3 +68,11 @@ For detailed options and first-time setup guidance, run the script with the `-He
 
 *   **`ARCHIVE_PROJECT.py`**: A utility script that scans the repository and generates the `FORTUNA_ALL_PART*.JSON` archive files. These archives are used as a ground truth for AI-driven code reviews and analysis.
 *   **`AGENTS.md`**: Contains critical operational protocols for the AI agents working on this repository.
+
+---
+
+## 🐍 Python Version Requirement
+
+**The Fortuna Monolith application must be built and run with Python 3.10.12.**
+
+This is due to a dependency (`cefpython3`) that does not support Python 3.11 or newer. The CI/CD workflows are pinned to this version. If you are building the application locally, please ensure you are using a Python 3.10.x environment.
