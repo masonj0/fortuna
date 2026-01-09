@@ -46,19 +46,19 @@ To get a build, simply push a commit to the `main` branch and retrieve the MSI a
 
 ### Python Version Requirement
 
-**Crucial:** The monolith build of this project requires **Python 3.10.12**. It is not compatible with Python 3.11 or newer due to a dependency on `cefpython3`, which does not support Python 3.11.
+**Crucial:** The monolith build of this project requires **Python 3.10.11**. It is not compatible with Python 3.11 or newer due to a dependency on `cefpython3`, which does not support Python 3.11.
 
 Before running the application locally or attempting to build it, ensure you are using the correct Python version.
 
 - **Using `pyenv` (Recommended):**
   ```bash
-  pyenv install 3.10.12
-  pyenv local 3.10.12
+  pyenv install 3.10.11
+  pyenv local 3.10.11
   ```
 
 - **Using `conda`:**
   ```bash
-  conda create -n fortuna python=3.10.12
+  conda create -n fortuna python=3.10.11
   conda activate fortuna
   ```
 
