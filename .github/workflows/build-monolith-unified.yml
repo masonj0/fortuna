@@ -110,13 +110,14 @@ jobs:
         timeout-minutes: 3
         run: |
           Write-Host "Launching fortuna-monolith.exe..."
-          $logFile = "${{ github.workspace }}/monolith-test.log"
+          $stdOutLog = "${{ github.workspace }}/monolith-stdout.log"
+          $stdErrLog = "${{ github.workspace }}/monolith-stderr.log"
 
           $process = Start-Process `
             -FilePath "dist/fortuna-monolith.exe" `
             -PassThru `
-            -RedirectStandardOutput $logFile `
-            -RedirectStandardError $logFile `
+            -RedirectStandardOutput $stdOutLog `
+            -RedirectStandardError $stdErrLog `
             -WindowStyle Hidden
 
           $procId = $process.Id
@@ -141,7 +142,6 @@ jobs:
                 break
               }
             } catch {
-              # FIXED: Use ${} to delimit variable name from the colon
               Write-Host "   Health check attempt ${attempt}/${maxAttempts}: waiting..."
               Start-Sleep -Seconds 2
             }
@@ -154,8 +154,10 @@ jobs:
           }
 
           # Show logs
-          Write-Host "`nBuild Log (last 50 lines):"
-          Get-Content $logFile -ErrorAction SilentlyContinue | Select-Object -Last 50
+          Write-Host "`nStdout Log (last 50 lines):"
+          Get-Content $stdOutLog -ErrorAction SilentlyContinue | Select-Object -Last 50
+          Write-Host "`nStderr Log (last 50 lines):"
+          Get-Content $stdErrLog -ErrorAction SilentlyContinue | Select-Object -Last 50
 
           if (-not $success) {
             throw "Smoke test failed - backend never became healthy"
