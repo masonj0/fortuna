@@ -11,7 +11,6 @@ import io
 import threading
 import time
 import json
-import requests
 from contextlib import suppress
 
 # ====================================================================
@@ -90,13 +89,47 @@ logger.info("=" * 70)
 logger.info(f"Mode: {'Frozen EXE' if getattr(sys, 'frozen', False) else 'Development'}")
 
 # ====================================================================
+# UI HELPERS (DEFINE BEFORE IMPORTS)
+# ====================================================================
+def show_error_dialog(title: str, message: str):
+    """Show error dialog (fallback if no GUI available)"""
+    try:
+        import tkinter as tk
+        from tkinter import messagebox
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showerror(title, message)
+    except:
+        # If tkinter fails, just log it
+        logger.error(f"{title}: {message}")
+
+# ====================================================================
+# FORCE PYINSTALLER TO INCLUDE DEPENDENCIES (TOP-LEVEL IMPORTS)
+# ====================================================================
+# PyInstaller's static analysis only sees top-level imports.
+# Since we do lazy imports in _import_dependencies() inside try/except,
+# PyInstaller doesn't detect them. This forces inclusion without executing:
+if False:  # Never executes, but PyInstaller sees the imports
+    import fastapi
+    import uvicorn
+    import webview
+    import pydantic
+    import starlette
+    import requests
+    from fastapi import FastAPI
+    from fastapi.staticfiles import StaticFiles
+    from fastapi.middleware.cors import CORSMiddleware
+    from fastapi.responses import FileResponse, JSONResponse
+
+# ====================================================================
 # IMPORT DEPENDENCIES WITH FRIENDLY ERROR HANDLING
 # ====================================================================
 def _import_dependencies():
     """Import all required modules with descriptive error messages"""
     try:
-        global uvicorn, webview, FastAPI, StaticFiles, CORSMiddleware, FileResponse, JSONResponse
+        global uvicorn, webview, FastAPI, StaticFiles, CORSMiddleware, FileResponse, JSONResponse, requests
 
+        import requests
         import uvicorn
         import webview
         from fastapi import FastAPI
@@ -111,31 +144,25 @@ def _import_dependencies():
         show_error_dialog(
             "Missing Dependencies",
             f"Could not load required library:\n{str(e)}\n\n"
-            "Please reinstall Fortuna or run repair script."
+            "Ensure all packages in requirements.txt are installed:\n"
+            "pip install -r web_service/backend/requirements.txt"
         )
         return False
     except Exception as e:
         logger.critical(f"FAILED - Unexpected import error: {e}", exc_info=True)
+        show_error_dialog(
+            "Startup Error",
+            f"Unexpected error during startup:\n{str(e)}\n\n"
+            f"Check the log file for details:\n{_get_log_file()}"
+        )
         return False
 
 if not _import_dependencies():
     sys.exit(1)
 
 # ====================================================================
-# UI HELPERS
+# UTILITY FUNCTIONS
 # ====================================================================
-def show_error_dialog(title: str, message: str):
-    """Show error dialog (fallback if no GUI available)"""
-    try:
-        import tkinter as tk
-        from tkinter import messagebox
-        root = tk.Tk()
-        root.withdraw()
-        messagebox.showerror(title, message)
-    except:
-        # If tkinter fails, just log it
-        logger.error(f"{title}: {message}")
-
 def get_resource_path(relative_path: str) -> Path:
     """Get absolute path to bundled resources"""
     if getattr(sys, "frozen", False):
@@ -254,13 +281,19 @@ def create_app():
 
         # Try exact file
         file_path = frontend_path / full_path
-        if file_path.is_file() and file_path.is_relative_to(frontend_path):
-            return FileResponse(file_path)
+        try:
+            if file_path.is_file() and file_path.is_relative_to(frontend_path):
+                return FileResponse(file_path)
+        except (ValueError, RuntimeError):
+            pass
 
         # Try with .html extension
         html_path = frontend_path / f"{full_path}.html"
-        if html_path.is_file() and html_path.is_relative_to(frontend_path):
-            return FileResponse(html_path)
+        try:
+            if html_path.is_file() and html_path.is_relative_to(frontend_path):
+                return FileResponse(html_path)
+        except (ValueError, RuntimeError):
+            pass
 
         # SPA fallback to index
         if index_file.exists():
