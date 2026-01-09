@@ -105,11 +105,11 @@ jobs:
           retention-days: 30
 
       # --- TEST ---
-      - name: 🧪 Smoke Test
+      - name: Smoke Test
         shell: pwsh
         timeout-minutes: 3
         run: |
-          Write-Host "🚀 Launching fortuna-monolith.exe..."
+          Write-Host "Launching fortuna-monolith.exe..."
           $logFile = "${{ github.workspace }}/monolith-test.log"
 
           $process = Start-Process `
@@ -120,7 +120,7 @@ jobs:
             -WindowStyle Hidden
 
           $procId = $process.Id
-          Write-Host "⏳ Process started (PID: $procId), waiting 8 seconds for startup..."
+          Write-Host "Process started (PID: $procId), waiting 8 seconds for startup..."
           Start-Sleep -Seconds 8
 
           # Health check
@@ -136,12 +136,13 @@ jobs:
                 -ErrorAction Stop
 
               if ($response.StatusCode -eq 200) {
-                Write-Host "✅ Backend healthy: $($response.Content)"
+                Write-Host "Backend healthy: $($response.Content)"
                 $success = $true
                 break
               }
             } catch {
-              Write-Host "   Health check attempt $attempt/$maxAttempts: waiting..."
+              # FIXED: Use ${} to delimit variable name from the colon
+              Write-Host "   Health check attempt ${attempt}/${maxAttempts}: waiting..."
               Start-Sleep -Seconds 2
             }
           }
@@ -153,11 +154,11 @@ jobs:
           }
 
           # Show logs
-          Write-Host "`n📋 Build Log (last 50 lines):"
+          Write-Host "`nBuild Log (last 50 lines):"
           Get-Content $logFile -ErrorAction SilentlyContinue | Select-Object -Last 50
 
           if (-not $success) {
-            throw "❌ Smoke test failed - backend never became healthy"
+            throw "Smoke test failed - backend never became healthy"
           }
 
-          Write-Host "✅ Smoke test passed!"
+          Write-Host "Smoke test passed!"
