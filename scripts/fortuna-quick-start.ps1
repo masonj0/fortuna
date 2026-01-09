@@ -89,10 +89,10 @@ if (-not (Test-Path $BACKEND_DIR)) { Show-Fail "Backend directory not found at: 
 
 # Check for Python
 try {
-    $pyVer = & $PYTHON_CMD --version 2>&1
-    Show-Success "Found $pyVer"
+    & $PYTHON_CMD --version
+    Show-Success "Python executable found."
 } catch {
-    Show-Fail "Python not found in PATH."
+    Show-Fail "Python not found in PATH or specified executable is invalid."
 }
 
 # Upgrade Pip & Wheel
