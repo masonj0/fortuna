@@ -1,184 +1,206 @@
 # web_service/backend/monolith.py
 """
 Fortuna Monolith - Single executable frontend + backend
-Includes comprehensive error handling and fallback modes
+Production-grade with enhanced error handling, user-friendly startup, and better logging
 """
 import sys
 import os
 from pathlib import Path
 import logging
 import io
+import threading
+import time
+import json
+import requests
+from contextlib import suppress
 
 # ====================================================================
-# SETUP LOGGING (BEFORE ANYTHING ELSE)
+# CONSTANTS & CONFIGURATION
 # ====================================================================
+APP_NAME = "Fortuna Faucet"
+APP_VERSION = "1.0.0"
+API_HOST = "127.0.0.1"
+API_PORT = 8000
+BACKEND_STARTUP_TIMEOUT = 10
+HEALTH_CHECK_ATTEMPTS = 10
+HEALTH_CHECK_INTERVAL = 1
+
+# ====================================================================
+# LOGGING SETUP (BEFORE ANYTHING ELSE)
+# ====================================================================
+def _get_log_file() -> Path:
+    """Get log file path (works in both dev and frozen modes)"""
+    if getattr(sys, "frozen", False):
+        log_dir = Path(os.environ.get("TEMP", "."))
+    else:
+        log_dir = Path(".")
+    return log_dir / "fortuna-monolith.log"
+
 def _force_utf8_stream(stream):
-    """Ensure text stream uses UTF-8 (prevents emoji crashes on Windows)"""
+    """Ensure stream uses UTF-8 encoding"""
     if hasattr(stream, "reconfigure"):
-        try:
+        with suppress(Exception):
             stream.reconfigure(encoding="utf-8", errors="replace")
             return stream
-        except:
-            pass
 
     buffer = getattr(stream, "buffer", None)
     if buffer is None:
         return stream
 
-    try:
+    with suppress(Exception):
         return io.TextIOWrapper(buffer, encoding="utf-8", errors="replace")
-    except:
-        return stream
+
+    return stream
 
 def setup_logging():
-    """Setup logging to file + console"""
-    # Log to %TEMP% on frozen, current dir in dev
-    if getattr(sys, "frozen", False):
-        log_dir = Path(os.environ.get("TEMP", "."))
-    else:
-        log_dir = Path(".")
+    """Configure logging to both file and console"""
+    log_file = _get_log_file()
 
-    log_file = log_dir / "fortuna-monolith.log"
-
-    # Force UTF-8 output
+    # Force UTF-8 on stdout/stderr
     sys.stdout = _force_utf8_stream(sys.stdout)
     sys.stderr = _force_utf8_stream(sys.stderr)
 
-    # Setup handlers
+    # Logging handlers
     file_handler = logging.FileHandler(log_file, mode="w", encoding="utf-8")
     console_handler = logging.StreamHandler(sys.stdout)
 
+    # Format with timestamps
     formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        "[%(levelname)-8s] %(asctime)s - %(message)s",
+        datefmt="%H:%M:%S"
     )
     file_handler.setFormatter(formatter)
     console_handler.setFormatter(formatter)
 
+    # Setup root logger
     logging.basicConfig(
-        level=logging.DEBUG,
+        level=logging.INFO,
         handlers=[file_handler, console_handler],
     )
-    return logging.getLogger(__name__)
 
-    logger = logging.getLogger("fortuna-monolith")
+    logger = logging.getLogger("fortuna")
     return logger
 
 logger = setup_logging()
 
+# Banner
 logger.info("=" * 70)
-logger.info("FORTUNA MONOLITH STARTUP")
+logger.info(f"{APP_NAME} v{APP_VERSION} - Starting up")
 logger.info("=" * 70)
-logger.info(f"Frozen: {getattr(sys, 'frozen', False)}")
-logger.info(f"Python: {sys.version}")
-logger.info(f"Executable: {sys.executable}")
-logger.info(f"Working Dir: {os.getcwd()}")
+logger.info(f"Mode: {'Frozen EXE' if getattr(sys, 'frozen', False) else 'Development'}")
 
 # ====================================================================
-# IMPORT CORE DEPENDENCIES
+# IMPORT DEPENDENCIES WITH FRIENDLY ERROR HANDLING
 # ====================================================================
-try:
-    import threading
-    import time
-    import json
-    import requests
+def _import_dependencies():
+    """Import all required modules with descriptive error messages"""
+    try:
+        global uvicorn, webview, FastAPI, StaticFiles, CORSMiddleware, FileResponse, JSONResponse
 
-    logger.info("OK: Standard library imports successful")
-except Exception as e:
-    logger.critical(f"FAILED: Standard library import: {e}", exc_info=True)
+        import uvicorn
+        import webview
+        from fastapi import FastAPI
+        from fastapi.staticfiles import StaticFiles
+        from fastapi.middleware.cors import CORSMiddleware
+        from fastapi.responses import FileResponse, JSONResponse
+
+        logger.info("OK - All dependencies loaded successfully")
+        return True
+    except ImportError as e:
+        logger.critical(f"FAILED - Missing dependency: {e}")
+        show_error_dialog(
+            "Missing Dependencies",
+            f"Could not load required library:\n{str(e)}\n\n"
+            "Please reinstall Fortuna or run repair script."
+        )
+        return False
+    except Exception as e:
+        logger.critical(f"FAILED - Unexpected import error: {e}", exc_info=True)
+        return False
+
+if not _import_dependencies():
     sys.exit(1)
 
-try:
-    import uvicorn
-    import webview
-    from fastapi import FastAPI
-    from fastapi.staticfiles import StaticFiles
-    from fastapi.middleware.cors import CORSMiddleware
-    from fastapi.responses import FileResponse, JSONResponse
-
-    logger.info("OK: FastAPI/Uvicorn/Webview imports successful")
-except Exception as e:
-    logger.critical(f"FAILED: FastAPI stack import: {e}", exc_info=True)
-    sys.exit(1)
-
 # ====================================================================
-# UTILITY FUNCTIONS
+# UI HELPERS
 # ====================================================================
+def show_error_dialog(title: str, message: str):
+    """Show error dialog (fallback if no GUI available)"""
+    try:
+        import tkinter as tk
+        from tkinter import messagebox
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showerror(title, message)
+    except:
+        # If tkinter fails, just log it
+        logger.error(f"{title}: {message}")
+
 def get_resource_path(relative_path: str) -> Path:
-    """Get absolute path to resource (works in dev and PyInstaller)"""
+    """Get absolute path to bundled resources"""
     if getattr(sys, "frozen", False):
         base_path = Path(sys._MEIPASS)
-        logger.debug(f"Frozen mode, base: {base_path}")
     else:
         base_path = Path(__file__).parent.parent.parent
-        logger.debug(f"Dev mode, base: {base_path}")
 
     full_path = base_path / relative_path
-    logger.debug(f"Resource path '{relative_path}': {full_path} (exists: {full_path.exists()})")
     return full_path
 
 # ====================================================================
-# BACKEND API CREATION
+# API CREATION
 # ====================================================================
 def create_backend_api():
-    """Create FastAPI backend with fallback endpoints"""
+    """Create FastAPI instance with fallback support"""
     api = FastAPI(title="Fortuna Backend")
 
     @api.get("/health")
     async def health():
-        return {"status": "ok", "service": "fortuna-monolith"}
+        """Health check endpoint"""
+        return {
+            "status": "ok",
+            "service": "fortuna-monolith",
+            "version": APP_VERSION
+        }
 
     try:
         logger.info("Attempting to load full backend API...")
         from web_service.backend import api as backend_api
 
-        logger.info(f"Full backend loaded, copying routes...")
+        # Copy routes from full backend
         for route in backend_api.app.routes:
             api.routes.append(route)
 
-        logger.info(f"OK: Full backend API loaded ({len(api.routes)} routes)")
+        logger.info(f"OK - Full backend API loaded ({len(api.routes)} routes)")
         return api
 
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         logger.warning(f"Full backend import failed: {e}")
-        logger.warning("Using minimal API stub (no races/data endpoints)")
+        logger.info("Running in minimal mode (basic endpoints only)")
 
+        # Provide stub endpoints
         @api.get("/races")
         async def get_races():
             return {
                 "status": "error",
-                "message": "Backend API not loaded",
-                "sample": [
-                    {"id": 1, "name": "Example Race", "status": "pending"}
-                ]
-            }
-
-        @api.get("/")
-        async def root():
-            return {
-                "status": "stub",
-                "message": "Minimal backend mode (full API unavailable)",
-                "error": str(e)
+                "message": "Full API not available",
+                "sample": [{"id": 1, "name": "Example Race", "status": "pending"}]
             }
 
         return api
 
     except Exception as e:
         logger.error(f"Unexpected error loading backend: {e}", exc_info=True)
-
-        @api.get("/")
-        async def root():
-            return {"status": "error", "message": str(e)}
-
         return api
 
 # ====================================================================
-# FRONTEND SERVING
+# APP CREATION
 # ====================================================================
 def create_app():
-    """Create main FastAPI app with frontend + backend"""
-    logger.info("Creating main FastAPI application...")
+    """Create main FastAPI application"""
+    logger.info("Creating FastAPI application...")
     app = FastAPI(title="Fortuna Monolith")
 
+    # CORS for local development
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -186,176 +208,188 @@ def create_app():
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    logger.info("OK: CORS middleware configured")
+    logger.info("OK - CORS middleware configured")
 
+    # Mount backend API
     logger.info("Mounting backend API at /api...")
     backend = create_backend_api()
     app.mount("/api", backend, name="backend")
-    logger.info("OK: Backend mounted")
 
+    # Setup frontend serving
     frontend_path = get_resource_path("frontend_dist")
     index_file = frontend_path / "index.html"
 
     logger.info(f"Frontend path: {frontend_path}")
-    logger.info(f"Index file: {index_file} (exists: {index_file.exists()})")
 
     if not frontend_path.exists():
-        logger.error(f"Frontend directory not found: {frontend_path}")
-        logger.warning("App will run but frontend will not be served")
+        logger.error("Frontend directory not found - app will run without UI")
 
         @app.get("/")
-        async def root():
+        async def fallback():
             return JSONResponse(
-                {"error": "Frontend not bundled", "path": str(frontend_path)},
-                status_code=500
+                {"message": "Frontend not available", "api": "/api/health"},
+                status_code=503
             )
-
         return app
 
-    logger.info("Configuring frontend serving...")
+    # Mount static files
+    logger.info("Configuring static file serving...")
 
+    # Mount Next.js build output
     next_dir = frontend_path / "_next"
     if next_dir.exists():
-        app.mount("/_next", StaticFiles(directory=str(next_dir)), name="next-static")
-        logger.info(f"OK: Mounted /_next static files ({len(list(next_dir.iterdir()))} items)")
-    else:
-        logger.warning("_next directory not found (static assets won't load)")
+        app.mount("/_next", StaticFiles(directory=str(next_dir)), name="next")
+        logger.info("OK - Static assets mounted")
 
     public_dir = frontend_path / "public"
     if public_dir.exists():
         app.mount("/public", StaticFiles(directory=str(public_dir)), name="public")
-        logger.info("OK: Mounted /public")
 
+    # SPA routing - catch all unmapped routes and serve index.html
     @app.get("/{full_path:path}")
-    async def serve_frontend(full_path: str):
+    async def serve_spa(full_path: str):
+        # Skip API routes
         if full_path.startswith("api/"):
             return JSONResponse({"error": "Not found"}, status_code=404)
 
+        # Try exact file
         file_path = frontend_path / full_path
-        if file_path.is_file():
-            logger.debug(f"Serving file: {full_path}")
+        if file_path.is_file() and file_path.is_relative_to(frontend_path):
             return FileResponse(file_path)
 
+        # Try with .html extension
         html_path = frontend_path / f"{full_path}.html"
-        if html_path.is_file():
+        if html_path.is_file() and html_path.is_relative_to(frontend_path):
             return FileResponse(html_path)
 
+        # SPA fallback to index
         if index_file.exists():
-            logger.debug(f"SPA fallback for: {full_path}")
             return FileResponse(index_file)
 
-        return JSONResponse(
-            {"error": "Frontend not found", "path": str(frontend_path)},
-            status_code=500
-        )
+        return JSONResponse({"error": "Not found"}, status_code=404)
 
-    logger.info("OK: Frontend routing configured")
+    logger.info("OK - SPA routing configured")
     return app
 
 # ====================================================================
 # BACKEND SERVER
 # ====================================================================
 def run_backend():
-    """Run Uvicorn backend server"""
+    """Run Uvicorn server"""
     try:
         logger.info("-" * 70)
         logger.info("STARTING BACKEND SERVER")
+        logger.info(f"API: http://{API_HOST}:{API_PORT}")
         logger.info("-" * 70)
 
         app = create_app()
-        logger.info("Starting Uvicorn on http://127.0.0.1:8000")
 
+        # Run Uvicorn
         uvicorn.run(
             app,
-            host="127.0.0.1",
-            port=8000,
-            log_level="info",
+            host=API_HOST,
+            port=API_PORT,
+            log_level="warning",
             access_log=False,
         )
+    except OSError as e:
+        logger.critical(f"Port {API_PORT} is already in use: {e}")
+        raise
     except Exception as e:
-        logger.error(f"Backend crashed: {e}", exc_info=True)
+        logger.critical(f"Backend error: {e}", exc_info=True)
         raise
 
 # ====================================================================
-# MAIN ENTRY POINT
+# HEALTH CHECKS
+# ====================================================================
+def check_backend_health(max_attempts: int = HEALTH_CHECK_ATTEMPTS) -> bool:
+    """Check if backend is responding"""
+    logger.info("Testing backend health...")
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            response = requests.get(
+                f"http://{API_HOST}:{API_PORT}/api/health",
+                timeout=2
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                logger.info(f"OK - Backend responding: {data}")
+                return True
+
+        except requests.ConnectionError:
+            if attempt < max_attempts:
+                logger.debug(f"Attempt {attempt}/{max_attempts} - waiting...")
+                time.sleep(HEALTH_CHECK_INTERVAL)
+        except Exception as e:
+            logger.warning(f"Health check error: {e}")
+
+    logger.warning(f"Backend did not respond after {max_attempts} attempts")
+    return False
+
+# ====================================================================
+# MAIN APPLICATION
 # ====================================================================
 def main():
-    """Main application entry point"""
+    """Main entry point"""
     try:
         logger.info("-" * 70)
-        logger.info("STARTING FORTUNA MONOLITH")
+        logger.info(f"STARTING {APP_NAME}")
         logger.info("-" * 70)
 
-        logger.info("Starting backend thread...")
+        # Start backend in background
+        logger.info("Starting backend server...")
         backend_thread = threading.Thread(target=run_backend, daemon=True)
         backend_thread.start()
-        logger.info("OK: Backend thread started")
+        logger.info("OK - Backend thread started")
 
-        logger.info("Waiting 4 seconds for backend to start...")
-        time.sleep(4)
+        # Wait for backend to initialize
+        logger.info(f"Waiting for backend to be ready (max {BACKEND_STARTUP_TIMEOUT}s)...")
+        time.sleep(2)
 
-        logger.info("Testing backend health...")
-        backend_ready = False
-
-        for attempt in range(1, 11):
-            try:
-                response = requests.get(
-                    "http://127.0.0.1:8000/api/health",
-                    timeout=2
-                )
-
-                if response.status_code == 200:
-                    data = response.json()
-                    logger.info(f"OK: Backend healthy: {data}")
-                    backend_ready = True
-                    break
-                else:
-                    logger.warning(f"Health check returned {response.status_code}")
-
-            except requests.exceptions.ConnectionError:
-                logger.debug(f"Backend not ready yet (attempt {attempt}/10)")
-            except Exception as e:
-                logger.warning(f"Health check error: {e}")
-
-            time.sleep(1)
+        # Health check
+        backend_ready = check_backend_health()
 
         if not backend_ready:
-            logger.error("Backend failed health check - launching anyway but expect errors")
+            logger.warning("Backend not responding - launching UI anyway")
 
+        # Launch UI
         logger.info("-" * 70)
-        logger.info("LAUNCHING WEBVIEW")
+        logger.info("LAUNCHING USER INTERFACE")
         logger.info("-" * 70)
-
-        webview.create_window(
-            title="Fortuna Faucet",
-            url="http://127.0.0.1:8000",
-            width=1400,
-            height=900,
-            resizable=True,
-            min_size=(800, 600),
-            background_color="#1a1a1a",
-        )
-
-        logger.info("Starting webview event loop...")
-        webview.start(debug=False, gui='cef')
-
-        logger.info("Webview closed, exiting...")
-
-    except Exception as e:
-        logger.critical(f"Fatal error: {e}", exc_info=True)
 
         try:
-            import tkinter as tk
-            from tkinter import messagebox
-            root = tk.Tk()
-            root.withdraw()
-            messagebox.showerror(
-                "Fortuna Monolith Error",
-                f"Failed to start:\n\n{str(e)}\n\nCheck %TEMP%\\fortuna-monolith.log"
+            webview.create_window(
+                title=APP_NAME,
+                url=f"http://{API_HOST}:{API_PORT}",
+                width=1400,
+                height=900,
+                resizable=True,
+                min_size=(800, 600),
+                background_color="#1a1a1a",
             )
-        except:
-            pass
 
+            logger.info("Starting webview event loop...")
+            webview.start(debug=False, gui='cef')
+
+        except Exception as e:
+            logger.error(f"Webview error: {e}", exc_info=True)
+            # Fall back to browser message
+            logger.info(f"Open http://{API_HOST}:{API_PORT} in your browser")
+            input("Press ENTER to exit...")
+
+        logger.info(f"{APP_NAME} closed normally")
+
+    except KeyboardInterrupt:
+        logger.info("Application interrupted by user")
+    except Exception as e:
+        logger.critical(f"Fatal error: {e}", exc_info=True)
+        show_error_dialog(
+            f"{APP_NAME} Error",
+            f"Application failed to start:\n{str(e)}\n\n"
+            f"Please check the log file at:\n{_get_log_file()}"
+        )
         sys.exit(1)
 
 if __name__ == "__main__":
