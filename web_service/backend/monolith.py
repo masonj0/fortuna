@@ -337,7 +337,7 @@ def main():
         )
 
         logger.info("Starting webview event loop...")
-        webview.start(debug=False)
+        webview.start(debug=False, gui='cef')
 
         logger.info("Webview closed, exiting...")
 
