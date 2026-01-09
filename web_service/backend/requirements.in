@@ -5,8 +5,11 @@
 
 # --- Core Application Framework (Hard Pins) ---
 fastapi
-uvicorn==0.30.1
+uvicorn[standard]
 cryptography
+websockets
+wsproto
+pywebview[cef]
 
 # --- Core Application Dependencies (Flexible) ---
 tenacity
@@ -18,7 +21,6 @@ slowapi
 redis
 pandas
 numpy
-scipy
 aiosqlite
 SQLAlchemy
 greenlet==3.0.3

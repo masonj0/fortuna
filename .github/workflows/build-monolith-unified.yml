@@ -59,8 +59,8 @@ jobs:
         shell: pwsh
         run: |
           pip install --upgrade pip wheel
+          pip install pyinstaller==6.6.0
           pip install -r web_service/backend/requirements.txt
-          pip install pywebview[cef] pyinstaller==6.6.0 pywin32 requests uvicorn[standard] websockets wsproto
 
       - name: Create Data Directories
         shell: pwsh
