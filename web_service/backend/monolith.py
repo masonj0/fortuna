@@ -1,7 +1,9 @@
-# web_service/backend/monolith.py
 """
 Fortuna Monolith - Single executable frontend + backend
 Production-grade with enhanced error handling, user-friendly startup, and better logging
+
+IMPORTANT: Uses WinForms instead of CEF for Python 3.10 compatibility
+(CEFPython3 v66.0 doesn't support Python 3.10.11)
 """
 import sys
 import os
@@ -87,6 +89,7 @@ logger.info("=" * 70)
 logger.info(f"{APP_NAME} v{APP_VERSION} - Starting up")
 logger.info("=" * 70)
 logger.info(f"Mode: {'Frozen EXE' if getattr(sys, 'frozen', False) else 'Development'}")
+logger.info(f"Python: {sys.version.split()[0]}")
 
 # ====================================================================
 # UI HELPERS (DEFINE BEFORE IMPORTS)
@@ -106,9 +109,6 @@ def show_error_dialog(title: str, message: str):
 # ====================================================================
 # FORCE PYINSTALLER TO INCLUDE DEPENDENCIES (TOP-LEVEL IMPORTS)
 # ====================================================================
-# PyInstaller's static analysis only sees top-level imports.
-# Since we do lazy imports in _import_dependencies() inside try/except,
-# PyInstaller doesn't detect them. This forces inclusion without executing:
 if False:  # Never executes, but PyInstaller sees the imports
     import fastapi
     import uvicorn
@@ -393,6 +393,8 @@ def main():
         logger.info("-" * 70)
 
         try:
+            # Use WinForms GUI (default on Windows, compatible with Python 3.10)
+            # CEF is not used here to avoid Python version compatibility issues
             webview.create_window(
                 title=APP_NAME,
                 url=f"http://{API_HOST}:{API_PORT}",
@@ -404,7 +406,8 @@ def main():
             )
 
             logger.info("Starting webview event loop...")
-            webview.start(debug=False, gui='cef')
+            # Don't specify gui='cef' - let pywebview auto-detect WinForms
+            webview.start(debug=False)
 
         except Exception as e:
             logger.error(f"Webview error: {e}", exc_info=True)
