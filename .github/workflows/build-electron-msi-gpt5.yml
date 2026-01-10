@@ -172,5 +172,60 @@ jobs:
           name: fortuna-msi-${{ matrix.arch }}
           path: electron/dist/*.msi
 
-  # ✂️ SMOKE TEST JOB REMOVED FOR HARVEST MODE
-  # The build stops here. Download the MSI to test manually.
+  smoke-test:
+    name: '🔥 Smoke Test (${{ matrix.arch }})'
+    runs-on: windows-latest
+    needs: [build-electron-msi]
+    continue-on-error: true
+    strategy:
+      matrix:
+        arch: [x64, x86]
+    steps:
+      - name: 📥 Download MSI
+        uses: actions/download-artifact@v4
+        with:
+          name: fortuna-msi-${{ matrix.arch }}
+          path: installer
+      - name: 🚀 Install & Verify
+        shell: pwsh
+        run: |
+          $msi = (Get-ChildItem "installer" -Filter "*.msi" -Recurse | Select -First 1).FullName
+          Start-Process msiexec.exe -ArgumentList "/i `"$msi`" /qn /L*v install.log" -Wait
+
+          $progFiles = if ('${{ matrix.arch }}' -eq 'x86') { ${env:ProgramFiles(x86)} } else { ${env:ProgramFiles} }
+          $installDir = Join-Path $progFiles "Fortuna Faucet"
+          New-Item -Path "$installDir\data", "$installDir\json", "$installDir\logs" -ItemType Directory -Force | Out-Null
+      - name: 🚦 Launch & Verify
+        shell: pwsh
+        run: |
+          $progFiles = if ('${{ matrix.arch }}' -eq 'x86') { ${env:ProgramFiles(x86)} } else { ${env:ProgramFiles} }
+          $installDir = Join-Path $progFiles "Fortuna Faucet"
+          Start-Process -FilePath "$installDir\Fortuna Faucet.exe"
+
+          Write-Host "Polling for backend process for up to 30 seconds..."
+          $timeout = 30
+          $startTime = Get-Date
+          $child = $null
+          while (((Get-Date) - $startTime).TotalSeconds -lt $timeout) {
+            $child = Get-Process -Name "fortuna-backend" -ErrorAction SilentlyContinue
+            if ($child) {
+              Write-Host "✅ Backend process found!"
+              break
+            }
+            Start-Sleep -Seconds 5
+          }
+
+          $parent = Get-Process -Name "Fortuna Faucet" -ErrorAction SilentlyContinue
+
+          if (-not $parent) {
+            throw "Main process 'Fortuna Faucet' not found!"
+          }
+          if (-not $child) {
+            throw "Backend process 'fortuna-backend' not found after timeout!"
+          }
+
+          Write-Host "✅ Both parent and child processes are running."
+      - name: 🧹 Cleanup
+        if: always()
+        run: |
+          Stop-Process -Name "Fortuna Faucet", "fortuna-backend" -Force -ErrorAction SilentlyContinue
