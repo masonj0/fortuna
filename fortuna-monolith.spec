@@ -2,7 +2,7 @@
 """
 Fortuna Monolith - PyInstaller Spec
 Single executable combining Next.js frontend + FastAPI backend
-Production-grade configuration with security, performance, and maintainability
+CRITICAL: Explicit hiddenimports to ensure all modules are bundled
 """
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 import os
@@ -12,17 +12,12 @@ import sys
 # CONFIGURATION
 # ====================================================================
 APP_NAME = "fortuna-monolith"
-CONSOLE_MODE = True  # Set to False for windowed-only app
-OPTIMIZE_LEVEL = 2  # 0=none, 1=basic, 2=full (slower build, faster runtime)
+CONSOLE_MODE = True
 
-# ====================================================================
-# BUILD OUTPUT
-# ====================================================================
 print("[SPEC] " + "=" * 66)
 print(f"[SPEC] Fortuna Monolith PyInstaller Configuration")
 print(f"[SPEC] Python: {sys.version.split()[0]}")
 print(f"[SPEC] Platform: {sys.platform}")
-print(f"[SPEC] Working dir: {os.getcwd()}")
 print("[SPEC] " + "=" * 66)
 
 # ====================================================================
@@ -31,196 +26,274 @@ print("[SPEC] " + "=" * 66)
 prerequisites = {
     'frontend_dist': 'Frontend static files',
     'web_service/backend/monolith.py': 'Monolith entry point',
-    'web_service/backend/requirements.txt': 'Python dependencies list',
 }
 
 print("[SPEC] Checking prerequisites...")
-missing = []
 for path, description in prerequisites.items():
     exists = os.path.exists(path)
     status = "FOUND" if exists else "MISSING"
     print(f"[SPEC]   {description}: {status}")
-    if not exists:
-        missing.append(path)
-
-if missing:
-    print(f"[SPEC] WARNING: Missing files - build may fail:")
-    for path in missing:
-        print(f"[SPEC]   - {path}")
 
 # ====================================================================
 # COLLECT PACKAGE DATA & HOOKS
 # ====================================================================
 print("[SPEC] Collecting package metadata...")
 
-# Collect data from all FastAPI/web dependencies
-packages_to_collect = {
-    'uvicorn': 'ASGI server',
-    'fastapi': 'Web framework',
-    'starlette': 'ASGI toolkit',
-    'pydantic': 'Data validation',
-    'webview': 'GUI framework',
-}
-
 collected_data = {}
-for package, description in packages_to_collect.items():
+for package in ['uvicorn', 'fastapi', 'starlette', 'pydantic', 'webview']:
     try:
         data = collect_all(package)
         collected_data[package] = data
-        datas_count = len(data[0])
-        imports_count = len(data[2])
-        print(f"[SPEC]   {package}: {datas_count} data files, {imports_count} imports")
+        print(f"[SPEC]   {package}: OK")
     except Exception as e:
-        print(f"[SPEC]   WARNING: Failed to collect {package}: {e}")
+        print(f"[SPEC]   WARNING: {package}: {e}")
         collected_data[package] = ([], [], [])
 
 # ====================================================================
-# DATA FILES (CRITICAL FOR RUNTIME)
+# DATA FILES
 # ====================================================================
 print("[SPEC] Configuring data files...")
 datas = []
 
-# Frontend static files (required)
 if os.path.exists('frontend_dist'):
     datas.append(('frontend_dist', 'frontend_dist'))
-    print("[SPEC]   Added: frontend_dist -> frontend_dist")
-else:
-    print("[SPEC]   WARNING: frontend_dist not found (will be created at build time)")
+    print("[SPEC]   Added: frontend_dist")
 
-# Backend runtime directories
-backend_dirs = [
+for source_dir, dest_dir in [
     ('web_service/backend/data', 'data'),
     ('web_service/backend/json', 'json'),
     ('web_service/backend/logs', 'logs'),
-    ('web_service/backend/config', 'config'),
-]
-
-for source_dir, dest_dir in backend_dirs:
+]:
     if os.path.exists(source_dir):
         datas.append((source_dir, dest_dir))
-        print(f"[SPEC]   Added: {source_dir} -> {dest_dir}")
 
-# Collect package data files from dependencies
 for package, data in collected_data.items():
     datas.extend(data[0])
 
 print(f"[SPEC] Total data files: {len(datas)}")
 
 # ====================================================================
-# BINARIES (DYNAMIC LIBRARIES)
+# BINARIES
 # ====================================================================
 print("[SPEC] Configuring binaries...")
 binaries = []
-
 for package, data in collected_data.items():
     binaries.extend(data[1])
-
 print(f"[SPEC] Total binaries: {len(binaries)}")
 
 # ====================================================================
-# HIDDEN IMPORTS (MODULES NOT DETECTED BY STATIC ANALYSIS)
+# HIDDEN IMPORTS - CRITICAL FOR PYINSTALLER
 # ====================================================================
 print("[SPEC] Configuring hidden imports...")
 
+# EXPLICITLY list all modules - do not rely on implicit detection
 hiddenimports = [
-    # Application entry points
+    # Core application
     'web_service.backend.monolith',
 
-    # FastAPI ecosystem
+    # FastAPI and web framework - EXPLICIT
     'fastapi',
     'fastapi.openapi',
-    'starlette.middleware.cors',
+    'fastapi.openapi.utils',
+    'fastapi.middleware',
+    'fastapi.middleware.cors',
+    'fastapi.middleware.base',
+    'fastapi.encoders',
+    'fastapi.routing',
+    'fastapi.security',
+    'fastapi.security.utils',
+    'fastapi.staticfiles',
+    'fastapi.responses',
+
+    # Starlette (ASGI framework) - EXPLICIT
+    'starlette',
+    'starlette.applications',
+    'starlette.authentication',
+    'starlette.background',
+    'starlette.concurrency',
+    'starlette.config',
+    'starlette.datastructures',
+    'starlette.endpoints',
+    'starlette.exceptions',
+    'starlette.formparsers',
+    'starlette.middleware',
+    'starlette.middleware.authentication',
     'starlette.middleware.base',
-    'starlette.staticfiles',
+    'starlette.middleware.cors',
+    'starlette.middleware.errors',
+    'starlette.middleware.gzip',
+    'starlette.middleware.httpsredirect',
+    'starlette.middleware.sessions',
+    'starlette.middleware.trustedhost',
+    'starlette.middleware.wsgi',
     'starlette.responses',
     'starlette.routing',
+    'starlette.schemas',
+    'starlette.staticfiles',
+    'starlette.status',
+    'starlette.testclient',
+    'starlette.types',
+    'starlette.websockets',
 
-    # Async/HTTP infrastructure
+    # Uvicorn (ASGI server) - EXPLICIT
+    'uvicorn',
+    'uvicorn.config',
+    'uvicorn.lifespan',
+    'uvicorn.lifespan.off',
+    'uvicorn.lifespan.on',
+    'uvicorn.loops',
+    'uvicorn.loops.auto',
+    'uvicorn.main',
+    'uvicorn.protocols',
+    'uvicorn.protocols.http',
+    'uvicorn.protocols.http.auto',
+    'uvicorn.protocols.http.h11_impl',
+    'uvicorn.protocols.http.httptools_impl',
+    'uvicorn.protocols.websockets',
+    'uvicorn.protocols.websockets.auto',
+    'uvicorn.protocols.websockets.wsproto_impl',
+    'uvicorn.server',
+    'uvicorn.workers',
+
+    # Pydantic (data validation) - EXPLICIT
+    'pydantic',
+    'pydantic.alias_generators',
+    'pydantic.annotated',
+    'pydantic.config',
+    'pydantic.dataclasses',
+    'pydantic.decorator',
+    'pydantic.deprecated',
+    'pydantic.deprecated.decorator',
+    'pydantic.deprecated.json',
+    'pydantic.deprecated.tools',
+    'pydantic.env_settings',
+    'pydantic.fields',
+    'pydantic.functional_serializers',
+    'pydantic.functional_validators',
+    'pydantic.generics',
+    'pydantic.json',
+    'pydantic.json_schema',
+    'pydantic.main',
+    'pydantic.networks',
+    'pydantic.tools',
+    'pydantic.type_adapter',
+    'pydantic.types',
+    'pydantic.validators',
+    'pydantic_core',
+    'pydantic_core._pydantic_core',
+    'pydantic_settings',
+
+    # HTTP and async - EXPLICIT
     'h11',
-    'httptools',
+    'h2',
+    'h2.config',
+    'h2.connection',
+    'h2.exceptions',
+    'h2.stream',
     'httpcore',
+    'httpcore._async',
+    'httpcore._models',
+    'httpcore._sync',
+    'httptools',
     'anyio',
+    'anyio._backends',
     'anyio._backends._asyncio',
     'anyio._backends._trio',
     'anyio.abc',
+    'anyio.streams',
 
-    # ASGI server
-    'uvicorn',
-    'uvicorn.lifespan',
-    'uvicorn.lifespan.on',
-    'uvicorn.lifespan.off',
-    'uvicorn.protocols.http',
-    'uvicorn.protocols.http.auto',
-    'uvicorn.protocols.websockets',
-    'uvicorn.protocols.websockets.auto',
-    'uvicorn.loops',
-    'uvicorn.loops.auto',
-
-    # Data validation
-    'pydantic',
-    'pydantic.json',
-    'pydantic_core',
-    'pydantic_settings',
-    'pydantic.validators',
-
-    # WebSocket support
+    # WebSockets - EXPLICIT
     'websockets',
+    'websockets.client',
     'websockets.frames',
     'websockets.protocol',
+    'websockets.server',
     'wsproto',
+    'wsproto.connection',
+    'wsproto.events',
+    'wsproto.extensions',
     'wsproto.frame_builder',
+    'wsproto.utilities',
 
-    # GUI rendering
+    # GUI - EXPLICIT
     'webview',
     'webview.api',
     'webview.dom',
+    'webview.js',
+    'webview.menu',
+    'webview.window',
 
-    # Windows-specific
+    # Windows - EXPLICIT
     'win32timezone',
     'pywin32',
     'win32api',
     'win32con',
+    'win32file',
 
-    # Logging and monitoring
+    # Standard library that might be missed - EXPLICIT
+    'asyncio',
+    'contextvars',
+    'dataclasses',
+    'decimal',
+    'enum',
+    'functools',
+    'io',
+    'itertools',
+    'json',
+    'logging',
     'logging.config',
+    'mimetypes',
+    'pathlib',
+    'queue',
+    're',
+    'socket',
+    'sqlite3',
+    'ssl',
+    'stat',
+    'string',
+    'struct',
+    'sys',
+    'threading',
+    'time',
+    'typing',
+    'types',
+    'urllib',
+    'urllib.parse',
+    'urllib.request',
+    'uuid',
+    'warnings',
+
+    # Additional utilities
     'structlog',
     'structlog.stdlib',
-
-    # JSON encoding/decoding
-    'json',
-    'json.decoder',
-    'json.encoder',
-
-    # Standard library items that might be missed
-    'pathlib',
-    'contextlib',
-    'io',
-    'threading',
-    'collections.abc',
+    'requests',
+    'certifi',
 ]
 
-# Add collected hidden imports from packages
+# Add collected imports
 for package, data in collected_data.items():
     hiddenimports.extend(data[2])
 
-# Try to collect backend submodules
-print("[SPEC] Scanning for additional backend modules...")
+# Try backend submodules
 try:
-    backend_submodules = collect_submodules('web_service.backend')
-    hiddenimports.extend(backend_submodules)
-    print(f"[SPEC]   Found {len(backend_submodules)} backend submodules")
-except Exception as e:
-    print(f"[SPEC]   WARNING: Could not scan backend submodules: {e}")
+    backend_modules = collect_submodules('web_service.backend')
+    hiddenimports.extend(backend_modules)
+    print(f"[SPEC] Added {len(backend_modules)} backend submodules")
+except:
+    pass
 
-# Remove duplicates while preserving order
+# Deduplicate
 hiddenimports = list(dict.fromkeys(hiddenimports))
 print(f"[SPEC] Total hidden imports: {len(hiddenimports)}")
+print(f"[SPEC] CRITICAL: fastapi in hiddenimports: {'fastapi' in hiddenimports}")
+print(f"[SPEC] CRITICAL: uvicorn in hiddenimports: {'uvicorn' in hiddenimports}")
+print(f"[SPEC] CRITICAL: starlette in hiddenimports: {'starlette' in hiddenimports}")
 
 # ====================================================================
-# ANALYSIS PHASE
+# ANALYSIS
 # ====================================================================
 print("[SPEC] " + "=" * 66)
-print("[SPEC] Starting PyInstaller analysis...")
+print("[SPEC] Running PyInstaller analysis...")
 print("[SPEC] " + "=" * 66)
 
 a = Analysis(
@@ -242,8 +315,6 @@ a = Analysis(
         'tensorflow',
         'pytest',
         'unittest',
-        'bdb',
-        'pdb',
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
@@ -270,16 +341,15 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=False,  # UPX can cause runtime issues, disabled for stability
+    upx=False,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=CONSOLE_MODE,  # Keep console for debugging output
+    console=CONSOLE_MODE,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,  # Set to 'path/to/icon.ico' for custom icon
 )
 
 # ====================================================================
@@ -288,17 +358,7 @@ exe = EXE(
 print("[SPEC] " + "=" * 66)
 print("[SPEC] Build configuration complete!")
 print("[SPEC] " + "=" * 66)
-print("[SPEC]")
-print("[SPEC] Summary:")
-print(f"[SPEC]   Output: dist/{APP_NAME}.exe")
-print(f"[SPEC]   Data files: {len(datas)}")
-print(f"[SPEC]   Binaries: {len(binaries)}")
-print(f"[SPEC]   Hidden imports: {len(hiddenimports)}")
-print("[SPEC]")
-print("[SPEC] To customize, modify these constants at the top:")
-print("[SPEC]   APP_NAME - Executable name")
-print("[SPEC]   CONSOLE_MODE - Show console window (True/False)")
-print("[SPEC]   OPTIMIZE_LEVEL - Optimization intensity")
-print("[SPEC]")
-print("[SPEC] To add an icon, uncomment icon line and set path")
+print(f"[SPEC] Output: dist/{APP_NAME}.exe")
+print(f"[SPEC] Hidden imports: {len(hiddenimports)}")
+print(f"[SPEC] Verification: fastapi={('fastapi' in hiddenimports)}")
 print("[SPEC]")
