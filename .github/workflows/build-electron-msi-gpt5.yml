@@ -202,17 +202,26 @@ jobs:
           $installDir = Join-Path $progFiles "Fortuna Faucet"
           Start-Process -FilePath "$installDir\Fortuna Faucet.exe"
 
-          Write-Host "Waiting 15 seconds for application to initialize..."
-          Start-Sleep 15
+          Write-Host "Polling for backend process for up to 30 seconds..."
+          $timeout = 30
+          $startTime = Get-Date
+          $child = $null
+          while (((Get-Date) - $startTime).TotalSeconds -lt $timeout) {
+            $child = Get-Process -Name "fortuna-backend" -ErrorAction SilentlyContinue
+            if ($child) {
+              Write-Host "✅ Backend process found!"
+              break
+            }
+            Start-Sleep -Seconds 5
+          }
 
           $parent = Get-Process -Name "Fortuna Faucet" -ErrorAction SilentlyContinue
-          $child = Get-Process -Name "fortuna-backend" -ErrorAction SilentlyContinue
 
           if (-not $parent) {
             throw "Main process 'Fortuna Faucet' not found!"
           }
           if (-not $child) {
-            throw "Backend process 'fortuna-backend' not found!"
+            throw "Backend process 'fortuna-backend' not found after timeout!"
           }
 
           Write-Host "✅ Both parent and child processes are running."
