@@ -465,6 +465,7 @@ class FortunaLauncher:
 
     def run(self) -> int:
         """Run the complete application"""
+        ui_available = True  # Assume UI is available by default
         try:
             print_banner()
 
@@ -485,14 +486,17 @@ class FortunaLauncher:
             # Build frontend
             if self.args.no_build:
                 print_info("Skipping frontend build (as requested)")
+                if not (FRONTEND_DIR / "out").exists():
+                    print_warning("No existing frontend build found. UI will be unavailable.")
+                    ui_available = False
             else:
                 self.frontend = FrontendBuilder()
                 if not self.frontend.build(dev_mode=self.args.dev):
                     if self.frontend.build_dir.exists():
                         print_warning("Using existing frontend build (new build failed)")
                     else:
-                        print_error("Frontend build failed and no existing build found!")
-                        return 1
+                        print_warning("Frontend build failed and no existing build found! UI will be unavailable.")
+                        ui_available = False
 
             print()  # Blank line for readability
 
@@ -508,20 +512,31 @@ class FortunaLauncher:
             print()  # Blank line for readability
 
             # Open browser (default unless --no-open)
-            if not self.args.no_open:
-                browser = BrowserLauncher(DEFAULT_HOST, self.args.port)
-                browser.open()
+            if ui_available:
+                if not self.args.no_open:
+                    browser = BrowserLauncher(DEFAULT_HOST, self.args.port)
+                    browser.open()
+                else:
+                    print_info(f"Access the application at: {Colors.BOLD}http://{DEFAULT_HOST}:{self.args.port}{Colors.ENDC}")
             else:
-                print_info(f"Access the application at: {Colors.BOLD}http://{DEFAULT_HOST}:{self.args.port}{Colors.ENDC}")
+                print_info("Frontend UI is not available.")
+                print_info(f"Access the API documentation at: {Colors.BOLD}http://{DEFAULT_HOST}:{self.args.port}/api/docs{Colors.ENDC}")
+
 
             # Keep application running
             print()  # Blank line for readability
             print(f"{Colors.BOLD}{Colors.OKGREEN}")
             print("╔════════════════════════════════════════════════════════════════╗")
-            print("║                    🎉 ALL SYSTEMS GO! 🎉                      ║")
-            print(f"║                  {APP_NAME} is running!                   ║")
-            print("║                                                                ║")
-            print(f"║         Local:  http://{DEFAULT_HOST}:{self.args.port:<7}                         ║")
+            if ui_available:
+                print("║                    🎉 ALL SYSTEMS GO! 🎉                      ║")
+                print(f"║                  {APP_NAME} is running!                   ║")
+                print("║                                                                ║")
+                print(f"║         Frontend UI: http://{DEFAULT_HOST}:{self.args.port:<7}                 ║")
+            else:
+                print("║               Backend ONLY - NO UI AVAILABLE                ║")
+                print(f"║                  {APP_NAME} is running!                   ║")
+
+            print(f"║         API Docs:    http://{DEFAULT_HOST}:{self.args.port:<7}/api/docs         ║")
             print("║                                                                ║")
             print("║                Press Ctrl+C to stop the server                 ║")
             print("╚════════════════════════════════════════════════════════════════╝")
