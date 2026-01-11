@@ -33,9 +33,9 @@ jobs:
           $errFile = "launcher-err.log"
           $process = Start-Process python -ArgumentList "fortuna_launcher.py", "--no-open" -RedirectStandardOutput $outFile -RedirectStandardError $errFile -PassThru
 
-          $pid = $process.Id
-          Write-Host "Launcher started with PID: $pid"
-          echo "pid=$pid" >> $env:GITHUB_OUTPUT
+          $processId = $process.Id
+          Write-Host "Launcher started with PID: $processId"
+          echo "pid=$processId" >> $env:GITHUB_OUTPUT
 
           $timeout = 180 # 3 minutes
           $startTime = Get-Date
@@ -87,10 +87,10 @@ jobs:
         if: always()
         shell: pwsh
         run: |
-          $pid = ${{ steps.launcher.outputs.pid }}
-          if ($pid) {
-              Write-Host "Stopping process with PID: $pid"
-              Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+          $processId = ${{ steps.launcher.outputs.pid }}
+          if ($processId) {
+              Write-Host "Stopping process with PID: $processId"
+              Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
           } else {
               Write-Host "No PID found, attempting to stop by name."
               Stop-Process -Name "python" -Force -ErrorAction SilentlyContinue
