@@ -88,7 +88,7 @@ jobs:
             throw "Build failed - EXE not created"
           }
 
-          $size = (Get-Item "dist/fortuna-monolith.exe").Length / 1MB
+          $size = (Get-Item $destinationPath).Length / 1MB
           Write-Host "Build complete: $([math]::Round($size, 2)) MB"
 
       # ========== UPLOAD ==========
