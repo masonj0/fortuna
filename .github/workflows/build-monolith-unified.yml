@@ -1,13 +1,9 @@
 name: Fortuna Monolith Build
 
 on:
-  workflow_dispatch:
   push:
-    branches: ["main"]
-    paths:
-      - 'web_service/**'
-      - 'web_platform/**'
-      - '.github/workflows/build-monolith-*.yml'
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build-monolith:
@@ -29,14 +25,15 @@ jobs:
           cd web_platform/frontend
 
           # Create next.config.js for static export
-          @"
-          module.exports = {
-            output: 'export',
-            distDir: 'out',
-            images: { unoptimized: true },
-            trailingSlash: true,
-          };
-          "@ | Set-Content "next.config.js" -Force
+          $config = @(
+            "module.exports = {",
+            "  output: 'export',",
+            "  distDir: 'out',",
+            "  images: { unoptimized: true },",
+            "  trailingSlash: true,",
+            "};"
+          )
+          $config | Set-Content "next.config.js" -Force
 
           npm ci
           npm run build
@@ -78,12 +75,16 @@ jobs:
           Write-Host "Building Fortuna Monolith..."
           pyinstaller --clean --noconfirm fortuna-monolith.spec
 
-          # Handle naming convention
-          if (Test-Path "dist/FortunaMonolith.exe") {
-            Move-Item "dist/FortunaMonolith.exe" "dist/fortuna-monolith.exe" -Force
+          # Handle naming convention - PyInstaller creates in build/ directory
+          if (Test-Path "build/fortuna-monolith/fortuna-monolith.exe") {
+            Copy-Item "build/fortuna-monolith/fortuna-monolith.exe" "dist/fortuna-monolith.exe" -Force
+            Write-Host "EXE copied to dist/ directory"
           }
 
           if (-not (Test-Path "dist/fortuna-monolith.exe")) {
+            Write-Host "ERROR: EXE not found at expected path"
+            Write-Host "Searching for .exe files..."
+            Get-ChildItem -Recurse -Filter "*.exe" -Path "." | Select-Object FullName
             throw "Build failed - EXE not created"
           }
 
