@@ -29,8 +29,9 @@ jobs:
         id: launcher
         shell: pwsh
         run: |
-          $logFile = "launcher.log"
-          $process = Start-Process python -ArgumentList "fortuna_launcher.py", "--no-open" -RedirectStandardOutput $logFile -RedirectStandardError $logFile -PassThru
+          $outFile = "launcher-out.log"
+          $errFile = "launcher-err.log"
+          $process = Start-Process python -ArgumentList "fortuna_launcher.py", "--no-open" -RedirectStandardOutput $outFile -RedirectStandardError $errFile -PassThru
 
           $pid = $process.Id
           Write-Host "Launcher started with PID: $pid"
@@ -42,17 +43,23 @@ jobs:
 
           Write-Host "Waiting for launcher to initialize..."
           while (((Get-Date) - $startTime).TotalSeconds -lt $timeout) {
-              if (Test-Path $logFile) {
-                  $content = Get-Content $logFile -Raw -ErrorAction SilentlyContinue
-                  if ($content -match "ALL SYSTEMS GO!") {
+              if (Test-Path $outFile) {
+                  $outContent = Get-Content $outFile -Raw -ErrorAction SilentlyContinue
+                  if ($outContent -match "ALL SYSTEMS GO!") {
                       Write-Host "✅ Success message found in logs."
                       $success = $true
                       break
                   }
-                  if ($content -match "Fatal error|failed|Error") {
+              }
+              if (Test-Path $errFile) {
+                  $errContent = Get-Content $errFile -Raw -ErrorAction SilentlyContinue
+                  if ($errContent -match "Fatal error|failed|Error") {
                       Write-Host "❌ Error message found in logs."
-                      # Dump the logs and exit
-                      Get-Content $logFile -ErrorAction SilentlyContinue
+                      # Dump both logs and exit
+                      Write-Host "--- STDOUT ---"
+                      Get-Content $outFile -ErrorAction SilentlyContinue
+                      Write-Host "--- STDERR ---"
+                      Get-Content $errFile -ErrorAction SilentlyContinue
                       exit 1
                   }
               }
@@ -61,9 +68,13 @@ jobs:
           }
 
           # Always print the log content for debugging purposes
-          Write-Host "--- Launcher Log Output ---"
-          if (Test-Path $logFile) {
-              Get-Content $logFile -ErrorAction SilentlyContinue
+          Write-Host "--- Launcher Log Output (STDOUT) ---"
+          if (Test-Path $outFile) {
+              Get-Content $outFile -ErrorAction SilentlyContinue
+          }
+          Write-Host "--- Launcher Log Output (STDERR) ---"
+          if (Test-Path $errFile) {
+              Get-Content $errFile -ErrorAction SilentlyContinue
           }
           Write-Host "--------------------------"
 
