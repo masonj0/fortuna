@@ -33,15 +33,3 @@ jobs:
           docker logs fortuna-test
           curl -f http://localhost:8000/api/health || (docker logs fortuna-test && exit 1)
           docker stop fortuna-test
-
-      - name: Build and Push to Docker Hub (Optional)
-        if: success()
-        uses: docker/build-push-action@v4
-        with:
-          context: .
-          push: true
-          tags: |
-            masonj0/fortuna-faucet:latest
-            masonj0/fortuna-faucet:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
