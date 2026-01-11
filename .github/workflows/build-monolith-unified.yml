@@ -1,13 +1,9 @@
 name: Fortuna Monolith Build
 
 on:
-  workflow_dispatch:
   push:
-    branches: ["main"]
-    paths:
-      - 'web_service/**'
-      - 'web_platform/**'
-      - '.github/workflows/build-monolith-*.yml'
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build-monolith:
@@ -29,14 +25,15 @@ jobs:
           cd web_platform/frontend
 
           # Create next.config.js for static export
-          @"
-          module.exports = {
-            output: 'export',
-            distDir: 'out',
-            images: { unoptimized: true },
-            trailingSlash: true,
-          };
-          "@ | Set-Content "next.config.js" -Force
+          $config = @(
+            "module.exports = {",
+            "  output: 'export',",
+            "  distDir: 'out',",
+            "  images: { unoptimized: true },",
+            "  trailingSlash: true,",
+            "};"
+          )
+          $config | Set-Content "next.config.js" -Force
 
           npm ci
           npm run build
