@@ -1,0 +1,87 @@
+name: Test Fortuna Launcher
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  test-launcher:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10.11'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Python dependencies
+        run: pip install -r web_service/backend/requirements.txt
+
+      - name: Run Fortuna Launcher and Verify Startup
+        id: launcher
+        shell: pwsh
+        run: |
+          $logFile = "launcher.log"
+          $process = Start-Process python -ArgumentList "fortuna_launcher.py", "--no-open" -RedirectStandardOutput $logFile -RedirectStandardError $logFile -PassThru
+
+          $pid = $process.Id
+          Write-Host "Launcher started with PID: $pid"
+          echo "pid=$pid" >> $env:GITHUB_OUTPUT
+
+          $timeout = 180 # 3 minutes
+          $startTime = Get-Date
+          $success = $false
+
+          Write-Host "Waiting for launcher to initialize..."
+          while (((Get-Date) - $startTime).TotalSeconds -lt $timeout) {
+              if (Test-Path $logFile) {
+                  $content = Get-Content $logFile -Raw -ErrorAction SilentlyContinue
+                  if ($content -match "ALL SYSTEMS GO!") {
+                      Write-Host "✅ Success message found in logs."
+                      $success = $true
+                      break
+                  }
+                  if ($content -match "Fatal error|failed|Error") {
+                      Write-Host "❌ Error message found in logs."
+                      # Dump the logs and exit
+                      Get-Content $logFile -ErrorAction SilentlyContinue
+                      exit 1
+                  }
+              }
+              Start-Sleep -Seconds 5
+              Write-Host "Still waiting..."
+          }
+
+          # Always print the log content for debugging purposes
+          Write-Host "--- Launcher Log Output ---"
+          if (Test-Path $logFile) {
+              Get-Content $logFile -ErrorAction SilentlyContinue
+          }
+          Write-Host "--------------------------"
+
+          if (-not $success) {
+              Write-Host "❌ Launcher did not start successfully within the timeout."
+              exit 1
+          }
+
+      - name: Cleanup Processes
+        if: always()
+        shell: pwsh
+        run: |
+          $pid = ${{ steps.launcher.outputs.pid }}
+          if ($pid) {
+              Write-Host "Stopping process with PID: $pid"
+              Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+          } else {
+              Write-Host "No PID found, attempting to stop by name."
+              Stop-Process -Name "python" -Force -ErrorAction SilentlyContinue
+          }
+          Write-Host "Cleanup complete."
