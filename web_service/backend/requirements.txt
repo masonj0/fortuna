@@ -73,7 +73,7 @@ slowapi==0.1.9
 tenacity==8.2.3
 
 # Desktop Gui Windows
-pywebview==5.2.1
+pywebview==5.4
 bottle==0.13.4
 proxy-tools==0.1.0
 # NOTE: pywebview WITHOUT CEF (uses WinForms instead). CEFPython3 66.0 incompatible with Python 3.10.11
