@@ -1,13 +1,9 @@
 name: Fortuna Monolith Build
 
 on:
-  workflow_dispatch:
   push:
-    branches: ["main"]
-    paths:
-      - 'web_service/**'
-      - 'web_platform/**'
-      - '.github/workflows/build-monolith-*.yml'
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build-monolith:
@@ -29,14 +25,15 @@ jobs:
           cd web_platform/frontend
 
           # Create next.config.js for static export
-          @"
-          module.exports = {
-            output: 'export',
-            distDir: 'out',
-            images: { unoptimized: true },
-            trailingSlash: true,
-          };
-          "@ | Set-Content "next.config.js" -Force
+          $config = @(
+            "module.exports = {",
+            "  output: 'export',",
+            "  distDir: 'out',",
+            "  images: { unoptimized: true },",
+            "  trailingSlash: true,",
+            "};"
+          )
+          $config | Set-Content "next.config.js" -Force
 
           npm ci
           npm run build
@@ -78,16 +75,23 @@ jobs:
           Write-Host "Building Fortuna Monolith..."
           pyinstaller --clean --noconfirm fortuna-monolith.spec
 
-          # Handle naming convention
-          if (Test-Path "dist/FortunaMonolith.exe") {
-            Move-Item "dist/FortunaMonolith.exe" "dist/fortuna-monolith.exe" -Force
+          # Correctly locate and move the final executable
+          $sourcePath = "dist/fortuna-monolith/fortuna-monolith.exe"
+          $destinationPath = "dist/fortuna-monolith.exe"
+
+          if (Test-Path $sourcePath) {
+            Move-Item -Path $sourcePath -Destination $destinationPath -Force
+            Write-Host "EXE moved to dist/ for artifact upload."
           }
 
-          if (-not (Test-Path "dist/fortuna-monolith.exe")) {
-            throw "Build failed - EXE not created"
+          if (-not (Test-Path $destinationPath)) {
+            Write-Host "ERROR: EXE not found at expected final path."
+            Write-Host "Searching build and dist directories for .exe files..."
+            Get-ChildItem -Recurse -Filter "*.exe" -Path "./dist", "./build" | Select-Object FullName
+            throw "Build failed - final EXE not found at $destinationPath"
           }
 
-          $size = (Get-Item "dist/fortuna-monolith.exe").Length / 1MB
+          $size = (Get-Item $destinationPath).Length / 1MB
           Write-Host "Build complete: $([math]::Round($size, 2)) MB"
 
       # ========== UPLOAD ==========

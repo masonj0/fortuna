@@ -1,13 +1,9 @@
 name: Fortuna Monolith Build
 
 on:
-  workflow_dispatch:
   push:
-    branches: ["main"]
-    paths:
-      - 'web_service/**'
-      - 'web_platform/**'
-      - '.github/workflows/build-monolith-*.yml'
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build-monolith:
