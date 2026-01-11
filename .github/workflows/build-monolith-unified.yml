@@ -75,17 +75,20 @@ jobs:
           Write-Host "Building Fortuna Monolith..."
           pyinstaller --clean --noconfirm fortuna-monolith.spec
 
-          # Handle naming convention - PyInstaller creates in build/ directory
-          if (Test-Path "build/fortuna-monolith/fortuna-monolith.exe") {
-            Copy-Item "build/fortuna-monolith/fortuna-monolith.exe" "dist/fortuna-monolith.exe" -Force
-            Write-Host "EXE copied to dist/ directory"
+          # Correctly locate and move the final executable
+          $sourcePath = "dist/fortuna-monolith/fortuna-monolith.exe"
+          $destinationPath = "dist/fortuna-monolith.exe"
+
+          if (Test-Path $sourcePath) {
+            Move-Item -Path $sourcePath -Destination $destinationPath -Force
+            Write-Host "EXE moved to dist/ for artifact upload."
           }
 
-          if (-not (Test-Path "dist/fortuna-monolith.exe")) {
-            Write-Host "ERROR: EXE not found at expected path"
-            Write-Host "Searching for .exe files..."
-            Get-ChildItem -Recurse -Filter "*.exe" -Path "." | Select-Object FullName
-            throw "Build failed - EXE not created"
+          if (-not (Test-Path $destinationPath)) {
+            Write-Host "ERROR: EXE not found at expected final path."
+            Write-Host "Searching build and dist directories for .exe files..."
+            Get-ChildItem -Recurse -Filter "*.exe" -Path "./dist", "./build" | Select-Object FullName
+            throw "Build failed - final EXE not found at $destinationPath"
           }
 
           $size = (Get-Item $destinationPath).Length / 1MB
