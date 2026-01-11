@@ -1,0 +1,35 @@
+name: Build and Deploy Docker Image
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    name: 'Build Docker Image & Test'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Build Docker Image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: false
+          tags: fortuna-faucet:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Test Container Startup
+        run: |
+          docker build -t fortuna-faucet:test .
+          docker run -d --name fortuna-test -p 8000:8000 fortuna-faucet:test
+          sleep 10
+          docker logs fortuna-test
+          curl -f http://localhost:8000/api/health || (docker logs fortuna-test && exit 1)
+          docker stop fortuna-test
