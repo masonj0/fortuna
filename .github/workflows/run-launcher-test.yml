@@ -28,6 +28,8 @@ jobs:
       - name: Run Fortuna Launcher and Verify Startup
         id: launcher
         shell: pwsh
+        env:
+          PYTHONUTF8: '1'
         run: |
           $outFile = "launcher-out.log"
           $errFile = "launcher-err.log"
