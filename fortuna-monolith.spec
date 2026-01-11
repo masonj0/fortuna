@@ -6,10 +6,10 @@ datas += collect_data_files('uvicorn')
 datas += collect_data_files('fastapi')
 datas += collect_data_files('starlette')
 
-hiddenimports = [
+hiddenimports = {
     'webview.platforms.winforms',
     'webview.platforms.edgechromium',
-]
+}
 hiddenimports.update(collect_submodules('uvicorn'))
 hiddenimports.update(collect_submodules('fastapi'))
 hiddenimports.update(collect_submodules('starlette'))
