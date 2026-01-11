@@ -29,6 +29,7 @@ from datetime import datetime
 # ====================================================================
 # CONFIGURATION
 # ====================================================================
+# This is a trivial change to trigger the CI workflow.
 APP_NAME = "Fortuna Faucet"
 APP_VERSION = "2.0.0"
 DEFAULT_PORT = 8000
