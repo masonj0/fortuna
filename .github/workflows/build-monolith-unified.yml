@@ -75,12 +75,16 @@ jobs:
           Write-Host "Building Fortuna Monolith..."
           pyinstaller --clean --noconfirm fortuna-monolith.spec
 
-          # Handle naming convention
-          if (Test-Path "dist/FortunaMonolith.exe") {
-            Move-Item "dist/FortunaMonolith.exe" "dist/fortuna-monolith.exe" -Force
+          # Handle naming convention - PyInstaller creates in build/ directory
+          if (Test-Path "build/fortuna-monolith/fortuna-monolith.exe") {
+            Copy-Item "build/fortuna-monolith/fortuna-monolith.exe" "dist/fortuna-monolith.exe" -Force
+            Write-Host "EXE copied to dist/ directory"
           }
 
           if (-not (Test-Path "dist/fortuna-monolith.exe")) {
+            Write-Host "ERROR: EXE not found at expected path"
+            Write-Host "Searching for .exe files..."
+            Get-ChildItem -Recurse -Filter "*.exe" -Path "." | Select-Object FullName
             throw "Build failed - EXE not created"
           }
 
