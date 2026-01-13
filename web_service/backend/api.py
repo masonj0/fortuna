@@ -74,39 +74,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Robust Pathing for Frozen Executables ---
-def resource_path(relative_path: str) -> str:
-    """ Get absolute path to resource, works for dev and for PyInstaller """
-    if getattr(sys, 'frozen', False):
-        # PyInstaller creates a temp folder and stores path in _MEIPASS
-        base_path = sys._MEIPASS
-    else:
-        # In development, the base path is the project root.
-        # This assumes the script is run from the project root.
-        base_path = os.path.abspath(".")
-
-    return os.path.join(base_path, relative_path)
-
-
-# --- Static File Serving Logic (Corrected for PyInstaller) ---
-if os.getenv("FORTUNA_MODE") == "webservice":
-    log.info("Application starting in 'webservice' mode, attempting to serve static files.")
-
-    # Use the robust resource_path function to find the 'ui' directory.
-    # The spec file bundles 'web_service/frontend/out' into the 'ui' folder in the executable's root.
-    static_dir_key = "ui" if getattr(sys, 'frozen', False) else "web_service/frontend/out"
-    static_dir = resource_path(static_dir_key)
-    log.info("Resolved static files directory", path=static_dir)
-
-    if not os.path.isdir(static_dir):
-        log.error("Static files directory not found! Frontend will not be served.", path=static_dir)
-    else:
-        log.info("Mounting StaticFiles to serve the frontend.")
-        app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
-else:
-    log.info("FORTUNA_MODE is not 'webservice', static files will not be served by this API.")
-
-
 # --- Dependency Injection ---
 def get_engine(request: Request) -> OddsEngine:
     if not hasattr(request.app.state, "engine") or request.app.state.engine is None:
@@ -159,3 +126,99 @@ async def get_all_adapter_statuses(
 # Add other endpoints as needed, following the pattern above.
 
 app.include_router(router, prefix="/api")
+
+# ╔════════════════════════════════════════════════════════════════╗
+# ║  MONOLITH 3.0: UNIFIED FRONTEND + BACKEND SERVING              ║
+# ║  This section configures FastAPI to serve the bundled          ║
+# ║  Next.js frontend while also providing all REST API endpoints. ║
+# ║  Single origin = Zero CORS issues                              ║
+# ╚════════════════════════════════════════════════════════════════╝
+
+import os
+import sys
+from pathlib import Path
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from starlette.middleware.base import BaseHTTPMiddleware
+
+
+def get_ui_directory() -> str:
+    """
+    Resolve the frontend 'ui' directory.
+    - Frozen: sys._MEIPASS/ui (bundled by PyInstaller)
+    - Dev: web_platform/frontend/out (Next.js build output)
+    """
+    if getattr(sys, 'frozen', False):
+        return os.path.join(sys._MEIPASS, 'ui')
+
+    # Development: try multiple paths
+    dev_path = Path(__file__).parent.parent.parent / 'web_platform' / 'frontend' / 'out'
+    if dev_path.exists():
+        return str(dev_path)
+
+    alt_path = Path.cwd() / 'web_platform' / 'frontend' / 'out'
+    if alt_path.exists():
+        return str(alt_path)
+
+    raise RuntimeError(
+        f"Frontend 'out' directory not found!\\n"
+        f"Checked: {dev_path}\\n"
+        f"Alt: {alt_path}\\n"
+        f"Please run: npm run build in web_platform/frontend/"
+    )
+
+
+UI_DIR = get_ui_directory()
+INDEX_HTML = os.path.join(UI_DIR, 'index.html')
+
+if not os.path.exists(UI_DIR):
+    raise RuntimeError(f"Frontend directory not found: {UI_DIR}")
+if not os.path.exists(INDEX_HTML):
+    raise RuntimeError(f"index.html not found: {INDEX_HTML}")
+
+log.info(f"✓ Frontend verified at: {UI_DIR}")
+
+
+class SPAMiddleware(BaseHTTPMiddleware):
+    """
+    Single Page Application Middleware.
+    Returns index.html for all non-API, non-static routes.
+    This enables Next.js client-side routing.
+    """
+
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+
+        if response.status_code == 404:
+            path = request.url.path
+
+            # Skip for API routes
+            if path.startswith('/api'):
+                return response
+
+            # Skip for OpenAPI/docs
+            if path.startswith(('/docs', '/redoc', '/openapi')):
+                return response
+
+            # Skip for known static extensions
+            static_exts = {'.js', '.css', '.png', '.jpg', '.gif', '.svg', '.woff', '.woff2', '.ttf', '.ico'}
+            if any(path.endswith(ext) for ext in static_exts):
+                return response
+
+            # Return index.html for SPA routing
+            log.debug(f"SPA: {path} → index.html")
+            return FileResponse(INDEX_HTML)
+
+        return response
+
+
+# Add SPA middleware
+app.add_middleware(SPAMiddleware)
+
+# Mount static files (/_next/*, /images/*, etc.)
+app.mount('/static', StaticFiles(directory=UI_DIR, check_dir=False), name='static')
+
+# Mount root path for index.html and all other frontend files
+app.mount('/', StaticFiles(directory=UI_DIR, html=True), name='ui')
+
+log.info("✓ Frontend and API unified at http://localhost:8000")

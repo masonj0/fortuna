@@ -1,0 +1,280 @@
+name: Build Podman & Create Launcher Scripts
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-podman:
+    permissions:
+      contents: write
+      packages: write
+    name: 'Build Podman Image & Create Launchers'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ============================================================
+      # STEP 1: Set up Podman
+      # ============================================================
+      - name: Set up Podman
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y podman podman-compose
+
+      # ============================================================
+      # STEP 2: Build Podman Image
+      # ============================================================
+      - name: Build Podman Image
+        run: podman-compose -f podman-compose.yml build
+
+      # ============================================================
+      # STEP 3: Test the Container
+      # ============================================================
+      - name: Test Container Startup
+        run: |
+          echo "Starting container for health check..."
+          podman-compose -f podman-compose.yml up -d
+          sleep 10
+          echo "Container logs:"
+          podman logs fortuna-faucet
+          echo "Running health check..."
+          curl -f http://localhost:8000/api/health || (podman logs fortuna-faucet && exit 1)
+          echo "✓ Health check passed!"
+          podman-compose -f podman-compose.yml down
+
+      # ============================================================
+      # STEP 4: Login and Push to GitHub Container Registry
+      # ============================================================
+      - name: Log in to GitHub Container Registry
+        if: github.event_name == 'push'
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | podman login -u "${{ github.actor }}" --password-stdin ghcr.io
+
+      - name: Push the image to GitHub Container Registry
+        if: github.event_name == 'push'
+        run: |
+          IMAGE_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          IMAGE_ID="ghcr.io/$IMAGE_OWNER/fortuna-faucet:latest"
+          podman tag localhost/fortuna_fortuna:latest "$IMAGE_ID"
+          podman push "$IMAGE_ID"
+
+      # ============================================================
+      # STEP 5: Create Windows Launcher Script (.bat file)
+      # ============================================================
+      - name: Create Windows Launcher Script
+        run: |
+          IMAGE_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          IMAGE_ID="ghcr.io/$IMAGE_OWNER/fortuna-faucet:latest"
+          cat > launcher.bat <<EOF
+          @echo off
+          REM Fortuna Faucet - Podman Launcher for Windows
+
+          echo.
+          echo ╔════════════════════════════════════════════╗
+          echo ║        🐴 Fortuna Faucet Launcher 🐴        ║
+          echo ║      Powered by Podman & Python FastAPI    ║
+          echo ╚════════════════════════════════════════════╝
+          echo.
+
+          REM Check if Podman is installed
+          podman --version >nul 2>&1
+          if errorlevel 1 (
+              echo ✗ ERROR: Podman is not installed!
+              echo.
+              echo Please install Podman Desktop from: https://podman-desktop.io/
+              echo.
+              pause
+              exit /b 1
+          )
+
+          echo ✓ Podman detected
+          echo.
+
+          REM Check if Podman is running
+          podman ps >nul 2>&1
+          if errorlevel 1 (
+              echo ✗ ERROR: Podman machine is not running!
+              echo.
+              echo Please start Podman Desktop and try again.
+              echo.
+              pause
+              exit /b 1
+          )
+
+          echo ✓ Podman is running
+          echo.
+          echo Pulling latest Fortuna image from GHCR...
+          podman pull ${IMAGE_ID}
+
+          if errorlevel 1 (
+              echo.
+              echo ✗ Failed to pull image. Checking local image...
+          )
+
+          echo.
+          echo Starting Fortuna container...
+          echo.
+
+          REM Stop any existing container
+          podman stop fortuna-faucet >nul 2>&1
+          podman rm fortuna-faucet >nul 2>&1
+
+          REM Start the container
+          podman run -d ^
+            --name fortuna-faucet ^
+            -p 8000:8000 ^
+            -v %cd%/data:/app/web_service/backend/data ^
+            -v %cd%/logs:/app/web_service/backend/logs ^
+            ${IMAGE_ID}
+
+          if errorlevel 1 (
+              echo ✗ Failed to start container
+              pause
+              exit /b 1
+          )
+
+          echo ✓ Container started!
+          echo.
+          echo Waiting for application to initialize...
+          timeout /t 5 /nobreak
+
+          echo.
+          echo ╔════════════════════════════════════════════╗
+          echo ║  🎉 Fortuna is running!                   ║
+          echo ║                                            ║
+          echo ║  Opening browser at:                       ║
+          echo ║  http://localhost:8000                     ║
+          echo ║                                            ║
+          echo ║  Press Ctrl+C in this window to stop       ║
+          echo ╚════════════════════════════════════════════╝
+          echo.
+
+          REM Open browser
+          start http://localhost:8000
+
+          REM Show logs
+          echo.
+          echo Container logs:
+          echo.
+          podman logs -f fortuna-faucet
+          EOF
+          echo "✓ Created launcher.bat"
+
+      # ============================================================
+      # STEP 5: Create Mac/Linux Launcher Script (.sh file)
+      # ============================================================
+      - name: Create Mac/Linux Launcher Script
+        run: |
+          IMAGE_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          IMAGE_ID="ghcr.io/$IMAGE_OWNER/fortuna-faucet:latest"
+          cat > launcher.sh <<EOF
+          #!/bin/bash
+
+          # Fortuna Faucet - Podman Launcher for Mac/Linux
+
+          echo ""
+          echo "╔════════════════════════════════════════════╗"
+          echo "║        🐴 Fortuna Faucet Launcher 🐴        ║"
+          echo "║      Powered by Podman & Python FastAPI    ║"
+          echo "╚════════════════════════════════════════════╝"
+          echo ""
+
+          # Check if Podman is installed
+          if ! command -v podman &> /dev/null; then
+              echo "✗ ERROR: Podman is not installed!"
+              echo ""
+              echo "Please install Podman from: https://podman.io/getting-started/installation"
+              echo ""
+              exit 1
+          fi
+
+          echo "✓ Podman detected"
+          echo ""
+
+          # Check if Podman is running
+          if ! podman ps &> /dev/null; then
+              echo "✗ ERROR: Podman is not running!"
+              echo ""
+              echo "Please start your Podman machine and try again."
+              echo ""
+              exit 1
+          fi
+
+          echo "✓ Podman is running"
+          echo ""
+          echo "Pulling latest Fortuna image from GHCR..."
+          podman pull \${IMAGE_ID}
+
+          echo ""
+          echo "Starting Fortuna container..."
+          echo ""
+
+          # Stop any existing container
+          podman stop fortuna-faucet 2>/dev/null
+          podman rm fortuna-faucet 2>/dev/null
+
+          # Create data directories
+          mkdir -p data logs
+
+          # Start the container
+          podman run -d \\
+            --name fortuna-faucet \\
+            -p 8000:8000 \\
+            -v "\$(pwd)/data:/app/web_service/backend/data" \\
+            -v "\$(pwd)/logs:/app/web_service/backend/logs" \\
+            \${IMAGE_ID}
+
+          if [ \$? -ne 0 ]; then
+              echo "✗ Failed to start container"
+              exit 1
+          fi
+
+          echo "✓ Container started!"
+          echo ""
+          echo "Waiting for application to initialize..."
+          sleep 5
+
+          echo ""
+          echo "╔════════════════════════════════════════════╗"
+          echo "║  🎉 Fortuna is running!                   ║"
+          echo "║                                            ║"
+          echo "║  Opening browser at:                       ║"
+          echo "║  http://localhost:8000                     ║"
+          echo "║                                            ║"
+          echo "║  Press Ctrl+C to stop                      ║"
+          echo "╚════════════════════════════════════════════╝"
+          echo ""
+
+          # Open browser (Mac)
+          if [[ "\$OSTYPE" == "darwin"* ]]; then
+              open http://localhost:8000
+          fi
+
+          # Open browser (Linux)
+          if [[ "\$OSTYPE" == "linux-gnu"* ]]; then
+              xdg-open http://localhost:8000 2>/dev/null || echo "Please open http://localhost:8000 in your browser"
+          fi
+
+          # Show logs
+          echo ""
+          echo "Container logs:"
+          echo ""
+          podman logs -f fortuna-faucet
+          EOF
+
+          chmod +x launcher.sh
+          echo "✓ Created launcher.sh"
+
+      # ============================================================
+      # STEP 6: Upload Launcher Scripts as Artifacts
+      # ============================================================
+      - name: Upload Launcher Scripts as Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: fortuna-podman-launchers
+          path: |
+            launcher.bat
+            launcher.sh
+          retention-days: 30

@@ -3,19 +3,13 @@ version: '3.8'
 services:
   fortuna:
     build: .
-    container_name: fortuna-faucet
     ports:
       - "8000:8000"
-    environment:
-      - PYTHONUNBUFFERED=1
-      - FORTUNA_MODE=docker
     volumes:
-      - ./web_service/backend/data:/app/web_service/backend/data
-      - ./web_service/backend/logs:/app/web_service/backend/logs
+      - ./data:/app/data
+      - ./json:/app/json
+      - ./logs:/app/logs
+    environment:
+      - FORTUNA_MODE=docker
+      - FORTUNA_PORT=8000
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 5s
