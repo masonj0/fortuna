@@ -51,46 +51,35 @@ jobs:
             exit 1
           }
 
-      - name: 🚀 Execute Bootstrapper
+      - name: 🚀 Launch Backend & Verify Health
         shell: pwsh
         run: |
-          Write-Host "Starting script in CI mode..."
-          # Pass the exact python executable path to the script to avoid PATH issues.
-          # Run with -Clean to test dependency installation
-          # Run with -NoFrontend to focus on Backend health first
-          # *>&1 combines stdout/stderr, Tee-Object saves to file AND shows in console
-          ./scripts/fortuna-quick-start.ps1 -Clean -NoFrontend -PythonExecutable "${{ steps.setup-python.outputs.python-path }}" *>&1 | Tee-Object -FilePath "bootstrapper_log.txt"
+          # Start the server as a background process directly.
+          # All STDERR/STDOUT will go to the main job log.
+          Start-Process "${{ steps.setup-python.outputs.python-path }}" -ArgumentList "-m uvicorn web_service.backend.main:app --host 127.0.0.1 --port 8000" -NoNewWindow
 
-      - name: 📤 Upload Debug Logs
-        if: always() # CRITICAL: Run this even if the bootstrapper crashes
-        uses: actions/upload-artifact@v4
-        with:
-          name: quickstart-debug-logs
-          path: |
-            bootstrapper_log.txt
-            web_service/backend/*.log
-            web_service/backend/logs/*.log
-
-      - name: 🩺 Verify Backend Health
-        shell: pwsh
-        run: |
-          $url = "http://127.0.0.1:8000/docs"
+          # Health Check Loop
+          $url = "http://127.0.0.1:8000/api/health"
           Write-Host "⏳ Waiting for Backend at $url..."
-
-          # Give it up to 60 seconds to install deps and start
-          for ($i=0; $i -lt 20; $i++) {
+          for ($i=0; $i -lt 30; $i++) {
             try {
               $resp = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 2
               if ($resp.StatusCode -eq 200) {
-                Write-Host "✅ Backend is UP and responding! The script works."
-                return
+                Write-Host "✅ Backend is UP and responding!"
+                # Capture logs for debugging if needed later
+                Get-Content web_service/backend/app.log -ErrorAction SilentlyContinue
+                exit 0 # Success
               }
             } catch {
-              Write-Host "... ping failed, retrying ($i/20)"
-              Start-Sleep -Seconds 3
+              Write-Host "... ping failed, retrying ($($i+1)/30)"
+              Start-Sleep -Seconds 2
             }
           }
-          throw "❌ Backend failed to start within timeout."
+
+          Write-Error "❌ Backend failed to start within timeout."
+          # If it fails, dump the logs for diagnosis
+          Get-Content web_service/backend/app.log -ErrorAction SilentlyContinue
+          exit 1
 
       - name: 🧹 Cleanup
         if: always()

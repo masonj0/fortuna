@@ -1,35 +1,36 @@
-FROM python:3.10-slim-bullseye
+# Use a Node.js base image to get Node and npm
+FROM node:20-slim as frontend-builder
 
 WORKDIR /app
 
-# Install Node.js for frontend build
-RUN apt-get update && apt-get install -y curl && \
-    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
-    apt-get install -y nodejs && \
-    rm -rf /var/lib/apt/lists/*
+# Copy frontend source and build it
+COPY web_platform/frontend ./web_platform/frontend
+RUN cd web_platform/frontend && npm ci && npm run build
 
-# Copy everything
-COPY . .
+# Use a Python base image for the final application
+FROM python:3.11-slim
 
-# Build frontend
-WORKDIR /app/web_platform/frontend
-RUN npm ci && npm run build
-
-# Copy frontend build to backend
 WORKDIR /app
-RUN mkdir -p web_service/backend/static && \
-    cp -r web_platform/frontend/out/* web_service/backend/static/
 
 # Install Python dependencies
-WORKDIR /app
-RUN pip install --no-cache-dir -r web_service/backend/requirements.txt
+COPY web_service/backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy backend source
+COPY web_service/backend ./web_service/backend
+
+# Copy the built frontend from the builder stage
+COPY --from=frontend-builder /app/web_platform/frontend/out ./web_platform/frontend/out
+
+# Create directories
+RUN mkdir -p data json logs
 
 # Expose port
 EXPOSE 8000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD python -c "import requests; requests.get('http://localhost:8000/api/health', timeout=5)"
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"
 
-# Run backend
-CMD ["python", "-m", "uvicorn", "web_service.backend.api:app", "--host", "0.0.0.0", "--port", "8000"]
+# Start monolith
+CMD ["python", "web_service/backend/main.py"]

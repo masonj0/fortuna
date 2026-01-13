@@ -1,57 +1,56 @@
 # -*- mode: python ; coding: utf-8 -*-
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from pathlib import Path
+from PyInstaller.utils.hooks import collect_submodules
 
-datas = [('frontend_dist', 'frontend_dist')]
-datas += collect_data_files('uvicorn')
-datas += collect_data_files('fastapi')
-datas += collect_data_files('starlette')
+block_cipher = None
+project_root = Path(SPECPATH).parent
+backend_root = project_root / 'web_service' / 'backend'
+
+# CRITICAL: Bundle the Next.js static frontend
+datas = [
+    (str(backend_root / 'data'), 'data'),
+    (str(backend_root / 'json'), 'json'),
+    (str(backend_root / 'adapters'), 'adapters'),
+    (str(project_root / 'assets' / 'icon.ico'), 'assets'),
+    # THE KEY: Frontend static export bundled into executable
+    (str(project_root / 'web_platform' / 'frontend' / 'out'), 'ui'),
+]
 
 hiddenimports = [
-    'webview.platforms.winforms',
-    'webview.platforms.edgechromium',
-]
-hiddenimports.extend(collect_submodules('uvicorn'))
-hiddenimports.extend(collect_submodules('fastapi'))
-hiddenimports.extend(collect_submodules('starlette'))
-hiddenimports.extend(collect_submodules('anyio'))
-hiddenimports.append('win32timezone')
-hiddenimports.extend(['pydantic_settings.sources'])
+    'uvicorn', 'fastapi', 'starlette', 'pydantic', 'structlog',
+    'tenacity', 'redis', 'sqlalchemy', 'greenlet', 'win32timezone'
+] + collect_submodules('web_service.backend')
 
 a = Analysis(
-    ['web_service/backend/monolith.py'],
-    pathex=[],
+    ['web_service/backend/main.py'],
+    pathex=[str(project_root)],
     binaries=[],
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
+    hooksconfig={},
     runtime_hooks=[],
     excludes=[],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
-    cipher=None,
-    noarchive=False
+    cipher=block_cipher,
+    noarchive=False,
 )
-pyz = PYZ(a.pure, a.zipped_data, cipher=None)
+
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 exe = EXE(
-    pyz,
-    a.scripts,
-    [],
-    exclude_binaries=True,
+    pyz, a.scripts, a.binaries, a.zipfiles, a.datas,
     name='fortuna-monolith',
     debug=False,
-    bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=True,  # Set to True for debugging stdout
-)
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    name='fortuna-monolith'
+    console=True,
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+    icon='assets/icon.ico',
+    version='file_version_info.txt'
 )
