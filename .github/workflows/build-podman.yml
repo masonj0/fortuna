@@ -45,6 +45,29 @@ jobs:
           echo "✓ Health check passed!"
           podman-compose -f podman-compose.yml down
 
+      # ========== PLAYWRIGHT SCREENSHOT ==========
+      - name: Run Playwright Smoke Test
+        continue-on-error: true
+        run: |
+          sudo apt-get install -y python3-pip
+          pip3 install playwright
+          playwright install --with-deps
+          echo "Starting container for Playwright test..."
+          podman-compose -f podman-compose.yml up -d
+          sleep 15 # Wait for app to initialize
+          echo "Running Playwright script..."
+          python3 e2e/jules-smoke-test.py
+          echo "Playwright test finished."
+          podman-compose -f podman-compose.yml down
+
+      - name: Upload Playwright Screenshot
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-screenshot-podman
+          path: playwright-screenshot.png
+          retention-days: 7
+
       # ============================================================
       # STEP 4: Login and Push to GitHub Container Registry
       # ============================================================

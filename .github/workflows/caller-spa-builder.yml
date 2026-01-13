@@ -12,3 +12,39 @@ jobs:
       entry_script: 'web_service/backend/monolith.py'
       artifact_name: 'WebService-SPA-Monolith'
       python_version: '3.11'
+
+  playwright-screenshot:
+    name: '📸 Playwright Screenshot'
+    needs: build-the-spa
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: WebService-SPA-Monolith
+          path: dist
+
+      - name: Run Playwright Smoke Test
+        continue-on-error: true
+        run: |
+          sudo apt-get install -y python3-pip
+          pip3 install playwright
+          playwright install --with-deps
+          echo "Starting monolith for Playwright test..."
+          chmod +x dist/fortuna-monolith
+          ./dist/fortuna-monolith &
+          pid=$!
+          sleep 15
+          echo "Running Playwright script..."
+          python3 e2e/jules-smoke-test.py
+          echo "Playwright test finished."
+          echo "Stopping monolith..."
+          kill $pid
+
+      - name: Upload Playwright Screenshot
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-screenshot-spa-builder
+          path: playwright-screenshot.png
+          retention-days: 7
