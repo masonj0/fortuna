@@ -4,102 +4,79 @@ import os
 import asyncio
 from multiprocessing import freeze_support
 
-# ✅ CRITICAL FIX: Set event loop policy BEFORE any other imports that use asyncio
-if sys.platform == 'win32':
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    print("[BOOT] ✅ Applied WindowsSelectorEventLoopPolicy for PyInstaller", file=sys.stderr)
-
 # Force UTF-8 encoding for stdout and stderr, crucial for PyInstaller on Windows
 os.environ["PYTHONUTF8"] = "1"
 
-# This is the definitive entry point for the Fortuna Faucet backend service.
-# It is designed to be compiled with PyInstaller.
+# Import the 'app' object at the top level
+from web_service.backend.api import app, HTTPException
+
+
+def _configure_sys_path():
+    """
+    Dynamically adds project paths to sys.path.
+    This is essential for PyInstaller to correctly resolve imports.
+    """
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        # Running in a PyInstaller bundle
+        project_root = os.path.abspath(sys._MEIPASS)
+        paths_to_add = [
+            project_root,
+            os.path.join(project_root, "web_service/backend"),
+        ]
+        for path in reversed(paths_to_add):
+            if path not in sys.path:
+                sys.path.insert(0, path)
+                print(f"INFO: Added path to sys.path: {path}")
+    else:
+        # Running as a normal script
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        if project_root not in sys.path:
+            sys.path.insert(0, project_root)
+            print(f"INFO: Added project root to sys.path: {project_root}")
+
 
 def main():
     """
     Primary entry point for the Fortuna Faucet backend application.
-    This function configures and runs the Uvicorn server.
     """
-    # [CRITICAL] This sys.path modification is essential for the application to find its
-    # modules when running as a frozen executable from PyInstaller. The `sys._MEIPASS`
-    # attribute points to a temporary directory where PyInstaller unpacks the app.
-    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
-        sys.path.insert(0, os.path.abspath(sys._MEIPASS))
-        # When frozen, the CWD is not reliable. Change it to the executable's directory.
-        os.chdir(sys._MEIPASS)
+    # Configure paths before any other imports
+    _configure_sys_path()
 
-    # When packaged, we need to ensure multiprocessing works correctly.
+    # Multiprocessing support for frozen (PyInstaller) mode on Windows
     if getattr(sys, "frozen", False):
-        # CRITICAL for multiprocessing support in frozen mode on Windows.
         freeze_support()
 
-    # Import the app object here after sys.path is configured.
-    from web_service.backend.api import app, HTTPException
+        # Set event loop policy for Windows
+        if sys.platform == "win32":
+            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+            print("[BOOT] ✓ Applied WindowsSelectorEventLoopPolicy for PyInstaller", file=sys.stderr)
+
     from web_service.backend.config import get_settings
-    from fastapi.staticfiles import StaticFiles
-    from fastapi.responses import FileResponse
     from web_service.backend.port_check import check_port_and_exit_if_in_use
 
     settings = get_settings()
 
-    # In CI/CD, binding to 0.0.0.0 is more robust than 127.0.0.1.
-    # We will override the host setting for the smoke test environment.
-    run_host = settings.UVICORN_HOST
-    if os.environ.get("FORTUNA_ENV") == "smoke-test":
-        run_host = "0.0.0.0"
-        print(f"INFO: Smoke test environment detected. Overriding host to '{run_host}'")
+    # Sanity check: ensure the target port is not already in use
+    check_port_and_exit_if_in_use(settings.FORTUNA_PORT, settings.UVICORN_HOST)
 
-    # --- Port Sanity Check ---
-    check_port_and_exit_if_in_use(settings.FORTUNA_PORT, run_host)
+    print(f"\\n{'='*60}")
+    print(f"🚀 Starting Fortuna Faucet Backend")
+    print(f" {'='*60}")
+    print(f"Host: {settings.UVICORN_HOST}")
+    print(f"Port: {settings.FORTUNA_PORT}")
+    print(f"Mode: {'Production (Frozen)' if getattr(sys, 'frozen', False) else 'Development'}")
+    print(f"Frontend will be served from: http://{settings.UVICORN_HOST}:{settings.FORTUNA_PORT}/")
+    print(f"API endpoints available at: http://{settings.UVICORN_HOST}:{settings.FORTUNA_PORT}/api/")
+    print(f" {'='*60}\\n")
 
-    # --- Conditional UI Serving for Web Service Mode ---
-    # Only serve the UI if the FORTUNA_MODE environment variable is set to 'webservice'.
-    # This prevents the Electron-packaged backend from trying to serve files it doesn't have.
-    if os.environ.get("FORTUNA_MODE") == "webservice":
-        # Define the path to the static UI files, accommodating PyInstaller's bundle.
-        if getattr(sys, "frozen", False):
-            # In a bundled app, the UI files are in the '_MEIPASS/ui' directory.
-            STATIC_DIR = os.path.join(sys._MEIPASS, "ui")
-        else:
-            # In development, they are in the frontend's output directory.
-            STATIC_DIR = os.path.abspath(
-                os.path.join(os.path.dirname(__file__), "..", "..", "web_platform", "frontend", "out")
-            )
-
-        # Mount the static assets directory for CSS, JS, etc.
-        if os.path.exists(os.path.join(STATIC_DIR, "_next")):
-            app.mount("/_next", StaticFiles(directory=os.path.join(STATIC_DIR, "_next")), name="next")
-
-        # Serve the main index.html for any non-API path.
-        @app.get("/{full_path:path}", include_in_schema=False)
-        async def serve_frontend(full_path: str):
-            if full_path.startswith("api/") or full_path.startswith("docs") or full_path == "health":
-                # This is an API route, let FastAPI handle it.
-                # A 404 will be raised naturally if no route matches.
-                return
-
-            index_path = os.path.join(STATIC_DIR, "index.html")
-            if os.path.exists(index_path):
-                return FileResponse(index_path)
-            else:
-                # This will only be hit if the frontend files are missing entirely.
-                raise HTTPException(
-                    status_code=404,
-                    detail="Frontend not found. Please build the frontend and ensure it's in the correct location.",
-                )
-
-    print(f"INFO: Starting Uvicorn server...")
-    print(f"      APP: web_service.backend.api:app (via direct import)")
-    print(f"      HOST: {run_host}")
-    print(f"      PORT: {settings.FORTUNA_PORT}")
-
+    # Run the Uvicorn server
     uvicorn.run(
         app,
-        host=run_host,
+        host=settings.UVICORN_HOST,
         port=settings.FORTUNA_PORT,
-        log_level="info",
-        reload=False,
+        log_level="info"
     )
+
 
 if __name__ == "__main__":
     main()
