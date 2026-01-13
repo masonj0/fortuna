@@ -23,40 +23,25 @@ jobs:
         shell: pwsh
         run: |
           cd web_platform/frontend
-
-          # Create next.config.js for static export
-          $config = @(
-            "module.exports = {",
-            "  output: 'export',",
-            "  distDir: 'out',",
-            "  images: { unoptimized: true },",
-            "  trailingSlash: true,",
-            "};"
-          )
-          $config | Set-Content "next.config.js" -Force
-
           npm ci
           npm run build
-
           if (-not (Test-Path "out/index.html")) {
-            throw "Frontend build failed"
+            throw "Frontend build failed: index.html not found in 'out' directory."
           }
-
-          Copy-Item -Path "out" -Destination "${{ github.workspace }}/frontend_dist" -Recurse -Force
           Write-Host "Frontend built successfully"
 
       # ========== BACKEND ==========
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10' # FIXED: Downgraded for CEFPython3 compatibility
+          python-version: '3.11'
           cache: 'pip'
 
       - name: Install Dependencies
         shell: pwsh
         run: |
           pip install --upgrade pip wheel
-          pip install pyinstaller==6.1.0
+          pip install pyinstaller==6.6.0
           pip install -r web_service/backend/requirements.txt
 
       - name: Create Data Directories
@@ -73,17 +58,11 @@ jobs:
           PYTHONIOENCODING: utf-8
         run: |
           Write-Host "Building Fortuna Monolith..."
-          pyinstaller --clean --noconfirm fortuna-monolith.spec
-
-          $exePath = "dist/fortuna-monolith/fortuna-monolith.exe"
-
+          pyinstaller --noconfirm --clean fortuna-monolith.spec
+          $exePath = "dist/fortuna-monolith.exe"
           if (-not (Test-Path $exePath)) {
-            Write-Host "ERROR: EXE not found at expected path."
-            Write-Host "Searching for .exe files..."
-            Get-ChildItem -Recurse -Filter "*.exe" -Path "./dist", "./build" | Select-Object FullName
             throw "Build failed - EXE not created at $exePath"
           }
-
           $size = (Get-Item $exePath).Length / 1MB
           Write-Host "Build complete: $([math]::Round($size, 2)) MB"
 
@@ -92,59 +71,62 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Fortuna-Monolith-${{ github.sha }}
-          path: dist/fortuna-monolith/fortuna-monolith.exe
+          path: dist/fortuna-monolith.exe
           retention-days: 30
 
-      # ========== TEST ==========
-      - name: Smoke Test
+      # ========== SMOKE TEST ==========
+      - name: Smoke Test Monolith
         shell: pwsh
         timeout-minutes: 5
         run: |
-          $stdOutLog = "${{ github.workspace }}/monolith-stdout.log"
-          $stdErrLog = "${{ github.workspace }}/monolith-stderr.log"
+          $exePath = "dist/fortuna-monolith.exe"
+          $logFile = "monolith-smoke-test.log"
 
-          Write-Host "Starting Fortuna Monolith..."
-          $process = Start-Process `
-            -FilePath "dist/fortuna-monolith/fortuna-monolith.exe" `
-            -PassThru `
-            -RedirectStandardOutput $stdOutLog `
-            -RedirectStandardError $stdErrLog `
-            -WindowStyle Hidden
+          Write-Host "Starting smoke test for $exePath..."
+          $process = Start-Process -FilePath $exePath -PassThru -RedirectStandardOutput $logFile -RedirectStandardError $logFile -WindowStyle Hidden
 
-          Write-Host "Waiting for startup (max 10 seconds)..."
-          Start-Sleep -Seconds 4
-
-          # Health check
+          Write-Host "Waiting for process (PID: $($process.Id)) to initialize (max 30s)..."
           $success = $false
-          for ($i = 1; $i -le 6; $i++) {
+          foreach ($i in 1..15) {
+            if ($process.HasExited) {
+              Write-Host "Process exited prematurely with code $($process.ExitCode)."
+              break
+            }
             try {
-              $response = Invoke-WebRequest `
-                -Uri "http://127.0.0.1:8000/api/health" `
-                -UseBasicParsing `
-                -TimeoutSec 2 `
-                -ErrorAction Stop
+              $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/health" -UseBasicParsing -TimeoutSec 2
               if ($response.StatusCode -eq 200) {
-                Write-Host "Health check passed"
+                Write-Host "✓ Health check passed on attempt $i."
                 $success = $true
                 break
               }
             } catch {
-              if ($i -lt 6) {
-                Start-Sleep -Seconds 2
-              }
+              Write-Host "Health check attempt $i failed. Retrying in 2s..."
+              Start-Sleep -Seconds 2
             }
           }
 
-          # Cleanup
-          Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-
-          # Show logs if test failed
-          if (-not $success) {
-            Write-Host "`nApplication Log (stdout):"
-            Get-Content $stdOutLog -ErrorAction SilentlyContinue | Select-Object -Last 100
-            Write-Host "`nApplication Log (stderr):"
-            Get-Content $stdErrLog -ErrorAction SilentlyContinue | Select-Object -Last 100
-            throw "Health check failed"
+          # Additional check for the frontend root
+          if ($success) {
+            try {
+              $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/" -UseBasicParsing
+              if ($response.StatusCode -ne 200) {
+                Write-Host "Frontend root page check failed with status $($response.StatusCode)"
+                $success = $false
+              } else {
+                 Write-Host "✓ Frontend root page loaded successfully."
+              }
+            } catch {
+              Write-Host "Frontend root page check failed: $($_.Exception.Message)"
+              $success = $false
+            }
           }
 
-          Write-Host "Test passed successfully"
+          Stop-Process -Id $process.Id -Force
+
+          if (-not $success) {
+            Write-Host "❌ Smoke test FAILED."
+            Get-Content $logFile -Tail 100
+            throw "Monolith smoke test failed."
+          }
+
+          Write-Host "✅ Smoke test PASSED successfully."

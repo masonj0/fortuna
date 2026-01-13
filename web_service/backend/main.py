@@ -1,75 +1,64 @@
-import uvicorn
-import sys
-import os
+#!/usr/bin/env python
+"""Fortuna Monolith - Unified Frontend + Backend Application"""
+
 import asyncio
+import os
+import sys
 from multiprocessing import freeze_support
 
-# Force UTF-8 encoding for stdout and stderr, crucial for PyInstaller on Windows
+# UTF-8 encoding for Windows PyInstaller
 os.environ["PYTHONUTF8"] = "1"
 
-# Import the 'app' object at the top level
-from web_service.backend.api import app, HTTPException
+from web_service.backend.api import app
 
 
 def _configure_sys_path():
-    """
-    Dynamically adds project paths to sys.path.
-    This is essential for PyInstaller to correctly resolve imports.
-    """
+    """Configure Python path for both dev and frozen environments."""
     if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
-        # Running in a PyInstaller bundle
+        # PyInstaller frozen environment
         project_root = os.path.abspath(sys._MEIPASS)
-        paths_to_add = [
-            project_root,
-            os.path.join(project_root, "web_service/backend"),
-        ]
-        for path in reversed(paths_to_add):
+        paths = [project_root, os.path.join(project_root, "web_service")]
+        for path in reversed(paths):
             if path not in sys.path:
                 sys.path.insert(0, path)
-                print(f"INFO: Added path to sys.path: {path}")
     else:
-        # Running as a normal script
-        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        # Development environment
+        project_root = os.path.abspath(os.path.dirname(__file__) + "/../..")
         if project_root not in sys.path:
             sys.path.insert(0, project_root)
-            print(f"INFO: Added project root to sys.path: {project_root}")
 
 
 def main():
-    """
-    Primary entry point for the Fortuna Faucet backend application.
-    """
-    # Configure paths before any other imports
+    """Main entry point for Fortuna Monolith."""
     _configure_sys_path()
 
-    # Multiprocessing support for frozen (PyInstaller) mode on Windows
     if getattr(sys, "frozen", False):
         freeze_support()
-
-        # Set event loop policy for Windows
         if sys.platform == "win32":
             asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-            print("[BOOT] ✓ Applied WindowsSelectorEventLoopPolicy for PyInstaller", file=sys.stderr)
 
     from web_service.backend.config import get_settings
     from web_service.backend.port_check import check_port_and_exit_if_in_use
 
+    import uvicorn
+
     settings = get_settings()
 
-    # Sanity check: ensure the target port is not already in use
+    # Ensure port is available
     check_port_and_exit_if_in_use(settings.FORTUNA_PORT, settings.UVICORN_HOST)
 
-    print(f"\\n{'='*60}")
-    print(f"🚀 Starting Fortuna Faucet Backend")
-    print(f" {'='*60}")
-    print(f"Host: {settings.UVICORN_HOST}")
-    print(f"Port: {settings.FORTUNA_PORT}")
-    print(f"Mode: {'Production (Frozen)' if getattr(sys, 'frozen', False) else 'Development'}")
-    print(f"Frontend will be served from: http://{settings.UVICORN_HOST}:{settings.FORTUNA_PORT}/")
-    print(f"API endpoints available at: http://{settings.UVICORN_HOST}:{settings.FORTUNA_PORT}/api/")
-    print(f" {'='*60}\\n")
+    print(f"\n{'='*70}")
+    print(f"🚀 FORTUNA FAUCET MONOLITH 3.0")
+    print(f"{'='*70}")
+    print(f"📍 Host: {settings.UVICORN_HOST}")
+    print(f"📍 Port: {settings.FORTUNA_PORT}")
+    print(f"🖥️  Mode: {'Frozen (Windows Executable)' if getattr(sys, 'frozen', False) else 'Development'}")
+    print(f"🌐 Frontend: http://{settings.UVICORN_HOST}:{settings.FORTUNA_PORT}/")
+    print(f"⚙️  API: http://{settings.UVICORN_HOST}:{settings.FORTUNA_PORT}/api/")
+    print(f"📚 Docs: http://{settings.UVICORN_HOST}:{settings.FORTUNA_PORT}/docs")
+    print(f"{'='*70}\\n")
 
-    # Run the Uvicorn server
+    # Run the server
     uvicorn.run(
         app,
         host=settings.UVICORN_HOST,

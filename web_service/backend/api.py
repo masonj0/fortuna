@@ -127,103 +127,98 @@ async def get_all_adapter_statuses(
 
 app.include_router(router, prefix="/api")
 
-# --- CRITICAL: Unified Frontend + Backend Serving ---
-# This section configures the FastAPI app to serve the Next.js static frontend
-# and handles SPA routing (all non-API routes return index.html)
+# ╔════════════════════════════════════════════════════════════════╗
+# ║  MONOLITH 3.0: UNIFIED FRONTEND + BACKEND SERVING              ║
+# ║  This section configures FastAPI to serve the bundled          ║
+# ║  Next.js frontend while also providing all REST API endpoints. ║
+# ║  Single origin = Zero CORS issues                              ║
+# ╚════════════════════════════════════════════════════════════════╝
 
+import os
+import sys
 from pathlib import Path
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
+
 def get_ui_directory() -> str:
     """
-    Resolves the correct path to the frontend 'ui' directory.
-    Works in both development and PyInstaller bundled environments.
+    Resolve the frontend 'ui' directory.
+    - Frozen: sys._MEIPASS/ui (bundled by PyInstaller)
+    - Dev: web_platform/frontend/out (Next.js build output)
     """
     if getattr(sys, 'frozen', False):
-        # Running in PyInstaller bundle
-        # The 'ui' folder is bundled at the same level as the app
         return os.path.join(sys._MEIPASS, 'ui')
-    else:
-        # Running in development
-        # Look for the Next.js build output
-        dev_path = Path(__file__).parent.parent.parent / 'web_platform' / 'frontend' / 'out'
-        if dev_path.exists():
-            return str(dev_path)
 
-        # Fallback: check if running from project root
-        alt_path = Path.cwd() / 'web_platform' / 'frontend' / 'out'
-        if alt_path.exists():
-            return str(alt_path)
+    # Development: try multiple paths
+    dev_path = Path(__file__).parent.parent.parent / 'web_platform' / 'frontend' / 'out'
+    if dev_path.exists():
+        return str(dev_path)
 
-        raise RuntimeError(
-            f"Frontend 'out' directory not found. "
-            f"Checked: {dev_path}, {alt_path}. "
-            f"Please run: npm run build in web_platform/frontend/"
-        )
+    alt_path = Path.cwd() / 'web_platform' / 'frontend' / 'out'
+    if alt_path.exists():
+        return str(alt_path)
+
+    raise RuntimeError(
+        f"Frontend 'out' directory not found!\\n"
+        f"Checked: {dev_path}\\n"
+        f"Alt: {alt_path}\\n"
+        f"Please run: npm run build in web_platform/frontend/"
+    )
+
 
 UI_DIR = get_ui_directory()
-log.info(f"Frontend directory resolved to: {UI_DIR}")
-
-# Verify the UI directory exists and has index.html
-if not os.path.exists(UI_DIR):
-    log.critical(f"FATAL: Frontend directory does not exist at {UI_DIR}")
-    raise RuntimeError(f"Frontend directory not found at {UI_DIR}")
-
 INDEX_HTML = os.path.join(UI_DIR, 'index.html')
+
+if not os.path.exists(UI_DIR):
+    raise RuntimeError(f"Frontend directory not found: {UI_DIR}")
 if not os.path.exists(INDEX_HTML):
-    log.critical(f"FATAL: index.html not found at {INDEX_HTML}")
-    raise RuntimeError(f"index.html not found at {INDEX_HTML}")
+    raise RuntimeError(f"index.html not found: {INDEX_HTML}")
 
-log.info(f"✓ Frontend index.html verified at: {INDEX_HTML}")
+log.info(f"✓ Frontend verified at: {UI_DIR}")
 
 
-# SPA Middleware: Fallback to index.html for non-API routes
 class SPAMiddleware(BaseHTTPMiddleware):
     """
-    Middleware that returns index.html for all non-API, non-static routes.
-    This enables client-side routing in Single Page Applications.
+    Single Page Application Middleware.
+    Returns index.html for all non-API, non-static routes.
+    This enables Next.js client-side routing.
     """
 
     async def dispatch(self, request, call_next):
-        # Let FastAPI handle the request normally
         response = await call_next(request)
 
-        # If it's a 404 and not an API/static route, return index.html
         if response.status_code == 404:
             path = request.url.path
 
-            # Don't serve index.html for API routes
+            # Skip for API routes
             if path.startswith('/api'):
                 return response
 
-            # Don't serve index.html for OpenAPI/docs
-            if path.startswith('/docs') or path.startswith('/redoc') or path.startswith('/openapi'):
+            # Skip for OpenAPI/docs
+            if path.startswith(('/docs', '/redoc', '/openapi')):
                 return response
 
-            # Don't serve index.html for known static extensions
-            static_extensions = {'.js', '.css', '.png', '.jpg', '.gif', '.svg', '.woff', '.woff2', '.ttf'}
-            if any(path.endswith(ext) for ext in static_extensions):
+            # Skip for known static extensions
+            static_exts = {'.js', '.css', '.png', '.jpg', '.gif', '.svg', '.woff', '.woff2', '.ttf', '.ico'}
+            if any(path.endswith(ext) for ext in static_exts):
                 return response
 
-            # Serve index.html for all other requests (SPA routing)
-            log.debug(f"SPA routing: {path} → index.html")
+            # Return index.html for SPA routing
+            log.debug(f"SPA: {path} → index.html")
             return FileResponse(INDEX_HTML)
 
         return response
 
 
-# Mount the SPA middleware BEFORE mounting static files
+# Add SPA middleware
 app.add_middleware(SPAMiddleware)
 
-# This serves /_next/*, /images/*, etc.
+# Mount static files (/_next/*, /images/*, etc.)
+app.mount('/static', StaticFiles(directory=UI_DIR, check_dir=False), name='static')
 
-# Mount the root path to serve index.html and other frontend files
-# IMPORTANT: This must be after all API route definitions
-try:
-    app.mount('/', StaticFiles(directory=UI_DIR, html=True), name='ui')
-    log.info("✓ Frontend static files mounted successfully")
-except Exception as e:
-    log.error(f"Failed to mount frontend static files: {e}")
-    raise
+# Mount root path for index.html and all other frontend files
+app.mount('/', StaticFiles(directory=UI_DIR, html=True), name='ui')
+
+log.info("✓ Frontend and API unified at http://localhost:8000")
