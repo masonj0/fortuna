@@ -81,6 +81,25 @@ jobs:
           Get-Content web_service/backend/app.log -ErrorAction SilentlyContinue
           exit 1
 
+      - name: 📸 Playwright Screenshot
+        if: success()
+        shell: pwsh
+        run: |
+          Write-Host "Installing Playwright..."
+          pip install playwright
+          playwright install --with-deps
+          Write-Host "Running Playwright script..."
+          python e2e/jules-smoke-test.py
+          Write-Host "Playwright test finished."
+
+      - name: Upload Playwright Screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-screenshot-quickstart
+          path: playwright-screenshot.png
+          retention-days: 7
+
       - name: 🧹 Cleanup
         if: always()
         shell: pwsh
