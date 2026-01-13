@@ -56,125 +56,123 @@ class FortunaDesktopApp {
     });
   }
 
-async waitForBackend(maxRetries = 30) {
+  async waitForBackend(maxRetries = 30) {
     const port = process.env.FORTUNA_PORT || 8000;
-    const url = `http://localhost:${port}/docs`;
+    const url = `http://127.0.0.1:${port}/health`;
 
     console.log(`[Backend Check] Starting health check at: ${url}`);
 
     for (let i = 0; i < maxRetries; i++) {
-        try {
-            const response = await fetch(url, { timeout: 3000 });
-            console.log(`[Backend Check] Attempt ${i}: Status ${response.status}`);
+      try {
+        const response = await fetch(url, { timeout: 3000 });
+        console.log(`[Backend Check] Attempt ${i}: Status ${response.status}`);
 
-            if (response.ok) {
-                console.log('✅ Backend is ready!');
-                return true;
-            }
-        } catch (e) {
-            console.log(`[Backend Check] Attempt ${i} failed: ${e.message}`);
-
-            // Log if backend process is still alive
-            if (this.backendProcess && !this.backendProcess.killed) {
-                console.log(`[Backend Check] Process still running (PID: ${this.backendProcess.pid})`);
-            } else {
-                console.error(`[Backend Check] ⚠️ Backend process is DEAD!`);
-                console.error(`[Backend Check] Last logs:`, this.backendLogs.slice(-5));
-                throw new Error(`Backend process died. Last logs:\n${this.backendLogs.slice(-5).join('\n')}`);
-            }
-
-            await new Promise(r => setTimeout(r, 1000));
+        if (response.ok) {
+          console.log('✅ Backend is healthy and responding');
+          return true;
         }
+      } catch (e) {
+        console.log(`[Backend Check] Attempt ${i} failed: ${e.message}`);
+
+        // Check if process is still alive
+        if (this.backendProcess && !this.backendProcess.killed) {
+          console.log(`[Backend Check] Process still running (PID: ${this.backendProcess.pid})`);
+        } else {
+          console.error(`[Backend Check] ⚠️  Backend process is DEAD!`);
+          console.error(`[Backend Check] Last logs:`, this.backendLogs.slice(-5));
+          throw new Error(`Backend process died. Last logs:\\n${this.backendLogs.slice(-5).join('\\n')}`);
+        }
+
+        await new Promise(r => setTimeout(r, 1000));
+      }
     }
 
     throw new Error(`Backend failed to respond at ${url} after 30 seconds`);
-}
+  }
 
-async startBackend() {
+  async startBackend() {
     const isDev = !app.isPackaged;
     let backendCommand;
     let backendCwd;
 
     if (isDev) {
-        console.log('[DEV MODE] Configuring backend...');
-        backendCommand = path.join(__dirname, '..', '.venv', 'Scripts', 'python.exe');
-        backendCwd = path.join(__dirname, '..', 'web_service', 'backend');
+      console.log('[DEV MODE] Configuring backend...');
+      backendCommand = path.join(__dirname, '..', '.venv', 'Scripts', 'python.exe');
+      backendCwd = path.join(__dirname, '..', 'web_service', 'backend');
     } else {
-        const backendFolder = path.join(process.resourcesPath, 'fortuna-backend');
-        backendCommand = path.join(backendFolder, 'fortuna-backend.exe');
-        backendCwd = backendFolder;
+      const backendFolder = path.join(process.resourcesPath, 'fortuna-webservice');
+      backendCommand = path.join(backendFolder, 'fortuna-webservice.exe');
+      backendCwd = backendFolder;
 
-        // DEBUG: Log the path we're looking for
-        console.log(`[Backend] Looking for executable at: ${backendCommand}`);
-        console.log(`[Backend] Directory exists: ${fs.existsSync(backendFolder)}`);
-        console.log(`[Backend] Executable exists: ${fs.existsSync(backendCommand)}`);
+      console.log(`[Backend] Looking for executable at: ${backendCommand}`);
+      console.log(`[Backend] Directory exists: ${fs.existsSync(backendFolder)}`);
+      console.log(`[Backend] Executable exists: ${fs.existsSync(backendCommand)}`);
     }
 
     if (!fs.existsSync(backendCommand)) {
-        const errorMsg = `Backend executable not found at: ${backendCommand}`;
-        console.error(`[Backend] ${errorMsg}`);
-        this.backendLogs.push(`ERROR: ${errorMsg}`);
-        this.backendState = 'error';
-
-        // Show user a helpful error dialog
-        dialog.showErrorBox(
-            'Backend Launch Failed',
-            `Could not find backend executable.\n\nExpected location:\n${backendCommand}`
-        );
-        return;
+      const errorMsg = `Backend executable not found at: ${backendCommand}`;
+      console.error(`[Backend] ${errorMsg}`);
+      this.backendLogs.push(`ERROR: ${errorMsg}`);
+      this.backendState = 'error';
+      dialog.showErrorBox(
+        'Backend Launch Failed',
+        `Could not find backend executable.\\n\\nExpected location:\\n${backendCommand}`
+      );
+      return;
     }
 
     console.log(`[Backend] Executable found, attempting to spawn...`);
 
-    console.log(`[Electron] Spawning backend: ${backendCommand}`);
-    console.log(`[Electron] Backend CWD: ${backendCwd}`);
-
     this.backendProcess = spawn(backendCommand, [], {
-        cwd: backendCwd, // CRITICAL: This allows the EXE to find the '_internal' folder
-        windowsHide: true,
-        env: {
-            ...process.env,
-            FORTUNA_MODE: 'electron', // Let the backend know its execution context
-            PYTHONPATH: backendCwd // Force python to look at the root of the extract dir
-        }
+      cwd: backendCwd,
+      windowsHide: true,
+      env: {
+        ...process.env,
+        FORTUNA_MODE: 'electron',
+        PYTHONPATH: backendCwd
+      }
     });
 
-    this.backendProcess.stdout.on('data', (data) => {
-      console.log(`[Backend STDOUT] ${data.toString()}`);
-    });
-
-    this.backendProcess.stderr.on('data', (data) => {
-      console.error(`[Backend STDERR] ${data.toString()}`);
-    });
+    this.backendState = 'starting';
+    this.isBackendStarting = true;
 
     this.backendProcess.stdout.on('data', (data) => {
       const output = data.toString().trim();
-      console.log(`[Backend] ${output}`);
+      console.log(`[Backend STDOUT] ${output}`);
       this.backendLogs.push(output);
-      if (this.backendState !== 'running' && output.includes('Application startup complete')) {
-        console.log('✅ Backend is ready!');
-        this.backendState = 'running';
-        this.isBackendStarting = false;
+
+      // Detect successful startup from log messages
+      if (output.includes('Application startup complete') || output.includes('Uvicorn running')) {
+        if (this.backendState !== 'running') {
+          console.log('✅ Backend reported successful startup');
+          this.backendState = 'running';
+          this.isBackendStarting = false;
+        }
       }
+
       this.sendBackendStatusUpdate();
     });
 
     this.backendProcess.stderr.on('data', (data) => {
       const errorOutput = data.toString().trim();
-      console.error(`[Backend ERROR] ${errorOutput}`);
+      console.error(`[Backend STDERR] ${errorOutput}`);
       this.backendLogs.push(`ERROR: ${errorOutput}`);
-      this.backendState = 'error';
-      this.isBackendStarting = false;
+
+      if (this.backendState === 'starting') {
+        this.backendState = 'error';
+        this.isBackendStarting = false;
+      }
+
       this.sendBackendStatusUpdate();
     });
 
     this.backendProcess.on('error', (err) => {
-        const errorMsg = `Failed to spawn backend process: ${err.message}`;
-        console.error(`[Backend] ${errorMsg}`);
-        this.backendLogs.push(`ERROR: ${errorMsg}`);
-        this.backendState = 'error';
-        this.isBackendStarting = false;
-        this.sendBackendStatusUpdate();
+      const errorMsg = `Failed to spawn backend process: ${err.message}`;
+      console.error(`[Backend] ${errorMsg}`);
+      this.backendLogs.push(`ERROR: ${errorMsg}`);
+      this.backendState = 'error';
+      this.isBackendStarting = false;
+      this.sendBackendStatusUpdate();
     });
 
     this.backendProcess.on('exit', (code) => {
@@ -182,29 +180,24 @@ async startBackend() {
         console.error(`[CRITICAL] Backend process exited with code: ${code}`);
         console.error(`[CRITICAL] Last 10 logs:`, this.backendLogs.slice(-10));
 
-        // Save logs immediately
-        const fs = require('fs');
-        const path = require('path');
+        // Save logs for debugging
         const logFile = path.join(require('os').homedir(), '.fortuna', 'backend_crash.log');
         fs.mkdirSync(path.dirname(logFile), { recursive: true });
-        fs.writeFileSync(logFile, this.backendLogs.join('\n'));
+        fs.writeFileSync(logFile, this.backendLogs.join('\\n'));
         console.error(`[CRITICAL] Full logs saved to: ${logFile}`);
+
         this.backendState = 'error';
         this.isBackendStarting = false;
         this.sendBackendStatusUpdate();
       }
     });
-}
+  }
 
-getFrontendPath() {
-    if (!app.isPackaged) {
-        return 'http://localhost:3000';
-    }
-
-    const indexPath = path.join(app.getAppPath(), 'out', 'index.html');
-    const { pathToFileURL } = require('url');
-    return pathToFileURL(indexPath).toString();
-}
+  getFrontendPath() {
+    // UNIFIED: Always serve from the backend
+    const port = process.env.FORTUNA_PORT || 8000;
+    return `http://127.0.0.1:${port}/`;
+  }
 
  createMainWindow() {
  this.mainWindow = new BrowserWindow({
@@ -237,68 +230,76 @@ getFrontendPath() {
  // ... (rest of the file is unchanged)
  }
 
- initialize() {
-  ipcMain.handle('get-api-port', () => {
-    return process.env.FORTUNA_PORT || 8000;
-  });
- this.createMainWindow();
- this.createSystemTray();
- this.startBackend();
+  initialize() {
+    console.log('[Electron] Initializing Fortuna application...');
 
-  // Wait for backend to be ready before loading frontend
-  this.waitForBackend()
-    .then(() => {
-      const frontendUrl = this.getFrontendPath();
-      this.mainWindow.loadURL(frontendUrl);
-    })
-    .catch((err) => {
-      console.error('Backend startup failed:', err);
-      dialog.showErrorBox('Backend Error', 'Failed to start backend service');
+    this.createMainWindow();
+    this.createSystemTray();
+    this.startBackend();
+
+    // Wait for backend to be ready, then load the unified frontend
+    this.waitForBackend()
+      .then(() => {
+        console.log('[Electron] Backend is ready, loading frontend...');
+        const frontendUrl = this.getFrontendPath();
+        console.log(`[Electron] Loading frontend from: ${frontendUrl}`);
+        this.mainWindow.loadURL(frontendUrl);
+      })
+      .catch((err) => {
+        console.error('[Electron] Backend startup failed:', err);
+        dialog.showErrorBox(
+          'Backend Error',
+          'Failed to start backend service:\\n\\n' + err.message
+        );
+      });
+
+    // Check for updates
+    autoUpdater.checkForUpdatesAndNotify();
+
+    autoUpdater.on('update-downloaded', (info) => {
+      const dialogOpts = {
+        type: 'info',
+        buttons: ['Restart', 'Later'],
+        title: 'Application Update',
+        message: process.platform === 'win32' ? info.releaseName : info.releaseName,
+        detail: 'A new version has been downloaded. Restart the application to apply the updates.'
+      };
+
+      dialog.showMessageBox(dialogOpts).then((returnValue) => {
+        if (returnValue.response === 0) autoUpdater.quitAndInstall();
+      });
     });
 
- // Check for updates
- autoUpdater.checkForUpdatesAndNotify();
+    ipcMain.on('restart-backend', () => this.startBackend());
+    ipcMain.on('stop-backend', () => this.stopBackend());
+    ipcMain.handle('get-backend-status', async () => ({
+      state: this.backendState,
+      logs: this.backendLogs.slice(-20)
+    }));
 
- autoUpdater.on('update-downloaded', (info) => {
- const dialogOpts = {
- type: 'info',
- buttons: ['Restart', 'Later'],
- title: 'Application Update',
- message: process.platform === 'win32' ? info.releaseName : info.releaseName,
- detail: 'A new version has been downloaded. Restart the application to apply the updates.'
- };
+    ipcMain.handle('get-api-key', async () => {
+      return SecureSettingsManager.getApiKey();
+    });
 
- dialog.showMessageBox(dialogOpts).then((returnValue) => {
- if (returnValue.response === 0) autoUpdater.quitAndInstall();
- });
- });
+    ipcMain.handle('generate-api-key', async () => {
+      const crypto = require('node:crypto');
+      const newKey = crypto.randomBytes(16).toString('hex');
+      SecureSettingsManager.saveApiKey(newKey);
+      return newKey;
+    });
 
- ipcMain.on('restart-backend', () => this.startBackend());
- ipcMain.on('stop-backend', () => this.stopBackend());
- ipcMain.handle('get-backend-status', async () => ({
- state: this.backendState,
- logs: this.backendLogs.slice(-20)
- }));
+    ipcMain.handle('save-api-key', async (event, apiKey) => {
+      return SecureSettingsManager.saveApiKey(apiKey);
+    });
 
- ipcMain.handle('get-api-key', async () => {
- return SecureSettingsManager.getApiKey();
- });
+    ipcMain.handle('save-betfair-credentials', async (event, credentials) => {
+      return SecureSettingsManager.saveBetfairCredentials(credentials);
+    });
 
- ipcMain.handle('generate-api-key', async () => {
- const crypto = require('node:crypto');
- const newKey = crypto.randomBytes(16).toString('hex');
- SecureSettingsManager.saveApiKey(newKey);
- return newKey;
- });
-
- ipcMain.handle('save-api-key', async (event, apiKey) => {
- return SecureSettingsManager.saveApiKey(apiKey);
- });
-
- ipcMain.handle('save-betfair-credentials', async (event, credentials) => {
- return SecureSettingsManager.saveBetfairCredentials(credentials);
- });
- }
+    ipcMain.handle('get-api-port', () => {
+      return process.env.FORTUNA_PORT || 8000;
+    });
+  }
 
  cleanup() {
  if (this.backendProcess && !this.backendProcess.killed) {
