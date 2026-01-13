@@ -45,7 +45,20 @@ jobs:
           podman-compose -f podman-compose.yml down
 
       # ============================================================
-      # STEP 4: Create Windows Launcher Script (.bat file)
+      # STEP 4: Login and Push to Docker Hub
+      # ============================================================
+      - name: Log in to Docker Hub
+        if: github.event_name == 'push'
+        run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | podman login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin docker.io
+
+      - name: Push the image to Docker Hub
+        if: github.event_name == 'push'
+        run: |
+          podman tag localhost/fortuna:latest docker.io/masonj0/fortuna-faucet:latest
+          podman push docker.io/masonj0/fortuna-faucet:latest
+
+      # ============================================================
+      # STEP 5: Create Windows Launcher Script (.bat file)
       # ============================================================
       - name: Create Windows Launcher Script
         run: |
