@@ -11,6 +11,7 @@ datas = [
     (str(backend_root / 'data'), 'data'),
     (str(backend_root / 'json'), 'json'),
     (str(backend_root / 'adapters'), 'adapters'),
+    (str(project_root / 'assets' / 'icon.ico'), 'assets'),
     # THE KEY: Frontend static export bundled into executable
     (str(project_root / 'web_platform' / 'frontend' / 'out'), 'ui'),
 ]
@@ -50,4 +51,6 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon='assets/icon.ico',
+    version='file_version_info.txt'
 )

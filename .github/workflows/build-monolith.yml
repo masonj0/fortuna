@@ -59,7 +59,7 @@ jobs:
         run: |
           Write-Host "Building Fortuna Monolith..."
           pyinstaller --noconfirm --clean fortuna-monolith.spec
-          $exePath = "dist/fortuna-monolith.exe"
+          $exePath = "dist/fortuna-monolith/fortuna-monolith.exe"
           if (-not (Test-Path $exePath)) {
             throw "Build failed - EXE not created at $exePath"
           }
@@ -79,7 +79,7 @@ jobs:
         shell: pwsh
         timeout-minutes: 5
         run: |
-          $exePath = "dist/fortuna-monolith.exe"
+          $exePath = "dist/fortuna-monolith/fortuna-monolith.exe"
           $logFile = "monolith-smoke-test.log"
 
           Write-Host "Starting smoke test for $exePath..."
