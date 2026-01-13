@@ -125,6 +125,10 @@ def print_section(title: str):
     print(f"{Colors.BOLD}{Colors.OKCYAN}{title}{Colors.ENDC}")
     print(f"{Colors.BOLD}{Colors.OKCYAN}{'─' * 60}{Colors.ENDC}\n")
 
+def print_step(step_num: int, total: int, msg: str):
+    """Print step counter"""
+    print(f"\n{Colors.BOLD}[{step_num}/{total}] {msg}{Colors.ENDC}")
+
 # ====================================================================
 # ENVIRONMENT CHECKS
 # ====================================================================
