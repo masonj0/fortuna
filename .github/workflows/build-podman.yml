@@ -9,6 +9,7 @@ jobs:
   build-podman:
     permissions:
       contents: write
+      packages: write
     name: 'Build Podman Image & Create Launchers'
     runs-on: ubuntu-latest
 
