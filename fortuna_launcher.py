@@ -1,57 +1,39 @@
 #!/usr/bin/env python3
 """
-Fortuna Faucet - Unified Python Launcher
-Alternative to EXE/MSI: Runs the entire application (frontend + backend) using pure Python
-Suitable for: Development, testing, alternative deployment, or environments without installers
-
-Usage:
-    python fortuna_launcher.py              # Runs with default settings (opens browser)
-    python fortuna_launcher.py --dev        # Dev mode with hot reload
-    python fortuna_launcher.py --port 8080  # Custom port
-    python fortuna_launcher.py --no-open    # Don't open browser automatically
+Fortuna Faucet - Enhanced Standalone Launcher for Windows 10 Home
+No Docker, no special permissions, just pure Python magic
+Run this file and your browser opens automatically with all the bells and whistles
 """
 
 import sys
 import os
-import logging
 import subprocess
 import threading
 import time
-import json
 import webbrowser
-import argparse
 import socket
+import json
 from pathlib import Path
 from typing import Optional
-from contextlib import suppress
 from datetime import datetime
 
 # ====================================================================
 # CONFIGURATION
 # ====================================================================
-# This is a trivial change to trigger the CI workflow.
 APP_NAME = "Fortuna Faucet"
-APP_VERSION = "2.0.0"
-DEFAULT_PORT = 8000
+APP_VERSION = "3.1.0"
 DEFAULT_HOST = "127.0.0.1"
-
-# ====================================================================
-# SETUP PATHS
-# ====================================================================
-PROJECT_ROOT = Path(__file__).parent.absolute()
-BACKEND_DIR = PROJECT_ROOT / "web_service" / "backend"
-FRONTEND_DIR = PROJECT_ROOT / "web_platform" / "frontend"
-VENV_DIR = PROJECT_ROOT / ".venv"
-LOG_DIR = PROJECT_ROOT / "logs"
-
-# Create directories
+DEFAULT_PORT = 8000
+BACKEND_STARTUP_TIMEOUT = 15
+HEALTH_CHECK_ATTEMPTS = 30
+LOG_DIR = Path("logs")
 LOG_DIR.mkdir(exist_ok=True)
 
 # ====================================================================
-# FANCY COLORS & FORMATTING
+# COLORS FOR WINDOWS CONSOLE
 # ====================================================================
 class Colors:
-    """Terminal color codes for friendly output"""
+    """ANSI color codes"""
     HEADER = '\033[95m'
     OKBLUE = '\033[94m'
     OKCYAN = '\033[96m'
@@ -61,561 +43,426 @@ class Colors:
     ENDC = '\033[0m'
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
+    RESET = '\033[0m'
 
-def is_windows():
-    """Check if running on Windows"""
-    return sys.platform.startswith('win')
-
-# Disable colors on Windows if not supported
-if is_windows():
-    try:
-        import ctypes
-        kernel32 = ctypes.windll.kernel32
-        kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), 7)
-    except:
-        # If colors fail on Windows, disable them
-        for attr in dir(Colors):
-            if not attr.startswith('_'):
-                setattr(Colors, attr, '')
+# Try to enable ANSI colors on Windows 10
+try:
+    import ctypes
+    kernel32 = ctypes.windll.kernel32
+    kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), 7)
+except:
+    pass
 
 # ====================================================================
-# LOGGING SETUP WITH FANCY OUTPUT
+# LOGGING
 # ====================================================================
-class ColoredFormatter(logging.Formatter):
-    """Custom formatter with colors"""
+class Logger:
+    """Dual logging to console and file"""
+    def __init__(self):
+        self.log_file = LOG_DIR / f"fortuna_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
 
-    COLORS = {
-        'DEBUG': Colors.OKCYAN,
-        'INFO': Colors.OKBLUE,
-        'WARNING': Colors.WARNING,
-        'ERROR': Colors.FAIL,
-        'CRITICAL': Colors.FAIL + Colors.BOLD,
-    }
+    def write(self, level: str, message: str):
+        """Write to both console and file"""
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        log_line = f"[{timestamp}] [{level}] {message}"
 
-    def format(self, record):
-        if record.levelname in self.COLORS:
-            record.levelname = f"{self.COLORS[record.levelname]}{record.levelname}{Colors.ENDC}"
-        return super().format(record)
+        with open(self.log_file, "a", encoding="utf-8") as f:
+            f.write(log_line + "\n")
 
-def setup_logging():
-    """Configure logging with both file and console output"""
-    log_file = LOG_DIR / f"fortuna_launcher_{time.strftime('%Y%m%d_%H%M%S')}.log"
-
-    # Console handler with colors
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_formatter = ColoredFormatter(
-        "[%(levelname)-8s] %(asctime)s - %(message)s",
-        datefmt="%H:%M:%S"
-    )
-    console_handler.setFormatter(console_formatter)
-
-    # File handler without colors
-    file_handler = logging.FileHandler(log_file, encoding='utf-8')
-    file_formatter = logging.Formatter(
-        "[%(levelname)-8s] %(asctime)s - %(name)s - %(message)s",
-        datefmt="%H:%M:%S"
-    )
-    file_handler.setFormatter(file_formatter)
-
-    logging.basicConfig(
-        level=logging.INFO,
-        handlers=[console_handler, file_handler]
-    )
-
-    logger = logging.getLogger("fortuna")
-    return logger
-
-logger = setup_logging()
+logger = Logger()
 
 # ====================================================================
-# FANCY BANNER
+# HELPER FUNCTIONS
 # ====================================================================
 def print_banner():
-    """Print a fancy welcome banner"""
+    """Print welcome banner"""
     banner = f"""
 {Colors.BOLD}{Colors.OKGREEN}
-╔════════════════════════════════════════════════════════════════╗
-║                                                                ║
+╔════════════════════════════════════════════════════════════╗
+║                                                            ║
 ║              🐴  {APP_NAME} v{APP_VERSION}  🐴              ║
-║          Unified Python Launcher (No EXE/MSI Needed)          ║
-║                                                                ║
-╚════════════════════════════════════════════════════════════════╝
+║         Enhanced Launcher - Windows 10 Home Ready         ║
+║                                                            ║
+╚════════════════════════════════════════════════════════════╝
 {Colors.ENDC}
 """
     print(banner)
 
 def print_success(msg: str, icon: str = "✓"):
-    """Print a success message"""
-    print(f"{Colors.OKGREEN}{icon}{Colors.ENDC} {msg}")
+    """Print success message"""
+    output = f"{Colors.OKGREEN}{icon}{Colors.ENDC} {msg}"
+    print(output)
+    logger.write("SUCCESS", msg)
 
 def print_warning(msg: str, icon: str = "⚠"):
-    """Print a warning message"""
-    print(f"{Colors.WARNING}{icon}{Colors.ENDC} {msg}")
+    """Print warning message"""
+    output = f"{Colors.WARNING}{icon}{Colors.ENDC} {msg}"
+    print(output)
+    logger.write("WARNING", msg)
 
 def print_error(msg: str, icon: str = "✗"):
-    """Print an error message"""
-    print(f"{Colors.FAIL}{icon}{Colors.ENDC} {msg}")
+    """Print error message"""
+    output = f"{Colors.FAIL}{icon}{Colors.ENDC} {msg}"
+    print(output)
+    logger.write("ERROR", msg)
 
 def print_info(msg: str, icon: str = "ℹ"):
-    """Print an info message"""
-    print(f"{Colors.OKBLUE}{icon}{Colors.ENDC} {msg}")
+    """Print info message"""
+    output = f"{Colors.OKBLUE}{icon}{Colors.ENDC} {msg}"
+    print(output)
+    logger.write("INFO", msg)
+
+def print_step(step_num: int, total: int, msg: str):
+    """Print step counter"""
+    output = f"\n{Colors.BOLD}[{step_num}/{total}] {msg}{Colors.ENDC}"
+    print(output)
+    logger.write("STEP", f"[{step_num}/{total}] {msg}")
+
+def print_section(title: str):
+    """Print section divider"""
+    output = f"\n{Colors.BOLD}{Colors.OKCYAN}{'─' * 60}{Colors.ENDC}"
+    print(output)
+    print(f"{Colors.BOLD}{Colors.OKCYAN}{title}{Colors.ENDC}")
+    print(f"{Colors.BOLD}{Colors.OKCYAN}{'─' * 60}{Colors.ENDC}\n")
 
 # ====================================================================
-# ENVIRONMENT DETECTION & VALIDATION
+# ENVIRONMENT CHECKS
 # ====================================================================
-class EnvironmentManager:
-    """Manages Python environment and dependencies"""
+def check_python_version() -> bool:
+    """Check if Python version is compatible"""
+    if sys.version_info < (3, 10):
+        print_error(f"Python 3.10+ required, you have {sys.version_info.major}.{sys.version_info.minor}")
+        return False
+    print_success(f"Python {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
+    return True
 
-    def __init__(self):
-        self.is_venv = self._detect_venv()
-        self.python_exe = sys.executable
-        self.python_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+def check_project_structure() -> bool:
+    """Check if we're in the right directory"""
+    required_dirs = [
+        "web_service/backend",
+        "web_platform/frontend"
+    ]
+    required_files = [
+        "web_service/backend/requirements.txt",
+        "web_platform/frontend/package.json"
+    ]
 
-    def _detect_venv(self) -> bool:
-        """Check if we're running in a virtual environment"""
-        return (hasattr(sys, 'real_prefix') or
-                (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix))
-
-    def validate_environment(self) -> bool:
-        """Validate that required directories and files exist"""
-        print_info("Validating environment...")
-
-        critical_paths = {
-            "Backend directory": BACKEND_DIR,
-            "Frontend directory": FRONTEND_DIR,
-            "Backend requirements": BACKEND_DIR / "requirements.txt",
-            "Next.js config": FRONTEND_DIR / "package.json",
-        }
-
-        all_valid = True
-        for name, path in critical_paths.items():
-            exists = path.exists()
-            if exists:
-                print_success(f"{name}", icon="  ")
-            else:
-                print_error(f"{name}: {path}", icon="  ")
-                all_valid = False
-
-        print_info(f"Python: {self.python_version}")
-        if self.is_venv:
-            print_success("Running in virtual environment")
+    print_info("Checking project structure...")
+    all_good = True
+    for d in required_dirs:
+        if Path(d).exists():
+            print_success(f"Found: {d}")
         else:
-            print_warning("Not running in a virtual environment (recommended)")
+            print_error(f"Missing: {d}")
+            all_good = False
 
-        if all_valid:
-            print_success("Environment validation passed")
+    for f in required_files:
+        if Path(f).exists():
+            print_success(f"Found: {f}")
         else:
-            print_error("Critical paths are missing!")
+            print_error(f"Missing: {f}")
+            all_good = False
 
-        return all_valid
+    return all_good
 
-    def install_dependencies(self, force: bool = False) -> bool:
-        """Install backend dependencies"""
-        print_info("Checking Python dependencies...")
-
-        requirements_file = BACKEND_DIR / "requirements.txt"
-
-        try:
-            # Check if dependencies are already installed
-            if not force:
-                try:
-                    import fastapi
-                    import uvicorn
-                    print_success("Core dependencies already installed")
-                    return True
-                except ImportError:
-                    pass
-
-            print_info(f"Installing dependencies (this may take a minute)...")
-            result = subprocess.run(
-                [self.python_exe, "-m", "pip", "install", "-q", "-r", str(requirements_file)],
-                capture_output=True,
-                text=True,
-                cwd=str(BACKEND_DIR)
-            )
-
-            if result.returncode != 0:
-                print_error(f"Dependency installation failed:\n{result.stderr}")
-                return False
-
-            print_success("Dependencies installed successfully")
-            return True
-
-        except Exception as e:
-            print_error(f"Dependency installation error: {e}")
-            return False
+def check_port_available(port: int) -> bool:
+    """Check if port is available"""
+    try:
+        sock = socket.create_connection(("127.0.0.1", port), timeout=1)
+        sock.close()
+        print_error(f"Port {port} is already in use by another application")
+        return False
+    except (socket.timeout, ConnectionRefusedError, OSError):
+        print_success(f"Port {port} is available")
+        return True
 
 # ====================================================================
-# FRONTEND BUILDER
+# DEPENDENCY CHECK & INSTALL
 # ====================================================================
-class FrontendBuilder:
-    """Manages Next.js frontend build"""
+def check_and_install_dependencies() -> bool:
+    """Check if dependencies are installed, install if needed"""
+    print_info("Checking Python dependencies...")
 
-    def __init__(self):
-        self.npm_available = self._check_npm()
-        self.node_available = self._check_node()
-        self.build_dir = FRONTEND_DIR / "out"
+    required_packages = {
+        "fastapi": "FastAPI web framework",
+        "uvicorn": "ASGI server",
+        "pydantic": "Data validation",
+    }
 
-    def _check_npm(self) -> bool:
-        """Check if npm is available"""
+    missing = []
+    for package, description in required_packages.items():
         try:
-            result = subprocess.run(
-                ["npm", "--version"],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-            return result.returncode == 0
-        except:
-            return False
+            __import__(package)
+            print_success(f"{description} (installed)")
+        except ImportError:
+            print_warning(f"{description} (NOT installed)")
+            missing.append(package)
 
-    def _check_node(self) -> bool:
-        """Check if Node.js is available"""
-        try:
-            result = subprocess.run(
-                ["node", "--version"],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-            return result.returncode == 0
-        except:
-            return False
+    if not missing:
+        print_success("All core dependencies satisfied!")
+        return True
 
-    def build(self, dev_mode: bool = False) -> bool:
-        """Build the Next.js frontend"""
-        if not self.npm_available or not self.node_available:
-            print_warning("Node.js/npm not found - frontend will not be rebuilt")
-            print_info("To fix: Install Node.js from https://nodejs.org/")
-            if self.build_dir.exists():
-                print_success("Using existing frontend build")
-                return True
-            return False
+    print()
+    print_info(f"Installing {len(missing)} missing package(s)...")
+    print_info("This may take 2-3 minutes on first run...")
+    print()
 
-        print_info("Building frontend...")
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "-q", "--upgrade", "pip"],
+            check=True,
+            capture_output=True,
+            timeout=120
+        )
 
-        try:
-            # Install npm dependencies
-            print_info("Installing npm dependencies...")
-            result = subprocess.run(
-                ["npm", "ci", "--silent"],
-                cwd=str(FRONTEND_DIR),
-                capture_output=True,
-                text=True,
-                timeout=120
-            )
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "-q"] + missing,
+            check=True,
+            capture_output=True,
+            timeout=300
+        )
+        print_success("Dependencies installed successfully!")
+        return True
+    except subprocess.CalledProcessError as e:
+        print_error(f"Failed to install dependencies: {e}")
+        print_info("Try running manually in PowerShell:")
+        print(f"  python -m pip install -r web_service/backend/requirements.txt")
+        logger.write("ERROR", f"Dependency installation failed: {e}")
+        return False
+    except subprocess.TimeoutExpired:
+        print_error("Installation timed out (took too long)")
+        return False
 
-            if result.returncode != 0:
-                print_error(f"npm ci failed:\n{result.stderr}")
-                return False
+# ====================================================================
+# FRONTEND BUILD
+# ====================================================================
+def build_frontend() -> bool:
+    """Build Next.js frontend if needed"""
+    frontend_dir = Path("web_platform/frontend")
+    build_dir = frontend_dir / "out"
 
-            # Build frontend
-            print_info("Running Next.js build...")
-            build_cmd = "dev" if dev_mode else "build"
-            result = subprocess.run(
-                ["npm", "run", build_cmd, "--silent"],
-                cwd=str(FRONTEND_DIR),
-                capture_output=True,
-                text=True,
-                timeout=180
-            )
+    if build_dir.exists() and (build_dir / "index.html").exists():
+        print_success("Frontend already built")
+        return True
 
-            if result.returncode != 0:
-                print_error(f"Frontend build failed:\n{result.stderr}")
-                return False
+    print_info("Frontend build required...")
 
-            print_success(f"Frontend build complete")
-            return True
+    # Check for Node.js
+    try:
+        subprocess.run(["npm", "--version"], capture_output=True, timeout=5, check=True)
+    except:
+        print_warning("Node.js not found - frontend may not load properly")
+        print_info("To fix: Install Node.js from https://nodejs.org/")
+        logger.write("WARNING", "Node.js not found for frontend build")
+        return True
 
-        except subprocess.TimeoutExpired:
-            print_error("Frontend build timed out")
-            return False
-        except Exception as e:
-            print_error(f"Frontend build error: {e}")
-            return False
+    print_info("Building frontend (this takes ~30 seconds)...")
+    print_info("(Progress shown in logs)")
+
+    try:
+        subprocess.run(
+            ["npm", "ci"],
+            cwd=str(frontend_dir),
+            capture_output=True,
+            timeout=120,
+            check=True
+        )
+        subprocess.run(
+            ["npm", "run", "build"],
+            cwd=str(frontend_dir),
+            capture_output=True,
+            timeout=180,
+            check=True
+        )
+        print_success("Frontend built successfully")
+        return True
+    except subprocess.TimeoutExpired:
+        print_warning("Frontend build timed out, continuing anyway...")
+        logger.write("WARNING", "Frontend build timed out")
+        return True
+    except subprocess.CalledProcessError as e:
+        print_warning(f"Frontend build failed: {e}")
+        logger.write("WARNING", f"Frontend build failed: {e}")
+        return True
+    except Exception as e:
+        print_warning(f"Frontend build error: {e}")
+        logger.write("WARNING", f"Frontend build error: {e}")
+        return True
 
 # ====================================================================
 # BACKEND SERVER
 # ====================================================================
-class BackendServer:
-    """Manages the FastAPI backend server"""
+def start_backend() -> Optional[subprocess.Popen]:
+    """Start the FastAPI backend server"""
+    print_info("Starting FastAPI server...")
 
-    def __init__(self, host: str = DEFAULT_HOST, port: int = DEFAULT_PORT):
-        self.host = host
-        self.port = port
-        self.process: Optional[subprocess.Popen] = None
-        self.logs = []
-        self.is_ready = False
-        self.startup_time = None
+    try:
+        process = subprocess.Popen(
+            [
+                sys.executable,
+                "-m", "uvicorn",
+                "web_service.backend.main:app",
+                "--host", DEFAULT_HOST,
+                "--port", str(DEFAULT_PORT),
+                "--log-level", "info"
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1
+        )
 
-    def start(self) -> bool:
-        """Start the backend server"""
-        print_info(f"Starting backend server on {self.host}:{self.port}...")
-        self.startup_time = time.time()
+        # Give it a moment to start
+        time.sleep(1)
 
+        if process.poll() is not None:
+            # Process exited already
+            stdout, stderr = process.communicate()
+            print_error(f"Backend failed to start: {stderr[:200]}")
+            logger.write("ERROR", f"Backend startup failed: {stderr}")
+            return None
+
+        print_success("Backend server started")
+        logger.write("SUCCESS", "Backend server started successfully")
+        return process
+
+    except Exception as e:
+        print_error(f"Failed to start backend: {e}")
+        logger.write("ERROR", f"Backend start exception: {e}")
+        return None
+
+def wait_for_backend_ready(max_retries: int = HEALTH_CHECK_ATTEMPTS) -> bool:
+    """Wait for backend to respond to health check"""
+    import urllib.request
+    import urllib.error
+
+    print_info("Waiting for backend to be ready...")
+
+    for attempt in range(max_retries):
         try:
-            # Change to backend directory and run uvicorn
-            self.process = subprocess.Popen(
-                [
-                    sys.executable,
-                    "-m", "uvicorn",
-                    "web_service.backend.main:app",
-                    "--host", self.host,
-                    "--port", str(self.port),
-                    "--log-level", "warning"
-                ],
-                cwd=str(PROJECT_ROOT),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                bufsize=1,
-                universal_newlines=True
+            response = urllib.request.urlopen(
+                f"http://{DEFAULT_HOST}:{DEFAULT_PORT}/api/health",
+                timeout=2
             )
-
-            # Monitor logs in background
-            threading.Thread(target=self._log_monitor, daemon=True).start()
-
-            # Wait for server to be ready
-            self.is_ready = self._wait_for_ready()
-
-            if self.is_ready:
-                elapsed = time.time() - self.startup_time
-                print_success(f"Backend ready in {elapsed:.1f}s at http://{self.host}:{self.port}")
+            if response.status == 200:
+                elapsed = attempt + 1
+                print_success(f"Backend ready in {elapsed} second(s)")
+                logger.write("SUCCESS", f"Backend health check passed in {elapsed}s")
                 return True
-            else:
-                print_error("Backend failed to start (health check failed)")
-                self.stop()
-                return False
+        except (urllib.error.URLError, urllib.error.HTTPError, Exception):
+            if attempt < max_retries - 1:
+                time.sleep(1)
 
-        except Exception as e:
-            print_error(f"Failed to start backend: {e}")
-            return False
-
-    def _log_monitor(self):
-        """Monitor backend logs"""
-        try:
-            for line in iter(self.process.stdout.readline, ''):
-                if line:
-                    line = line.rstrip()
-                    self.logs.append(line)
-                    logger.debug(f"[Backend] {line}")
-        except:
-            pass
-
-    def _wait_for_ready(self, max_retries: int = 30) -> bool:
-        """Wait for backend to respond to health check"""
-        for attempt in range(max_retries):
-            try:
-                sock = socket.create_connection((self.host, self.port), timeout=2)
-                sock.close()
-                return True
-            except:
-                if attempt < max_retries - 1:
-                    time.sleep(1)
-
-        return False
-
-    def stop(self):
-        """Stop the backend server"""
-        if self.process and not self.process.poll():
-            print_info("Stopping backend server...")
-            self.process.terminate()
-            try:
-                self.process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                self.process.kill()
-            print_success("Backend stopped")
+    print_error("Backend did not respond after 30 seconds")
+    logger.write("ERROR", "Backend health check failed - no response after 30s")
+    return False
 
 # ====================================================================
-# BROWSER LAUNCHER (WITH RETRY LOGIC)
+# BROWSER LAUNCHER
 # ====================================================================
-class BrowserLauncher:
-    """Manages opening the application in a web browser"""
+def open_browser():
+    """Open browser to the application"""
+    url = f"http://{DEFAULT_HOST}:{DEFAULT_PORT}"
+    try:
+        print_info(f"Opening browser at {url}...")
+        webbrowser.open(url)
+        time.sleep(1)  # Give browser time to open
+        print_success("Browser opened!")
+        logger.write("SUCCESS", f"Browser opened at {url}")
+    except Exception as e:
+        print_warning(f"Could not open browser automatically: {e}")
+        print_info(f"Please manually open: {url}")
+        logger.write("WARNING", f"Browser auto-open failed: {e}")
 
-    def __init__(self, host: str = DEFAULT_HOST, port: int = DEFAULT_PORT):
-        self.url = f"http://{host}:{port}"
-        self.host = host
-        self.port = port
-
-    def open(self) -> bool:
-        """Open the application in the default browser with retry logic"""
-        try:
-            # Add a small delay to ensure backend is fully ready
-            time.sleep(0.5)
-
-            print_info(f"Opening browser at {self.url}...")
-            webbrowser.open(self.url)
-            print_success("Browser opened!")
-            return True
-        except Exception as e:
-            print_warning(f"Could not open browser automatically: {e}")
-            print_info(f"Please manually open: {Colors.BOLD}{self.url}{Colors.ENDC}")
-            return False
+# ====================================================================
+# SYSTEM INFO
+# ====================================================================
+def print_system_info():
+    """Print system information"""
+    print_section("System Information")
+    print_success(f"Python: {sys.version.split()[0]}")
+    print_success(f"Platform: {sys.platform}")
+    print_success(f"Current Directory: {Path.cwd()}")
+    print_success(f"Log Directory: {LOG_DIR.absolute()}")
+    print()
 
 # ====================================================================
 # MAIN APPLICATION
 # ====================================================================
-class FortunaLauncher:
-    """Main application orchestrator"""
-
-    def __init__(self, args):
-        self.args = args
-        self.env = EnvironmentManager()
-        self.backend: Optional[BackendServer] = None
-        self.frontend: Optional[FrontendBuilder] = None
-
-    def run(self) -> int:
-        """Run the complete application"""
-        ui_available = True  # Assume UI is available by default
-        try:
-            print_banner()
-
-            # Validate environment
-            if not self.env.validate_environment():
-                print_error("Environment validation failed!")
-                return 1
-
-            print()  # Blank line for readability
-
-            # Install dependencies
-            if not self.env.install_dependencies():
-                print_error("Dependency installation failed!")
-                return 1
-
-            print()  # Blank line for readability
-
-            # Build frontend
-            if self.args.no_build:
-                print_info("Skipping frontend build (as requested)")
-                if not (FRONTEND_DIR / "out").exists():
-                    print_warning("No existing frontend build found. UI will be unavailable.")
-                    ui_available = False
-            else:
-                self.frontend = FrontendBuilder()
-                if not self.frontend.build(dev_mode=self.args.dev):
-                    if self.frontend.build_dir.exists():
-                        print_warning("Using existing frontend build (new build failed)")
-                    else:
-                        print_warning("Frontend build failed and no existing build found! UI will be unavailable.")
-                        ui_available = False
-
-            print()  # Blank line for readability
-
-            # Start backend
-            self.backend = BackendServer(
-                host=DEFAULT_HOST,
-                port=self.args.port
-            )
-            if not self.backend.start():
-                print_error("Backend startup failed!")
-                return 1
-
-            print()  # Blank line for readability
-
-            # Open browser (default unless --no-open)
-            if ui_available:
-                if not self.args.no_open:
-                    browser = BrowserLauncher(DEFAULT_HOST, self.args.port)
-                    browser.open()
-                else:
-                    print_info(f"Access the application at: {Colors.BOLD}http://{DEFAULT_HOST}:{self.args.port}{Colors.ENDC}")
-            else:
-                print_info("Frontend UI is not available.")
-                print_info(f"Access the API documentation at: {Colors.BOLD}http://{DEFAULT_HOST}:{self.args.port}/api/docs{Colors.ENDC}")
-
-
-            # Keep application running
-            print()  # Blank line for readability
-            print(f"{Colors.BOLD}{Colors.OKGREEN}")
-            print("╔════════════════════════════════════════════════════════════════╗")
-            if ui_available:
-                print("║                    🎉 ALL SYSTEMS GO! 🎉                      ║")
-                print(f"║                  {APP_NAME} is running!                   ║")
-                print("║                                                                ║")
-                print(f"║         Frontend UI: http://{DEFAULT_HOST}:{self.args.port:<7}                 ║")
-            else:
-                print("║               Backend ONLY - NO UI AVAILABLE                ║")
-                print(f"║                  {APP_NAME} is running!                   ║")
-
-            print(f"║         API Docs:    http://{DEFAULT_HOST}:{self.args.port:<7}/api/docs         ║")
-            print("║                                                                ║")
-            print("║                Press Ctrl+C to stop the server                 ║")
-            print("╚════════════════════════════════════════════════════════════════╝")
-            print(f"{Colors.ENDC}")
-            print()
-
-            # Wait for user interrupt
-            try:
-                while True:
-                    time.sleep(1)
-            except KeyboardInterrupt:
-                print()
-                print_info("Shutting down gracefully...")
-                return 0
-
-        except Exception as e:
-            print_error(f"Fatal error: {e}", icon="💥")
-            logger.error(f"Fatal error:", exc_info=True)
-            return 1
-        finally:
-            if self.backend:
-                self.backend.stop()
-            print()
-            print_success("Goodbye! Thanks for using Fortuna Faucet 🐴")
-            print()
-
-# ====================================================================
-# ENTRY POINT
-# ====================================================================
 def main():
     """Main entry point"""
-    parser = argparse.ArgumentParser(
-        description=f"{APP_NAME} - Unified Python Launcher",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=f"""
-{Colors.BOLD}Examples:{Colors.ENDC}
-  python fortuna_launcher.py                    # Run (auto-opens browser)
-  python fortuna_launcher.py --dev              # Dev mode with hot reload
-  python fortuna_launcher.py --port 8080        # Custom port
-  python fortuna_launcher.py --no-open          # Don't open browser
-  python fortuna_launcher.py --no-build         # Skip frontend build
+    print_banner()
+    print_system_info()
 
-{Colors.BOLD}Features:{Colors.ENDC}
-  ✓ Auto-opens browser on startup (disable with --no-open)
-  ✓ Colored, friendly terminal output
-  ✓ Auto-installs Python dependencies
-  ✓ Automatic Next.js frontend build
-  ✓ Comprehensive error messages
-  ✓ Full logging to file
-        """
-    )
+    # Step 1: Environment validation
+    print_step(1, 5, "Validating environment...")
+    if not check_python_version():
+        return 1
+    if not check_project_structure():
+        return 1
+    if not check_port_available(DEFAULT_PORT):
+        return 1
+    print()
 
-    parser.add_argument(
-        "--port",
-        type=int,
-        default=DEFAULT_PORT,
-        help=f"Port to run the server on (default: {DEFAULT_PORT})"
-    )
-    parser.add_argument(
-        "--dev",
-        action="store_true",
-        help="Run in development mode with hot reload"
-    )
-    parser.add_argument(
-        "--no-open",
-        action="store_true",
-        help="Don't automatically open browser on startup"
-    )
-    parser.add_argument(
-        "--no-build",
-        action="store_true",
-        help="Skip frontend build and use existing build"
-    )
+    # Step 2: Dependencies
+    print_step(2, 5, "Installing dependencies...")
+    if not check_and_install_dependencies():
+        return 1
+    print()
 
-    args = parser.parse_args()
+    # Step 3: Frontend build
+    print_step(3, 5, "Building frontend...")
+    build_frontend()
+    print()
 
-    launcher = FortunaLauncher(args)
-    sys.exit(launcher.run())
+    # Step 4: Start backend
+    print_step(4, 5, "Starting backend server...")
+    backend_process = start_backend()
+    if not backend_process:
+        return 1
+
+    if not wait_for_backend_ready():
+        backend_process.terminate()
+        logger.write("ERROR", "Application startup failed - health check timeout")
+        return 1
+    print()
+
+    # Step 5: Open browser
+    print_step(5, 5, "Launching browser...")
+    open_browser()
+    print()
+
+    # Success!
+    print(f"{Colors.BOLD}{Colors.OKGREEN}")
+    print("╔════════════════════════════════════════════════════════════╗")
+    print("║                                                            ║")
+    print("║          🎉  FORTUNA IS RUNNING!  🎉                     ║")
+    print("║                                                            ║")
+    print(f"║  Access your app at: http://{DEFAULT_HOST}:{DEFAULT_PORT:<5}                      ║")
+    print("║                                                            ║")
+    print(f"║  Log file: {LOG_DIR / 'fortuna_*.log':<40}  ║")
+    print("║                                                            ║")
+    print("║  Press Ctrl+C to stop the server                          ║")
+    print("║                                                            ║")
+    print("╚════════════════════════════════════════════════════════════╝")
+    print(f"{Colors.ENDC}")
+    print()
+
+    # Keep running
+    try:
+        while True:
+            time.sleep(0.1)
+    except KeyboardInterrupt:
+        print()
+        print_info("Shutting down gracefully...")
+        backend_process.terminate()
+        try:
+            backend_process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            backend_process.kill()
+        print_success("Fortuna stopped successfully")
+        logger.write("SUCCESS", "Application stopped gracefully by user")
+        return 0
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
