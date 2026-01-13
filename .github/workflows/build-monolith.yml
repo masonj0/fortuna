@@ -131,26 +131,32 @@ jobs:
 
           Write-Host "✅ Smoke test PASSED successfully."
 
-      # ========== PLAYWRIGHT SCREENSHOT ==========
-      - name: Run Playwright Smoke Test
+      # ========== OPTIONAL VERIFICATION STEPS ==========
+      - name: Run Verification Scripts
         shell: pwsh
         continue-on-error: true
         run: |
           pip install playwright
           playwright install
           $exePath = "dist/fortuna-monolith/fortuna-monolith.exe"
-          $logFile = "monolith-playwright-test.log"
+          $logFile = "monolith-verification-test.log"
 
-          Write-Host "Starting monolith for Playwright test..."
+          Write-Host "Starting monolith for verification tests..."
           $process = Start-Process -FilePath $exePath -PassThru -RedirectStandardOutput $logFile -RedirectStandardError $logFile -WindowStyle Hidden
 
-          Start-Sleep -Seconds 15 # Wait for app to initialize
+          Write-Host "Waiting for application to initialize..."
+          Start-Sleep -Seconds 15
 
           Write-Host "Running Playwright script..."
           python e2e/jules-smoke-test.py
+          Write-Host "Playwright script finished."
+
+          Write-Host "Running race info script..."
+          python e2e/get-race-info.py
+          Write-Host "Race info script finished."
 
           Stop-Process -Id $process.Id -Force
-          Write-Host "Playwright test finished."
+          Write-Host "Verification tests complete."
 
       - name: Upload Playwright Screenshot
         uses: actions/upload-artifact@v4
@@ -158,4 +164,12 @@ jobs:
         with:
           name: playwright-screenshot
           path: playwright-screenshot.png
+          retention-days: 7
+
+      - name: Upload Race Info
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: race-info
+          path: race-info.txt
           retention-days: 7

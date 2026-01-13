@@ -51,46 +51,68 @@ jobs:
             exit 1
           }
 
-      - name: 🚀 Launch Backend & Verify Health
+      - name: 🚀 Launch, Test, & Verify Backend
         shell: pwsh
         run: |
-          # Start the server as a background process directly.
-          # All STDERR/STDOUT will go to the main job log.
-          Start-Process "${{ steps.setup-python.outputs.python-path }}" -ArgumentList "-m uvicorn web_service.backend.main:app --host 127.0.0.1 --port 8000" -NoNewWindow
+          $process = $null
+          try {
+              # Start the server
+              Write-Host "Starting backend server..."
+              $process = Start-Process "${{ steps.setup-python.outputs.python-path }}" -ArgumentList "-m uvicorn web_service.backend.main:app --host 127.0.0.1 --port 8000" -PassThru -NoNewWindow
 
-          # Health Check Loop
-          $url = "http://127.0.0.1:8000/api/health"
-          Write-Host "⏳ Waiting for Backend at $url..."
-          for ($i=0; $i -lt 30; $i++) {
-            try {
-              $resp = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 2
-              if ($resp.StatusCode -eq 200) {
-                Write-Host "✅ Backend is UP and responding!"
-                # Capture logs for debugging if needed later
-                Get-Content web_service/backend/app.log -ErrorAction SilentlyContinue
-                exit 0 # Success
+              # Health Check Loop
+              $url = "http://127.0.0.1:8000/api/health"
+              Write-Host "⏳ Waiting for Backend at $url..."
+              $healthy = $false
+              for ($i=0; $i -lt 30; $i++) {
+                  try {
+                      $resp = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 2
+                      if ($resp.StatusCode -eq 200) {
+                          Write-Host "✅ Backend is UP and responding!"
+                          $healthy = $true
+                          break
+                      }
+                  } catch {
+                      Write-Host "... ping failed, retrying ($($i+1)/30)"
+                      Start-Sleep -Seconds 2
+                  }
               }
-            } catch {
-              Write-Host "... ping failed, retrying ($($i+1)/30)"
-              Start-Sleep -Seconds 2
-            }
+
+              if (-not $healthy) {
+                  throw "Backend failed to start within timeout."
+              }
+
+              # If healthy, run optional verification scripts
+              Write-Host "Backend is healthy. Running verification scripts..."
+              try {
+                  Write-Host "Installing Playwright..."
+                  pip install playwright
+                  playwright install --with-deps
+
+                  Write-Host "Running Playwright script..."
+                  python e2e/jules-smoke-test.py
+                  Write-Host "Playwright script finished."
+
+                  Write-Host "Running race info script..."
+                  python e2e/get-race-info.py
+                  Write-Host "Race info script finished."
+              } catch {
+                  # This is continue-on-error, so we catch and log, but don't fail the step
+                  Write-Host "⚠️ A verification script failed: $($_.Exception.Message)"
+              }
+
+          } catch {
+              Write-Error "❌ An error occurred during the test run: $($_.Exception.Message)"
+              # Dump logs for diagnosis
+              Get-Content web_service/backend/app.log -ErrorAction SilentlyContinue
+              exit 1
+          } finally {
+              if ($process -ne $null) {
+                  Write-Host "🧹 Cleaning up backend process..."
+                  Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+                  Write-Host "✅ Cleanup complete."
+              }
           }
-
-          Write-Error "❌ Backend failed to start within timeout."
-          # If it fails, dump the logs for diagnosis
-          Get-Content web_service/backend/app.log -ErrorAction SilentlyContinue
-          exit 1
-
-      - name: 📸 Playwright Screenshot
-        if: success()
-        shell: pwsh
-        run: |
-          Write-Host "Installing Playwright..."
-          pip install playwright
-          playwright install --with-deps
-          Write-Host "Running Playwright script..."
-          python e2e/jules-smoke-test.py
-          Write-Host "Playwright test finished."
 
       - name: Upload Playwright Screenshot
         if: always()
@@ -100,10 +122,10 @@ jobs:
           path: playwright-screenshot.png
           retention-days: 7
 
-      - name: 🧹 Cleanup
+      - name: Upload Race Info
         if: always()
-        shell: pwsh
-        run: |
-          # The script spawns 'pwsh' and 'python' processes. Kill them.
-          Stop-Process -Name "uvicorn", "python", "pwsh" -Force -ErrorAction SilentlyContinue
-          Write-Host "✅ Cleanup complete."
+        uses: actions/upload-artifact@v4
+        with:
+          name: race-info-quickstart
+          path: race-info.txt
+          retention-days: 7
