@@ -45,24 +45,28 @@ jobs:
           podman-compose -f podman-compose.yml down
 
       # ============================================================
-      # STEP 4: Login and Push to Docker Hub
+      # STEP 4: Login and Push to GitHub Container Registry
       # ============================================================
-      - name: Log in to Docker Hub
+      - name: Log in to GitHub Container Registry
         if: github.event_name == 'push'
-        run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | podman login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin docker.io
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | podman login -u "${{ github.actor }}" --password-stdin ghcr.io
 
-      - name: Push the image to Docker Hub
+      - name: Push the image to GitHub Container Registry
         if: github.event_name == 'push'
         run: |
-          podman tag localhost/fortuna:latest docker.io/masonj0/fortuna-faucet:latest
-          podman push docker.io/masonj0/fortuna-faucet:latest
+          IMAGE_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          IMAGE_ID="ghcr.io/$IMAGE_OWNER/fortuna-faucet:latest"
+          podman tag localhost/fortuna_fortuna:latest "$IMAGE_ID"
+          podman push "$IMAGE_ID"
 
       # ============================================================
       # STEP 5: Create Windows Launcher Script (.bat file)
       # ============================================================
       - name: Create Windows Launcher Script
         run: |
-          cat > launcher.bat << 'EOF'
+          IMAGE_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          IMAGE_ID="ghcr.io/$IMAGE_OWNER/fortuna-faucet:latest"
+          cat > launcher.bat <<EOF
           @echo off
           REM Fortuna Faucet - Podman Launcher for Windows
 
@@ -100,8 +104,8 @@ jobs:
 
           echo ✓ Podman is running
           echo.
-          echo Pulling latest Fortuna image...
-          podman pull docker.io/masonj0/fortuna-faucet:latest
+          echo Pulling latest Fortuna image from GHCR...
+          podman pull ${IMAGE_ID}
 
           if errorlevel 1 (
               echo.
@@ -122,7 +126,7 @@ jobs:
             -p 8000:8000 ^
             -v %cd%/data:/app/web_service/backend/data ^
             -v %cd%/logs:/app/web_service/backend/logs ^
-            docker.io/masonj0/fortuna-faucet:latest
+            ${IMAGE_ID}
 
           if errorlevel 1 (
               echo ✗ Failed to start container
@@ -162,7 +166,9 @@ jobs:
       # ============================================================
       - name: Create Mac/Linux Launcher Script
         run: |
-          cat > launcher.sh << 'EOF'
+          IMAGE_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          IMAGE_ID="ghcr.io/$IMAGE_OWNER/fortuna-faucet:latest"
+          cat > launcher.sh <<EOF
           #!/bin/bash
 
           # Fortuna Faucet - Podman Launcher for Mac/Linux
@@ -197,8 +203,8 @@ jobs:
 
           echo "✓ Podman is running"
           echo ""
-          echo "Pulling latest Fortuna image..."
-          podman pull docker.io/masonj0/fortuna-faucet:latest
+          echo "Pulling latest Fortuna image from GHCR..."
+          podman pull \${IMAGE_ID}
 
           echo ""
           echo "Starting Fortuna container..."
@@ -212,14 +218,14 @@ jobs:
           mkdir -p data logs
 
           # Start the container
-          podman run -d \
-            --name fortuna-faucet \
-            -p 8000:8000 \
-            -v "$(pwd)/data:/app/web_service/backend/data" \
-            -v "$(pwd)/logs:/app/web_service/backend/logs" \
-            docker.io/masonj0/fortuna-faucet:latest
+          podman run -d \\
+            --name fortuna-faucet \\
+            -p 8000:8000 \\
+            -v "\$(pwd)/data:/app/web_service/backend/data" \\
+            -v "\$(pwd)/logs:/app/web_service/backend/logs" \\
+            \${IMAGE_ID}
 
-          if [ $? -ne 0 ]; then
+          if [ \$? -ne 0 ]; then
               echo "✗ Failed to start container"
               exit 1
           fi
@@ -241,12 +247,12 @@ jobs:
           echo ""
 
           # Open browser (Mac)
-          if [[ "$OSTYPE" == "darwin"* ]]; then
+          if [[ "\$OSTYPE" == "darwin"* ]]; then
               open http://localhost:8000
           fi
 
           # Open browser (Linux)
-          if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+          if [[ "\$OSTYPE" == "linux-gnu"* ]]; then
               xdg-open http://localhost:8000 2>/dev/null || echo "Please open http://localhost:8000 in your browser"
           fi
 
