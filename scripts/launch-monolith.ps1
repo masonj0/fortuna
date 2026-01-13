@@ -46,6 +46,13 @@ if ($AutoRestart) {
         }
     }
 } else {
-    Write-Host "Monolith launched. Press Ctrl+C to stop."
+    Write-Host "Monolith launched successfully. Waiting for server to initialize..."
+    Start-Sleep -Seconds 3 # Give the server a moment to start up before opening the browser
+
+    $url = "http://127.0.0.1:$Port"
+    Write-Host "Opening application at $url in your default browser."
+    Start-Process $url
+
+    Write-Host "Application is running. Press Ctrl+C in this window to stop the server."
     Wait-Process -Id $process.Id
 }
