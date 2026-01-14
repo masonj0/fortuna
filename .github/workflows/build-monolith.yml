@@ -41,7 +41,6 @@ jobs:
         shell: pwsh
         run: |
           pip install --upgrade pip wheel
-          pip install pyinstaller==6.6.0
           pip install -r web_service/backend/requirements.txt
 
       - name: Create Data Directories
@@ -74,7 +73,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Fortuna-Monolith-${{ github.sha }}
-          path: dist/fortuna-monolith.exe
+          path: dist/fortuna-monolith/fortuna-monolith.exe
           retention-days: 30
 
       # ========== SMOKE TEST ==========

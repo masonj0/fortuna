@@ -1,6 +1,8 @@
 name: Monolith Experimental (Webservice Mode)
 
 on:
+  push:
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
@@ -34,7 +36,7 @@ jobs:
 
     - name: Build frontend
       run: |
-        cd web_service/frontend
+        cd web_platform/frontend
         npm ci
         npm run build
         Copy-Item -Path "out" -Destination "${{ github.workspace }}/frontend_dist" -Recurse -Force
@@ -77,47 +79,47 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: fortuna-monolith
-        path: dist/fortuna-monolith.exe
+        path: dist/fortuna-monolith/fortuna-monolith.exe
 
-      # ========== OPTIONAL VERIFICATION STEPS ==========
-      - name: Run Verification Scripts
-        shell: pwsh
-        continue-on-error: true
-        run: |
-          pip install playwright
-          playwright install
-          $exePath = "dist/fortuna-monolith/fortuna-monolith.exe"
-          $logFile = "monolith-verification-test.log"
+    # ========== OPTIONAL VERIFICATION STEPS ==========
+    - name: Run Verification Scripts
+      shell: pwsh
+      continue-on-error: true
+      run: |
+        pip install playwright
+        playwright install
+        $exePath = "dist/fortuna-monolith/fortuna-monolith.exe"
+        $logFile = "monolith-verification-test.log"
 
-          Write-Host "Starting monolith for verification tests..."
-          $process = Start-Process -FilePath $exePath -PassThru -RedirectStandardOutput $logFile -RedirectStandardError $logFile -WindowStyle Hidden
+        Write-Host "Starting monolith for verification tests..."
+        $process = Start-Process -FilePath $exePath -PassThru -RedirectStandardOutput $logFile -RedirectStandardError $logFile -WindowStyle Hidden
 
-          Write-Host "Waiting for application to initialize..."
-          Start-Sleep -Seconds 15
+        Write-Host "Waiting for application to initialize..."
+        Start-Sleep -Seconds 15
 
-          Write-Host "Running Playwright script..."
-          python e2e/jules-smoke-test.py
-          Write-Host "Playwright script finished."
+        Write-Host "Running Playwright script..."
+        python e2e/jules-smoke-test.py
+        Write-Host "Playwright script finished."
 
-          Write-Host "Running race info script..."
-          python e2e/get-race-info.py
-          Write-Host "Race info script finished."
+        Write-Host "Running race info script..."
+        python e2e/get-race-info.py
+        Write-Host "Race info script finished."
 
-          Stop-Process -Id $process.Id -Force
-          Write-Host "Verification tests complete."
+        Stop-Process -Id $process.Id -Force
+        Write-Host "Verification tests complete."
 
-      - name: Upload Playwright Screenshot
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: playwright-screenshot-experimental
-          path: playwright-screenshot.png
-          retention-days: 7
+    - name: Upload Playwright Screenshot
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: playwright-screenshot-experimental
+        path: playwright-screenshot.png
+        retention-days: 7
 
-      - name: Upload Race Info
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: race-info-experimental
-          path: race-info.txt
-          retention-days: 7
+    - name: Upload Race Info
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: race-info-experimental
+        path: race-info.txt
+        retention-days: 7

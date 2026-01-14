@@ -1,24 +1,22 @@
 # -*- mode: python ; coding: utf-8 -*-
-import os
+from pathlib import Path
 from PyInstaller.utils.hooks import collect_submodules
 
 block_cipher = None
 
-# Get the absolute path of the directory containing this .spec file
-basedir = os.path.abspath(os.path.dirname(__file__))
-
-# Define paths relative to the base directory
-backend_root = os.path.join(basedir, 'web_service', 'backend')
-assets_root = os.path.join(basedir, 'assets')
-frontend_out = os.path.join(basedir, 'web_platform', 'frontend', 'out')
+# Use __file__ to create absolute paths, making the spec self-contained
+SPEC_DIR = Path(__file__).resolve().parent
+backend_root = SPEC_DIR / 'web_service' / 'backend'
+assets_root = SPEC_DIR / 'assets'
+frontend_out = SPEC_DIR / 'web_platform' / 'frontend' / 'out'
 
 # CRITICAL: Bundle the Next.js static frontend using absolute paths
 datas = [
-    (os.path.join(backend_root, 'data'), 'data'),
-    (os.path.join(backend_root, 'json'), 'json'),
-    (os.path.join(backend_root, 'adapters'), 'adapters'),
-    (os.path.join(assets_root, 'icon.ico'), 'assets'),
-    (frontend_out, 'ui'),
+    (str(backend_root / 'data'), 'data'),
+    (str(backend_root / 'json'), 'json'),
+    (str(backend_root / 'adapters'), 'adapters'),
+    (str(assets_root / 'icon.ico'), 'assets'),
+    (str(frontend_out), 'ui'),
 ]
 
 hiddenimports = [
@@ -28,7 +26,7 @@ hiddenimports = [
 
 a = Analysis(
     ['web_service/backend/main.py'],
-    pathex=[str(project_root)],
+    pathex=[str(SPEC_DIR)],
     binaries=[],
     datas=datas,
     hiddenimports=hiddenimports,
