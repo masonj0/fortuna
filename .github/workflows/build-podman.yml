@@ -39,9 +39,10 @@ jobs:
           podman-compose -f podman-compose.yml up -d
           sleep 10
           echo "Container logs:"
-          podman logs fortuna-faucet
-          echo "Running health check..."
-          curl -f http://localhost:8000/api/health || (podman logs fortuna-faucet && exit 1)
+          podman logs fortuna-faucet || true
+          echo "Running health check inside container..."
+          podman exec fortuna-faucet curl -f http://localhost:8000/api/health \
+            || (podman logs fortuna-faucet && exit 1)
           echo "✓ Health check passed!"
           podman-compose -f podman-compose.yml down
 
@@ -79,8 +80,8 @@ jobs:
           echo "Playwright script finished."
 
           echo "Running race info script..."
-          mkdir -p web_service/backend/data # Create a temporary local data dir
-          podman cp fortuna_fortuna_1:/app/web_service/backend/data/. web_service/backend/data/
+          mkdir -p web_service/backend/data
+          podman cp fortuna-faucet:/app/web_service/backend/data/. web_service/backend/data/
           python3 e2e/get-race-info.py
           echo "Race info script finished."
 
@@ -163,6 +164,11 @@ jobs:
 
           echo ✓ Podman is running
           echo.
+
+          REM Ensure data/logs directories exist
+          if not exist "%cd%\data" mkdir "%cd%\data"
+          if not exist "%cd%\logs" mkdir "%cd%\logs"
+
           echo Pulling latest Fortuna image from GHCR...
           podman pull ${IMAGE_ID}
 
@@ -183,8 +189,8 @@ jobs:
           podman run -d ^
             --name fortuna-faucet ^
             -p 8000:8000 ^
-            -v %cd%/data:/app/web_service/backend/data ^
-            -v %cd%/logs:/app/web_service/backend/logs ^
+            -v "%cd%\data:/app/web_service/backend/data" ^
+            -v "%cd%\logs:/app/web_service/backend/logs" ^
             ${IMAGE_ID}
 
           if errorlevel 1 (
