@@ -4,11 +4,11 @@ from PyInstaller.utils.hooks import collect_submodules
 
 block_cipher = None
 
-# Use pathlib for robust path handling
-basedir = Path(SPECPATH).parent
-backend_root = basedir / 'web_service' / 'backend'
-assets_root = basedir / 'assets'
-frontend_out = basedir / 'web_platform' / 'frontend' / 'out'
+# Use __file__ to create absolute paths, making the spec self-contained
+SPEC_DIR = Path(__file__).resolve().parent
+backend_root = SPEC_DIR / 'web_service' / 'backend'
+assets_root = SPEC_DIR / 'assets'
+frontend_out = SPEC_DIR / 'web_platform' / 'frontend' / 'out'
 
 # CRITICAL: Bundle the Next.js static frontend using absolute paths
 datas = [
@@ -26,7 +26,7 @@ hiddenimports = [
 
 a = Analysis(
     ['web_service/backend/main.py'],
-    pathex=[basedir],
+    pathex=[str(SPEC_DIR)],
     binaries=[],
     datas=datas,
     hiddenimports=hiddenimports,
