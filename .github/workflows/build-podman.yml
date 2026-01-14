@@ -45,6 +45,21 @@ jobs:
           echo "✓ Health check passed!"
           podman-compose -f podman-compose.yml down
 
+      # ============================================================
+      # STEP 3a: Save Podman image as a tarball
+      # ============================================================
+      - name: Save Podman Image
+        run: |
+          podman save -o fortuna-faucet.tar localhost/fortuna_fortuna:latest
+          echo "✓ Podman image saved to fortuna-faucet.tar"
+
+      - name: Upload Podman Image Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fortuna-podman-image
+          path: fortuna-faucet.tar
+          retention-days: 7
+
       # ========== OPTIONAL VERIFICATION STEPS ==========
       - name: Run Verification Scripts
         continue-on-error: true

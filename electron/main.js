@@ -100,8 +100,8 @@ class FortunaDesktopApp {
       backendCommand = path.join(__dirname, '..', '.venv', 'Scripts', 'python.exe');
       backendCwd = path.join(__dirname, '..', 'web_service', 'backend');
     } else {
-      const backendFolder = path.join(process.resourcesPath, 'fortuna-webservice');
-      backendCommand = path.join(backendFolder, 'fortuna-webservice.exe');
+      const backendFolder = path.join(process.resourcesPath, 'fortuna-backend');
+      backendCommand = path.join(backendFolder, 'fortuna-backend.exe');
       backendCwd = backendFolder;
 
       console.log(`[Backend] Looking for executable at: ${backendCommand}`);
