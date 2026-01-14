@@ -50,6 +50,9 @@ jobs:
           New-Item -ItemType Directory -Force -Path "web_service/backend/data" | Out-Null
           New-Item -ItemType Directory -Force -Path "web_service/backend/json" | Out-Null
           New-Item -ItemType Directory -Force -Path "web_service/backend/logs" | Out-Null
+          New-Item -ItemType File -Force -Path "web_service/backend/data/.gitkeep" | Out-Null
+          New-Item -ItemType File -Force -Path "web_service/backend/json/.gitkeep" | Out-Null
+          New-Item -ItemType File -Force -Path "web_service/backend/logs/.gitkeep" | Out-Null
 
       # ========== BUILD ==========
       - name: Build Monolith EXE
