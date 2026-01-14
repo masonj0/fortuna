@@ -28,7 +28,7 @@ hiddenimports = [
 
 a = Analysis(
     ['web_service/backend/main.py'],
-    pathex=[str(project_root)],
+    pathex=[basedir],
     binaries=[],
     datas=datas,
     hiddenimports=hiddenimports,
