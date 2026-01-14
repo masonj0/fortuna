@@ -74,7 +74,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Fortuna-Monolith-${{ github.sha }}
-          path: dist/fortuna-monolith.exe
+          path: dist/fortuna-monolith/fortuna-monolith.exe
           retention-days: 30
 
       # ========== SMOKE TEST ==========
