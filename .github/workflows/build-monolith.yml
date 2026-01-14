@@ -25,22 +25,28 @@ jobs:
           cd web_platform/frontend
           npm ci
           npm run build
+
+          # CRITICAL: Verify frontend built successfully
           if (-not (Test-Path "out/index.html")) {
-            throw "Frontend build failed: index.html not found in 'out' directory."
+            Write-Error "❌ Frontend build failed: index.html not found in 'out' directory."
+            exit 1
           }
-          Write-Host "Frontend built successfully"
+
+          $fileCount = (Get-ChildItem -Path "out" -Recurse -File).Count
+          Write-Host "✅ Frontend built successfully ($fileCount files)"
 
       # ========== BACKEND ==========
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.10.11'
           cache: 'pip'
 
       - name: Install Dependencies
         shell: pwsh
         run: |
           pip install --upgrade pip wheel
+          pip install pyinstaller==6.6.0
           pip install -r web_service/backend/requirements.txt
 
       - name: Create Data Directories
@@ -49,9 +55,6 @@ jobs:
           New-Item -ItemType Directory -Force -Path "web_service/backend/data" | Out-Null
           New-Item -ItemType Directory -Force -Path "web_service/backend/json" | Out-Null
           New-Item -ItemType Directory -Force -Path "web_service/backend/logs" | Out-Null
-          New-Item -ItemType File -Force -Path "web_service/backend/data/.gitkeep" | Out-Null
-          New-Item -ItemType File -Force -Path "web_service/backend/json/.gitkeep" | Out-Null
-          New-Item -ItemType File -Force -Path "web_service/backend/logs/.gitkeep" | Out-Null
 
       # ========== BUILD ==========
       - name: Build Monolith EXE
@@ -59,22 +62,38 @@ jobs:
         env:
           PYTHONIOENCODING: utf-8
         run: |
-          Write-Host "Building Fortuna Monolith..."
+          Write-Host "🔨 Building Fortuna Monolith..."
+
+          # Verify frontend exists before building
+          if (-not (Test-Path "web_platform/frontend/out")) {
+            Write-Error "❌ Frontend 'out' directory not found!"
+            exit 1
+          }
+
           pyinstaller --noconfirm --clean fortuna-monolith.spec
+
           $exePath = "dist/fortuna-monolith/fortuna-monolith.exe"
           if (-not (Test-Path $exePath)) {
-            throw "Build failed - EXE not created at $exePath"
+            Write-Error "❌ Build failed - EXE not created at $exePath"
+
+            # Show PyInstaller output directory contents for debugging
+            Write-Host "Contents of dist directory:"
+            Get-ChildItem -Path "dist" -Recurse | Format-Table Name, FullName
+
+            exit 1
           }
+
           $size = (Get-Item $exePath).Length / 1MB
-          Write-Host "Build complete: $([math]::Round($size, 2)) MB"
+          Write-Host "✅ Build complete: $([math]::Round($size, 2)) MB"
 
       # ========== UPLOAD ==========
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Fortuna-Monolith-${{ github.sha }}
+          name: Fortuna-Monolith-${{ github.run_number }}
           path: dist/fortuna-monolith/fortuna-monolith.exe
           retention-days: 30
+          if-no-files-found: error  # CRITICAL: Fail if file doesn't exist
 
       # ========== SMOKE TEST ==========
       - name: Smoke Test Monolith
@@ -84,25 +103,29 @@ jobs:
           $exePath = "dist/fortuna-monolith/fortuna-monolith.exe"
           $logFile = "monolith-smoke-test.log"
 
-          Write-Host "Starting smoke test for $exePath..."
+          Write-Host "🧪 Starting smoke test for $exePath..."
           $process = Start-Process -FilePath $exePath -PassThru -RedirectStandardOutput $logFile -RedirectStandardError $logFile -WindowStyle Hidden
 
-          Write-Host "Waiting for process (PID: $($process.Id)) to initialize (max 30s)..."
+          Write-Host "⏳ Waiting for process (PID: $($process.Id)) to initialize (max 30s)..."
           $success = $false
+
           foreach ($i in 1..15) {
             if ($process.HasExited) {
-              Write-Host "Process exited prematurely with code $($process.ExitCode)."
+              Write-Host "❌ Process exited prematurely with code $($process.ExitCode)"
+              Write-Host "Last 20 lines of log:"
+              Get-Content $logFile -Tail 20
               break
             }
+
             try {
               $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/health" -UseBasicParsing -TimeoutSec 2
               if ($response.StatusCode -eq 200) {
-                Write-Host "✓ Health check passed on attempt $i."
+                Write-Host "✅ Health check passed on attempt $i"
                 $success = $true
                 break
               }
             } catch {
-              Write-Host "Health check attempt $i failed. Retrying in 2s..."
+              Write-Host "⏳ Health check attempt $i failed, retrying in 2s..."
               Start-Sleep -Seconds 2
             }
           }
@@ -110,28 +133,29 @@ jobs:
           # Additional check for the frontend root
           if ($success) {
             try {
-              $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/" -UseBasicParsing
-              if ($response.StatusCode -ne 200) {
-                Write-Host "Frontend root page check failed with status $($response.StatusCode)"
-                $success = $false
+              $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/" -UseBasicParsing -TimeoutSec 2
+              if ($response.StatusCode -eq 200) {
+                Write-Host "✅ Frontend root page loaded successfully"
               } else {
-                 Write-Host "✓ Frontend root page loaded successfully."
+                Write-Host "❌ Frontend root page check failed with status $($response.StatusCode)"
+                $success = $false
               }
             } catch {
-              Write-Host "Frontend root page check failed: $($_.Exception.Message)"
+              Write-Host "❌ Frontend root page check failed: $($_.Exception.Message)"
               $success = $false
             }
           }
 
-          Stop-Process -Id $process.Id -Force
+          Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
 
           if (-not $success) {
-            Write-Host "❌ Smoke test FAILED."
-            Get-Content $logFile -Tail 100
-            throw "Monolith smoke test failed."
+            Write-Host "❌ SMOKE TEST FAILED"
+            Write-Host "Full log contents:"
+            Get-Content $logFile
+            throw "Monolith smoke test failed"
           }
 
-          Write-Host "✅ Smoke test PASSED successfully."
+          Write-Host "✅ SMOKE TEST PASSED"
 
       # ========== OPTIONAL VERIFICATION STEPS ==========
       - name: Run Verification Scripts
@@ -139,39 +163,37 @@ jobs:
         continue-on-error: true
         run: |
           pip install playwright
-          playwright install
+          playwright install --with-deps
+
           $exePath = "dist/fortuna-monolith/fortuna-monolith.exe"
-          $logFile = "monolith-verification-test.log"
+          $logFile = "verification.log"
 
           Write-Host "Starting monolith for verification tests..."
           $process = Start-Process -FilePath $exePath -PassThru -RedirectStandardOutput $logFile -RedirectStandardError $logFile -WindowStyle Hidden
-
-          Write-Host "Waiting for application to initialize..."
           Start-Sleep -Seconds 15
 
           Write-Host "Running Playwright script..."
           python e2e/jules-smoke-test.py
-          Write-Host "Playwright script finished."
 
           Write-Host "Running race info script..."
           python e2e/get-race-info.py
-          Write-Host "Race info script finished."
 
-          Stop-Process -Id $process.Id -Force
-          Write-Host "Verification tests complete."
+          Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
 
       - name: Upload Playwright Screenshot
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: playwright-screenshot
+          name: playwright-screenshot-${{ github.run_number }}
           path: playwright-screenshot.png
           retention-days: 7
+          if-no-files-found: ignore
 
       - name: Upload Race Info
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: race-info
+          name: race-info-${{ github.run_number }}
           path: race-info.txt
           retention-days: 7
+          if-no-files-found: ignore
