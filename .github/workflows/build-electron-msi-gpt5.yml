@@ -225,7 +225,21 @@ jobs:
           }
 
           Write-Host "✅ Both parent and child processes are running."
+
+      - name: 📸 Run Playwright Screenshot Test
+        shell: pwsh
+        run: |
+          pip install playwright
+          playwright install --with-deps
+          python e2e/jules-smoke-test.py
       - name: 🧹 Cleanup
         if: always()
         run: |
           Stop-Process -Name "Fortuna Faucet", "fortuna-backend" -Force -ErrorAction SilentlyContinue
+      - name: 🖼️ Upload Screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-screenshot-${{ matrix.arch }}
+          path: playwright-screenshot.png
+          retention-days: 7
