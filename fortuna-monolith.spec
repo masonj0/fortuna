@@ -5,7 +5,7 @@ from PyInstaller.utils.hooks import collect_submodules
 block_cipher = None
 
 # Get the absolute path of the directory containing this .spec file
-basedir = os.path.abspath(os.path.dirname(__file__))
+basedir = os.path.dirname(SPECPATH)
 
 # Define paths relative to the base directory
 backend_root = os.path.join(basedir, 'web_service', 'backend')
