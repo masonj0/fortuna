@@ -86,14 +86,6 @@ jobs:
           path: race-info.txt
           retention-days: 7
 
-      - name: Upload Playwright Screenshot
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: playwright-screenshot-docker
-          path: playwright-screenshot.png
-          retention-days: 7
-
       # ============================================================
       # STEP 3: Create Windows Launcher Script (.bat file)
       # ============================================================
