@@ -33,6 +33,12 @@ jobs:
           pip install -r web_service/backend/requirements.txt
           pip install -r web_service/backend/requirements-dev.txt
 
+      - name: 🎨 Build Frontend
+        working-directory: web_platform/frontend
+        run: |
+          npm ci
+          npm run build
+
       - name: 🧪 Run Backend Unit Tests
         shell: pwsh
         run: |
