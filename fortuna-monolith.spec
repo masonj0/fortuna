@@ -1,19 +1,24 @@
 # -*- mode: python ; coding: utf-8 -*-
-from pathlib import Path
+import os
 from PyInstaller.utils.hooks import collect_submodules
 
 block_cipher = None
-project_root = Path(SPECPATH).parent
-backend_root = project_root / 'web_service' / 'backend'
 
-# CRITICAL: Bundle the Next.js static frontend
+# Get the absolute path of the directory containing this .spec file
+basedir = os.path.abspath(os.path.dirname(__file__))
+
+# Define paths relative to the base directory
+backend_root = os.path.join(basedir, 'web_service', 'backend')
+assets_root = os.path.join(basedir, 'assets')
+frontend_out = os.path.join(basedir, 'web_platform', 'frontend', 'out')
+
+# CRITICAL: Bundle the Next.js static frontend using absolute paths
 datas = [
-    (str(backend_root / 'data'), 'data'),
-    (str(backend_root / 'json'), 'json'),
-    (str(backend_root / 'adapters'), 'adapters'),
-    (str(project_root / 'assets' / 'icon.ico'), 'assets'),
-    # THE KEY: Frontend static export bundled into executable
-    (str(project_root / 'web_platform' / 'frontend' / 'out'), 'ui'),
+    (os.path.join(backend_root, 'data'), 'data'),
+    (os.path.join(backend_root, 'json'), 'json'),
+    (os.path.join(backend_root, 'adapters'), 'adapters'),
+    (os.path.join(assets_root, 'icon.ico'), 'assets'),
+    (frontend_out, 'ui'),
 ]
 
 hiddenimports = [

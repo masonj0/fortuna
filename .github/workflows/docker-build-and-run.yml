@@ -32,20 +32,59 @@ jobs:
           cache-to: type=gha,mode=max
 
       # ============================================================
-      # STEP 2: Test the Container
+      # STEP 2: Optional Verification Steps
       # ============================================================
-      - name: Test Container Startup
+      - name: Run Verification Scripts
+        continue-on-error: true
         run: |
-          echo "Starting container for health check..."
+          echo "Starting container for verification tests..."
           docker run -d --name fortuna-test -p 8000:8000 fortuna-faucet:latest
-          sleep 10
+
+          echo "Waiting for application to initialize..."
+          sleep 15
+
           echo "Container logs:"
           docker logs fortuna-test
+
           echo "Running health check..."
           curl -f http://localhost:8000/api/health || (docker logs fortuna-test && exit 1)
           echo "✓ Health check passed!"
+
+          echo "Installing Python dependencies for tests..."
+          sudo apt-get update && sudo apt-get install -y python3-pip
+          pip3 install playwright
+          playwright install --with-deps
+
+          echo "Running Playwright script..."
+          python3 e2e/jules-smoke-test.py
+          echo "Playwright script finished."
+
+          echo "Running race info script..."
+          mkdir -p web_service/backend/data
+          docker cp fortuna-test:/app/web_service/backend/data/. web_service/backend/data/
+          python3 e2e/get-race-info.py
+          echo "Race info script finished."
+
+          echo "Stopping container..."
           docker stop fortuna-test
           docker rm fortuna-test
+          echo "Verification tests complete."
+
+      - name: Upload Playwright Screenshot
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-screenshot-docker
+          path: playwright-screenshot.png
+          retention-days: 7
+
+      - name: Upload Race Info
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: race-info-docker
+          path: race-info.txt
+          retention-days: 7
 
       # ============================================================
       # STEP 3: Create Windows Launcher Script (.bat file)
