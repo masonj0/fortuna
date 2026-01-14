@@ -36,7 +36,7 @@ jobs:
 
     - name: Build frontend
       run: |
-        cd web_service/frontend
+        cd web_platform/frontend
         npm ci
         npm run build
         Copy-Item -Path "out" -Destination "${{ github.workspace }}/frontend_dist" -Recurse -Force

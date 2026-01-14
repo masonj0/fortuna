@@ -41,7 +41,6 @@ jobs:
         shell: pwsh
         run: |
           pip install --upgrade pip wheel
-          pip install pyinstaller==6.6.0
           pip install -r web_service/backend/requirements.txt
 
       - name: Create Data Directories
