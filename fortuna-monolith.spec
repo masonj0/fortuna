@@ -9,7 +9,7 @@ datas = [
     ('web_service/backend/json', 'json'),
     ('web_service/backend/adapters', 'adapters'),
     ('assets/icon.ico', 'assets'),
-    ('web_platform/frontend/out', 'ui'),
+    ('web_service/frontend/out', 'ui'),
 ]
 
 hiddenimports = [

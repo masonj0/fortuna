@@ -34,7 +34,7 @@ jobs:
           pip install -r web_service/backend/requirements-dev.txt
 
       - name: 🎨 Build Frontend
-        working-directory: web_platform/frontend
+        working-directory: web_service/frontend
         run: |
           npm ci
           npm run build

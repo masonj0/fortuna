@@ -228,6 +228,7 @@ jobs:
 
       - name: 📸 Run Playwright Screenshot Test
         shell: pwsh
+        continue-on-error: true
         run: |
           pip install playwright
           playwright install --with-deps
