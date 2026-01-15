@@ -241,8 +241,8 @@ jobs:
           name: diagnostic-logs-${{ github.run_number }}
           path: |
             pyinstaller-build.log
-            npm-install.log
-            npm-build.log
+            web_service/frontend/npm-install.log
+            web_service/frontend/npm-build.log
             exe-stdout.log
             exe-stderr.log
             build/**/*.log
