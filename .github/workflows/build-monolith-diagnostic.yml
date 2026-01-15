@@ -71,46 +71,16 @@ jobs:
         run: |
           Write-Host "=== FRONTEND BUILD START ===" -ForegroundColor Cyan
           Write-Host "Installing npm dependencies..."
-          npm ci 2>&1 | Tee-Object -FilePath "../../npm-install.log"
-
+          npm ci 2>&1 | Tee-Object -FilePath "../npm-install.log"
           Write-Host "Running build..."
-          npm run build 2>&1 | Tee-Object -FilePath "../../npm-build.log"
-
-          if (-not $frontendDir) {
-            Write-Error "❌ Could not find frontend directory!"
-            exit 1
-          }
-
-          cd $frontendDir
-
-          Write-Host "Installing npm dependencies..."
-          npm ci 2>&1 | Tee-Object -FilePath "../../npm-install.log"
-
-          Write-Host "Running build..."
-          npm run build 2>&1 | Tee-Object -FilePath "../../npm-build.log"
-
+          npm run build 2>&1 | Tee-Object -FilePath "../npm-build.log"
           # Verify output
-          if (Test-Path "out") {
-            Write-Host "✅ 'out' directory created" -ForegroundColor Green
-            $fileCount = (Get-ChildItem -Path "out" -Recurse -File).Count
-            Write-Host "   Files in 'out': $fileCount"
-
-            if (Test-Path "out/index.html") {
-              Write-Host "✅ index.html exists" -ForegroundColor Green
-            } else {
-              Write-Error "❌ index.html NOT found in 'out'"
-              Write-Host "Contents of 'out' directory:"
-              Get-ChildItem -Path "out" -Recurse | Format-Table Name, FullName
-              exit 1
-            }
+          if (Test-Path "out/index.html") {
+            Write-Host "✅ 'out/index.html' directory created" -ForegroundColor Green
           } else {
-            Write-Error "❌ 'out' directory was NOT created"
-            Write-Host "Contents of frontend directory:"
-            Get-ChildItem | Format-Table Name
+            Write-Error "❌ 'out/index.html' was NOT created"
             exit 1
           }
-
-          cd ../..
           Write-Host "=== FRONTEND BUILD COMPLETE ===" -ForegroundColor Green
 
       # ========== PYINSTALLER SETUP ==========
