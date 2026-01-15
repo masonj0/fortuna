@@ -2,6 +2,8 @@ name: PyInstaller Diagnostic Build
 
 on:
   workflow_dispatch:
+  push:
+    branches: [ main ]
 
 jobs:
   diagnostic-build:
@@ -121,6 +123,12 @@ jobs:
           Write-Host "=== FRONTEND BUILD COMPLETE ===" -ForegroundColor Green
 
       # ========== PYINSTALLER SETUP ==========
+      - name: 🔩 Create Missing Data Directories
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "web_service/backend/data"
+          New-Item -ItemType Directory -Force -Path "web_service/backend/json"
+
       - name: 📁 Verify Paths for PyInstaller
         shell: pwsh
         run: |
@@ -133,7 +141,6 @@ jobs:
             "Icon" = "assets/icon.ico"
             "Backend Data" = "web_service/backend/data"
             "Backend JSON" = "web_service/backend/json"
-            "Backend Adapters" = "web_service/backend/adapters"
           }
 
           $allGood = $true

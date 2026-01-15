@@ -23,9 +23,9 @@ jobs:
 
     - name: Create required directories
       run: |
-        New-Item -ItemType Directory -Force -Path "python_service/data"
-        New-Item -ItemType Directory -Force -Path "python_service/json"
-        New-Item -ItemType Directory -Force -Path "python_service/logs"
+        New-Item -ItemType Directory -Force -Path "web_service/backend/data"
+        New-Item -ItemType Directory -Force -Path "web_service/backend/json"
+        New-Item -ItemType Directory -Force -Path "web_service/backend/logs"
 
     - name: Set up Node.js
       uses: actions/setup-node@v4
