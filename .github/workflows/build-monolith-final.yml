@@ -1,0 +1,167 @@
+name: Build Monolith (FINAL FIX)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    name: 'Build Fortuna Monolith'
+    runs-on: windows-latest
+
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      # ========== FRONTEND ==========
+      - name: 🎨 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 🏗️ Build Frontend
+        working-directory: ./web_service/frontend
+        shell: pwsh
+        run: |
+          Write-Host "=== BUILDING FRONTEND ===" -ForegroundColor Cyan
+
+          # CRITICAL: Ensure next.config.js exists with static export
+          $configLines = @(
+            "/** @type {import('next').NextConfig} */",
+            "const nextConfig = {",
+            "  output: 'export',",
+            "  images: { unoptimized: true },",
+            "  trailingSlash: true,",
+            "}",
+            "module.exports = nextConfig"
+          )
+          $configContent = $configLines -join [System.Environment]::NewLine
+
+          # Only create if it doesn't exist
+          if (-not (Test-Path "next.config.js")) {
+            Write-Host "Creating next.config.js with static export..."
+            Set-Content -Path "next.config.js" -Value $configContent
+          } else {
+            Write-Host "next.config.js already exists"
+          }
+
+          Write-Host "Installing dependencies..."
+          npm ci
+
+          Write-Host "Building..."
+          npm run build
+
+          # VERIFY OUTPUT
+          if (-not (Test-Path "out/index.html")) {
+            Write-Error "❌ Frontend build FAILED: out/index.html not found!"
+            Write-Host "Contents of current directory:"
+            Get-ChildItem | Format-Table Name
+            exit 1
+          }
+
+          $fileCount = (Get-ChildItem -Path "out" -Recurse -File).Count
+          Write-Host "✅ Frontend built: $fileCount files in 'out' directory" -ForegroundColor Green
+
+      # ========== BACKEND ==========
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10.11'
+          cache: 'pip'
+
+      - name: 📦 Install Dependencies
+        shell: pwsh
+        run: |
+          pip install --upgrade pip wheel
+          pip install pyinstaller==6.6.0
+          pip install -r web_service/backend/requirements.txt
+
+      - name: 📁 Create Data Directories
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "web_service/backend/data" | Out-Null
+          New-Item -ItemType Directory -Force -Path "web_service/backend/json" | Out-Null
+          New-Item -ItemType Directory -Force -Path "web_service/backend/logs" | Out-Null
+
+      # ========== BUILD ==========
+      - name: 🔨 Build with PyInstaller
+        shell: pwsh
+        env:
+          PYTHONIOENCODING: utf-8
+        run: |
+          Write-Host "=== BUILDING MONOLITH ===" -ForegroundColor Cyan
+
+          # Final verification
+          if (-not (Test-Path "web_service/frontend/out/index.html")) {
+            Write-Error "❌ Frontend output not found before PyInstaller!"
+            exit 1
+          }
+
+          Write-Host "✅ Frontend verified, running PyInstaller..."
+          pyinstaller --noconfirm --clean fortuna-monolith.spec 2>&1 | Tee-Object -FilePath "build.log"
+
+          $exePath = "dist/fortuna-monolith/fortuna-monolith.exe"
+          if (-not (Test-Path $exePath)) {
+            Write-Error "❌ BUILD FAILED - EXE not created!"
+            Write-Host "Last 50 lines of build log:"
+            Get-Content "build.log" -Tail 50
+            exit 1
+          }
+
+          $size = (Get-Item $exePath).Length / 1MB
+          Write-Host "✅ BUILD SUCCESS: $([math]::Round($size, 2)) MB" -ForegroundColor Green
+
+      # ========== UPLOAD ==========
+      - name: 📤 Upload EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: Fortuna-Monolith-${{ github.run_number }}
+          path: dist/fortuna-monolith/fortuna-monolith.exe
+          if-no-files-found: error
+
+      # ========== TEST ==========
+      - name: 🧪 Smoke Test
+        shell: pwsh
+        timeout-minutes: 3
+        run: |
+          Write-Host "=== SMOKE TEST ===" -ForegroundColor Cyan
+
+          $exePath = "dist/fortuna-monolith/fortuna-monolith.exe"
+          $process = Start-Process -FilePath $exePath -PassThru -WindowStyle Hidden
+
+          Write-Host "Waiting for startup (max 30s)..."
+          $success = $false
+
+          for ($i = 1; $i -le 15; $i++) {
+            if ($process.HasExited) {
+              Write-Host "❌ Process died (exit code: $($process.ExitCode))"
+              break
+            }
+
+            try {
+              $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/health" -UseBasicParsing -TimeoutSec 2
+              if ($response.StatusCode -eq 200) {
+                Write-Host "✅ SMOKE TEST PASSED!" -ForegroundColor Green
+                $success = $true
+                break
+              }
+            } catch {
+              Start-Sleep -Seconds 2
+            }
+          }
+
+          Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+
+          if (-not $success) {
+            Write-Error "❌ SMOKE TEST FAILED"
+            exit 1
+          }
+
+      - name: 📤 Upload Build Log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-${{ github.run_number }}
+          path: build.log
+          if-no-files-found: ignore
