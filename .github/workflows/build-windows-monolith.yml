@@ -20,12 +20,12 @@ jobs:
           node-version: '20'
 
       - name: "Build Frontend"
+        working-directory: ./web_platform/frontend
         shell: pwsh
         run: |
-          cd web_platform/frontend
           npm ci
           npm run build
-          if (-not (Test-Path "out/index.html")) {
+          if (-not (Test-Path "./out/index.html")) {
             Write-Error "Frontend build failed: index.html not found in 'out' directory."
             exit 1
           }
