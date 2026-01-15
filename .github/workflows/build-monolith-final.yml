@@ -27,15 +27,16 @@ jobs:
           Write-Host "=== BUILDING FRONTEND ===" -ForegroundColor Cyan
 
           # CRITICAL: Ensure next.config.js exists with static export
-          $configContent = @'
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-  output: 'export',
-  images: { unoptimized: true },
-  trailingSlash: true,
-}
-module.exports = nextConfig
-'@
+          $configLines = @(
+            "/** @type {import('next').NextConfig} */",
+            "const nextConfig = {",
+            "  output: 'export',",
+            "  images: { unoptimized: true },",
+            "  trailingSlash: true,",
+            "}",
+            "module.exports = nextConfig"
+          )
+          $configContent = $configLines -join [System.Environment]::NewLine
 
           # Only create if it doesn't exist
           if (-not (Test-Path "next.config.js")) {
