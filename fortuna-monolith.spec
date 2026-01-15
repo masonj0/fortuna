@@ -2,6 +2,7 @@
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules, collect_all
 from pathlib import Path
 import sys
+import os
 
 print("\n" + "="*70)
 print("FORTUNA MONOLITH - PYINSTALLER SPEC")
@@ -10,7 +11,7 @@ print("="*70)
 block_cipher = None
 
 # Get project root (where spec file lives)
-project_root = Path(SPECPATH).parent
+project_root = Path(os.path.dirname(__file__))
 print(f"\n📁 Project Root: {project_root}")
 
 # ========== FRONTEND VALIDATION ==========
