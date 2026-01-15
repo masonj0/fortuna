@@ -1,0 +1,129 @@
+name: Build Windows Monolith
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: 'Build Monolith EXE'
+    runs-on: windows-latest
+
+    steps:
+      - name: "Checkout Code"
+        uses: actions/checkout@v4
+
+      - name: "Setup Node.js"
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: "Build Frontend"
+        shell: pwsh
+        run: |
+          cd web_platform/frontend
+          npm ci
+          npm run build
+          if (-not (Test-Path "out/index.html")) {
+            Write-Error "Frontend build failed: index.html not found in 'out' directory."
+            exit 1
+          }
+          Write-Host "Frontend built successfully."
+
+      - name: "Setup Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10.11'
+          cache: 'pip'
+
+      - name: "Install Python Dependencies"
+        shell: pwsh
+        run: |
+          pip install --upgrade pip wheel
+          pip install pyinstaller==6.6.0
+          pip install -r web_service/backend/requirements.txt
+
+      - name: "Create Data Directories"
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "web_service/backend/data"
+          New-Item -ItemType Directory -Force -Path "web_service/backend/json"
+          New-Item -ItemType Directory -Force -Path "web_service/backend/logs"
+
+      - name: "Build Monolith EXE with PyInstaller"
+        shell: pwsh
+        env:
+          PYTHONIOENCODING: "utf-8"
+        run: |
+          Write-Host "Building Fortuna Monolith..."
+          if (-not (Test-Path "web_platform/frontend/out")) {
+            Write-Error "Frontend 'out' directory not found!"
+            exit 1
+          }
+          pyinstaller --noconfirm --clean fortuna-monolith.spec
+          $exePath = "dist/fortuna-monolith/fortuna-monolith.exe"
+          if (-not (Test-Path $exePath)) {
+            Write-Error "Build failed - EXE not created at $exePath"
+            exit 1
+          }
+          $size = (Get-Item $exePath).Length / 1MB
+          Write-Host "Build complete: $([math]::Round($size, 2)) MB"
+
+      - name: "Upload Artifact"
+        uses: actions/upload-artifact@v4
+        with:
+          name: Fortuna-Monolith-${{ github.run_number }}
+          path: dist/fortuna-monolith/fortuna-monolith.exe
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: "Smoke Test Monolith"
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          $exePath = "dist/fortuna-monolith/fortuna-monolith.exe"
+          $logFile = "monolith-smoke-test.log"
+          Write-Host "Starting smoke test for $exePath..."
+          $process = Start-Process -FilePath $exePath -PassThru -RedirectStandardOutput $logFile -RedirectStandardError $logFile
+          Write-Host "Waiting for process (PID: $($process.Id)) to initialize (max 30s)..."
+          $success = $false
+          foreach ($i in 1..15) {
+            if ($process.HasExited) {
+              Write-Host "Process exited prematurely with code $($process.ExitCode)"
+              Get-Content $logFile -Tail 20
+              break
+            }
+            try {
+              $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/health" -UseBasicParsing -TimeoutSec 2
+              if ($response.StatusCode -eq 200) {
+                Write-Host "Health check passed on attempt $i"
+                $success = $true
+                break
+              }
+            } catch {
+              Write-Host "Health check attempt $i failed, retrying in 2s..."
+              Start-Sleep -Seconds 2
+            }
+          }
+          if ($success) {
+            try {
+              $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/" -UseBasicParsing -TimeoutSec 2
+              if ($response.StatusCode -eq 200) {
+                Write-Host "Frontend root page loaded successfully"
+              } else {
+                Write-Host "Frontend root page check failed with status $($response.StatusCode)"
+                $success = $false
+              }
+            } catch {
+              Write-Host "Frontend root page check failed: $($_.Exception.Message)"
+              $success = $false
+            }
+          }
+          Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+          if (-not $success) {
+            Write-Host "SMOKE TEST FAILED"
+            Get-Content $logFile
+            throw "Monolith smoke test failed"
+          }
+          Write-Host "SMOKE TEST PASSED"
