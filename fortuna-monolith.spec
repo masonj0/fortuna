@@ -6,7 +6,7 @@ from pathlib import Path
 block_cipher = None
 
 # Get project root (where spec file lives)
-project_root = Path(SPECPATH).parent
+project_root = Path(SPECPATH)
 
 # CRITICAL: Verify frontend was built
 frontend_out = project_root / 'web_service' / 'frontend' / 'out'
