@@ -6,7 +6,8 @@ import sys
 import os
 
 block_cipher = None
-project_root = Path(os.path.dirname(os.path.abspath(__file__)))
+# Correctly set project_root using the SPECPATH global provided by PyInstaller
+project_root = Path(SPECPATH).parent
 
 # ===== FRONTEND VALIDATION =====
 frontend_out = project_root / 'web_service' / 'frontend' / 'out'
