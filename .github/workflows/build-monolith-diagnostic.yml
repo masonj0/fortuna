@@ -56,6 +56,7 @@ jobs:
 
           Write-Host ""
           Write-Host "=== INSTALLED PACKAGES ===" -ForegroundColor Cyan
+          pip freeze > pip-freeze.log
           pip list
 
       # ========== FRONTEND SETUP ==========
@@ -65,61 +66,21 @@ jobs:
           node-version: '20'
 
       - name: 🏗️ Build Frontend (with detailed logging)
+        working-directory: ./web_service/frontend
         shell: pwsh
         run: |
           Write-Host "=== FRONTEND BUILD START ===" -ForegroundColor Cyan
-
-          # Find the frontend directory
-          $frontendDirs = @(
-            "web_platform/frontend",
-            "web_service/frontend",
-            "frontend"
-          )
-
-          $frontendDir = $null
-          foreach ($dir in $frontendDirs) {
-            if (Test-Path "$dir/package.json") {
-              $frontendDir = $dir
-              Write-Host "✅ Found frontend at: $dir" -ForegroundColor Green
-              break
-            }
-          }
-
-          if (-not $frontendDir) {
-            Write-Error "❌ Could not find frontend directory!"
-            exit 1
-          }
-
-          cd $frontendDir
-
           Write-Host "Installing npm dependencies..."
-          npm ci 2>&1 | Tee-Object -FilePath "../../npm-install.log"
-
+          npm ci 2>&1 | Tee-Object -FilePath "../npm-install.log"
           Write-Host "Running build..."
-          npm run build 2>&1 | Tee-Object -FilePath "../../npm-build.log"
-
+          npm run build 2>&1 | Tee-Object -FilePath "../npm-build.log"
           # Verify output
-          if (Test-Path "out") {
-            Write-Host "✅ 'out' directory created" -ForegroundColor Green
-            $fileCount = (Get-ChildItem -Path "out" -Recurse -File).Count
-            Write-Host "   Files in 'out': $fileCount"
-
-            if (Test-Path "out/index.html") {
-              Write-Host "✅ index.html exists" -ForegroundColor Green
-            } else {
-              Write-Error "❌ index.html NOT found in 'out'"
-              Write-Host "Contents of 'out' directory:"
-              Get-ChildItem -Path "out" -Recurse | Format-Table Name, FullName
-              exit 1
-            }
+          if (Test-Path "out/index.html") {
+            Write-Host "✅ 'out/index.html' directory created" -ForegroundColor Green
           } else {
-            Write-Error "❌ 'out' directory was NOT created"
-            Write-Host "Contents of frontend directory:"
-            Get-ChildItem | Format-Table Name
+            Write-Error "❌ 'out/index.html' was NOT created"
             exit 1
           }
-
-          cd ../..
           Write-Host "=== FRONTEND BUILD COMPLETE ===" -ForegroundColor Green
 
       # ========== PYINSTALLER SETUP ==========
@@ -160,6 +121,13 @@ jobs:
           }
 
       # ========== PYINSTALLER BUILD ==========
+      - name: "Generate Pre-Build File Listing"
+        shell: pwsh
+        run: |
+          Write-Host "Generating file listing before build..."
+          Get-ChildItem -Recurse | Select-Object FullName, Length, LastWriteTime | Out-File -FilePath "directory-listing.log"
+          Write-Host "File listing saved to directory-listing.log"
+
       - name: 🔨 Run PyInstaller (with verbose logging)
         shell: pwsh
         env:
@@ -168,7 +136,7 @@ jobs:
           Write-Host "=== PYINSTALLER BUILD START ===" -ForegroundColor Cyan
 
           # Run PyInstaller with maximum verbosity
-          pyinstaller --noconfirm --clean --log-level DEBUG fortuna-monolith-diagnostic.spec 2>&1 | Tee-Object -FilePath "pyinstaller-build.log"
+          pyinstaller --noconfirm --clean --log-level DEBUG fortuna-monolith.spec 2>&1 | Tee-Object -FilePath "pyinstaller-build.log"
 
           Write-Host ""
           Write-Host "=== BUILD OUTPUT ANALYSIS ===" -ForegroundColor Cyan
@@ -243,11 +211,13 @@ jobs:
           name: diagnostic-logs-${{ github.run_number }}
           path: |
             pyinstaller-build.log
-            npm-install.log
-            npm-build.log
+            web_service/frontend/npm-install.log
+            web_service/frontend/npm-build.log
             exe-stdout.log
             exe-stderr.log
             build/**/*.log
+            directory-listing.log
+            pip-freeze.log
           if-no-files-found: ignore
 
       # ========== UPLOAD EXE IF IT EXISTS ==========
