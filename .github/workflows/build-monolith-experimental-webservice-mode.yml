@@ -1,8 +1,6 @@
 name: Monolith Experimental (Webservice Mode)
 
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
 
 jobs:
@@ -25,9 +23,9 @@ jobs:
 
     - name: Create required directories
       run: |
-        New-Item -ItemType Directory -Force -Path "python_service/data"
-        New-Item -ItemType Directory -Force -Path "python_service/json"
-        New-Item -ItemType Directory -Force -Path "python_service/logs"
+        New-Item -ItemType Directory -Force -Path "web_service/backend/data"
+        New-Item -ItemType Directory -Force -Path "web_service/backend/json"
+        New-Item -ItemType Directory -Force -Path "web_service/backend/logs"
 
     - name: Set up Node.js
       uses: actions/setup-node@v4
@@ -39,7 +37,6 @@ jobs:
         cd web_platform/frontend
         npm ci
         npm run build
-        Copy-Item -Path "out" -Destination "${{ github.workspace }}/frontend_dist" -Recurse -Force
 
     - name: Run PyInstaller
       run: pyinstaller --noconfirm fortuna-monolith.spec
@@ -65,11 +62,11 @@ jobs:
           }
         } catch {
           Write-Host "Smoke test failed: $_"
-            $logPath = "$env:TEMP\fortuna-monolith.log"
-            if (Test-Path $logPath) {
-              Write-Host "--- LOG FILE CONTENTS ---"
-              Get-Content $logPath
-            }
+          $logPath = "$env:TEMP\fortuna-monolith.log"
+          if (Test-Path $logPath) {
+            Write-Host "--- LOG FILE CONTENTS ---"
+            Get-Content $logPath
+          }
           exit 1
         } finally {
           Stop-Process -Name "fortuna-monolith" -Force
@@ -80,6 +77,7 @@ jobs:
       with:
         name: fortuna-monolith
         path: dist/fortuna-monolith/fortuna-monolith.exe
+        if-no-files-found: error
 
     # ========== OPTIONAL VERIFICATION STEPS ==========
     - name: Run Verification Scripts
