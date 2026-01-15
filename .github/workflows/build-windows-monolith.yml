@@ -20,7 +20,7 @@ jobs:
           node-version: '20'
 
       - name: "Build Frontend"
-        working-directory: ./web_platform/frontend
+        working-directory: ./web_service/frontend
         shell: pwsh
         run: |
           npm ci
@@ -57,7 +57,7 @@ jobs:
           PYTHONIOENCODING: "utf-8"
         run: |
           Write-Host "Building Fortuna Monolith..."
-          if (-not (Test-Path "web_platform/frontend/out")) {
+          if (-not (Test-Path "web_service/frontend/out")) {
             Write-Error "Frontend 'out' directory not found!"
             exit 1
           }
