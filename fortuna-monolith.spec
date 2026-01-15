@@ -9,11 +9,11 @@ block_cipher = None
 project_root = Path(SPECPATH).parent
 
 # CRITICAL: Verify frontend was built
-frontend_out = project_root / 'web_platform' / 'frontend' / 'out'
+frontend_out = project_root / 'web_service' / 'frontend' / 'out'
 if not frontend_out.exists():
     raise FileNotFoundError(
         f"Frontend 'out' directory not found at {frontend_out}. "
-        "Run 'npm run build' in web_platform/frontend first!"
+        "Run 'npm run build' in web_service/frontend first!"
     )
 
 if not (frontend_out / 'index.html').exists():
