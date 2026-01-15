@@ -4,6 +4,7 @@
 import asyncio
 import os
 import sys
+from pathlib import Path
 from contextlib import asynccontextmanager
 from typing import List, Optional
 
@@ -127,98 +128,18 @@ async def get_all_adapter_statuses(
 
 app.include_router(router, prefix="/api")
 
-# ╔════════════════════════════════════════════════════════════════╗
-# ║  MONOLITH 3.0: UNIFIED FRONTEND + BACKEND SERVING              ║
-# ║  This section configures FastAPI to serve the bundled          ║
-# ║  Next.js frontend while also providing all REST API endpoints. ║
-# ║  Single origin = Zero CORS issues                              ║
-# ╚════════════════════════════════════════════════════════════════╝
-
-import os
-import sys
-from pathlib import Path
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-from starlette.middleware.base import BaseHTTPMiddleware
-
-
-def get_ui_directory() -> str:
-    """
-    Resolve the frontend 'ui' directory.
-    - Frozen: sys._MEIPASS/ui (bundled by PyInstaller)
-    - Dev: web_platform/frontend/out (Next.js build output)
-    """
+# Mount static files (frontend)
+try:
     if getattr(sys, 'frozen', False):
-        return os.path.join(sys._MEIPASS, 'ui')
+        # Running as executable
+        ui_path = Path(sys.executable).parent / "ui"
+    else:
+        ui_path = Path(__file__).parent.parent.parent / "web_service" / "frontend" / "out"
 
-    # Development: try multiple paths
-    dev_path = Path(__file__).parent.parent.parent / 'web_platform' / 'frontend' / 'out'
-    if dev_path.exists():
-        return str(dev_path)
+    if ui_path.exists():
+        app.mount("/", StaticFiles(directory=str(ui_path), html=True), name="static")
+except Exception as e:
+    print(f"⚠️  Could not mount static files: {e}")
 
-    alt_path = Path.cwd() / 'web_platform' / 'frontend' / 'out'
-    if alt_path.exists():
-        return str(alt_path)
-
-    raise RuntimeError(
-        f"Frontend 'out' directory not found!\\n"
-        f"Checked: {dev_path}\\n"
-        f"Alt: {alt_path}\\n"
-        f"Please run: npm run build in web_platform/frontend/"
-    )
-
-
-UI_DIR = get_ui_directory()
-INDEX_HTML = os.path.join(UI_DIR, 'index.html')
-
-if not os.path.exists(UI_DIR):
-    raise RuntimeError(f"Frontend directory not found: {UI_DIR}")
-if not os.path.exists(INDEX_HTML):
-    raise RuntimeError(f"index.html not found: {INDEX_HTML}")
-
-log.info(f"✓ Frontend verified at: {UI_DIR}")
-
-
-class SPAMiddleware(BaseHTTPMiddleware):
-    """
-    Single Page Application Middleware.
-    Returns index.html for all non-API, non-static routes.
-    This enables Next.js client-side routing.
-    """
-
-    async def dispatch(self, request, call_next):
-        response = await call_next(request)
-
-        if response.status_code == 404:
-            path = request.url.path
-
-            # Skip for API routes
-            if path.startswith('/api'):
-                return response
-
-            # Skip for OpenAPI/docs
-            if path.startswith(('/docs', '/redoc', '/openapi')):
-                return response
-
-            # Skip for known static extensions
-            static_exts = {'.js', '.css', '.png', '.jpg', '.gif', '.svg', '.woff', '.woff2', '.ttf', '.ico'}
-            if any(path.endswith(ext) for ext in static_exts):
-                return response
-
-            # Return index.html for SPA routing
-            log.debug(f"SPA: {path} → index.html")
-            return FileResponse(INDEX_HTML)
-
-        return response
-
-
-# Add SPA middleware
-app.add_middleware(SPAMiddleware)
-
-# Mount static files (/_next/*, /images/*, etc.)
-app.mount('/static', StaticFiles(directory=UI_DIR, check_dir=False), name='static')
-
-# Mount root path for index.html and all other frontend files
-app.mount('/', StaticFiles(directory=UI_DIR, html=True), name='ui')
-
-log.info("✓ Frontend and API unified at http://localhost:8000")
+# Export app for Uvicorn
+__all__ = ["app"]
