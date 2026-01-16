@@ -100,12 +100,11 @@ class FortunaDesktopApp {
       backendCommand = path.join(__dirname, '..', '.venv', 'Scripts', 'python.exe');
       backendCwd = path.join(__dirname, '..', 'web_service', 'backend');
     } else {
-      const backendFolder = path.join(process.resourcesPath, 'fortuna-backend');
-      backendCommand = path.join(backendFolder, 'fortuna-backend.exe');
-      backendCwd = backendFolder;
+      // CORRECTED PATH: In production, the backend executable is at the root of the resources directory.
+      backendCommand = path.join(process.resourcesPath, 'fortuna-backend.exe');
+      backendCwd = process.resourcesPath;
 
       console.log(`[Backend] Looking for executable at: ${backendCommand}`);
-      console.log(`[Backend] Directory exists: ${fs.existsSync(backendFolder)}`);
       console.log(`[Backend] Executable exists: ${fs.existsSync(backendCommand)}`);
     }
 
