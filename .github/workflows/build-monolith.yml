@@ -51,17 +51,17 @@ jobs:
           Write-Host "=== BUILDING FRONTEND ===" -ForegroundColor Cyan
 
           # Create/verify next.config.js
-          $config = @"
-          /** @type {import('next').NextConfig} */
-          const nextConfig = {
-            output: 'export',
-            images: { unoptimized: true },
-            trailingSlash: true,
-          }
-          module.exports = nextConfig
-          "@
-
-          Set-Content -Path "next.config.js" -Value $config -Encoding UTF8
+          $configLines = @(
+            "/** @type {import('next').NextConfig} */",
+            "const nextConfig = {",
+            "  output: 'export',",
+            "  images: { unoptimized: true },",
+            "  trailingSlash: true,",
+            "}",
+            "module.exports = nextConfig"
+          )
+          $configContent = $configLines -join [System.Environment]::NewLine
+          Set-Content -Path "next.config.js" -Value $configContent -Encoding UTF8
           Write-Host "✅ next.config.js set"
 
           Write-Host "Installing dependencies..."
@@ -190,7 +190,6 @@ jobs:
             } catch {
               Start-Sleep -Seconds 1
             }
-          }
 
           Write-Host "❌ SMOKE TEST FAILED" -ForegroundColor Red
           Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue

@@ -3,7 +3,6 @@ name: Build Monolith (FINAL FIX)
 on:
   push:
     branches: [ jules115b ]
-  workflow_dispatch:
 
 jobs:
   build:
@@ -51,17 +50,17 @@ jobs:
           Write-Host "=== BUILDING FRONTEND ===" -ForegroundColor Cyan
 
           # Create/verify next.config.js
-          $config = @"
-          /** @type {import('next').NextConfig} */
-          const nextConfig = {
-            output: 'export',
-            images: { unoptimized: true },
-            trailingSlash: true,
-          }
-          module.exports = nextConfig
-          "@
-
-          Set-Content -Path "next.config.js" -Value $config -Encoding UTF8
+          $configLines = @(
+            "/** @type {import('next').NextConfig} */",
+            "const nextConfig = {",
+            "  output: 'export',",
+            "  images: { unoptimized: true },",
+            "  trailingSlash: true,",
+            "}",
+            "module.exports = nextConfig"
+          )
+          $configContent = $configLines -join [System.Environment]::NewLine
+          Set-Content -Path "next.config.js" -Value $configContent -Encoding UTF8
           Write-Host "✅ next.config.js set"
 
           Write-Host "Installing dependencies..."
