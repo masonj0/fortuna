@@ -13,17 +13,17 @@ block_cipher = None
 spec_path = Path(SPECPATH) if 'SPECPATH' in dir() else Path(os.path.dirname(os.path.abspath(__file__)))
 project_root = spec_path.parent if spec_path.name == 'fortuna-monolith.spec' else spec_path
 
-print(f"\n{'='*70}")
-print(f"FORTUNA MONOLITH SPEC - PATH RESOLUTION")
-print(f"{'='*70}")
+print("\n" + "="*70)
+print("FORTUNA MONOLITH SPEC - PATH RESOLUTION")
+print("="*70)
 print(f"Spec file location: {spec_path}")
 print(f"Project root:       {project_root}")
 print(f"Current working:    {Path.cwd()}")
 
 # ===== FRONTEND VALIDATION =====
-print(f"\n{'='*70}")
-print(f"FRONTEND VALIDATION")
-print(f"{'='*70}")
+print("\n" + "="*70)
+print("FRONTEND VALIDATION")
+print("="*70)
 
 frontend_out = project_root / 'web_service' / 'frontend' / 'out'
 print(f"Looking for frontend at: {frontend_out}")
@@ -37,25 +37,24 @@ if frontend_out.exists():
     if index_html.exists():
         file_count = len(list(frontend_out.rglob('*')))
         size = index_html.stat().st_size
-        print(f"✅ Frontend validated!")
+        print("[OK] Frontend validated!")
         print(f"   Files: {file_count}")
         print(f"   index.html size: {size} bytes")
     else:
-        print(f"❌ FATAL: index.html not found at {index_html}")
-        # List what IS in the directory
+        print(f"[ERROR] FATAL: index.html not found at {index_html}")
         print(f"\nContents of {frontend_out}:")
         for item in frontend_out.iterdir():
             print(f"  - {item.name}")
         sys.exit(1)
 else:
-    print(f"❌ FATAL: Frontend 'out' directory not found!")
+    print(f"[ERROR] FATAL: Frontend 'out' directory not found!")
     print(f"\nSearching for 'out' directory from project root:")
     for root, dirs, files in os.walk(project_root):
         if 'out' in dirs:
             out_path = Path(root) / 'out'
             print(f"  Found at: {out_path}")
             if (out_path / 'index.html').exists():
-                print(f"    ✓ Has index.html")
+                print(f"    [OK] Has index.html")
                 frontend_out = out_path
                 break
     else:
@@ -63,9 +62,9 @@ else:
         sys.exit(1)
 
 # ===== BACKEND VALIDATION =====
-print(f"\n{'='*70}")
-print(f"BACKEND VALIDATION")
-print(f"{'='*70}")
+print("\n" + "="*70)
+print("BACKEND VALIDATION")
+print("="*70)
 
 backend_root = project_root / 'web_service' / 'backend'
 main_py = backend_root / 'main.py'
@@ -75,7 +74,7 @@ print(f"main.py path:           {main_py}")
 print(f"main.py exists:         {main_py.exists()}")
 
 if not main_py.exists():
-    print(f"❌ FATAL: Backend main.py not found!")
+    print(f"[ERROR] FATAL: Backend main.py not found!")
     print(f"\nContents of {backend_root}:")
     if backend_root.exists():
         for item in backend_root.iterdir():
@@ -84,35 +83,35 @@ if not main_py.exists():
         print(f"  Directory doesn't exist!")
     sys.exit(1)
 
-print(f"✅ Backend validated!")
+print(f"[OK] Backend validated!")
 print(f"   main.py size: {main_py.stat().st_size} bytes")
 
 # ===== DATA FILES =====
-print(f"\n{'='*70}")
-print(f"COLLECTING DATA FILES")
-print(f"{'='*70}")
+print("\n" + "="*70)
+print("COLLECTING DATA FILES")
+print("="*70)
 
 datas = []
 
 # Frontend
 datas.append((str(frontend_out), 'ui'))
-print(f"✅ Frontend:  {frontend_out} → ui/")
+print(f"[OK] Frontend:  {frontend_out} -> ui/")
 
 # Backend directories
 for dirname in ['data', 'json', 'logs']:
     src = backend_root / dirname
     if src.exists():
         datas.append((str(src), dirname))
-        print(f"✅ {dirname:8}: {src}")
+        print(f"[OK] {dirname:8}: {src}")
     else:
-        print(f"⚠️  {dirname:8}: Not found (will create)")
+        print(f"[WARN] {dirname:8}: Not found (will create)")
 
 print(f"\nTotal data entries: {len(datas)}")
 
 # ===== HIDDEN IMPORTS =====
-print(f"\n{'='*70}")
-print(f"COLLECTING HIDDEN IMPORTS")
-print(f"{'='*70}")
+print("\n" + "="*70)
+print("COLLECTING HIDDEN IMPORTS")
+print("="*70)
 
 core_imports = [
     'uvicorn', 'uvicorn.logging', 'uvicorn.loops', 'uvicorn.loops.auto',
@@ -132,9 +131,9 @@ print(f"Backend submodules:     {len(backend_submodules)}")
 print(f"Total hidden imports:   {len(hiddenimports)}")
 
 # ===== ANALYSIS =====
-print(f"\n{'='*70}")
-print(f"CREATING PYINSTALLER ANALYSIS")
-print(f"{'='*70}")
+print("\n" + "="*70)
+print("CREATING PYINSTALLER ANALYSIS")
+print("="*70)
 
 a = Analysis(
     [str(main_py)],
@@ -150,16 +149,16 @@ a = Analysis(
     noarchive=False,
 )
 
-print(f"✅ Analysis created")
+print(f"[OK] Analysis created")
 print(f"   Scripts:       {len(a.scripts)}")
 print(f"   Pure modules:  {len(a.pure)}")
 print(f"   Binaries:      {len(a.binaries)}")
 print(f"   Data files:    {len(a.datas)}")
 
 # ===== BUILD =====
-print(f"\n{'='*70}")
-print(f"BUILDING EXECUTABLE")
-print(f"{'='*70}")
+print("\n" + "="*70)
+print("BUILDING EXECUTABLE")
+print("="*70)
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
@@ -187,5 +186,5 @@ coll = COLLECT(
     name='fortuna-monolith'
 )
 
-print(f"✅ Spec file complete!")
-print(f"\n{'='*70}\n")
+print(f"[OK] Spec file complete!")
+print("\n" + "="*70 + "\n")
