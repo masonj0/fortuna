@@ -1,36 +1,70 @@
-# Use a Node.js base image to get Node and npm
-FROM node:20-slim as frontend-builder
+# Stage 1: Build Frontend
+FROM node:20-alpine AS frontend-builder
+
+WORKDIR /app/web_service/frontend
+
+# Copy package files
+COPY web_service/frontend/package*.json ./
+
+# Install dependencies
+RUN npm install --legacy-peer-deps
+
+# Create next.config.js with static export
+RUN cat > next.config.js << 'EOF'
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  output: 'export',
+  images: { unoptimized: true },
+  trailingSlash: true,
+}
+module.exports = nextConfig
+EOF
+
+# Copy source
+COPY web_service/frontend/src ./src
+COPY web_service/frontend/public ./public
+
+# Build
+RUN npm run build
+
+# Verify output
+RUN if [ ! -f out/index.html ]; then echo "❌ Frontend build failed!"; exit 1; fi
+
+# Stage 2: Build Backend
+FROM python:3.10.11-slim
 
 WORKDIR /app
 
-# Copy frontend source and build it
-COPY web_platform/frontend ./web_platform/frontend
-RUN cd web_platform/frontend && npm ci && npm run build
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
 
-# Use a Python base image for the final application
-FROM python:3.11-slim
-
-WORKDIR /app
+# Copy requirements
+COPY web_service/backend/requirements.txt /app/web_service/backend/
 
 # Install Python dependencies
-COPY web_service/backend/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r /app/web_service/backend/requirements.txt
 
-# Copy backend source
-COPY web_service/backend ./web_service/backend
+# Copy backend code
+COPY web_service/backend /app/web_service/backend
+COPY web_service/__init__.py /app/web_service/
 
-# Copy the built frontend from the builder stage
-COPY --from=frontend-builder /app/web_platform/frontend/out ./web_platform/frontend/out
+# Copy frontend build from stage 1
+COPY --from=frontend-builder /app/web_service/frontend/out /app/web_service/frontend/out
 
-# Create directories
-RUN mkdir -p data json logs
-
-# Expose port
-EXPOSE 8000
+# Create required directories
+RUN mkdir -p /app/web_service/backend/data \
+    && mkdir -p /app/web_service/backend/json \
+    && mkdir -p /app/web_service/backend/logs
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"
+    CMD curl -f http://localhost:8000/api/health || exit 1
 
-# Start monolith
+# Set entrypoint
+WORKDIR /app
+ENV PYTHONUNBUFFERED=1
+EXPOSE 8000
+
 CMD ["python", "-m", "web_service.backend.main"]
