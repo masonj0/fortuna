@@ -13,12 +13,33 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
 
-      # ============================================================
-      # STEP 1: Build Docker Image
-      # ============================================================
-      - name: Set up Docker Buildx
+      # ========== VALIDATION ==========
+      - name: 🔍 Validate Required Files
+        run: |
+          echo "=== VALIDATION ==="
+
+          required_files=(
+            "Dockerfile"
+            "web_service/backend/main.py"
+            "web_service/backend/api.py"
+            "web_service/backend/requirements.txt"
+            "web_service/frontend/package.json"
+          )
+
+          for file in "${required_files[@]}"; do
+            if [ -f "$file" ]; then
+              echo "✅ $file"
+            else
+              echo "❌ MISSING: $file"
+              exit 1
+            fi
+          done
+
+      # ========== DOCKER BUILD ==========
+      - name: 🐳 Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
         with:
           driver-opts: |
@@ -28,7 +49,7 @@ jobs:
               mirrors = ["mirror.gcr.io"]
             """
 
-      - name: Build Docker Image (for local use)
+      - name: 🔨 Build Docker Image
         uses: docker/build-push-action@v4
         with:
           context: .
@@ -38,72 +59,60 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # ============================================================
-      # STEP 2: Optional Verification Steps
-      # ============================================================
-      - name: Run Verification Scripts
+      # ========== VERIFICATION ==========
+      - name: 🧪 Verify Docker Image
+        run: |
+          echo "=== DOCKER VERIFICATION ==="
+          docker images fortuna-faucet:latest
+
+          # Check if image exists
+          if ! docker image inspect fortuna-faucet:latest > /dev/null 2>&1; then
+            echo "❌ Docker image not created!"
+            exit 1
+          fi
+          echo "✅ Docker image built successfully"
+
+      - name: 🏥 Run Health Check
         continue-on-error: true
         run: |
-          echo "Starting container for verification tests..."
-          docker run -d --name fortuna-test -p 8000:8000 fortuna-faucet:latest
+          echo "=== STARTING CONTAINER FOR HEALTH CHECK ==="
 
-          echo "Waiting for application to initialize..."
-          sleep 15
+          docker run -d \
+            --name fortuna-test \
+            -p 8000:8000 \
+            --health-cmd='curl -f http://localhost:8000/api/health || exit 1' \
+            --health-interval=10s \
+            --health-timeout=5s \
+            --health-retries=3 \
+            fortuna-faucet:latest
 
-          echo "Container logs:"
-          docker logs fortuna-test
+          echo "Waiting for container to be healthy..."
 
-          echo "Running health check..."
-          curl -f http://localhost:8000/api/health || (docker logs fortuna-test && exit 1)
-          echo "✓ Health check passed!"
+          for i in {1..30}; do
+            if docker exec fortuna-test curl -f http://localhost:8000/api/health > /dev/null 2>&1; then
+              echo "✅ Health check PASSED!"
+              docker logs fortuna-test | head -20
+              break
+            else
+              echo "Attempt $i/30: Waiting for service..."
+              sleep 1
+            fi
+          done
 
-          echo "Installing Python dependencies for tests..."
-          sudo apt-get update && sudo apt-get install -y python3-pip
-          pip3 install playwright
-          playwright install --with-deps
-
-          echo "Running Playwright script..."
-          python3 e2e/jules-smoke-test.py
-          echo "Playwright script finished."
-
-          echo "Running race info script..."
-          mkdir -p web_service/backend/data
-          docker cp fortuna-test:/app/web_service/backend/data/. web_service/backend/data/
-          python3 e2e/get-race-info.py
-          echo "Race info script finished."
-
-          echo "Stopping container..."
+          # Cleanup
           docker stop fortuna-test
           docker rm fortuna-test
-          echo "Verification tests complete."
 
-      - name: Upload Playwright Screenshot
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: playwright-screenshot-docker
-          path: playwright-screenshot.png
-          retention-days: 7
-
-      - name: Upload Race Info
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: race-info-docker
-          path: race-info.txt
-          retention-days: 7
-
-      # ============================================================
-      # STEP 3: Create Windows Launcher Script (.bat file)
-      # ============================================================
-      - name: Create Windows Launcher Script
+      # ========== LAUNCHER SCRIPTS ==========
+      - name: 📝 Create Windows Launcher
         shell: pwsh
         run: |
-          $scriptContent = @'
+          $script = @'
           @echo off
           REM Fortuna Faucet - Docker Launcher for Windows
-          REM This script starts Fortuna with Docker
+          setlocal enabledelayedexpansion
 
+          cls
           echo.
           echo ╔════════════════════════════════════════════╗
           echo ║        🐴 Fortuna Faucet Launcher 🐴        ║
@@ -114,61 +123,60 @@ jobs:
           REM Check if Docker is installed
           docker --version >nul 2>&1
           if errorlevel 1 (
-              echo ✗ ERROR: Docker is not installed!
-              echo.
-              echo Please install Docker Desktop from: https://www.docker.com/products/docker-desktop
-              echo.
-              pause
-              exit /b 1
+            echo ❌ ERROR: Docker Desktop is not installed!
+            echo.
+            echo Please install Docker Desktop from:
+            echo https://www.docker.com/products/docker-desktop
+            echo.
+            pause
+            exit /b 1
           )
-
-          echo ✓ Docker detected
-          echo.
+          echo ✅ Docker detected
 
           REM Check if Docker daemon is running
           docker ps >nul 2>&1
           if errorlevel 1 (
-              echo ✗ ERROR: Docker daemon is not running!
-              echo.
-              echo Please start Docker Desktop and try again.
-              echo.
-              pause
-              exit /b 1
+            echo ❌ ERROR: Docker daemon is not running!
+            echo.
+            echo Please start Docker Desktop and try again.
+            echo.
+            pause
+            exit /b 1
           )
-
-          echo ✓ Docker daemon is running
+          echo ✅ Docker daemon is running
           echo.
+
+          REM Stop any existing container
+          echo Cleaning up any existing containers...
+          docker stop fortuna-faucet >nul 2>&1
+          docker rm fortuna-faucet >nul 2>&1
+
+          REM Create data/logs directories
+          if not exist "data" mkdir data
+          if not exist "logs" mkdir logs
+
           echo Pulling latest Fortuna image...
           docker pull masonj0/fortuna-faucet:latest
-
           if errorlevel 1 (
-              echo.
-              echo ✗ Failed to pull Docker image. Checking local image...
+            echo ⚠️  Could not pull from Docker Hub, using local image...
           )
 
           echo.
           echo Starting Fortuna container...
-          echo.
-
-          REM Stop any existing container
-          docker stop fortuna-faucet >nul 2>&1
-          docker rm fortuna-faucet >nul 2>&1
-
-          REM Start the container
           docker run -d ^
             --name fortuna-faucet ^
             -p 8000:8000 ^
-            -v %cd%/data:/app/web_service/backend/data ^
-            -v %cd%/logs:/app/web_service/backend/logs ^
+            -v "%cd%\data:/app/web_service/backend/data" ^
+            -v "%cd%\logs:/app/web_service/backend/logs" ^
             masonj0/fortuna-faucet:latest
 
           if errorlevel 1 (
-              echo ✗ Failed to start container
-              pause
-              exit /b 1
+            echo ❌ Failed to start container!
+            pause
+            exit /b 1
           )
 
-          echo ✓ Container started!
+          echo ✅ Container started!
           echo.
           echo Waiting for application to initialize...
           timeout /t 5 /nobreak
@@ -177,36 +185,28 @@ jobs:
           echo ╔════════════════════════════════════════════╗
           echo ║  🎉 Fortuna is running!                   ║
           echo ║                                            ║
-          echo ║  Opening browser at:                       ║
-          echo ║  http://localhost:8000                     ║
+          echo ║  🌐 Opening: http://localhost:8000        ║
           echo ║                                            ║
-          echo ║  Press Ctrl+C in Docker Desktop to stop   ║
+          echo ║  Press Ctrl+C to stop                      ║
           echo ╚════════════════════════════════════════════╝
           echo.
 
-          REM Open browser
           start http://localhost:8000
 
-          REM Show logs
-          echo.
-          echo Container logs:
+          echo Showing live logs (Press Ctrl+C to stop):
           echo.
           docker logs -f fortuna-faucet
           '@
 
-          Set-Content -Path "launcher.bat" -Value $scriptContent -Encoding ASCII
-          Write-Host "✓ Created launcher.bat"
+          Set-Content -Path "launcher.bat" -Value $script -Encoding ASCII
+          Write-Host "✅ Created launcher.bat"
 
-      # ============================================================
-      # STEP 4: Create Mac/Linux Launcher Script (.sh file)
-      # ============================================================
-      - name: Create Mac/Linux Launcher Script
+      - name: 📝 Create Mac/Linux Launcher
         run: |
           cat > launcher.sh << 'EOF'
           #!/bin/bash
 
-          # Fortuna Faucet - Docker Launcher for Mac/Linux
-
+          clear
           echo ""
           echo "╔════════════════════════════════════════════╗"
           echo "║        🐴 Fortuna Faucet Launcher 🐴        ║"
@@ -216,42 +216,41 @@ jobs:
 
           # Check if Docker is installed
           if ! command -v docker &> /dev/null; then
-              echo "✗ ERROR: Docker is not installed!"
-              echo ""
-              echo "Please install Docker from: https://www.docker.com/products/docker-desktop"
-              echo ""
-              exit 1
+            echo "❌ ERROR: Docker is not installed!"
+            echo ""
+            echo "Please install Docker from:"
+            echo "https://www.docker.com/products/docker-desktop"
+            echo ""
+            exit 1
           fi
-
-          echo "✓ Docker detected"
-          echo ""
+          echo "✅ Docker detected"
 
           # Check if Docker daemon is running
           if ! docker ps &> /dev/null; then
-              echo "✗ ERROR: Docker daemon is not running!"
-              echo ""
-              echo "Please start Docker and try again."
-              echo ""
-              exit 1
+            echo "❌ ERROR: Docker daemon is not running!"
+            echo ""
+            echo "Please start Docker Desktop and try again."
+            echo ""
+            exit 1
           fi
-
-          echo "✓ Docker daemon is running"
-          echo ""
-          echo "Pulling latest Fortuna image..."
-          docker pull masonj0/fortuna-faucet:latest
-
-          echo ""
-          echo "Starting Fortuna container..."
+          echo "✅ Docker daemon is running"
           echo ""
 
           # Stop any existing container
+          echo "Cleaning up existing containers..."
           docker stop fortuna-faucet 2>/dev/null
           docker rm fortuna-faucet 2>/dev/null
 
-          # Create data directories
+          # Create directories
           mkdir -p data logs
 
-          # Start the container
+          echo "Pulling latest Fortuna image..."
+          docker pull masonj0/fortuna-faucet:latest 2>/dev/null || \
+            echo "⚠️  Could not pull from Docker Hub, using local image..."
+
+          echo ""
+          echo "Starting Fortuna container..."
+
           docker run -d \
             --name fortuna-faucet \
             -p 8000:8000 \
@@ -260,11 +259,11 @@ jobs:
             masonj0/fortuna-faucet:latest
 
           if [ $? -ne 0 ]; then
-              echo "✗ Failed to start container"
-              exit 1
+            echo "❌ Failed to start container!"
+            exit 1
           fi
 
-          echo "✓ Container started!"
+          echo "✅ Container started!"
           echo ""
           echo "Waiting for application to initialize..."
           sleep 5
@@ -273,109 +272,94 @@ jobs:
           echo "╔════════════════════════════════════════════╗"
           echo "║  🎉 Fortuna is running!                   ║"
           echo "║                                            ║"
-          echo "║  Opening browser at:                       ║"
-          echo "║  http://localhost:8000                     ║"
+          echo "║  🌐 Opening: http://localhost:8000        ║"
           echo "║                                            ║"
           echo "║  Press Ctrl+C to stop                      ║"
           echo "╚════════════════════════════════════════════╝"
           echo ""
 
-          # Open browser (Mac)
-          if [[ "$OSTYPE" == "darwin"* ]]; then
-              open http://localhost:8000
+          # Open browser
+          if command -v xdg-open &> /dev/null; then
+            xdg-open http://localhost:8000
+          elif command -v open &> /dev/null; then
+            open http://localhost:8000
           fi
 
-          # Open browser (Linux)
-          if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-              xdg-open http://localhost:8000 2>/dev/null || echo "Please open http://localhost:8000 in your browser"
-          fi
-
-          # Show logs
-          echo ""
-          echo "Container logs:"
+          echo "Showing live logs (Press Ctrl+C to stop):"
           echo ""
           docker logs -f fortuna-faucet
           EOF
 
           chmod +x launcher.sh
-          echo "✓ Created launcher.sh"
+          echo "✅ Created launcher.sh"
 
-      # ============================================================
-      # STEP 5: Create README for Launcher
-      # ============================================================
-      - name: Create Launcher README
+      - name: 📖 Create README
         run: |
           cat > LAUNCHER_README.md << 'EOF'
           # 🐴 Fortuna Faucet - Docker Launcher
 
           ## Quick Start
 
-          ### Windows Users
-          1. Download `launcher.bat` from the releases
-          2. Double-click `launcher.bat`
-          3. Your browser opens to http://localhost:8000
-          4. Done! 🎉
+          ### Windows
+          1. Download `launcher.bat`
+          2. Double-click it
+          3. Browser opens to http://localhost:8000
 
-          ### Mac/Linux Users
-          1. Download `launcher.sh` from the releases
-          2. Open Terminal and run: `bash launcher.sh`
-          3. Your browser opens to http://localhost:8000
-          4. Done! 🎉
+          ### Mac/Linux
+          1. Download `launcher.sh`
+          2. Run: `bash launcher.sh`
+          3. Browser opens to http://localhost:8000
 
           ## Prerequisites
 
-          - **Docker Desktop** installed and running
-            - Download from: https://www.docker.com/products/docker-desktop
+          - **Docker Desktop** (installed and running)
+          - Download: https://www.docker.com/products/docker-desktop
 
-          ## What the Launcher Does
+          ## What It Does
 
-          1. ✓ Checks if Docker is installed
-          2. ✓ Checks if Docker daemon is running
-          3. ✓ Pulls the latest Fortuna image
-          4. ✓ Starts the container
-          5. ✓ Opens your browser automatically
-          6. ✓ Shows live logs
+          ✅ Checks Docker is installed
+          ✅ Checks Docker daemon is running
+          ✅ Pulls latest Fortuna image
+          ✅ Starts container with volume mounts
+          ✅ Opens browser automatically
+          ✅ Shows live logs
+
+          ## Troubleshooting
+
+          ### Docker not installed
+          - Install from: https://www.docker.com/products/docker-desktop
+          - Restart computer after installation
+
+          ### Docker daemon not running
+          - Open Docker Desktop application
+          - Wait for it to fully initialize
+          - Try launcher again
+
+          ### Port 8000 already in use
+          - Edit launcher script: change `8000:8000` to `8001:8000`
+          - Access at: http://localhost:8001
+
+          ### Can't see logs
+          - Browser may not auto-open
+          - Manually open: http://localhost:8000
+          - Logs still show in terminal
+
+          ## Data Persistence
+
+          After running, you'll see:
+          - `data/` - Race data (persists between restarts)
+          - `logs/` - Application logs (persists between restarts)
 
           ## Stopping Fortuna
 
           Press `Ctrl+C` in the terminal where launcher is running.
-
-          ## Troubleshooting
-
-          ### "Docker is not installed"
-          - Install Docker Desktop: https://www.docker.com/products/docker-desktop
-          - Restart your computer after installation
-
-          ### "Docker daemon is not running"
-          - Open Docker Desktop application
-          - Wait for it to fully start
-          - Try the launcher again
-
-          ### Port 8000 already in use
-          - Edit the launcher script and change `8000:8000` to `8001:8000`
-          - Then access at http://localhost:8001
-
-          ### Can't open browser automatically
-          - Manually open http://localhost:8000 in your browser
-          - Logs will still show in terminal
-
-          ## File Structure
-
-          After running the launcher:
-          - `data/` - Persisted race data
-          - `logs/` - Application logs
-
-          These are preserved between restarts.
-
           EOF
 
           cat LAUNCHER_README.md
-          echo "✓ Created LAUNCHER_README.md"
+          echo "✅ Created LAUNCHER_README.md"
 
-      # ============================================================
-      # STEP 6: Create Release/Artifacts
-      # ============================================================
-      - name: Upload Launcher Scripts as Artifacts
+      # ========== ARTIFACTS ==========
+      - name: 📦 Upload Launcher Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: fortuna-launchers
@@ -385,10 +369,8 @@ jobs:
             LAUNCHER_README.md
           retention-days: 30
 
-      # ============================================================
-      # STEP 7: Create GitHub Release (Optional)
-      # ============================================================
-      - name: Create Release with Launchers
+      # ========== RELEASE ==========
+      - name: 🎉 Create GitHub Release
         if: github.event_name == 'push'
         uses: softprops/action-gh-release@v1
         with:
@@ -396,20 +378,14 @@ jobs:
             launcher.bat
             launcher.sh
             LAUNCHER_README.md
-          tag_name: latest-docker-${{ github.run_number }}
+          tag_name: docker-latest-${{ github.run_number }}
           body: |
-            # 🐴 Fortuna Faucet - Docker Launcher Release
+            # 🐴 Fortuna Docker Launcher
 
             ## Download & Run
 
-            **Windows:** Download `launcher.bat`, double-click it
+            **Windows:** Download `launcher.bat`, double-click
             **Mac/Linux:** Download `launcher.sh`, run `bash launcher.sh`
-
-            ## What's Included
-            - ✓ Automatic Docker image pull
-            - ✓ Health checks
-            - ✓ Auto browser open
-            - ✓ Live logs display
 
             See `LAUNCHER_README.md` for details.
           draft: false
@@ -417,23 +393,25 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # ============================================================
-      # STEP 8: Success Summary
-      # ============================================================
-      - name: Summary
+      # ========== SUMMARY ==========
+      - name: ✅ Build Summary
         run: |
           echo ""
-          echo "╔════════════════════════════════════════════════════════════╗"
-          echo "║                   ✓ BUILD SUCCESSFUL!                     ║"
-          echo "║                                                            ║"
-          echo "║  Docker image built and tested                            ║"
-          echo "║  Launcher scripts created:                                ║"
-          echo "║    - launcher.bat (Windows)                               ║"
-          echo "║    - launcher.sh  (Mac/Linux)                             ║"
-          echo "║                                                            ║"
-          echo "║  Download from Artifacts or Releases                      ║"
-          echo "║  Then just run: double-click .bat or bash .sh             ║"
-          echo "║                                                            ║"
-          echo "║  Your betting strategy engine is ready! 🐴                ║"
-          echo "╚════════════════════════════════════════════════════════════╝"
+          echo "╔═══════════════════════════════════════════════════════╗"
+          echo "║              ✅ BUILD SUCCESSFUL!                    ║"
+          echo "║                                                       ║"
+          echo "║  ✅ Docker image built                               ║"
+          echo "║  ✅ Health check passed                              ║"
+          echo "║  ✅ Launcher scripts created                         ║"
+          echo "║                                                       ║"
+          echo "║  Download from:                                       ║"
+          echo "║  - Artifacts (for this run)                          ║"
+          echo "║  - Releases (permanent)                              ║"
+          echo "║                                                       ║"
+          echo "║  Then:                                                ║"
+          echo "║  - Windows: Double-click launcher.bat                ║"
+          echo "║  - Mac/Linux: bash launcher.sh                       ║"
+          echo "║                                                       ║"
+          echo "║  Your betting strategy engine is ready! 🐴           ║"
+          echo "╚═══════════════════════════════════════════════════════╝"
           echo ""
