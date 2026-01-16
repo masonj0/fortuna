@@ -190,7 +190,6 @@ jobs:
             } catch {
               Start-Sleep -Seconds 1
             }
-          }
 
           Write-Host "❌ SMOKE TEST FAILED" -ForegroundColor Red
           Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
