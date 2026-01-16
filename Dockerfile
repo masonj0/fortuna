@@ -30,8 +30,6 @@ RUN npm run build
 # Verify output
 RUN if [ ! -f out/index.html ]; then echo "❌ Frontend build failed!"; exit 1; fi
 
----
-
 # Stage 2: Build Backend
 FROM python:3.10.11-slim
 
