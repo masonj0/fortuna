@@ -150,12 +150,52 @@ jobs:
             exit 1
           }
 
-      # ========== UPLOAD ==========
-      - name: 📤 Upload EXE
+      # ========== PACKAGE & UPLOAD ==========
+      - name: 📦 Package Artifact for Distribution
+        shell: pwsh
+        run: |
+          $distDir = "dist/fortuna-monolith"
+          Write-Host "=== PACKAGING ARTIFACT ===" -ForegroundColor Cyan
+
+          # Create README.txt
+          $readmeLines = @(
+            'Fortuna Monolith',
+            '',
+            'This directory contains the main executable (fortuna-monolith.exe).',
+            '',
+            'To run the application, please use the run.bat script. It will start the application and keep this window open. If the application fails to start, you will see error messages here.',
+            '',
+            'For detailed debugging, a full log file is created inside this same directory, named:',
+            'fortuna-monolith.log',
+            '',
+            'You can view this log file with any text editor.'
+          )
+          $readmeLines | Out-File -FilePath "$distDir/README.txt" -Encoding utf8
+          Write-Host "✅ Created README.txt"
+
+          # Create run.bat
+          $batLines = @(
+            '@echo off',
+            'echo Starting Fortuna Monolith...',
+            'echo.',
+            'call "%~dp0fortuna-monolith.exe"',
+            'echo.',
+            'echo Application has exited. Press any key to close this window...',
+            'pause > nul'
+          )
+          $batLines | Out-File -FilePath "$distDir/run.bat" -Encoding ascii
+          Write-Host "✅ Created run.bat"
+
+          # Create ZIP archive
+          $zipFileName = "Fortuna-Monolith-Windows-${{ github.run_number }}.zip"
+          Compress-Archive -Path "$distDir/*" -DestinationPath $zipFileName -Force
+          Write-Host "✅ Created $zipFileName" -ForegroundColor Green
+
+      - name: 📤 Upload Packaged Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Fortuna-Monolith-${{ github.run_number }}
-          path: dist/fortuna-monolith/fortuna-monolith.exe
+          name: Fortuna-Monolith-Windows-${{ github.run_number }}
+          path: Fortuna-Monolith-Windows-${{ github.run_number }}.zip
           if-no-files-found: error
 
       # ========== TEST ==========
@@ -164,64 +204,82 @@ jobs:
         timeout-minutes: 3
         run: |
           Write-Host "=== SMOKE TEST ===" -ForegroundColor Cyan
+          $distDir = "dist/fortuna-monolith"
+          $exe = "$distDir/fortuna-monolith.exe"
+          $outputLog = "$distDir/smoke-test-output.log"
+          $internalLog = "$distDir/fortuna-monolith.log"
 
-          $exe = "dist/fortuna-monolith/fortuna-monolith.exe"
-          $outputLog = "dist/fortuna-monolith/smoke-test-output.log"
-          $internalLog = "dist/fortuna-monolith/fortuna-monolith.log"
+          Write-Host "--- 1. Directory Manifest ---" -ForegroundColor Yellow
+          Get-ChildItem -Path $distDir -Recurse | Format-Table Name, Length
+          if (-not (Test-Path $exe)) {
+            Write-Error "FATAL: Executable not found at $exe"
+            exit 1
+          }
 
-          Write-Host "Starting executable: $exe"
+          Write-Host "--- 2. Network State Dump ---" -ForegroundColor Yellow
+          netstat -ano
+          Write-Host "--- End of Network State ---"
+
+          Write-Host "--- 3. Starting Executable ---" -ForegroundColor Yellow
+          Write-Host "Starting: $exe"
           cmd /c "start /b `"$exe`" > `"$outputLog`" 2>&1"
           Start-Sleep -Seconds 5 # Wait for the process to initialize
 
           $proc = Get-Process -Name "fortuna-monolith" -ErrorAction SilentlyContinue
           if (-not $proc) {
               Write-Host "❌ Process failed to start!" -ForegroundColor Red
-              if (Test-Path $outputLog) {
-                  Write-Host "--- Displaying startup output log ---"
-                  Get-Content $outputLog
-              }
-              if (Test-Path $internalLog) {
-                  Write-Host "--- Displaying internal application log ---"
-                  Get-Content $internalLog
-              }
-              exit 1
-          }
-
-          Write-Host "PID: $($proc.Id). Waiting up to 20 seconds for health check..."
-          $success = $false
-          for ($i = 1; $i -le 20; $i++) {
-              if ($proc.HasExited) {
-                  Write-Host "❌ Process exited prematurely (code: $($proc.ExitCode))" -ForegroundColor Red
-                  break
-              }
-              try {
-                  $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/health" -UseBasicParsing -TimeoutSec 1 -ErrorAction Stop
-                  if ($response.StatusCode -eq 200) {
-                      Write-Host "✅ SMOKE TEST PASSED!" -ForegroundColor Green
-                      $success = $true
+              # Failure analysis will run at the end
+              $success = $false
+          } else {
+              Write-Host "PID: $($proc.Id). Waiting up to 20 seconds for health check..."
+              $success = $false
+              for ($i = 1; $i -le 20; $i++) {
+                  if ($proc.HasExited) {
+                      Write-Host "❌ Process exited prematurely (code: $($proc.ExitCode))" -ForegroundColor Red
                       break
                   }
-              } catch {
-                  Write-Host "Health check attempt $i failed. Retrying..."
-                  Start-Sleep -Seconds 1
+                  try {
+                      $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/health" -UseBasicParsing -TimeoutSec 1 -ErrorAction Stop
+                      if ($response.StatusCode -eq 200) {
+                          Write-Host "✅ SMOKE TEST PASSED!" -ForegroundColor Green
+                          $success = $true
+                          break
+                      }
+                  } catch {
+                      Write-Host "Health check attempt $i failed. Retrying..."
+                      Start-Sleep -Seconds 1
+                  }
               }
           }
 
+          # --- Cleanup ---
           if ($proc -and -not $proc.HasExited) {
               Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
           }
 
-          if (-not $success) {
-              Write-Host "❌ SMOKE TEST FAILED" -ForegroundColor Red
-              if (Test-Path $outputLog) {
-                  Write-Host "--- Displaying startup output log (smoke-test-output.log) ---"
-                  Get-Content $outputLog -ErrorAction SilentlyContinue
-              }
-              if (Test-Path $internalLog) {
-                  Write-Host "--- Displaying internal application log (fortuna-monolith.log) ---"
-                  Get-Content $internalLog -ErrorAction SilentlyContinue
-              }
-              exit 1
+          # --- Final Verdict & Diagnostics ---
+          if ($success) {
+            Write-Host "Smoke test SUCCEEDED."
+            exit 0
+          } else {
+            Write-Error "SMOKE TEST FAILED."
+
+            Write-Host "--- 4. Failure Analysis ---" -ForegroundColor Yellow
+            if (Test-Path $outputLog) {
+                Write-Host "--- Displaying startup output log (smoke-test-output.log) ---"
+                Get-Content $outputLog -ErrorAction SilentlyContinue
+            } else {
+                Write-Host "--- WARNING: Startup output log not found! ($outputLog) ---"
+            }
+
+            if (Test-Path $internalLog) {
+                Write-Host "--- Displaying internal application log (fortuna-monolith.log) ---"
+                Get-Content $internalLog -ErrorAction SilentlyContinue
+            } else {
+                Write-Host "--- WARNING: Internal application log not found! ($internalLog) ---"
+                Write-Host "This usually means the application crashed before it could initialize its logging."
+            }
+            exit 1
           }
 
       - name: 📋 Upload Build Log
