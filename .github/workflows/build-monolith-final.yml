@@ -2,7 +2,8 @@ name: Build Monolith (FINAL FIX)
 
 on:
   push:
-    branches: [ jules115b ]
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -12,8 +13,6 @@ jobs:
     steps:
       - name: 📥 Checkout
         uses: actions/checkout@v4
-        with:
-          ref: jules115b
 
       # ========== FRONTEND ==========
       - name: 🎨 Setup Node.js
