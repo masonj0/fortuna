@@ -20,6 +20,13 @@ jobs:
       # ============================================================
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
+        with:
+          driver-opts: |
+            network=host
+            "buildkitd.toml" = """
+            [registry."docker.io"]
+              mirrors = ["mirror.gcr.io"]
+            """
 
       - name: Build Docker Image (for local use)
         uses: docker/build-push-action@v4
