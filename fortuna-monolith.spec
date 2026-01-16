@@ -1,4 +1,65 @@
 # fortuna-monolith.spec
+import sys
+import os
+from pathlib import Path
+
+# ================= BEGIN DIAGNOSTIC SCRIPT =================
+# This script runs before the spec is parsed. Its purpose is to
+# give us a ground-truth look at the filesystem from Python's perspective
+# at the exact moment PyInstaller starts.
+
+print("--- [DIAGNOSTIC] Python and OS Info ---")
+print(f"Python Version: {sys.version}")
+print(f"OS Platform: {sys.platform}")
+print(f"Current Working Dir: {os.getcwd()}")
+print("--- [END DIAGNOSTIC] ---")
+
+# In PyInstaller, SPECPATH is the absolute path to this .spec file.
+# We use it to derive the project root, which is its parent directory.
+spec_path = Path(SPECPATH)
+project_root_diag = spec_path.parent
+print(f"--- [DIAGNOSTIC] Project Root (derived from SPECPATH): {project_root_diag} ---")
+
+def log_tree(start_path):
+    """Recursively logs the contents of a directory."""
+    print(f"\n--- [DIAGNOSTIC] Recursive directory listing for: {start_path} ---")
+    if not start_path.is_dir():
+        print(f"ERROR: Path is not a directory or does not exist.")
+        return
+
+    file_count = 0
+    dir_count = 0
+
+    for root, dirs, files in os.walk(str(start_path)):
+        level = root.replace(str(start_path), '').count(os.sep)
+        indent = ' ' * 4 * (level)
+        print(f'{indent}{os.path.basename(root)}/')
+        sub_indent = ' ' * 4 * (level + 1)
+        for d in sorted(dirs):
+            dir_count += 1
+            print(f'{sub_indent}DIR: {d}')
+        for f in sorted(files):
+            file_count += 1
+            try:
+                # Get file size, handle potential errors
+                file_path = Path(root) / f
+                size_bytes = file_path.stat().st_size
+                print(f'{sub_indent}FILE: {f} ({size_bytes} bytes)')
+            except OSError as e:
+                print(f'{sub_indent}FILE: {f} (Error getting size: {e})')
+
+    print(f"--- [END DIAGNOSTIC] Found {file_count} files and {dir_count} directories. ---")
+
+# Run the diagnostic listing on the entire project root.
+# This will show us EVERYTHING the script can see.
+log_tree(project_root_diag)
+
+# Also, specifically check the path to the frontend build output
+frontend_out_diag = project_root_diag / 'web_service' / 'frontend' / 'out'
+log_tree(frontend_out_diag)
+print("--- [DIAGNOSTIC] End of pre-flight checks. Spec parsing will now begin. ---\n")
+# ================= END DIAGNOSTIC SCRIPT =================
+
 
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 from pathlib import Path
