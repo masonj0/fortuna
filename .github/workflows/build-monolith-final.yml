@@ -3,7 +3,7 @@ name: Build Monolith (FINAL FIX)
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [ jules115b ]
 
 jobs:
   build:
@@ -13,6 +13,8 @@ jobs:
     steps:
       - name: 📥 Checkout
         uses: actions/checkout@v4
+        with:
+          ref: jules115b
 
       # ========== FRONTEND ==========
       - name: 🎨 Setup Node.js
@@ -20,13 +22,35 @@ jobs:
         with:
           node-version: '20'
 
+      - name: 🧹 Clean Previous Builds
+        working-directory: ./web_service/frontend
+        shell: pwsh
+        run: |
+          Remove-Item -Path "out" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path ".next" -Recurse -Force -ErrorAction SilentlyContinue
+          Write-Host "✅ Cleaned"
+
+      - name: 📋 Check Next.js Config
+        working-directory: ./web_service/frontend
+        shell: pwsh
+        run: |
+          Write-Host "Checking package.json..."
+          if (Test-Path "package.json") {
+            $pkg = Get-Content package.json | ConvertFrom-Json
+            Write-Host "  name: $($pkg.name)"
+            Write-Host "  build: $($pkg.scripts.build)"
+          } else {
+            Write-Error "package.json not found!"
+            exit 1
+          }
+
       - name: 🏗️ Build Frontend
         working-directory: ./web_service/frontend
         shell: pwsh
         run: |
           Write-Host "=== BUILDING FRONTEND ===" -ForegroundColor Cyan
 
-          # CRITICAL: Ensure next.config.js exists with static export
+          # Create/verify next.config.js
           $configLines = @(
             "/** @type {import('next').NextConfig} */",
             "const nextConfig = {",
@@ -37,47 +61,56 @@ jobs:
             "module.exports = nextConfig"
           )
           $configContent = $configLines -join [System.Environment]::NewLine
-
-          # Only create if it doesn't exist
-          if (-not (Test-Path "next.config.js")) {
-            Write-Host "Creating next.config.js with static export..."
-            Set-Content -Path "next.config.js" -Value $configContent
-          } else {
-            Write-Host "next.config.js already exists"
-          }
+          Set-Content -Path "next.config.js" -Value $configContent -Encoding UTF8
+          Write-Host "✅ next.config.js set"
 
           Write-Host "Installing dependencies..."
-          npm ci
+          npm install --legacy-peer-deps
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "npm install failed"
+            exit 1
+          }
 
           Write-Host "Building..."
           npm run build
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "npm run build failed"
+            exit 1
+          }
 
-          # VERIFY OUTPUT
-          if (-not (Test-Path "out/index.html")) {
-            Write-Error "❌ Frontend build FAILED: out/index.html not found!"
-            Write-Host "Contents of current directory:"
+          # Verify output
+          Write-Host "`nVerifying output..."
+          if (-not (Test-Path "out")) {
+            Write-Host "❌ 'out' directory not found!" -ForegroundColor Red
+            Write-Host "Contents of current dir:"
             Get-ChildItem | Format-Table Name
             exit 1
           }
 
-          $fileCount = (Get-ChildItem -Path "out" -Recurse -File).Count
-          Write-Host "✅ Frontend built: $fileCount files in 'out' directory" -ForegroundColor Green
+          if (-not (Test-Path "out/index.html")) {
+            Write-Host "❌ out/index.html not found!" -ForegroundColor Red
+            Write-Host "Contents of 'out':"
+            Get-ChildItem -Path "out" -Recurse | Format-Table Name
+            exit 1
+          }
+
+          $count = (Get-ChildItem -Path "out" -Recurse -File).Count
+          Write-Host "✅ Frontend built: $count files" -ForegroundColor Green
 
       # ========== BACKEND ==========
       - name: 🐍 Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10.11'
-          cache: 'pip'
 
-      - name: 📦 Install Dependencies
+      - name: 📦 Install Python Dependencies
         shell: pwsh
         run: |
           pip install --upgrade pip wheel
           pip install pyinstaller==6.6.0
           pip install -r web_service/backend/requirements.txt
 
-      - name: 📁 Create Data Directories
+      - name: 📂 Create Data Directories
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path "web_service/backend/data" | Out-Null
@@ -87,30 +120,37 @@ jobs:
       # ========== BUILD ==========
       - name: 🔨 Build with PyInstaller
         shell: pwsh
-        env:
-          PYTHONIOENCODING: utf-8
         run: |
           Write-Host "=== BUILDING MONOLITH ===" -ForegroundColor Cyan
 
           # Final verification
           if (-not (Test-Path "web_service/frontend/out/index.html")) {
-            Write-Error "❌ Frontend output not found before PyInstaller!"
+            Write-Error "❌ Frontend not ready!"
+            Write-Host "Frontend path check:"
+            Test-Path "web_service/frontend/out"
+            Test-Path "web_service/frontend/out/index.html"
             exit 1
           }
 
-          Write-Host "✅ Frontend verified, running PyInstaller..."
+          Write-Host "✅ Frontend verified"
+          Write-Host "Running PyInstaller..."
+
           pyinstaller --noconfirm --clean fortuna-monolith.spec 2>&1 | Tee-Object -FilePath "build.log"
 
-          $exePath = "dist/fortuna-monolith/fortuna-monolith.exe"
-          if (-not (Test-Path $exePath)) {
-            Write-Error "❌ BUILD FAILED - EXE not created!"
-            Write-Host "Last 50 lines of build log:"
-            Get-Content "build.log" -Tail 50
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "Last 100 lines of build.log:" -ForegroundColor Red
+            Get-Content "build.log" -Tail 100
             exit 1
           }
 
-          $size = (Get-Item $exePath).Length / 1MB
-          Write-Host "✅ BUILD SUCCESS: $([math]::Round($size, 2)) MB" -ForegroundColor Green
+          $exe = "dist/fortuna-monolith/fortuna-monolith.exe"
+          if (Test-Path $exe) {
+            $mb = (Get-Item $exe).Length / 1MB
+            Write-Host "✅ BUILD SUCCESS: $([math]::Round($mb, 2)) MB" -ForegroundColor Green
+          } else {
+            Write-Error "EXE not created!"
+            exit 1
+          }
 
       # ========== UPLOAD ==========
       - name: 📤 Upload EXE
@@ -127,38 +167,36 @@ jobs:
         run: |
           Write-Host "=== SMOKE TEST ===" -ForegroundColor Cyan
 
-          $exePath = "dist/fortuna-monolith/fortuna-monolith.exe"
-          $process = Start-Process -FilePath $exePath -PassThru -WindowStyle Hidden
+          $exe = "dist/fortuna-monolith/fortuna-monolith.exe"
+          Write-Host "Starting: $exe"
 
-          Write-Host "Waiting for startup (max 30s)..."
-          $success = $false
+          $proc = Start-Process -FilePath $exe -PassThru -WindowStyle Hidden
+          Write-Host "PID: $($proc.Id)"
+          Write-Host "Waiting 15 seconds..."
 
           for ($i = 1; $i -le 15; $i++) {
-            if ($process.HasExited) {
-              Write-Host "❌ Process died (exit code: $($process.ExitCode))"
-              break
+            if ($proc.HasExited) {
+              Write-Host "❌ Process exited (code: $($proc.ExitCode))" -ForegroundColor Red
+              exit 1
             }
 
             try {
-              $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/health" -UseBasicParsing -TimeoutSec 2
+              $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/health" -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
               if ($response.StatusCode -eq 200) {
                 Write-Host "✅ SMOKE TEST PASSED!" -ForegroundColor Green
-                $success = $true
-                break
+                Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+                exit 0
               }
             } catch {
-              Start-Sleep -Seconds 2
+              Start-Sleep -Seconds 1
             }
           }
 
-          Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+          Write-Host "❌ SMOKE TEST FAILED" -ForegroundColor Red
+          Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+          exit 1
 
-          if (-not $success) {
-            Write-Error "❌ SMOKE TEST FAILED"
-            exit 1
-          }
-
-      - name: 📤 Upload Build Log
+      - name: 📋 Upload Build Log
         if: always()
         uses: actions/upload-artifact@v4
         with:
