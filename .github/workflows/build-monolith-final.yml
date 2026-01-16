@@ -2,7 +2,8 @@ name: Build Monolith (FINAL FIX)
 
 on:
   push:
-    branches: [ jules115b ]
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -12,8 +13,6 @@ jobs:
     steps:
       - name: 📥 Checkout
         uses: actions/checkout@v4
-        with:
-          ref: jules115b
 
       # ========== FRONTEND ==========
       - name: 🎨 Setup Node.js
@@ -167,33 +166,63 @@ jobs:
           Write-Host "=== SMOKE TEST ===" -ForegroundColor Cyan
 
           $exe = "dist/fortuna-monolith/fortuna-monolith.exe"
-          Write-Host "Starting: $exe"
+          $outputLog = "dist/fortuna-monolith/smoke-test-output.log"
+          $internalLog = "dist/fortuna-monolith/fortuna-monolith.log"
 
-          $proc = Start-Process -FilePath $exe -PassThru -WindowStyle Hidden
-          Write-Host "PID: $($proc.Id)"
-          Write-Host "Waiting 15 seconds..."
+          Write-Host "Starting executable: $exe"
+          cmd /c "start /b `"$exe`" > `"$outputLog`" 2>&1"
+          Start-Sleep -Seconds 5 # Wait for the process to initialize
 
-          for ($i = 1; $i -le 15; $i++) {
-            if ($proc.HasExited) {
-              Write-Host "❌ Process exited (code: $($proc.ExitCode))" -ForegroundColor Red
-              exit 1
-            }
-
-            try {
-              $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/health" -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
-              if ($response.StatusCode -eq 200) {
-                Write-Host "✅ SMOKE TEST PASSED!" -ForegroundColor Green
-                Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-                exit 0
+          $proc = Get-Process -Name "fortuna-monolith" -ErrorAction SilentlyContinue
+          if (-not $proc) {
+              Write-Host "❌ Process failed to start!" -ForegroundColor Red
+              if (Test-Path $outputLog) {
+                  Write-Host "--- Displaying startup output log ---"
+                  Get-Content $outputLog
               }
-            } catch {
-              Start-Sleep -Seconds 1
-            }
+              if (Test-Path $internalLog) {
+                  Write-Host "--- Displaying internal application log ---"
+                  Get-Content $internalLog
+              }
+              exit 1
           }
 
-          Write-Host "❌ SMOKE TEST FAILED" -ForegroundColor Red
-          Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-          exit 1
+          Write-Host "PID: $($proc.Id). Waiting up to 20 seconds for health check..."
+          $success = $false
+          for ($i = 1; $i -le 20; $i++) {
+              if ($proc.HasExited) {
+                  Write-Host "❌ Process exited prematurely (code: $($proc.ExitCode))" -ForegroundColor Red
+                  break
+              }
+              try {
+                  $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/health" -UseBasicParsing -TimeoutSec 1 -ErrorAction Stop
+                  if ($response.StatusCode -eq 200) {
+                      Write-Host "✅ SMOKE TEST PASSED!" -ForegroundColor Green
+                      $success = $true
+                      break
+                  }
+              } catch {
+                  Write-Host "Health check attempt $i failed. Retrying..."
+                  Start-Sleep -Seconds 1
+              }
+          }
+
+          if ($proc -and -not $proc.HasExited) {
+              Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+          }
+
+          if (-not $success) {
+              Write-Host "❌ SMOKE TEST FAILED" -ForegroundColor Red
+              if (Test-Path $outputLog) {
+                  Write-Host "--- Displaying startup output log (smoke-test-output.log) ---"
+                  Get-Content $outputLog -ErrorAction SilentlyContinue
+              }
+              if (Test-Path $internalLog) {
+                  Write-Host "--- Displaying internal application log (fortuna-monolith.log) ---"
+                  Get-Content $internalLog -ErrorAction SilentlyContinue
+              }
+              exit 1
+          }
 
       - name: 📋 Upload Build Log
         if: always()

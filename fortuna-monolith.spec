@@ -14,21 +14,21 @@ frontend_out = project_root / 'web_service' / 'frontend' / 'out'
 index_html = frontend_out / 'index.html'
 
 if not index_html.exists():
-    print(f"❌ FATAL: Frontend build output not found at {index_html}")
+    print(f"ERROR: Frontend build output not found at {index_html}")
     print(f"   Run: cd web_service/frontend && npm ci && npm run build")
     sys.exit(1)
 
-print(f"✅ Frontend validated: {len(list(frontend_out.rglob('*')))} files")
+print(f"OK: Frontend validated: {len(list(frontend_out.rglob('*')))} files")
 
 # ===== BACKEND VALIDATION =====
 backend_root = project_root / 'web_service' / 'backend'
 main_py = backend_root / 'main.py'
 
 if not main_py.exists():
-    print(f"❌ FATAL: Backend main.py not found at {main_py}")
+    print(f"ERROR: Backend main.py not found at {main_py}")
     sys.exit(1)
 
-print(f"✅ Backend validated: main.py found")
+print(f"OK: Backend validated: main.py found")
 
 # ===== DATA FILES =====
 datas = []
