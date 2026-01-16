@@ -1,6 +1,8 @@
 name: Monolith Experimental (Webservice Mode)
 
 on:
+  push:
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:

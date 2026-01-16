@@ -1,9 +1,9 @@
 name: 🧪 Backend CI & Quick-Start Test
 
 on:
-  workflow_dispatch:
   push:
-    branches: ["jules115b"]
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   test-bootstrapper:
@@ -11,8 +11,6 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: jules115b
 
       - name: 🐍 Setup Python
         id: setup-python
