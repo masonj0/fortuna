@@ -1,9 +1,9 @@
 name: Build Monolith (FINAL FIX)
 
 on:
-  workflow_dispatch:
   push:
     branches: [ jules115b ]
+  workflow_dispatch:
 
 jobs:
   build:
