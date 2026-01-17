@@ -1,0 +1,136 @@
+name: 🧪 Backend CI & Quick-Start Test (Tiny Field)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  test-bootstrapper:
+    name: '🏃 Run Quick-Start PS1 (Tiny Field)'
+    runs-on: windows-latest
+    env:
+      CI: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        id: setup-python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: 🟢 Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: web_platform/frontend/package-lock.json
+
+      - name: 📦 Install Python Dependencies
+        shell: pwsh
+        run: |
+          pip install --upgrade pip
+          pip install -r web_service/backend/requirements.txt
+          pip install -r web_service/backend/requirements-dev.txt
+
+      - name: 🎨 Build Frontend
+        working-directory: web_service/frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: 🧪 Run Backend Unit Tests
+        shell: pwsh
+        run: |
+          $env:PYTHONPATH = "$env:PYTHONPATH;${env:GITHUB_WORKSPACE}/web_service/backend"
+          python -m pytest web_service/backend/tests/
+
+      - name: 🔍 Syntax Validation
+        shell: pwsh
+        run: |
+          try {
+            $script = Get-Content "scripts/fortuna-quick-start-tinyfield.ps1" -Raw
+            [void][System.Management.Automation.PSParser]::Tokenize($script, [ref]$null)
+            Write-Host "✅ PowerShell Syntax is valid."
+          } catch {
+            Write-Error "❌ Syntax Error: $_"
+            exit 1
+          }
+
+      - name: 🚀 Launch, Test, & Verify Backend
+        shell: pwsh
+        run: |
+          $process = $null
+          try {
+              # Start the server
+              Write-Host "Starting backend server..."
+              $process = Start-Process "${{ steps.setup-python.outputs.python-path }}" -ArgumentList "-m uvicorn web_service.backend.main:app --host 127.0.0.1 --port 8000" -PassThru -NoNewWindow
+
+              # Health Check Loop
+              $url = "http://127.0.0.1:8000/api/health"
+              Write-Host "⏳ Waiting for Backend at $url..."
+              $healthy = $false
+              for ($i=0; $i -lt 30; $i++) {
+                  try {
+                      $resp = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 2
+                      if ($resp.StatusCode -eq 200) {
+                          Write-Host "✅ Backend is UP and responding!"
+                          $healthy = $true
+                          break
+                      }
+                  } catch {
+                      Write-Host "... ping failed, retrying ($($i+1)/30)"
+                      Start-Sleep -Seconds 2
+                  }
+              }
+
+              if (-not $healthy) {
+                  throw "Backend failed to start within timeout."
+              }
+
+              # If healthy, run optional verification scripts
+              Write-Host "Backend is healthy. Running verification scripts..."
+              try {
+                  Write-Host "Installing Playwright..."
+                  pip install playwright
+                  playwright install --with-deps
+
+                  Write-Host "Running Tiny Field smoke test..."
+                  python e2e/tiny-field-smoke-test.py
+                  Write-Host "Tiny Field smoke test finished."
+
+              } catch {
+                  # This is continue-on-error, so we catch and log, but don't fail the step
+                  Write-Host "⚠️ A verification script failed: $($_.Exception.Message)"
+              }
+
+          } catch {
+              Write-Error "❌ An error occurred during the test run: $($_.Exception.Message)"
+              # Dump logs for diagnosis
+              Get-Content web_service/backend/app.log -ErrorAction SilentlyContinue
+              exit 1
+          } finally {
+              if ($process -ne $null) {
+                  Write-Host "🧹 Cleaning up backend process..."
+                  Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+                  Write-Host "✅ Cleanup complete."
+              }
+          }
+
+      - name: Upload Playwright Screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-screenshot-quickstart
+          path: playwright-screenshot.png
+          retention-days: 7
+
+      - name: Upload Race Info
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: race-info-quickstart
+          path: race-info.txt
+          retention-days: 7

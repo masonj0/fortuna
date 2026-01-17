@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, 
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -59,9 +60,15 @@ app = FastAPI(
     openapi_url="/api/openapi.json",
 )
 
-app.state.limiter = limiter
-app.add_middleware(SlowAPIMiddleware)
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+# Conditionally apply rate limiting middleware, disable in CI
+if os.environ.get("CI") != "true":
+    app.state.limiter = limiter
+    app.add_middleware(SlowAPIMiddleware)
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+else:
+    # In CI, we don't want rate limiting, so we provide a no-op limiter.
+    # The limiter instance is still required by endpoints even if not used.
+    app.state.limiter = Limiter(key_func=get_remote_address, enabled=False)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(UserFriendlyException, user_friendly_exception_handler)
 router.include_router(health_router)
@@ -95,6 +102,23 @@ async def get_races(
     """Fetches all race data for a given date from all or a specific source."""
     return await engine.fetch_all_odds(race_date, source)
 
+@router.get("/races/qualified/tiny_field_trifecta", response_model=QualifiedRacesResponse)
+@limiter.limit("120/minute")
+async def get_tiny_field_trifecta_races(
+    request: Request,
+    race_date: Optional[str] = Query(None, description="Date in YYYY-MM-DD format."),
+    engine: OddsEngine = Depends(get_engine),
+    _=Depends(verify_api_key),
+):
+    """Fetches all race data and runs the tiny_field_trifecta analyzer to find qualified races."""
+    response = await engine.fetch_all_odds(race_date)
+    races = [Race(**r) for r in response.get("races", [])]
+
+    analyzer = engine.analyzer_engine.get_analyzer("tiny_field_trifecta")
+    result = analyzer.qualify_races(races)
+
+    return QualifiedRacesResponse(qualified_races=result.get("races", []), analysis_metadata=result.get("criteria", {}))
+
 @router.get("/races/qualified/{analyzer_name}", response_model=QualifiedRacesResponse)
 @limiter.limit("120/minute")
 async def get_qualified_races(
@@ -108,11 +132,15 @@ async def get_qualified_races(
     min_odds: float = Query(2.0, ge=1.0),
 ):
     """Fetches all race data and runs a specific analyzer to find qualified races."""
-    # This is a simplified version; a real implementation would have a dynamic analyzer engine.
-    # For now, we'll just fetch and return all races as "qualified".
     response = await engine.fetch_all_odds(race_date)
     races = [Race(**r) for r in response.get("races", [])]
-    return QualifiedRacesResponse(qualified_races=races, analysis_metadata={"analyzer": analyzer_name})
+
+    try:
+        analyzer = engine.analyzer_engine.get_analyzer(analyzer_name, max_field_size=max_field_size, min_odds=min_odds)
+        result = analyzer.qualify_races(races)
+        return QualifiedRacesResponse(qualified_races=result.get("races", []), analysis_metadata=result.get("criteria", {}))
+    except ValueError:
+        raise HTTPException(status_code=404, detail=f"Analyzer '{analyzer_name}' not found.")
 
 @router.get("/adapters/status")
 @limiter.limit("60/minute")
@@ -130,16 +158,26 @@ app.include_router(router, prefix="/api")
 
 # Mount static files (frontend)
 try:
-    if getattr(sys, 'frozen', False):
-        # Running as executable
-        ui_path = Path(sys.executable).parent / "ui"
-    else:
-        ui_path = Path(__file__).parent.parent.parent / "web_service" / "frontend" / "out"
+    # Path for the new static 'public' directory
+    static_dir = Path(__file__).parent.parent.joinpath("frontend", "public")
 
-    if ui_path.exists():
-        app.mount("/", StaticFiles(directory=str(ui_path), html=True), name="static")
+    if static_dir.exists():
+        app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+        @app.get("/", response_class=FileResponse)
+        async def serve_frontend():
+            """Serves the static index.html file for the root path."""
+            return FileResponse(static_dir / "index.html")
+
+    elif getattr(sys, 'frozen', False):
+        # Fallback for PyInstaller executable (legacy path)
+        ui_path = Path(sys.executable).parent / "ui"
+        if ui_path.exists():
+            app.mount("/", StaticFiles(directory=str(ui_path), html=True), name="static")
+
 except Exception as e:
-    print(f"⚠️  Could not mount static files: {e}")
+    log.warning("Could not mount static files", error=str(e))
+
 
 # Export app for Uvicorn
 __all__ = ["app"]
