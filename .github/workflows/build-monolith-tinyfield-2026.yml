@@ -1,0 +1,300 @@
+name: Build Monolith TinyField (2026)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: 'Build Fortuna Monolith'
+    runs-on: windows-latest
+
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      # ========== FRONTEND ==========
+      - name: 🎨 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 🧹 Clean Previous Builds
+        working-directory: ./web_service/frontend
+        shell: pwsh
+        run: |
+          Remove-Item -Path "out" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path ".next" -Recurse -Force -ErrorAction SilentlyContinue
+          Write-Host "✅ Cleaned"
+
+      - name: 📋 Check Next.js Config
+        working-directory: ./web_service/frontend
+        shell: pwsh
+        run: |
+          Write-Host "Checking package.json..."
+          if (Test-Path "package.json") {
+            $pkg = Get-Content package.json | ConvertFrom-Json
+            Write-Host "  name: $($pkg.name)"
+            Write-Host "  build: $($pkg.scripts.build)"
+          } else {
+            Write-Error "package.json not found!"
+            exit 1
+          }
+
+      - name: 🏗️ Build Frontend
+        working-directory: ./web_service/frontend
+        shell: pwsh
+        run: |
+          Write-Host "=== BUILDING FRONTEND ===" -ForegroundColor Cyan
+
+          # Create/verify next.config.js
+          $configLines = @(
+            "/** @type {import('next').NextConfig} */",
+            "const nextConfig = {",
+            "  output: 'export',",
+            "  images: { unoptimized: true },",
+            "  trailingSlash: true,",
+            "}",
+            "module.exports = nextConfig"
+          )
+          $configContent = $configLines -join [System.Environment]::NewLine
+          Set-Content -Path "next.config.js" -Value $configContent -Encoding UTF8
+          Write-Host "✅ next.config.js set"
+
+          Write-Host "Installing dependencies..."
+          npm install --legacy-peer-deps
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "npm install failed"
+            exit 1
+          }
+
+          Write-Host "Building..."
+          npm run build
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "npm run build failed"
+            exit 1
+          }
+
+          # Verify output
+          Write-Host "`nVerifying output..."
+          if (-not (Test-Path "out")) {
+            Write-Host "❌ 'out' directory not found!" -ForegroundColor Red
+            Write-Host "Contents of current dir:"
+            Get-ChildItem | Format-Table Name
+            exit 1
+          }
+
+          if (-not (Test-Path "out/index.html")) {
+            Write-Host "❌ out/index.html not found!" -ForegroundColor Red
+            Write-Host "Contents of 'out':"
+            Get-ChildItem -Path "out" -Recurse | Format-Table Name
+            exit 1
+          }
+
+          $count = (Get-ChildItem -Path "out" -Recurse -File).Count
+          Write-Host "✅ Frontend built: $count files" -ForegroundColor Green
+
+      # ========== BACKEND ==========
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10.11'
+
+      - name: 📦 Install Python Dependencies
+        shell: pwsh
+        run: |
+          pip install --upgrade pip wheel
+          pip install pyinstaller==6.6.0
+          pip install pywin32 # CRITICAL: Provides the 'win32timezone' hidden import
+          pip install -r web_service/backend/requirements.txt
+
+      - name: 📂 Create Data Directories
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "web_service/backend/data" | Out-Null
+          New-Item -ItemType Directory -Force -Path "web_service/backend/json" | Out-Null
+          New-Item -ItemType Directory -Force -Path "web_service/backend/logs" | Out-Null
+
+      # ========== BUILD ==========
+      - name: 🔨 Build with PyInstaller
+        shell: pwsh
+        run: |
+          Write-Host "=== BUILDING MONOLITH ===" -ForegroundColor Cyan
+
+          # Final verification
+          if (-not (Test-Path "web_service/frontend/out/index.html")) {
+            Write-Error "❌ Frontend not ready!"
+            Write-Host "Frontend path check:"
+            Test-Path "web_service/frontend/out"
+            Test-Path "web_service/frontend/out/index.html"
+            exit 1
+          }
+
+          Write-Host "✅ Frontend verified"
+          Write-Host "Running PyInstaller..."
+
+          pyinstaller --noconfirm --clean fortuna-monolith.spec 2>&1 | Tee-Object -FilePath "build.log"
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "Last 100 lines of build.log:" -ForegroundColor Red
+            Get-Content "build.log" -Tail 100
+            exit 1
+          }
+
+          $exe = "dist/fortuna-monolith/fortuna-monolith.exe"
+          if (Test-Path $exe) {
+            $mb = (Get-Item $exe).Length / 1MB
+            Write-Host "✅ BUILD SUCCESS: $([math]::Round($mb, 2)) MB" -ForegroundColor Green
+          } else {
+            Write-Error "EXE not created!"
+            exit 1
+          }
+
+      # ========== PACKAGE & UPLOAD ==========
+      - name: 📦 Package Artifact for Distribution
+        shell: pwsh
+        run: |
+          $distDir = "dist/fortuna-monolith"
+          Write-Host "=== PACKAGING ARTIFACT ===" -ForegroundColor Cyan
+
+          # Create README.txt
+          $readmeLines = @(
+            'Fortuna Monolith',
+            '',
+            'This directory contains the main executable (fortuna-monolith.exe).',
+            '',
+            'To run the application, please use the run.bat script. It will start the application and keep this window open. If the application fails to start, you will see error messages here.',
+            '',
+            'For detailed debugging, a full log file is created inside this same directory, named:',
+            'fortuna-monolith.log',
+            '',
+            'You can view this log file with any text editor.'
+          )
+          $readmeLines | Out-File -FilePath "$distDir/README.txt" -Encoding utf8
+          Write-Host "✅ Created README.txt"
+
+          # Create run.bat
+          $batLines = @(
+            '@echo off',
+            'echo Starting Fortuna Monolith...',
+            'echo.',
+            'call "%~dp0fortuna-monolith.exe"',
+            'echo.',
+            'echo Application has exited. Press any key to close this window...',
+            'pause > nul'
+          )
+          $batLines | Out-File -FilePath "$distDir/run.bat" -Encoding ascii
+          Write-Host "✅ Created run.bat"
+
+          # Create ZIP archive
+          $zipFileName = "Fortuna-Monolith-Windows-${{ github.run_number }}.zip"
+          Compress-Archive -Path "$distDir/*" -DestinationPath $zipFileName -Force
+          Write-Host "✅ Created $zipFileName" -ForegroundColor Green
+
+      - name: 📤 Upload Packaged Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Fortuna-Monolith-Windows-${{ github.run_number }}
+          path: Fortuna-Monolith-Windows-${{ github.run_number }}.zip
+          if-no-files-found: error
+
+      # ========== TEST ==========
+      - name: Install VC++ Redistributable
+        shell: pwsh
+        run: |
+          # Download and install VC++ Runtime
+          $url = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
+          Invoke-WebRequest -Uri $url -OutFile vc_redist.x64.exe
+          .\vc_redist.x64.exe /install /quiet /norestart
+
+      - name: 🧪 Smoke Test
+        shell: pwsh
+        timeout-minutes: 3
+        run: |
+          Write-Host "=== SMOKE TEST ===" -ForegroundColor Cyan
+          $distDir = "dist/fortuna-monolith"
+          $exe = "$distDir/fortuna-monolith.exe"
+          $outputLog = "$distDir/smoke-test-output.log"
+          $internalLog = "$distDir/fortuna-monolith.log"
+
+          Write-Host "--- 1. Directory Manifest ---" -ForegroundColor Yellow
+          Get-ChildItem -Path $distDir -Recurse | Format-Table Name, Length
+          if (-not (Test-Path $exe)) {
+            Write-Error "FATAL: Executable not found at $exe"
+            exit 1
+          }
+
+          Write-Host "--- 2. Network State Dump ---" -ForegroundColor Yellow
+          netstat -ano
+          Write-Host "--- End of Network State ---"
+
+          Write-Host "--- 3. Starting Executable ---" -ForegroundColor Yellow
+          Write-Host "Starting: $exe"
+          cmd /c "start /b `"$exe`" > `"$outputLog`" 2>&1"
+          Start-Sleep -Seconds 5 # Wait for the process to initialize
+
+          $proc = Get-Process -Name "fortuna-monolith" -ErrorAction SilentlyContinue
+          if (-not $proc) {
+              Write-Host "❌ Process failed to start!" -ForegroundColor Red
+              # Failure analysis will run at the end
+              $success = $false
+          } else {
+              Write-Host "PID: $($proc.Id). Waiting up to 20 seconds for health check..."
+              $success = $false
+              for ($i = 1; $i -le 20; $i++) {
+                  if ($proc.HasExited) {
+                      Write-Host "❌ Process exited prematurely (code: $($proc.ExitCode))" -ForegroundColor Red
+                      break
+                  }
+                  try {
+                      $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/races/qualified/tiny_field_trifecta" -UseBasicParsing -TimeoutSec 1 -ErrorAction Stop
+                      if ($response.StatusCode -eq 200) {
+                          Write-Host "✅ SMOKE TEST PASSED!" -ForegroundColor Green
+                          $success = $true
+                          break
+                      }
+                  } catch {
+                      Write-Host "Health check attempt $i failed. Retrying..."
+                      Start-Sleep -Seconds 1
+                  }
+              }
+          }
+
+          # --- Cleanup ---
+          if ($proc -and -not $proc.HasExited) {
+              Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+          }
+
+          # --- Final Verdict & Diagnostics ---
+          if ($success) {
+            Write-Host "Smoke test SUCCEEDED."
+            exit 0
+          } else {
+            Write-Error "SMOKE TEST FAILED."
+
+            Write-Host "--- 4. Failure Analysis ---" -ForegroundColor Yellow
+            if (Test-Path $outputLog) {
+                Write-Host "--- Displaying startup output log (smoke-test-output.log) ---"
+                Get-Content $outputLog -ErrorAction SilentlyContinue
+            } else {
+                Write-Host "--- WARNING: Startup output log not found! ($outputLog) ---"
+            }
+
+            if (Test-Path $internalLog) {
+                Write-Host "--- Displaying internal application log (fortuna-monolith.log) ---"
+                Get-Content $internalLog -ErrorAction SilentlyContinue
+            } else {
+                Write-Host "--- WARNING: Internal application log not found! ($internalLog) ---"
+                Write-Host "This usually means the application crashed before it could initialize its logging."
+            }
+            exit 1
+          }
+
+      - name: 📋 Upload Build Log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-${{ github.run_number }}
+          path: build.log
+          if-no-files-found: ignore
