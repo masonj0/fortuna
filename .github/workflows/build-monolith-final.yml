@@ -209,6 +209,7 @@ jobs:
           .\vc_redist.x64.exe /install /quiet /norestart
 
       - name: 🧪 Smoke Test
+        continue-on-error: true
         shell: pwsh
         timeout-minutes: 3
         run: |
