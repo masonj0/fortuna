@@ -8,8 +8,8 @@ async def main():
         try:
             await page.goto("http://127.0.0.1:8000")
             await expect(page.get_by_test_id("main-heading")).to_be_visible()
-            await page.screenshot(path="playwright-screenshot.png")
         finally:
+            await page.screenshot(path="playwright-screenshot.png")
             await browser.close()
 
 if __name__ == "__main__":
