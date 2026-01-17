@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, 
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -157,16 +158,26 @@ app.include_router(router, prefix="/api")
 
 # Mount static files (frontend)
 try:
-    if getattr(sys, 'frozen', False):
-        # Running as executable
-        ui_path = Path(sys.executable).parent / "ui"
-    else:
-        ui_path = Path(__file__).parent.parent.parent / "web_service" / "frontend" / "out"
+    # Path for the new static 'public' directory
+    static_dir = Path(__file__).parent.parent.joinpath("frontend", "public")
 
-    if ui_path.exists():
-        app.mount("/", StaticFiles(directory=str(ui_path), html=True), name="static")
+    if static_dir.exists():
+        app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+        @app.get("/", response_class=FileResponse)
+        async def serve_frontend():
+            """Serves the static index.html file for the root path."""
+            return FileResponse(static_dir / "index.html")
+
+    elif getattr(sys, 'frozen', False):
+        # Fallback for PyInstaller executable (legacy path)
+        ui_path = Path(sys.executable).parent / "ui"
+        if ui_path.exists():
+            app.mount("/", StaticFiles(directory=str(ui_path), html=True), name="static")
+
 except Exception as e:
-    print(f"⚠️  Could not mount static files: {e}")
+    log.warning("Could not mount static files", error=str(e))
+
 
 # Export app for Uvicorn
 __all__ = ["app"]
