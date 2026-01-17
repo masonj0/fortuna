@@ -9,104 +9,75 @@ OUTPUT_DIR = Path(".")
 NUM_MANIFESTS = 5 # We will create 5 balanced manifests
 
 # --- Inclusion/Exclusion Rules ---
-# To keep the manifests clean and focused, we define specific directories to include.
-# Everything else will be ignored.
-INCLUDE_ONLY_DIRS = {
-    "python_service",
-    "web_platform",
-    "electron",
-    "scripts",
-    "wix",
-    ".github",
-    "web_service", # Include the new web service architecture
-}
+# This script is now comprehensive. Instead of a narrow include list,
+# it scans everything and uses a more precise exclusion list.
+INCLUDE_ONLY_DIRS = None # Deactivated: We now scan all directories by default
 
 EXCLUDE_DIRS = {
-    ".git",
-    ".idea",
-    ".vscode",
-    "node_modules",
-    ".next",
-    ".venv",
-    "dist",
-    "build",
-    "__pycache__",
-    "attic",
-    "installer",
-    "ReviewableJSON",
-    "PREV_src",
-    ".pytest_cache",
+    # Standard git/ide/v-env exclusions
+    ".git", ".idea", ".vscode", "node_modules", ".next", ".venv",
+    # Build artifacts and caches
+    "dist", "build", "__pycache__", ".pytest_cache", "out", "build_wix",
+    # Agent-specific/Volatile directories
+    "attic", "installer", "ReviewableJSON", "jules-scratch",
+    # Legacy code not relevant to the current monolith
+    "PREV_src", "python_service",
 }
 
-EXCLUDE_FILES = {
-    # Exclude deactivated workflows
-    ".ymlx",
-    # Exclude the manifests and archives themselves
-    "MANIFEST_PART1.json",
-    "MANIFEST_PART2.json",
-    "MANIFEST_PART3.json",
-    "MANIFEST_PART4.json",
-    "MANIFEST_PART5.json",
-    "FORTUNA_ALL_PART1.JSON",
-    "FORTUNA_ALL_PART2.JSON",
-    "FORTUNA_ALL_PART3.JSON",
-    "FORTUNA_ALL_PART4.JSON",
-    "FORTUNA_ALL_PART5.JSON",
-    # Exclude self and other key scripts from being archived
-    "generate_manifests.py",
-    "ARCHIVE_PROJECT.py",
-    # Exclude environment files and build specs
-    ".env",
-    ".env.local.example",
-    "env",
-    "api.spec",
-    "fortuna-api.spec",
+EXCLUDE_FILES_BY_EXTENSION = {
+    # Archives and logs
+    ".zip", ".json", ".log", ".db", ".sqlite3",
+    # Binary/Image formats not useful for LLM context
+    ".png", ".ico", ".bmp", ".exe", ".dll", ".pyd", ".pdf",
+    # Deactivated workflows (keep them for history, but not for active context)
+    ".ymlx"
 }
 
 
 def get_all_project_files():
-    """Walk the directory to find all files, respecting inclusions and exclusions."""
+    """
+    Walks the entire project directory to find all relevant files for archiving,
+    respecting a detailed set of exclusion rules.
+    """
     all_files_with_size = []
+    print("\n--- Starting Comprehensive File Audit ---")
+    scanned_count = 0
+    included_count = 0
 
-    # Start with a curated list of top-level files to include
-    top_level_files = [
-        "AGENTS.md", "ARCHITECTURAL_MANDATE.md", "HISTORY.md", "README.md",
-        "WISDOM.md", "PSEUDOCODE.MD", "VERSION.txt", "fortuna-backend-electron.spec",
-        "fortuna-backend-webservice.spec", "fortuna-webservice-electron.spec",
-        "fortuna-webservice-service.spec", "pyproject.toml", "pytest.ini",
-        "requirements.txt", "requirements-dev.txt", "package.json", "package-lock.json",
-        ".github/workflows/build-msi-supreme-combo.yml"
-    ]
-    for file_name in top_level_files:
-        file_path = ROOT_DIR / file_name
-        if file_path.exists():
-            all_files_with_size.append((str(file_path.as_posix()), os.path.getsize(file_path)))
+    for root, dirs, files in os.walk(ROOT_DIR, topdown=True):
+        current_path = Path(root)
 
-    # Walk through the explicitly included directories
-    for include_dir in INCLUDE_ONLY_DIRS:
-        walk_path = ROOT_DIR / include_dir
-        if not walk_path.is_dir():
-            continue
-        for root, dirs, files in os.walk(walk_path, topdown=True):
-            # Still respect the nested exclude directories like __pycache__
-            dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS]
+        # 1. Directory Exclusion: Prune entire directory subtrees
+        dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS and not d.endswith('.egg-info')]
 
-            for name in files:
-                if name in EXCLUDE_FILES or name.endswith((".bmp", ".png", ".ico", ".ymlx")):
-                    continue
+        for name in files:
+            scanned_count += 1
+            file_path = current_path / name
 
-                file_path = Path(root) / name
-                try:
-                    # Use forward slashes for cross-platform compatibility
-                    posix_path = str(file_path.as_posix())
-                    size = os.path.getsize(file_path)
-                    all_files_with_size.append((posix_path, size))
-                except FileNotFoundError:
-                    print(f"[WARNING] File not found while scanning: {file_path}")
-                    continue
+            # 2. Filename/Extension Exclusion
+            if name.startswith(('MANIFEST_PART', 'FORTUNA_ALL_PART', '.env')):
+                continue
+            if file_path.suffix in EXCLUDE_FILES_BY_EXTENSION:
+                continue
 
-    # Consolidate and remove duplicates that might arise from overlapping rules
-    return list(set(all_files_with_size))
+            # Special case: allow '.spec' files which are critical configs
+            if file_path.suffix == '.spec' and name not in ['api.spec']:
+                 pass # keep it
+            elif file_path.suffix in ['.spec']:
+                 continue # exclude other .spec files
+
+            try:
+                posix_path = str(file_path.as_posix())
+                size = os.path.getsize(file_path)
+                all_files_with_size.append((posix_path, size))
+                included_count += 1
+            except FileNotFoundError:
+                print(f"[WARNING] File not found during scan: {file_path}")
+                continue
+
+    print(f"Scanned {scanned_count} files, included {included_count} for manifest.")
+    print("--- File Audit Complete ---\n")
+    return all_files_with_size
 
 
 def balance_files_by_size(files_with_size, num_bins):
