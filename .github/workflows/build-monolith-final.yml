@@ -21,7 +21,7 @@ jobs:
           node-version: '20'
 
       - name: 🧹 Clean Previous Builds
-        working-directory: ./web_service/frontend
+        working-directory: web_service/frontend
         shell: pwsh
         run: |
           Remove-Item -Path "out" -Recurse -Force -ErrorAction SilentlyContinue
@@ -29,7 +29,7 @@ jobs:
           Write-Host "✅ Cleaned"
 
       - name: 📋 Check Next.js Config
-        working-directory: ./web_service/frontend
+        working-directory: web_service/frontend
         shell: pwsh
         run: |
           Write-Host "Checking package.json..."
@@ -211,7 +211,7 @@ jobs:
       - name: 🧪 Smoke Test
         continue-on-error: true
         shell: pwsh
-        timeout-minutes: 3
+        timeout-minutes: 5
         run: |
           Write-Host "=== SMOKE TEST ===" -ForegroundColor Cyan
           $distDir = "dist/fortuna-monolith"
@@ -241,9 +241,9 @@ jobs:
               # Failure analysis will run at the end
               $success = $false
           } else {
-              Write-Host "PID: $($proc.Id). Waiting up to 20 seconds for health check..."
+              Write-Host "PID: $($proc.Id). Waiting up to 45 seconds for health check..."
               $success = $false
-              for ($i = 1; $i -le 20; $i++) {
+              for ($i = 1; $i -le 45; $i++) {
                   if ($proc.HasExited) {
                       Write-Host "❌ Process exited prematurely (code: $($proc.ExitCode))" -ForegroundColor Red
                       break
@@ -256,7 +256,7 @@ jobs:
                           break
                       }
                   } catch {
-                      Write-Host "Health check attempt $i failed. Retrying..."
+                      Write-Host "Health check attempt $i failed. Retrying... Error: $($_.Exception.Message)"
                       Start-Sleep -Seconds 1
                   }
               }

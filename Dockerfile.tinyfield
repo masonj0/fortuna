@@ -1,0 +1,70 @@
+# TinyField Variant - Optimized for smaller dataset and faster builds
+FROM python:3.11-slim as builder
+
+WORKDIR /build
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    gnupg \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Node.js for frontend build
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy frontend
+COPY web_service/frontend /build/frontend
+WORKDIR /build/frontend
+
+# Build frontend
+RUN npm ci --legacy-peer-deps && \
+    npm run build
+
+# Verify build output
+RUN test -f out/index.html || (echo "Frontend build failed" && exit 1)
+
+# Backend builder stage
+FROM python:3.11-slim as backend-builder
+
+WORKDIR /build
+
+COPY web_service/backend/requirements.txt .
+RUN pip install --no-cache-dir --user -r requirements.txt
+
+# Final runtime stage
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install runtime dependencies only
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy Python packages from builder
+COPY --from=backend-builder /root/.local /root/.local
+
+# Copy backend
+COPY web_service/backend /app/backend
+
+# Copy frontend build from frontend builder
+COPY --from=builder /build/frontend/out /app/frontend/out
+
+# Create data directories for TinyField
+RUN mkdir -p /app/backend/data /app/backend/json /app/backend/logs
+
+# Set Python path
+ENV PATH=/root/.local/bin:$PATH \
+    PYTHONPATH=/app/backend:$PYTHONPATH \
+    PYTHONUNBUFFERED=1
+
+# Health check
+HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8000/api/health || exit 1
+
+EXPOSE 8000
+
+# Start backend (serves both API and frontend static files)
+CMD ["python", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]

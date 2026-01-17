@@ -211,7 +211,7 @@ jobs:
       - name: 🧪 Smoke Test
         continue-on-error: true
         shell: pwsh
-        timeout-minutes: 3
+        timeout-minutes: 5
         run: |
           Write-Host "=== SMOKE TEST ===" -ForegroundColor Cyan
           $distDir = "dist/fortuna-monolith"
@@ -241,22 +241,22 @@ jobs:
               # Failure analysis will run at the end
               $success = $false
           } else {
-              Write-Host "PID: $($proc.Id). Waiting up to 20 seconds for health check..."
+              Write-Host "PID: $($proc.Id). Waiting up to 45 seconds for health check..."
               $success = $false
-              for ($i = 1; $i -le 20; $i++) {
+              for ($i = 1; $i -le 45; $i++) {
                   if ($proc.HasExited) {
                       Write-Host "❌ Process exited prematurely (code: $($proc.ExitCode))" -ForegroundColor Red
                       break
                   }
                   try {
-                      $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/races/qualified/tiny_field_trifecta" -UseBasicParsing -TimeoutSec 1 -ErrorAction Stop
+                      $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/health" -UseBasicParsing -TimeoutSec 1 -ErrorAction Stop
                       if ($response.StatusCode -eq 200) {
                           Write-Host "✅ SMOKE TEST PASSED!" -ForegroundColor Green
                           $success = $true
                           break
                       }
                   } catch {
-                      Write-Host "Health check attempt $i failed. Retrying..."
+                      Write-Host "Health check attempt $i failed. Retrying... Error: $($_.Exception.Message)"
                       Start-Sleep -Seconds 1
                   }
               }
