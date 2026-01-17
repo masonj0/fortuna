@@ -200,6 +200,14 @@ jobs:
           if-no-files-found: error
 
       # ========== TEST ==========
+      - name: Install VC++ Redistributable
+        shell: pwsh
+        run: |
+          # Download and install VC++ Runtime
+          $url = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
+          Invoke-WebRequest -Uri $url -OutFile vc_redist.x64.exe
+          .\vc_redist.x64.exe /install /quiet /norestart
+
       - name: 🧪 Smoke Test
         shell: pwsh
         timeout-minutes: 3
