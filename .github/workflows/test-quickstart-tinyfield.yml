@@ -9,6 +9,8 @@ jobs:
   test-bootstrapper:
     name: '🏃 Run Quick-Start PS1 (Tiny Field)'
     runs-on: windows-latest
+    env:
+      CI: true
     steps:
       - uses: actions/checkout@v4
 
