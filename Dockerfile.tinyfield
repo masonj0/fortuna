@@ -1,0 +1,40 @@
+# TinyField Variant - Static Frontend + Python Backend
+FROM python:3.11-slim as backend-builder
+
+WORKDIR /build
+COPY web_service/backend/requirements.txt .
+RUN pip install --no-cache-dir --user -r requirements.txt
+
+# Runtime stage
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install only runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+
+# Copy Python packages
+COPY --from=backend-builder /root/.local /root/.local
+
+# Copy backend
+COPY web_service/backend /app/backend
+
+# Copy frontend (static HTML)
+COPY web_service/frontend/public /app/frontend/public
+
+# Create TinyField data directories
+RUN mkdir -p /app/backend/data /app/backend/json /app/backend/logs
+
+# Set environment
+ENV PATH=/root/.local/bin:$PATH \
+    PYTHONPATH=/app/backend:$PYTHONPATH \
+    PYTHONUNBUFFERED=1
+
+# Health check
+HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8000/api/health || exit 1
+
+EXPOSE 8000
+
+# Start backend (serves both API and frontend)
+CMD ["python", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
