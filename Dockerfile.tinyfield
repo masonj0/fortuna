@@ -16,19 +16,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf 
 # Copy Python packages
 COPY --from=backend-builder /root/.local /root/.local
 
-# Copy backend
-COPY web_service/backend /app/backend
-
-# Copy frontend (static HTML)
-COPY web_service/frontend/public /app/frontend/public
+# Copy application code, preserving directory structure
+COPY web_service /app/web_service
 
 # Create TinyField data directories
-RUN mkdir -p /app/backend/data /app/backend/json /app/backend/logs
+RUN mkdir -p /app/web_service/backend/data /app/web_service/backend/json /app/web_service/backend/logs
 
 # Set environment
-ENV PATH=/root/.local/bin:$PATH \
-    PYTHONPATH=/app:$PYTHONPATH \
-    PYTHONUNBUFFERED=1
+ENV PATH=/root/.local/bin:$PATH
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
 
 # Health check
 HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=3 \
