@@ -1,4 +1,4 @@
-name: Build Monolith (2026)
+name: Build Monolith TinyField (2026)
 
 on:
   push:
@@ -249,7 +249,7 @@ jobs:
                       break
                   }
                   try {
-                      $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/health" -UseBasicParsing -TimeoutSec 1 -ErrorAction Stop
+                      $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/races/qualified/tiny_field_trifecta" -UseBasicParsing -TimeoutSec 1 -ErrorAction Stop
                       if ($response.StatusCode -eq 200) {
                           Write-Host "✅ SMOKE TEST PASSED!" -ForegroundColor Green
                           $success = $true
