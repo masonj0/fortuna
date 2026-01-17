@@ -27,7 +27,7 @@ RUN mkdir -p /app/backend/data /app/backend/json /app/backend/logs
 
 # Set environment
 ENV PATH=/root/.local/bin:$PATH \
-    PYTHONPATH=/app/backend:$PYTHONPATH \
+    PYTHONPATH=/app:$PYTHONPATH \
     PYTHONUNBUFFERED=1
 
 # Health check
@@ -37,4 +37,4 @@ HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=3 \
 EXPOSE 8000
 
 # Start backend (serves both API and frontend)
-CMD ["python", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-m", "uvicorn", "web_service.backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
