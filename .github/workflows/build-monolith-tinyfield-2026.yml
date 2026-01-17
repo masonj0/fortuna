@@ -1,4 +1,4 @@
-name: Build Monolith (2026)
+name: Build Monolith TinyField (2026)
 
 on:
   push:
@@ -21,7 +21,7 @@ jobs:
           node-version: '20'
 
       - name: 🧹 Clean Previous Builds
-        working-directory: web_service/frontend
+        working-directory: ./web_service/frontend
         shell: pwsh
         run: |
           Remove-Item -Path "out" -Recurse -Force -ErrorAction SilentlyContinue
@@ -29,7 +29,7 @@ jobs:
           Write-Host "✅ Cleaned"
 
       - name: 📋 Check Next.js Config
-        working-directory: web_service/frontend
+        working-directory: ./web_service/frontend
         shell: pwsh
         run: |
           Write-Host "Checking package.json..."
