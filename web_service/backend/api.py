@@ -95,6 +95,23 @@ async def get_races(
     """Fetches all race data for a given date from all or a specific source."""
     return await engine.fetch_all_odds(race_date, source)
 
+@router.get("/races/qualified/tiny_field_trifecta", response_model=QualifiedRacesResponse)
+@limiter.limit("120/minute")
+async def get_tiny_field_trifecta_races(
+    request: Request,
+    race_date: Optional[str] = Query(None, description="Date in YYYY-MM-DD format."),
+    engine: OddsEngine = Depends(get_engine),
+    _=Depends(verify_api_key),
+):
+    """Fetches all race data and runs the tiny_field_trifecta analyzer to find qualified races."""
+    response = await engine.fetch_all_odds(race_date)
+    races = [Race(**r) for r in response.get("races", [])]
+
+    analyzer = engine.analyzer_engine.get_analyzer("tiny_field_trifecta")
+    result = analyzer.qualify_races(races)
+
+    return QualifiedRacesResponse(qualified_races=result.get("races", []), analysis_metadata=result.get("criteria", {}))
+
 @router.get("/races/qualified/{analyzer_name}", response_model=QualifiedRacesResponse)
 @limiter.limit("120/minute")
 async def get_qualified_races(
@@ -108,11 +125,15 @@ async def get_qualified_races(
     min_odds: float = Query(2.0, ge=1.0),
 ):
     """Fetches all race data and runs a specific analyzer to find qualified races."""
-    # This is a simplified version; a real implementation would have a dynamic analyzer engine.
-    # For now, we'll just fetch and return all races as "qualified".
     response = await engine.fetch_all_odds(race_date)
     races = [Race(**r) for r in response.get("races", [])]
-    return QualifiedRacesResponse(qualified_races=races, analysis_metadata={"analyzer": analyzer_name})
+
+    try:
+        analyzer = engine.analyzer_engine.get_analyzer(analyzer_name, max_field_size=max_field_size, min_odds=min_odds)
+        result = analyzer.qualify_races(races)
+        return QualifiedRacesResponse(qualified_races=result.get("races", []), analysis_metadata=result.get("criteria", {}))
+    except ValueError:
+        raise HTTPException(status_code=404, detail=f"Analyzer '{analyzer_name}' not found.")
 
 @router.get("/adapters/status")
 @limiter.limit("60/minute")
