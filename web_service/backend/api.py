@@ -59,9 +59,15 @@ app = FastAPI(
     openapi_url="/api/openapi.json",
 )
 
-app.state.limiter = limiter
-app.add_middleware(SlowAPIMiddleware)
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+# Conditionally apply rate limiting middleware, disable in CI
+if os.environ.get("CI") != "true":
+    app.state.limiter = limiter
+    app.add_middleware(SlowAPIMiddleware)
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+else:
+    # In CI, we don't want rate limiting, so we provide a no-op limiter.
+    # The limiter instance is still required by endpoints even if not used.
+    app.state.limiter = Limiter(key_func=get_remote_address, enabled=False)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(UserFriendlyException, user_friendly_exception_handler)
 router.include_router(health_router)

@@ -28,17 +28,17 @@ def main():
         max_field_size = criteria.get("max_field_size")
 
         if max_field_size == 6:
-            print(f"✅ SUCCESS: Analyzer correctly configured with max_field_size={max_field_size}")
+            print(f"[SUCCESS] Analyzer correctly configured with max_field_size={max_field_size}")
             sys.exit(0)
         else:
-            print(f"❌ FAILURE: Incorrect max_field_size. Expected 6, got {max_field_size}")
+            print(f"[FAILURE] Incorrect max_field_size. Expected 6, got {max_field_size}")
             sys.exit(1)
 
     except requests.exceptions.RequestException as e:
-        print(f"❌ FAILURE: Could not connect to the API: {e}")
+        print(f"[FAILURE] Could not connect to the API: {e}")
         sys.exit(1)
     except (json.JSONDecodeError, KeyError) as e:
-        print(f"❌ FAILURE: Could not parse the API response: {e}")
+        print(f"[FAILURE] Could not parse the API response: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":
