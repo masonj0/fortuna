@@ -1,0 +1,127 @@
+name: Build & Test TinyField Docker Image
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    name: 'Build, Test, and Publish TinyField Docker Image'
+    runs-on: ubuntu-latest
+    env:
+      IMAGE_NAME: fortuna-tinyfield
+
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 🐳 Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 🔨 Build Docker Image
+        run: |
+          echo "Building Docker image..."
+          docker buildx build \
+            -f Dockerfile.tinyfield \
+            -t ${{ env.IMAGE_NAME }}:latest \
+            -t ${{ env.IMAGE_NAME }}:${{ github.run_number }} \
+            --load \
+            .
+          echo "✅ Image built successfully"
+
+      - name: ✔️ Verify Image Created
+        run: |
+          echo "Verifying image exists..."
+          docker images | grep ${{ env.IMAGE_NAME }}
+          docker inspect ${{ env.IMAGE_NAME }}:latest > /dev/null || exit 1
+          echo "✅ Image verification passed"
+
+      - name: 🚀 Start Container and Wait for Health
+        id: container
+        timeout-minutes: 5
+        run: |
+          echo "Starting container..."
+          CONTAINER_ID=$(docker run -d -p 8000:8000 ${{ env.IMAGE_NAME }}:latest)
+          echo "container_id=$CONTAINER_ID" >> $GITHUB_OUTPUT
+          echo "Container started with ID: $CONTAINER_ID"
+
+          # Wait for container to be ready
+          sleep 3
+
+          MAX_ATTEMPTS=60
+          ATTEMPT=0
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/api/health 2>/dev/null || echo "000")
+            echo "Attempt $((ATTEMPT+1))/$MAX_ATTEMPTS - HTTP Status: $HTTP_CODE"
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "✅ Container is responding"
+              break
+            fi
+            sleep 1
+            ATTEMPT=$((ATTEMPT+1))
+          done
+
+          if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
+            echo "❌ Container failed to respond within timeout"
+            docker logs $CONTAINER_ID || true
+            docker stop $CONTAINER_ID || true
+            exit 1
+          fi
+
+      - name: 🧪 Test /api/health Endpoint
+        run: |
+          echo "Testing health endpoint..."
+          curl -f http://localhost:8000/api/health || { echo "Health check failed"; exit 1; }
+          echo "✅ Health endpoint working"
+
+      - name: 🧪 Test /api/races/qualified/tiny_field_trifecta Endpoint
+        run: |
+          echo "Testing races endpoint..."
+          RESPONSE=$(curl -s http://localhost:8000/api/races/qualified/tiny_field_trifecta)
+          echo "Response: $RESPONSE"
+          echo "$RESPONSE" | jq . || { echo "Invalid JSON response"; exit 1; }
+          echo "✅ Races endpoint working"
+
+      - name: 🧪 Test Frontend Load
+        run: |
+          echo "Testing frontend HTML..."
+          curl -s http://localhost:8000/ | grep -q "Fortuna TinyField" || { echo "Frontend not serving"; exit 1; }
+          echo "✅ Frontend HTML loaded successfully"
+
+      - name: 📋 Collect Container Logs
+        if: always()
+        run: |
+          echo "=== CONTAINER LOGS ===" > container-logs.txt
+          docker logs ${{ steps.container.outputs.container_id }} >> container-logs.txt 2>&1
+          cat container-logs.txt
+
+      - name: 🧹 Cleanup Container
+        if: always()
+        run: |
+          docker stop ${{ steps.container.outputs.container_id }} || true
+          docker rm ${{ steps.container.outputs.container_id }} || true
+          echo "✅ Cleanup complete"
+
+      - name: 📦 Upload Container Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-container-logs-${{ github.run_number }}
+          path: container-logs.txt
+          retention-days: 7
+
+      # OPTIONAL: Uncomment below to push to registry
+      # - name: 🚀 Push to Docker Registry
+      #   if: success()
+      #   uses: docker/build-push-action@v5
+      #   with:
+      #     context: .
+      #     file: ./Dockerfile.tinyfield
+      #     push: true
+      #     tags: |
+      #       ghcr.io/${{ github.repository }}/fortuna-tinyfield:latest
+      #       ghcr.io/${{ github.repository }}/fortuna-tinyfield:${{ github.run_number }}
+      #     registry: ghcr.io
+      #     username: ${{ github.actor }}
+      #     password: ${{ secrets.GITHUB_TOKEN }}

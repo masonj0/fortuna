@@ -158,6 +158,18 @@ class TrifectaAnalyzer(BaseAnalyzer):
         return score
 
 
+class TinyFieldTrifectaAnalyzer(TrifectaAnalyzer):
+    """A specialized TrifectaAnalyzer that only considers races with 6 or fewer runners."""
+
+    def __init__(self, **kwargs):
+        # Override the max_field_size to 6 for "tiny field" analysis
+        super().__init__(max_field_size=6, **kwargs)
+
+    @property
+    def name(self) -> str:
+        return "tiny_field_trifecta_analyzer"
+
+
 class AnalyzerEngine:
     """Discovers and manages all available analyzer plugins."""
 
@@ -169,6 +181,7 @@ class AnalyzerEngine:
         # In a real plugin system, this would inspect a folder.
         # For now, we register them manually.
         self.register_analyzer("trifecta", TrifectaAnalyzer)
+        self.register_analyzer("tiny_field_trifecta", TinyFieldTrifectaAnalyzer)
         log.info(
             "AnalyzerEngine discovered plugins",
             available_analyzers=list(self.analyzers.keys()),
