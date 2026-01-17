@@ -3,12 +3,12 @@ from decimal import Decimal
 
 import pytest
 
-from python_service.analyzer import AnalyzerEngine
-from python_service.analyzer import TrifectaAnalyzer
-from python_service.analyzer import _get_best_win_odds
-from python_service.models import OddsData
-from python_service.models import Race
-from python_service.models import Runner
+from web_service.backend.analyzer import AnalyzerEngine
+from web_service.backend.analyzer import TrifectaAnalyzer
+from web_service.backend.analyzer import _get_best_win_odds
+from web_service.backend.models import OddsData
+from web_service.backend.models import Race
+from web_service.backend.models import Runner
 
 
 # Helper to create runners for tests
@@ -171,3 +171,29 @@ def test_trifecta_analyzer_rejects_races_with_too_few_runners(trifecta_analyzer)
 
     qualified = trifecta_analyzer.is_race_qualified(race_with_two_runners)
     assert not qualified, "Trifecta analyzer should not qualify a race with only two runners."
+
+
+def test_tiny_field_trifecta_analyzer_filters_by_field_size(sample_races_for_true_trifecta):
+    """
+    Tests that the TinyFieldTrifectaAnalyzer correctly applies its max_field_size of 6.
+    """
+    engine = AnalyzerEngine()
+    analyzer = engine.get_analyzer("tiny_field_trifecta")
+
+    # Add a race with 7 runners, which should be filtered out
+    race_with_7_runners = Race(
+        id="race_fail_tiny_field",
+        venue="Test Park",
+        race_number=6,
+        start_time=datetime.now(),
+        source="Test",
+        runners=[create_runner(i, 5.0 + i) for i in range(1, 8)],  # 7 runners
+    )
+    sample_races_for_true_trifecta.append(race_with_7_runners)
+
+    result = analyzer.qualify_races(sample_races_for_true_trifecta)
+    qualified_races = result["races"]
+
+    assert len(qualified_races) == 2  # Should be the same two as the original test
+    assert "race_fail_tiny_field" not in [r.id for r in qualified_races]
+    assert result["criteria"]["max_field_size"] == 6
