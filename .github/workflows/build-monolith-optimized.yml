@@ -1,0 +1,46 @@
+name: Build Monolith (Optimized)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r web_service/backend/requirements.txt
+        pip install pyinstaller==6.1.0
+
+    - name: Build monolith executable
+      run: pyinstaller --noconfirm --clean fortuna-monolith.spec
+
+    - name: Run Smoke Test
+      run: |
+        Start-Process -FilePath "dist/fortuna-monolith/fortuna-monolith.exe"
+        Start-Sleep -Seconds 15
+        try {
+          $response = Invoke-WebRequest -Uri http://127.0.0.1:8000/api/health -UseBasicParsing
+          if ($response.StatusCode -eq 200) {
+            Write-Host "Smoke test PASSED"
+          } else {
+            Write-Host "Smoke test FAILED with status code $($response.StatusCode)"
+            exit 1
+          }
+        } catch {
+          Write-Host "Smoke test FAILED to connect: $($_.Exception.Message)"
+          exit 1
+        } finally {
+          Stop-Process -Name "fortuna-monolith" -Force
+        }
+      shell: pwsh
