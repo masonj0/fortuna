@@ -14,7 +14,20 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.11'
+        python-version: '3.10.11'
+
+    - name: 🟢 Setup Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: web_service/frontend/package-lock.json
+
+    - name: 🎨 Build Frontend
+      working-directory: web_service/frontend
+      run: |
+        npm ci
+        npm run build
 
     - name: Install dependencies
       run: |
@@ -26,21 +39,25 @@ jobs:
       run: pyinstaller --noconfirm --clean fortuna-monolith.spec
 
     - name: Run Smoke Test
+      shell: pwsh
       run: |
         Start-Process -FilePath "dist/fortuna-monolith/fortuna-monolith.exe"
-        Start-Sleep -Seconds 15
-        try {
-          $response = Invoke-WebRequest -Uri http://127.0.0.1:8000/api/health -UseBasicParsing
-          if ($response.StatusCode -eq 200) {
-            Write-Host "Smoke test PASSED"
-          } else {
-            Write-Host "Smoke test FAILED with status code $($response.StatusCode)"
-            exit 1
-          }
-        } catch {
-          Write-Host "Smoke test FAILED to connect: $($_.Exception.Message)"
-          exit 1
-        } finally {
-          Stop-Process -Name "fortuna-monolith" -Force
+        $healthy = $false
+        for ($i=0; $i -lt 30; $i++) {
+            try {
+                $response = Invoke-WebRequest -Uri http://127.0.0.1:8000/api/health -UseBasicParsing
+                if ($response.StatusCode -eq 200) {
+                    Write-Host "Smoke test PASSED"
+                    $healthy = $true
+                    break
+                }
+            } catch {
+                Write-Host "Waiting for server... ($($i+1)/30)"
+                Start-Sleep -Seconds 2
+            }
         }
-      shell: pwsh
+        if (-not $healthy) {
+            Write-Host "Smoke test FAILED"
+            exit 1
+        }
+        Stop-Process -Name "fortuna-monolith" -Force
