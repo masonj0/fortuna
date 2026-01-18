@@ -33,7 +33,7 @@ $ErrorActionPreference = "Stop"
 # --- Configuration ---
 $PROJECT_ROOT = Resolve-Path "$PSScriptRoot\.."
 $BACKEND_DIR  = Join-Path $PROJECT_ROOT "web_service\backend"
-$FRONTEND_DIR = Join-Path $PROJECT_ROOT "web_platform\frontend"
+$FRONTEND_DIR = Join-Path $PROJECT_ROOT "web_service\frontend"
 $PYTHON_CMD   = if ($PythonExecutable) { $PythonExecutable } else { "py -3.11" }
 
 # --- Helper Functions ---
