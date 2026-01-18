@@ -12,7 +12,7 @@ updates:
       interval: "daily"
 
   - package-ecosystem: "npm"
-    directory: "/web_platform/frontend"
+    directory: "/web_service/frontend"
     schedule:
       interval: "daily"
 
