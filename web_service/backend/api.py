@@ -159,21 +159,17 @@ app.include_router(router, prefix="/api")
 # Mount static files (frontend)
 try:
     # Path for the new static 'public' directory
-    static_dir = Path(__file__).parent.parent.joinpath("frontend", "public")
+    frontend_dir = Path(__file__).parent.parent.joinpath("frontend", "public")
 
-    if static_dir.exists():
-        app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
-
-        @app.get("/", response_class=FileResponse)
-        async def serve_frontend():
-            """Serves the static index.html file for the root path."""
-            return FileResponse(static_dir / "index.html")
-
+    if frontend_dir.exists():
+        app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")
     elif getattr(sys, 'frozen', False):
-        # Fallback for PyInstaller executable (legacy path)
-        ui_path = Path(sys.executable).parent / "ui"
-        if ui_path.exists():
-            app.mount("/", StaticFiles(directory=str(ui_path), html=True), name="static")
+        # Fallback for PyInstaller executable
+        frontend_dir = Path(sys.executable).parent / "public"
+        if frontend_dir.exists():
+            app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")
+    else:
+        log.warning(f"Frontend directory not found at {frontend_dir}")
 
 except Exception as e:
     log.warning("Could not mount static files", error=str(e))
