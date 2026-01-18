@@ -29,16 +29,14 @@ jobs:
         shell: bash
         run: |
           echo "=== BUILDING FRONTEND FOR PODMAN ==="
-          cat > next.config.js <<EOF
-          /** @type {import('next').NextConfig} */
-          const nextConfig = {
-            output: 'export',
-            distDir: 'build',
-            images: { unoptimized: true },
-            trailingSlash: true,
-          }
-          module.exports = nextConfig
-          EOF
+          echo "/** @type {import('next').NextConfig} */" > next.config.js
+          echo "const nextConfig = {" >> next.config.js
+          echo "  output: 'export'," >> next.config.js
+          echo "  distDir: 'build'," >> next.config.js
+          echo "  images: { unoptimized: true }," >> next.config.js
+          echo "  trailingSlash: true," >> next.config.js
+          echo "}" >> next.config.js
+          echo "module.exports = nextConfig" >> next.config.js
           echo "✅ next.config.js set for 'build' directory output"
           npm install --legacy-peer-deps
           if [ $? -ne 0 ]; then echo "npm install failed"; exit 1; fi

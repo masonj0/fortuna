@@ -1,43 +1,11 @@
-# Stage 1: Build Frontend
-FROM node:20-alpine AS frontend-builder
-
-WORKDIR /app/web_service/frontend
-
-# Copy package files
-COPY web_service/frontend/package*.json ./
-
-# Install dependencies
-RUN npm install --legacy-peer-deps
-
-# Create next.config.js with static export
-RUN cat > next.config.js << 'EOF'
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-  output: 'export',
-  images: { unoptimized: true },
-  trailingSlash: true,
-}
-module.exports = nextConfig
-EOF
-
-# Copy source
-COPY web_service/frontend/src ./src
-COPY web_service/frontend/public ./public
-
-# Build
-RUN npm run build
-
-# Verify output
-RUN if [ ! -f out/index.html ]; then echo "❌ Frontend build failed!"; exit 1; fi
-
-# Stage 2: Build Backend
+# Main Application Stage
 FROM python:3.10.11-slim
 
 WORKDIR /app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
-    gcc \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements
@@ -50,8 +18,8 @@ RUN pip install --no-cache-dir -r /app/web_service/backend/requirements.txt
 COPY web_service/backend /app/web_service/backend
 COPY web_service/__init__.py /app/web_service/
 
-# Copy frontend build from stage 1
-COPY --from=frontend-builder /app/web_service/frontend/out /app/web_service/frontend/out
+# Copy pre-built frontend assets
+COPY web_service/frontend/public /app/web_service/frontend/public
 
 # Create required directories
 RUN mkdir -p /app/web_service/backend/data \
