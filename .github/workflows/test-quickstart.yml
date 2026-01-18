@@ -19,25 +19,12 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
 
-      - name: 🟢 Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: web_service/frontend/package-lock.json
-
       - name: 📦 Install Python Dependencies
         shell: pwsh
         run: |
           pip install --upgrade pip
           pip install -r web_service/backend/requirements.txt
           pip install -r web_service/backend/requirements-dev.txt
-
-      - name: 🎨 Build Frontend
-        working-directory: web_service/frontend
-        run: |
-          npm ci
-          npm run build
 
       - name: 🧪 Run Backend Unit Tests
         shell: pwsh
