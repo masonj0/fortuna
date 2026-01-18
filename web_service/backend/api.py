@@ -160,38 +160,34 @@ async def get_all_adapter_statuses(
 app.include_router(router, prefix="/api")
 
 # Mount static files (frontend)
-try:
-    # Path for the new static 'public' directory
-    frontend_dir = Path(__file__).parent.parent.joinpath("frontend", "public")
+# This logic ensures that the frontend is served both in development and in the frozen executable.
+static_dir = None
+if getattr(sys, 'frozen', False):
+    # Running in a PyInstaller bundle
+    static_dir = Path(sys.executable).parent / "public"
+else:
+    # Running in a normal Python environment
+    static_dir = Path(__file__).parent.parent.joinpath("frontend", "public")
 
-    if frontend_dir.exists():
-        # Mount the static directory at the root
-        app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")
+if static_dir and static_dir.exists():
+    app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
 
-        @app.middleware("http")
-        async def spa_middleware(request: Request, call_next):
-            """
-            Middleware to handle SPA routing. If a request is not for an API endpoint
-            and the file is not found, it serves index.html.
-            """
-            response = await call_next(request)
-            # If a 404 is returned for a non-API, non-file path, serve the SPA index.
-            if response.status_code == 404 and not request.url.path.startswith("/api/"):
-                # Check if it looks like a file request
-                if "." not in request.url.path.split("/")[-1]:
-                    return FileResponse(str(frontend_dir / "index.html"))
-            return response
-
-    elif getattr(sys, 'frozen', False):
-        # Fallback for PyInstaller executable
-        frontend_dir = Path(sys.executable).parent / "public"
-        if frontend_dir.exists():
-            app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")
-    else:
-        log.warning(f"Frontend directory not found at {frontend_dir}")
-
-except Exception as e:
-    log.warning("Could not mount static files", error=str(e))
+    @app.middleware("http")
+    async def spa_middleware(request: Request, call_next):
+        """
+        Middleware to handle SPA routing. If a request is not for an API endpoint
+        and the file is not found, it serves index.html. This is crucial for
+        letting the frontend handle routing.
+        """
+        response = await call_next(request)
+        # If a 404 is returned for a non-API, non-file path, serve the SPA index.
+        if response.status_code == 404 and not request.url.path.startswith("/api/"):
+            # A simple check to avoid redirecting file requests (e.g. for .css, .js)
+            if "." not in request.url.path.split("/")[-1]:
+                return FileResponse(static_dir / "index.html")
+        return response
+else:
+    log.warning(f"Static frontend directory not found at '{static_dir}'. The frontend will not be served.")
 
 
 # Export app for Uvicorn
