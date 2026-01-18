@@ -1,6 +1,8 @@
 name: Build Monolith (TinyField)
 
 on:
+  push:
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
