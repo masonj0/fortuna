@@ -165,7 +165,23 @@ try:
     frontend_dir = Path(__file__).parent.parent.joinpath("frontend", "public")
 
     if frontend_dir.exists():
+        # Mount the static directory at the root
         app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")
+
+        @app.middleware("http")
+        async def spa_middleware(request: Request, call_next):
+            """
+            Middleware to handle SPA routing. If a request is not for an API endpoint
+            and the file is not found, it serves index.html.
+            """
+            response = await call_next(request)
+            # If a 404 is returned for a non-API, non-file path, serve the SPA index.
+            if response.status_code == 404 and not request.url.path.startswith("/api/"):
+                # Check if it looks like a file request
+                if "." not in request.url.path.split("/")[-1]:
+                    return FileResponse(str(frontend_dir / "index.html"))
+            return response
+
     elif getattr(sys, 'frozen', False):
         # Fallback for PyInstaller executable
         frontend_dir = Path(sys.executable).parent / "public"

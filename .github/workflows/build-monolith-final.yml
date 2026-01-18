@@ -170,16 +170,20 @@ jobs:
 
           # Create README.txt
           $readmeLines = @(
-            'Fortuna Monolith',
+            'Fortuna Monolith - User Guide',
             '',
-            'This directory contains the main executable (fortuna-monolith.exe).',
+            '**HOW TO RUN**',
+            '1. Double-click "run.bat".',
+            '2. A terminal window will open, and the backend server will start.',
+            '3. Your default web browser should automatically open to the Fortuna Faucet dashboard.',
             '',
-            'To run the application, please use the run.bat script. It will start the application and keep this window open. If the application fails to start, you will see error messages here.',
+            '**WHAT TO EXPECT**',
+            '- The "run.bat" window must remain open for the application to work.',
+            '- To stop the application, simply close the "run.bat" window.',
             '',
-            'For detailed debugging, a full log file is created inside this same directory, named:',
-            'fortuna-monolith.log',
-            '',
-            'You can view this log file with any text editor.'
+            '**TROUBLESHOOTING**',
+            '- If your browser does not open automatically, please manually navigate to: http://127.0.0.1:8000',
+            '- If the application fails to start, check the "fortuna-monolith.log" file in this directory for error details.'
           )
           $readmeLines | Out-File -FilePath "$distDir/README.txt" -Encoding utf8
           Write-Host "✅ Created README.txt"
@@ -187,9 +191,17 @@ jobs:
           # Create run.bat
           $batLines = @(
             '@echo off',
-            'echo Starting Fortuna Monolith...',
             'echo.',
+            'echo  Starting Fortuna Monolith...',
+            'echo  Please wait a few moments for the server to initialize.',
+            'echo.',
+            '',
+            'rem Start the browser after a short delay',
+            'start /b cmd /c "timeout /t 5 > nul && start http://127.0.0.1:8000"',
+            '',
+            'rem Start the main application and wait for it to exit',
             'call "%~dp0fortuna-monolith.exe"',
+            '',
             'echo.',
             'echo Application has exited. Press any key to close this window...',
             'pause > nul'
