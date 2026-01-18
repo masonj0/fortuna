@@ -17,6 +17,39 @@ jobs:
       - uses: actions/checkout@v4
 
       # ============================================================
+      # FRONTEND BUILD
+      # ============================================================
+      - name: 🎨 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 🏗️ Build Frontend
+        working-directory: ./web_service/frontend
+        shell: bash
+        run: |
+          echo "=== BUILDING FRONTEND FOR PODMAN ==="
+          cat > next.config.js <<EOF
+          /** @type {import('next').NextConfig} */
+          const nextConfig = {
+            output: 'export',
+            distDir: 'build',
+            images: { unoptimized: true },
+            trailingSlash: true,
+          }
+          module.exports = nextConfig
+          EOF
+          echo "✅ next.config.js set for 'build' directory output"
+          npm install --legacy-peer-deps
+          if [ $? -ne 0 ]; then echo "npm install failed"; exit 1; fi
+          npm run build
+          if [ $? -ne 0 ]; then echo "npm run build failed"; exit 1; fi
+          mkdir -p public
+          mv build/* public/
+          if [ $? -ne 0 ]; then echo "Failed to move build artifacts"; exit 1; fi
+          echo "✅ Artifacts moved to public"
+
+      # ============================================================
       # STEP 1: Set up Podman
       # ============================================================
       - name: Set up Podman

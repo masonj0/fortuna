@@ -14,6 +14,11 @@ for folder in ['data', 'json', 'adapters']:
     if source_path.exists():
         datas.append((str(source_path), folder))
 
+# CRITICAL: Bundle the frontend assets
+frontend_dist = project_root / 'web_service' / 'frontend' / 'public'
+if frontend_dist.exists():
+    datas.append((str(frontend_dist), 'public'))
+
 # Collect dependencies
 hiddenimports = [
     'uvicorn', 'fastapi', 'starlette', 'pydantic', 'structlog',
