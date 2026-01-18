@@ -1,4 +1,4 @@
-name: Build Monolith (Final)
+name: Build Monolith (TinyField)
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    name: 'Build Fortuna Monolith'
+    name: 'Build Fortuna Monolith (TinyField)'
     runs-on: windows-latest
 
     steps:
@@ -216,15 +216,15 @@ jobs:
           Write-Host "✅ Created run.bat"
 
           # Create ZIP archive
-          $zipFileName = "Fortuna-Monolith-Windows-${{ github.run_number }}.zip"
+          $zipFileName = "Fortuna-Monolith-TinyField-Windows-${{ github.run_number }}.zip"
           Compress-Archive -Path "$distDir/*" -DestinationPath $zipFileName -Force
           Write-Host "✅ Created $zipFileName" -ForegroundColor Green
 
       - name: 📤 Upload Packaged Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Fortuna-Monolith-Windows-${{ github.run_number }}
-          path: Fortuna-Monolith-Windows-${{ github.run_number }}.zip
+          name: Fortuna-Monolith-TinyField-Windows-${{ github.run_number }}
+          path: Fortuna-Monolith-TinyField-Windows-${{ github.run_number }}.zip
           if-no-files-found: error
 
       # ========== TEST ==========
