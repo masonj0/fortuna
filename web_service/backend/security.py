@@ -1,6 +1,7 @@
 # python_service/security.py
 
 import secrets
+import os
 
 from fastapi import Depends
 from fastapi import HTTPException
@@ -13,9 +14,6 @@ from .config import get_settings
 
 API_KEY_NAME = "X-API-Key"
 api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=True)
-
-
-import os
 
 async def verify_api_key(key: str = Security(api_key_header), settings: Settings = Depends(get_settings)):
     """

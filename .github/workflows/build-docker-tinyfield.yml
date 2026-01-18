@@ -24,9 +24,13 @@ jobs:
           cache: 'npm'
           cache-dependency-path: web_service/frontend/package-lock.json
 
-      - name: 🏗️ Build Frontend
+      - name: 🏗️ Build Frontend (TinyField Variant)
         working-directory: ./web_service/frontend
         run: |
+          echo "INFO: Adapting frontend for TinyField variant..."
+          sed -i "s/'Fortuna'/'Fortuna TinyField'/g" app/layout.tsx
+          echo "✅ Frontend adapted."
+
           echo "INFO: Cleaning previous builds..."
           rm -rf public .next build
 
