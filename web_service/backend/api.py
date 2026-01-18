@@ -163,25 +163,24 @@ app.include_router(router, prefix="/api")
 try:
     # Path for the new static 'public' directory
     frontend_dir = Path(__file__).parent.parent.joinpath("frontend", "public")
-    static_files_app = StaticFiles(directory=str(frontend_dir), html=True)
 
     if frontend_dir.exists():
-        app.mount("/_next", static_files_app, name="next-assets")
-        app.mount("/public", static_files_app, name="public-assets")
+        # Mount the static directory at the root
+        app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")
 
-        @app.get("/{full_path:path}", response_class=FileResponse)
-        async def serve_spa(request: Request, full_path: str):
-            """Catch-all for SPA routing."""
-            # Prevent API calls from being routed here
-            if full_path.startswith("api/"):
-                raise HTTPException(status_code=404, detail="Not Found")
-
-            # Check if a specific file exists, otherwise serve index.html
-            file_path = frontend_dir / full_path
-            if file_path.is_file():
-                return FileResponse(file_path)
-
-            return FileResponse(frontend_dir / "index.html")
+        @app.middleware("http")
+        async def spa_middleware(request: Request, call_next):
+            """
+            Middleware to handle SPA routing. If a request is not for an API endpoint
+            and the file is not found, it serves index.html.
+            """
+            response = await call_next(request)
+            # If a 404 is returned for a non-API, non-file path, serve the SPA index.
+            if response.status_code == 404 and not request.url.path.startswith("/api/"):
+                # Check if it looks like a file request
+                if "." not in request.url.path.split("/")[-1]:
+                    return FileResponse(str(frontend_dir / "index.html"))
+            return response
 
     elif getattr(sys, 'frozen', False):
         # Fallback for PyInstaller executable
