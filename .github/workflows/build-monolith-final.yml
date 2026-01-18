@@ -191,20 +191,26 @@ jobs:
           # Create run.bat
           $batLines = @(
             '@echo off',
+            'title Fortuna Monolith',
             'echo.',
-            'echo  Starting Fortuna Monolith...',
-            'echo  Please wait a few moments for the server to initialize.',
+            'echo  +-------------------------------------------------+',
+            'echo  |             Fortuna Monolith Server             |',
+            'echo  +-------------------------------------------------+',
+            'echo.',
+            'echo  Server is starting in the background...',
+            'echo  All detailed output is being saved to "fortuna-monolith.log".',
+            'echo.',
+            'echo  Your browser will open to the dashboard in a few seconds.',
+            'echo.',
+            'echo  >> This window must remain open for the server to run. <<',
+            'echo  >> To stop the server, simply close this window.   <<',
             'echo.',
             '',
-            'rem Start the browser after a short delay',
+            'rem Start the browser after a 5-second delay to allow the server to initialize.',
             'start /b cmd /c "timeout /t 5 > nul && start http://127.0.0.1:8000"',
             '',
-            'rem Start the main application and wait for it to exit',
-            'call "%~dp0fortuna-monolith.exe"',
-            '',
-            'echo.',
-            'echo Application has exited. Press any key to close this window...',
-            'pause > nul'
+            'rem Start the main application and redirect its output to a log file.',
+            'call "%~dp0fortuna-monolith.exe" > "%~dp0fortuna-monolith.log" 2>&1'
           )
           $batLines | Out-File -FilePath "$distDir/run.bat" -Encoding ascii
           Write-Host "✅ Created run.bat"
