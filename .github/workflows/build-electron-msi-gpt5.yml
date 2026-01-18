@@ -13,7 +13,7 @@ concurrency:
 
 env:
   NODE_VERSION: '20'
-  PYTHON_VERSION: '3.11'
+  PYTHON_VERSION: '3.10.11'
   ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
   BACKEND_DIR: 'web_service/backend'
   PYTHONUTF8: '1'
@@ -102,23 +102,46 @@ jobs:
           path: dist/fortuna-backend.exe
 
   build-frontend:
-    name: 🎨 Build Web Frontend
+    name: 🎨 Build Frontend
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+      - name: 🎨 Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - name: 🔨 Build
-        working-directory: web_platform/frontend
+      - name: 🏗️ Build Frontend
+        working-directory: ./web_service/frontend
+        shell: pwsh
         run: |
-          npm ci
+          Write-Host "=== BUILDING FRONTEND FOR ELECTRON ===" -ForegroundColor Cyan
+          $configLines = @(
+            "/** @type {import('next').NextConfig} */",
+            "const nextConfig = {",
+            "  output: 'export',",
+            "  distDir: 'build',",
+            "  images: { unoptimized: true },",
+            "  trailingSlash: true,",
+            "}",
+            "module.exports = nextConfig"
+          )
+          $configContent = $configLines -join [System.Environment]::NewLine
+          Set-Content -Path "next.config.js" -Value $configContent -Encoding UTF8
+          Write-Host "✅ next.config.js set for 'build' directory output"
+          npm install --legacy-peer-deps
+          if ($LASTEXITCODE -ne 0) { Write-Error "npm install failed"; exit 1 }
           npm run build
-      - name: 📤 Upload
+          if ($LASTEXITCODE -ne 0) { Write-Error "npm run build failed"; exit 1 }
+          New-Item -ItemType Directory -Force -Path "public" | Out-Null
+          Move-Item -Path "build/*" -Destination "public" -Force
+          if ($LASTEXITCODE -ne 0) { Write-Error "Failed to move build artifacts"; exit 1 }
+          Write-Host "✅ Artifacts moved to public"
+      - name: 📤 Upload Frontend Artifact
         uses: actions/upload-artifact@v4
         with:
           name: frontend-dist
-          path: web_platform/frontend/out/
+          path: web_service/frontend/public/
 
   build-electron-msi:
     name: '🚀 Build Electron MSI (${{ matrix.arch }})'
@@ -139,7 +162,13 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: frontend-dist
-          path: electron/out
+          path: temp_frontend
+      - name: '🚚 Stage Frontend'
+        shell: pwsh
+        run: |
+          $dest = "electron/out"
+          New-Item -ItemType Directory -Path $dest -Force
+          Copy-Item -Path "temp_frontend/*" -Destination $dest -Recurse -Force
       - name: '🚚 Stage Backend'
         shell: pwsh
         run: |
