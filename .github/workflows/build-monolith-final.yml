@@ -53,7 +53,7 @@ jobs:
             "/** @type {import('next').NextConfig} */",
             "const nextConfig = {",
             "  output: 'export',",
-            "  distDir: 'public',",
+            "  distDir: 'build',",
             "  images: { unoptimized: true },",
             "  trailingSlash: true,",
             "}",
@@ -61,7 +61,7 @@ jobs:
           )
           $configContent = $configLines -join [System.Environment]::NewLine
           Set-Content -Path "next.config.js" -Value $configContent -Encoding UTF8
-          Write-Host "✅ next.config.js set for 'public' directory output"
+          Write-Host "✅ next.config.js set for 'build' directory output"
 
           Write-Host "Installing dependencies..."
           npm install --legacy-peer-deps
@@ -76,6 +76,15 @@ jobs:
             Write-Error "npm run build failed"
             exit 1
           }
+
+          Write-Host "Moving build artifacts to 'public'..."
+          New-Item -ItemType Directory -Force -Path "public" | Out-Null
+          Move-Item -Path "build/*" -Destination "public" -Force
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to move build artifacts"
+            exit 1
+          }
+          Write-Host "✅ Artifacts moved."
 
           # Verify output
           Write-Host "`nVerifying output..."
