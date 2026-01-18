@@ -1,4 +1,4 @@
-name: Build Monolith (2026)
+name: Build Monolith (Final)
 
 on:
   push:
@@ -21,15 +21,15 @@ jobs:
           node-version: '20'
 
       - name: 🧹 Clean Previous Builds
-        working-directory: web_service/frontend
+        working-directory: ./web_service/frontend
         shell: pwsh
         run: |
-          Remove-Item -Path "out" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "public" -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path ".next" -Recurse -Force -ErrorAction SilentlyContinue
           Write-Host "✅ Cleaned"
 
       - name: 📋 Check Next.js Config
-        working-directory: web_service/frontend
+        working-directory: ./web_service/frontend
         shell: pwsh
         run: |
           Write-Host "Checking package.json..."
@@ -53,6 +53,7 @@ jobs:
             "/** @type {import('next').NextConfig} */",
             "const nextConfig = {",
             "  output: 'export',",
+            "  distDir: 'public',",
             "  images: { unoptimized: true },",
             "  trailingSlash: true,",
             "}",
@@ -60,7 +61,7 @@ jobs:
           )
           $configContent = $configLines -join [System.Environment]::NewLine
           Set-Content -Path "next.config.js" -Value $configContent -Encoding UTF8
-          Write-Host "✅ next.config.js set"
+          Write-Host "✅ next.config.js set for 'public' directory output"
 
           Write-Host "Installing dependencies..."
           npm install --legacy-peer-deps
@@ -78,21 +79,21 @@ jobs:
 
           # Verify output
           Write-Host "`nVerifying output..."
-          if (-not (Test-Path "out")) {
-            Write-Host "❌ 'out' directory not found!" -ForegroundColor Red
+          if (-not (Test-Path "public")) {
+            Write-Host "❌ 'public' directory not found!" -ForegroundColor Red
             Write-Host "Contents of current dir:"
             Get-ChildItem | Format-Table Name
             exit 1
           }
 
-          if (-not (Test-Path "out/index.html")) {
-            Write-Host "❌ out/index.html not found!" -ForegroundColor Red
-            Write-Host "Contents of 'out':"
-            Get-ChildItem -Path "out" -Recurse | Format-Table Name
+          if (-not (Test-Path "public/index.html")) {
+            Write-Host "❌ public/index.html not found!" -ForegroundColor Red
+            Write-Host "Contents of 'public':"
+            Get-ChildItem -Path "public" -Recurse | Format-Table Name
             exit 1
           }
 
-          $count = (Get-ChildItem -Path "out" -Recurse -File).Count
+          $count = (Get-ChildItem -Path "public" -Recurse -File).Count
           Write-Host "✅ Frontend built: $count files" -ForegroundColor Green
 
       # ========== BACKEND ==========
@@ -123,11 +124,11 @@ jobs:
           Write-Host "=== BUILDING MONOLITH ===" -ForegroundColor Cyan
 
           # Final verification
-          if (-not (Test-Path "web_service/frontend/out/index.html")) {
+          if (-not (Test-Path "web_service/frontend/public/index.html")) {
             Write-Error "❌ Frontend not ready!"
             Write-Host "Frontend path check:"
-            Test-Path "web_service/frontend/out"
-            Test-Path "web_service/frontend/out/index.html"
+            Test-Path "web_service/frontend/public"
+            Test-Path "web_service/frontend/public/index.html"
             exit 1
           }
 
