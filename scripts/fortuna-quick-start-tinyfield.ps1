@@ -112,17 +112,9 @@ if (-not $NoFrontend) {
     if (-not (Test-Path $FRONTEND_DIR)) { Show-Fail "Frontend directory not found at: $FRONTEND_DIR" }
 
     Push-Location $FRONTEND_DIR
-    if (Test-Path "node_modules") {
-        Show-Success "Node modules present."
-    } else {
-        Show-Warn "Installing dependencies (npm ci)..."
-        npm ci --silent
-    }
-    if ($Production) {
-        Show-Step "Building for Production..."
-        npm run build
-        Show-Success "Production build complete."
-    }
+    # With the unified architecture, we only need to ensure the assets are present.
+    # The Node.js server is no longer required for the TinyField variant.
+    Show-Success "Frontend assets are served by the backend."
     Pop-Location
 }
 
@@ -175,15 +167,8 @@ if ($env:CI) {
 }
 
 if (-not $NoFrontend) {
-    if ($env:CI) {
-        # In CI, we assume backend serves static files from build. Frontend npm dev server not needed.
-        Show-Warn "Frontend dev server launch is skipped in CI mode."
-    } else {
-        $cmd = if ($Production) { "start" } else { "dev" }
-        $frontendScript = "cd `"$FRONTEND_DIR`"; npm run $cmd"
-        Start-Process pwsh -ArgumentList "-NoExit", "-Command", $frontendScript -WindowStyle Normal
-        Show-Success "Frontend launched on Port 3000 ($cmd mode)"
-    }
+    # The backend now serves the frontend, so we don't need to launch a separate server.
+    Show-Success "Frontend is served by the backend at http://localhost:8000/"
 }
 
 if ($env:CI) {

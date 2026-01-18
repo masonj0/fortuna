@@ -25,7 +25,7 @@ print("\n" + "="*70)
 print("FRONTEND VALIDATION")
 print("="*70)
 
-frontend_out = project_root / 'web_service' / 'frontend' / 'out'
+frontend_out = project_root / 'web_service' / 'frontend' / 'public'
 print(f"Looking for frontend at: {frontend_out}")
 print(f"Exists: {frontend_out.exists()}")
 
@@ -47,11 +47,11 @@ if frontend_out.exists():
             print(f"  - {item.name}")
         sys.exit(1)
 else:
-    print(f"[ERROR] FATAL: Frontend 'out' directory not found!")
-    print(f"\nSearching for 'out' directory from project root:")
+    print(f"[ERROR] FATAL: Frontend 'public' directory not found!")
+    print(f"\nSearching for 'public' directory from project root:")
     for root, dirs, files in os.walk(project_root):
-        if 'out' in dirs:
-            out_path = Path(root) / 'out'
+        if 'public' in dirs:
+            out_path = Path(root) / 'public'
             print(f"  Found at: {out_path}")
             if (out_path / 'index.html').exists():
                 print(f"    [OK] Has index.html")
@@ -94,8 +94,8 @@ print("="*70)
 datas = []
 
 # Frontend
-datas.append((str(frontend_out), 'ui'))
-print(f"[OK] Frontend:  {frontend_out} -> ui/")
+datas.append((str(frontend_out), 'public'))
+print(f"[OK] Frontend:  {frontend_out} -> public/")
 
 # Backend directories
 for dirname in ['data', 'json', 'logs']:
