@@ -6,10 +6,15 @@ __pycache__
 .pytest_cache
 .venv
 venv
-node_modules
-.next
-dist/
-build/
+# Keep node_modules out of the build context
+node_modules/
+
+# Keep build caches out of the build context
+web_service/frontend/.next/
+
+# Allow frontend build artifacts
+# dist/
+# build/
 *.egg-info
 .DS_Store
 .env

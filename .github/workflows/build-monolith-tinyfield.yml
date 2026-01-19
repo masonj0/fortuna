@@ -1,4 +1,4 @@
-name: Build Monolith (Final)
+name: Build Monolith (TinyField)
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    name: 'Build Fortuna Monolith'
+    name: 'Build Fortuna Monolith (TinyField)'
     runs-on: windows-latest
 
     steps:
@@ -144,7 +144,7 @@ jobs:
           Write-Host "✅ Frontend verified"
           Write-Host "Running PyInstaller..."
 
-          pyinstaller --noconfirm --clean fortuna-desktop.spec 2>&1 | Tee-Object -FilePath "build.log"
+          pyinstaller --noconfirm --clean fortuna-desktop-tinyfield.spec 2>&1 | Tee-Object -FilePath "build.log"
 
           if ($LASTEXITCODE -ne 0) {
             Write-Host "Last 100 lines of build.log:" -ForegroundColor Red
@@ -152,7 +152,7 @@ jobs:
             exit 1
           }
 
-          $exe = "dist/Fortuna-Desktop/Fortuna-Desktop.exe"
+          $exe = "dist/Fortuna-Desktop-TinyField/Fortuna-Desktop-TinyField.exe"
           if (Test-Path $exe) {
             $mb = (Get-Item $exe).Length / 1MB
             Write-Host "✅ BUILD SUCCESS: $([math]::Round($mb, 2)) MB" -ForegroundColor Green
@@ -165,15 +165,15 @@ jobs:
       - name: 📦 Package Artifact for Distribution
         shell: pwsh
         run: |
-          $distDir = "dist/Fortuna-Desktop"
+          $distDir = "dist/Fortuna-Desktop-TinyField"
           Write-Host "=== PACKAGING ARTIFACT ===" -ForegroundColor Cyan
 
           # Create README.txt
           $readmeLines = @(
-            'Fortuna Desktop - User Guide',
+            'Fortuna Desktop (TinyField) - User Guide',
             '',
             '**HOW TO RUN**',
-            '1. Double-click "Fortuna-Desktop.exe".',
+            '1. Double-click "Fortuna-Desktop-TinyField.exe".',
             '2. The application window will open and the dashboard will load.',
             '',
             '**WHAT TO EXPECT**',
@@ -183,15 +183,15 @@ jobs:
           Write-Host "✅ Created README.txt"
 
           # Create ZIP archive
-          $zipFileName = "Fortuna-Desktop-Windows-${{ github.run_number }}.zip"
+          $zipFileName = "Fortuna-Desktop-TinyField-Windows-${{ github.run_number }}.zip"
           Compress-Archive -Path "$distDir/*" -DestinationPath $zipFileName -Force
           Write-Host "✅ Created $zipFileName" -ForegroundColor Green
 
       - name: 📤 Upload Packaged Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Fortuna-Desktop-Windows-${{ github.run_number }}
-          path: Fortuna-Desktop-Windows-${{ github.run_number }}.zip
+          name: Fortuna-Desktop-TinyField-Windows-${{ github.run_number }}
+          path: Fortuna-Desktop-TinyField-Windows-${{ github.run_number }}.zip
           if-no-files-found: error
 
       # ========== TEST ==========
@@ -209,10 +209,10 @@ jobs:
         timeout-minutes: 5
         run: |
           Write-Host "=== SMOKE TEST ===" -ForegroundColor Cyan
-          $distDir = "dist/Fortuna-Desktop"
-          $exe = "$distDir/Fortuna-Desktop.exe"
+          $distDir = "dist/Fortuna-Desktop-TinyField"
+          $exe = "$distDir/Fortuna-Desktop-TinyField.exe"
           $outputLog = "$distDir/smoke-test-output.log"
-          $internalLog = "$distDir/fortuna-desktop.log" # Assumes log is named after exe
+          $internalLog = "$distDir/fortuna-desktop-tinyfield.log" # Assumes log is named after exe
 
           Write-Host "--- 1. Directory Manifest ---" -ForegroundColor Yellow
           Get-ChildItem -Path $distDir -Recurse | Format-Table Name, Length
@@ -230,7 +230,7 @@ jobs:
           cmd /c "start /b `"$exe`" > `"$outputLog`" 2>&1"
           Start-Sleep -Seconds 10 # Increased wait for GUI app
 
-          $proc = Get-Process -Name "Fortuna-Desktop" -ErrorAction SilentlyContinue
+          $proc = Get-Process -Name "Fortuna-Desktop-TinyField" -ErrorAction SilentlyContinue
           if (-not $proc) {
               Write-Host "❌ Process failed to start!" -ForegroundColor Red
               # Failure analysis will run at the end

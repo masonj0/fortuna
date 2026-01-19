@@ -1,12 +1,12 @@
 # TinyField Variant - Static Frontend + Python Backend
-FROM python:3.11-slim as backend-builder
+FROM python:3.10.11-slim as backend-builder
 
 WORKDIR /build
 COPY web_service/backend/requirements.txt .
 RUN pip install --no-cache-dir --user -r requirements.txt
 
 # Runtime stage
-FROM python:3.11-slim
+FROM python:3.10.11-slim
 
 WORKDIR /app
 
@@ -34,4 +34,4 @@ HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=3 \
 EXPOSE 8000
 
 # Start backend (serves both API and frontend)
-CMD ["python", "-m", "uvicorn", "web_service.backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-m", "uvicorn", "web_service.backend.api:app", "--host", "0.0.0.0", "--port", "8000"]
