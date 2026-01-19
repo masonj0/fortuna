@@ -3,165 +3,213 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fortuna Deluxe Race Report</title>
+    <title>🐴 Fortuna - Filtered Race Report</title>
     <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: #1a202c;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0f1419 0%, #1a1f2e 50%, #16213e 100%);
             color: #e2e8f0;
-            margin: 0;
             padding: 2rem;
+            line-height: 1.6;
+            min-height: 100vh;
         }
-        #container {
-            max-width: 1200px;
-            margin: 0 auto;
+
+        .container { max-width: 1400px; margin: 0 auto; }
+
+        header {
+            text-align: center;
+            margin-bottom: 3rem;
+            background: linear-gradient(135deg, rgba(15, 52, 96, 0.5), rgba(0, 255, 136, 0.1));
+            border: 2px solid #00ff88;
+            border-radius: 12px;
+            padding: 3rem 2rem;
+            box-shadow: 0 8px 32px rgba(0, 255, 136, 0.2);
         }
+
         h1 {
-            color: #9f7aea;
-            border-bottom: 2px solid #4a5568;
-            padding-bottom: 0.5rem;
+            color: #00ff88;
+            font-size: 2.8rem;
+            margin-bottom: 0.5rem;
+            text-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
         }
-        .race {
-            background-color: #2d3748;
-            border: 1px solid #4a5568;
+
+        .subtitle { color: #a0aec0; font-size: 1rem; margin-top: 0.5rem; }
+
+        .summary-box {
+            background: rgba(0, 255, 136, 0.1);
+            border-left: 4px solid #00ff88;
             border-radius: 8px;
-            margin-bottom: 2rem;
-            padding: 1.5rem;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            padding: 1.5rem 2rem;
+            margin: 2rem 0;
+            font-size: 1.1rem;
+            text-align: center;
+            color: #00ff88;
+            font-weight: bold;
         }
+
+        .race-card {
+            background: linear-gradient(135deg, #0f3460 0%, #1a4d7a 100%);
+            border: 1px solid rgba(0, 255, 136, 0.2);
+            border-left: 4px solid #00ff88;
+            border-radius: 12px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s ease;
+        }
+
+        .race-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 30px rgba(0, 255, 136, 0.25);
+            border-color: rgba(0, 255, 136, 0.5);
+        }
+
         .race-header {
             display: flex;
             justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1rem;
+            align-items: flex-start;
+            margin-bottom: 1.5rem;
+            border-bottom: 2px solid #00ff88;
+            padding-bottom: 1rem;
+            flex-wrap: wrap;
+            gap: 1rem;
         }
-        .race-title {
-            font-size: 1.5rem;
-            font-weight: bold;
-        }
-        .race-meta {
-            font-size: 0.9rem;
-            color: #a0aec0;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        th, td {
-            padding: 0.75rem;
+
+        .race-title { font-size: 1.4rem; font-weight: bold; color: #00ff88; }
+        .race-meta { color: #a0aec0; font-size: 0.9rem; }
+
+        .runners-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+        .runners-table thead { background: rgba(0, 255, 136, 0.15); border-bottom: 2px solid #00ff88; }
+        .runners-table th {
+            padding: 1rem;
             text-align: left;
-            border-bottom: 1px solid #4a5568;
-        }
-        th {
-            color: #a0aec0;
-            font-size: 0.8rem;
+            font-weight: bold;
+            color: #00ff88;
             text-transform: uppercase;
+            font-size: 0.85rem;
+            letter-spacing: 1px;
         }
-        tr:last-child td {
-            border-bottom: none;
-        }
-        .runner-name {
-            font-weight: 600;
-        }
-        .odds {
-            font-family: monospace;
+        .runners-table td { padding: 0.75rem 1rem; border-bottom: 1px solid #1a3a52; }
+        .runners-table tbody tr:hover { background: rgba(0, 255, 136, 0.05); }
+        .runner-name { font-weight: 600; color: #e2e8f0; }
+        .odds { font-family: 'Courier New', monospace; color: #00ff88; font-weight: bold; font-size: 1.1rem; }
+        .source { color: #718096; font-size: 0.9rem; }
+
+        .no-races {
+            text-align: center;
+            padding: 3rem;
+            background: #0f3460;
+            border: 2px dashed #ff4444;
+            border-radius: 12px;
+            color: #a0aec0;
             font-size: 1.1rem;
         }
-        .source {
-            font-style: italic;
-            color: #718096;
-        }
-        #generated-time {
+
+        footer {
             text-align: center;
+            margin-top: 4rem;
+            padding-top: 2rem;
+            border-top: 1px solid #404060;
             color: #718096;
-            margin-top: 2rem;
+            font-size: 0.85rem;
+        }
+
+        footer a { color: #00ff88; text-decoration: none; transition: color 0.2s; }
+        footer a:hover { color: #00ff88; text-decoration: underline; }
+
+        @media (max-width: 768px) {
+            h1 { font-size: 1.8rem; }
+            header { padding: 2rem 1rem; }
+            .race-card { padding: 1rem; }
+            .runners-table th, .runners-table td { padding: 0.5rem; }
         }
     </style>
 </head>
 <body>
-    <div id="container">
-        <h1>🐴 Fortuna Deluxe Race Report</h1>
-        <div id="races-container"></div>
-        <p id="generated-time"></p>
+    <div id="container" class="container">
+        <!-- Content will be generated here -->
     </div>
 
+    <!-- Data placeholder -->
+    <script id="race_data" type="application/json">__RACE_DATA_PLACEHOLDER__</script>
+
     <script>
-        const raceData = __RACE_DATA_PLACEHOLDER__;
+        document.addEventListener('DOMContentLoaded', function () {
+            const container = document.getElementById('container');
+            const jsonData = JSON.parse(document.getElementById('race_data').textContent);
+            const races = jsonData.races || [];
+            const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
 
-        function getBestOdds(runner) {
-            if (!runner.odds || Object.keys(runner.odds).length === 0) {
-                return { odds: 'N/A', source: 'N/A' };
-            }
-            let bestOdds = 0;
-            let bestSource = 'N/A';
-            for (const source in runner.odds) {
-                const winOdds = runner.odds[source].win;
-                if (winOdds && winOdds > bestOdds) {
-                    bestOdds = winOdds;
-                    bestSource = source;
-                }
-            }
-            return { odds: bestOdds > 0 ? bestOdds.toFixed(2) : 'N/A', source: bestSource };
-        }
+            let html = `
+                <header>
+                    <h1>🐴 Fortuna Faucet Race Report</h1>
+                    <p class="subtitle">Filtered Trifecta Opportunities</p>
+                    <p class="subtitle">Generated: ${timestamp}</p>
+                </header>
+                <div class="summary-box">${races.length} qualified race(s) found</div>
+            `;
 
-        function renderRaces() {
-            const container = document.getElementById('races-container');
-            const now = new Date();
-
-            const upcomingRaces = raceData.races
-                .map(race => ({...race, startTime: new Date(race.startTime)}))
-                .filter(race => race.startTime > now)
-                .sort((a, b) => a.startTime - b.startTime)
-                .slice(0, 10); // Show top 10 upcoming races
-
-            if(upcomingRaces.length === 0) {
-                container.innerHTML = '<p>No upcoming races found in the data.</p>';
-                return;
-            }
-
-            let html = '';
-            for (const race of upcomingRaces) {
-                const timeToPost = new Date(race.startTime) - now;
-                const minutes = Math.floor(timeToPost / 60000);
-                const seconds = Math.floor((timeToPost % 60000) / 1000);
-
-                html += `
-                    <div class="race">
-                        <div class="race-header">
-                            <div>
-                                <div class="race-title">${race.venue} - Race ${race.race_number}</div>
-                                <div class="race-meta">Starts at ${race.startTime.toLocaleTimeString()} (in ${minutes}m ${seconds}s)</div>
+            if (races.length === 0) {
+                html += '<div class="no-races">❌ No qualified races found at this time.</div>';
+            } else {
+                races.forEach(race => {
+                    html += `
+                        <div class="race-card">
+                            <div class="race-header">
+                                <div>
+                                    <div class="race-title">${race.venue || 'Unknown'} - Race ${race.race_number || '?'}</div>
+                                    <div class="race-meta">Post Time: ${race.startTime || 'N/A'}</div>
+                                </div>
                             </div>
+                            <table class="runners-table">
+                                <thead>
+                                    <tr>
+                                        <th>Horse Name</th>
+                                        <th>Win Odds</th>
+                                        <th>Best Source</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${(race.runners || []).map(runner => {
+                                        let bestOdds = 'N/A';
+                                        let bestSource = 'N/A';
+                                        if (runner.odds) {
+                                            let bestVal = 0;
+                                            for (const source in runner.odds) {
+                                                if (runner.odds[source].win > bestVal) {
+                                                    bestVal = runner.odds[source].win;
+                                                    bestOdds = bestVal.toFixed(2);
+                                                    bestSource = source;
+                                                }
+                                            }
+                                        }
+                                        return `
+                                            <tr>
+                                                <td class="runner-name">${runner.name || 'Unknown'}</td>
+                                                <td class="odds">${bestOdds}</td>
+                                                <td class="source">${bestSource}</td>
+                                            </tr>
+                                        `;
+                                    }).join('')}
+                                </tbody>
+                            </table>
                         </div>
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Runner</th>
-                                    <th>Best Odds</th>
-                                    <th>Source</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${race.runners.map(runner => {
-                                    const best = getBestOdds(runner);
-                                    return `
-                                        <tr>
-                                            <td class="runner-name">${runner.name}</td>
-                                            <td class="odds">${best.odds}</td>
-                                            <td class="source">${best.source}</td>
-                                        </tr>
-                                    `;
-                                }).join('')}
-                            </tbody>
-                        </table>
-                    </div>
-                `;
+                    `;
+                });
             }
-            container.innerHTML = html;
-        }
 
-        document.getElementById('generated-time').innerText = `Report generated at ${new Date().toLocaleString()}`;
-        renderRaces();
+            html += `
+                <footer>
+                    <p>This report was automatically generated by Fortuna Faucet via GitHub Actions.</p>
+                    <p>Data sources: Multiple racing exchanges and bookmakers.</p>
+                </footer>
+            `;
+
+            container.innerHTML = html;
+        });
     </script>
 </body>
 </html>
