@@ -26,6 +26,7 @@ jobs:
       - name: Generate Report
         env:
           API_KEY: ${{ secrets.API_KEY }}
+          PYTHONIOENCODING: UTF-8
         run: python scripts/query_and_generate_report.py
 
       - name: Upload Report Artifact
