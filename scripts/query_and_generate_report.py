@@ -25,7 +25,7 @@ API_ENDPOINT = "http://127.0.0.1:8000/api/races/qualified/tiny_field_trifecta"
 HEALTH_ENDPOINT = "http://127.0.0.1:8000/api/health"
 TEMPLATE_PATH = "scripts/templates/race_report_template.html"
 OUTPUT_PATH = "race-report.html"
-API_KEY = os.environ.get("API_KEY", "a_secure_test_api_key_that_is_long_enough")
+API_KEY = os.environ.get("API_KEY") or "a_secure_test_api_key_that_is_long_enough"
 
 # Timeouts (in seconds)
 INITIAL_WAIT = 5  # Give server 5 seconds to start
