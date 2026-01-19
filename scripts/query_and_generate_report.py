@@ -113,10 +113,8 @@ def query_races(timeout_seconds=API_QUERY_TIMEOUT):
 
     # Check for API Key
     if not API_KEY:
-        log("API_KEY environment variable is not set. Using default test key.", "WARNING")
-        api_key = "a_secure_test_api_key_that_is_long_enough"
-    else:
-        api_key = API_KEY
+        log("API_KEY environment variable is not set. Cannot authenticate.", "ERROR")
+        return None
 
     try:
         headers = {"X-API-Key": api_key}

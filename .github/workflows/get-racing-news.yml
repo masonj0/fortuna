@@ -31,15 +31,9 @@ jobs:
           PYTHONUTF8: '1'
         run: |
           $env:PYTHONPATH = "."
-          $job = Start-Job -ScriptBlock {
-              param($root)
-              Set-Location $root
-              python -m uvicorn web_service.backend.main:app --host 127.0.0.1 --port 8000
-          } -ArgumentList $pwd
-
-          Write-Host "Backend job started (Id: $($job.Id)). Warming up..."
-          $job.Id | Out-File -FilePath "backend-job.txt"
-          Start-Sleep -Seconds 5
+          Start-Process python -ArgumentList "-m", "uvicorn", "web_service.backend.main:app", "--host", "127.0.0.1", "--port", "8000" -NoNewWindow
+          Write-Host "Backend process started. Warming up..."
+          Start-Sleep -Seconds 10
 
       - name: 🗞️ Fetch & Print News
         shell: pwsh
