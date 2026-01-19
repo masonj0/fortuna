@@ -25,7 +25,9 @@ def fetch_news():
     # 1. Fetch Races (Adjust endpoint if your filter logic is specific)
     try:
         # Try the main races endpoint
-        resp = requests.get(f"{base_url}/api/races")
+        api_key = os.environ.get("API_KEY", "a_secure_test_api_key_that_is_long_enough")
+        headers = {"X-API-Key": api_key}
+        resp = requests.get(f"{base_url}/api/races", headers=headers)
         data = resp.json()
     except Exception as e:
         print(f"❌ Failed to fetch news: {e}")
