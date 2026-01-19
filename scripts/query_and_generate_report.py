@@ -25,7 +25,7 @@ API_ENDPOINT = "http://127.0.0.1:8000/api/races/qualified/tiny_field_trifecta"
 HEALTH_ENDPOINT = "http://127.0.0.1:8000/api/health"
 TEMPLATE_PATH = "scripts/templates/race_report_template.html"
 OUTPUT_PATH = "race-report.html"
-API_KEY = os.environ.get("API_KEY") or "a_secure_test_api_key_that_is_long_enough"
+API_KEY = os.environ.get("API_KEY")
 
 # Timeouts (in seconds)
 INITIAL_WAIT = 5  # Give server 5 seconds to start
@@ -109,6 +109,11 @@ def query_races(timeout_seconds=API_QUERY_TIMEOUT):
         Race data dict or None if failed
     """
     log(f"Querying API: {API_ENDPOINT}", "INFO")
+
+    # Check for API Key
+    if not API_KEY:
+        log("API_KEY environment variable is not set. Cannot authenticate.", "ERROR")
+        return None
 
     try:
         headers = {"X-API-Key": API_KEY}
