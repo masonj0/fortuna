@@ -16,6 +16,48 @@ jobs:
       - name: 📥 Checkout Code
         uses: actions/checkout@v4
 
+      # ========== FRONTEND BUILD ==========
+      - name: 🎨 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: web_service/frontend/package-lock.json
+
+      - name: 🏗️ Build Frontend (TinyField Variant)
+        working-directory: ./web_service/frontend
+        run: |
+          echo "INFO: Adapting frontend for TinyField variant..."
+          sed -i "s/'Fortuna'/'Fortuna TinyField'/g" app/layout.tsx
+          echo "✅ Frontend adapted."
+
+          echo "INFO: Cleaning previous builds..."
+          rm -rf public .next build
+
+          echo "INFO: Verifying next.config.js exists..."
+          if [ ! -f "next.config.js" ]; then
+            echo "ERROR: next.config.js not found!"
+            exit 1
+          fi
+
+          echo "INFO: Installing dependencies..."
+          npm install --legacy-peer-deps
+
+          echo "INFO: Building static site..."
+          npm run build
+
+          echo "INFO: Moving build artifacts to 'public' directory..."
+          mkdir -p public
+          mv build/* public/
+
+          echo "INFO: Verifying build output..."
+          if [ ! -f "public/index.html" ]; then
+            echo "ERROR: public/index.html not found after build!"
+            ls -R
+            exit 1
+          fi
+          echo "✅ Frontend built successfully."
+
       - name: 🐳 Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
