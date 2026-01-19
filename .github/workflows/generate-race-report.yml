@@ -1,187 +1,46 @@
-name: 🐴 Fortuna - Instant Filtered Race Report
-
+name: 🐴 Fortuna - Generate Race Report
 on:
-  workflow_dispatch:  # Manual trigger from Actions tab
+  workflow_dispatch:
   push:
-    branches:
-      - main
+    branches: [main]
   schedule:
-    - cron: '0 6 * * *'  # Daily at 6 AM UTC
-
-concurrency:
-  group: fortuna-report-${{ github.ref }}
-  cancel-in-progress: true
+    - cron: '0 14 * * *' # Every day at 2 PM UTC
 
 jobs:
-  generate-race-report:
-    name: '📊 Generate Filtered Race List'
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [windows-latest]  # Windows for native exe support
-
+  build-and-report:
+    runs-on: ubuntu-latest
     steps:
-      - name: 📥 Checkout Repository
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: 🐍 Setup Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10.11'
           cache: 'pip'
 
-      - name: 📦 Install Dependencies
-        shell: pwsh
+      - name: Install Dependencies
         run: |
-          python -m pip install --upgrade pip wheel
+          python -m pip install --upgrade pip
           pip install -r web_service/backend/requirements.txt
           pip install requests
 
-      - name: 📂 Create Runtime Directories
-        shell: pwsh
+      - name: Create Runtime Directories
         run: |
-          $dirs = @(
-            "web_service/backend/data",
-            "web_service/backend/json",
-            "web_service/backend/logs"
-          )
-          foreach ($dir in $dirs) {
-            New-Item -ItemType Directory -Force -Path $dir | Out-Null
-          }
-          Write-Host "✅ Runtime directories created"
+          mkdir -p web_service/backend/data
+          mkdir -p web_service/backend/json
+          mkdir -p web_service/backend/logs
 
-      - name: 🚀 Start Backend Service
-        shell: pwsh
-        env:
-          PYTHONUNBUFFERED: '1'
-          PYTHONUTF8: '1'
-        run: |
-          Write-Host "Starting backend service..." -ForegroundColor Cyan
-
-          # Start uvicorn in background job
-          $job = Start-Job -ScriptBlock {
-            Set-Location "${{ github.workspace }}"
-            $env:PYTHONPATH = "${{ github.workspace }}"
-            python -m uvicorn web_service.backend.main:app --host 127.0.0.1 --port 8000 --log-level warning
-          }
-
-          # Store job ID for later cleanup
-          $job.Id | Out-File -FilePath "backend-job.txt"
-          Write-Host "Backend job started (ID: $($job.Id))"
-
-      - name: ⏳ Wait for Backend Health Check
-        shell: pwsh
-        run: |
-          Write-Host "Waiting for backend to be healthy..." -ForegroundColor Cyan
-
-          $healthUrl = "http://127.0.0.1:8000/api/health"
-          $maxAttempts = 30
-          $attempt = 0
-          $healthy = $false
-
-          while ($attempt -lt $maxAttempts) {
-            $attempt++
-            try {
-              $response = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
-              if ($response.StatusCode -eq 200) {
-                Write-Host "✅ Backend is healthy!" -ForegroundColor Green
-                $healthy = $true
-                break
-              }
-            } catch {
-              Write-Host "...attempt $attempt/$maxAttempts, retrying..."
-              Start-Sleep -Seconds 1
-            }
-          }
-
-          if (-not $healthy) {
-            Write-Host "❌ Backend failed to start" -ForegroundColor Red
-            exit 1
-          }
-
-      - name: 📊 Query Filtered Race Data
-        shell: pwsh
+      - name: Generate Report
         env:
           API_KEY: ${{ secrets.API_KEY }}
-        run: |
-          Write-Host "Fetching qualified races..." -ForegroundColor Cyan
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/query_and_generate_report.py
 
-          $apiUrl = "http://127.0.0.1:8000/api/races/qualified/trifecta"
-          $headers = @{ "X-API-Key" = "${{ env.API_KEY }}" }
-
-          try {
-            $races = Invoke-RestMethod -Uri $apiUrl -Headers $headers -TimeoutSec 10
-
-            # Save JSON
-            $races | ConvertTo-Json -Depth 10 | Out-File -FilePath "qualified_races.json" -Encoding utf8
-
-            $count = $races.races.Count
-            Write-Host "✅ Retrieved $count qualified races" -ForegroundColor Green
-          } catch {
-            Write-Host "❌ Failed to fetch races: $_" -ForegroundColor Red
-            exit 1
-          }
-
-      - name: 🎨 Generate HTML Report
-        shell: pwsh
-        run: pwsh -File scripts/generate_report.ps1 -JsonInputPath qualified_races.json -HtmlOutputPath race-report.html
-
-      - name: 📤 Upload Artifacts
+      - name: Upload Artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: fortuna-race-report-${{ github.run_number }}
-          path: |
-            race-report.html
-            qualified_races.json
-          retention-days: 30
-          if-no-files-found: warn
-
-      - name: 📋 Create Job Summary
-        if: always()
-        shell: pwsh
-        run: |
-          $races = Get-Content "qualified_races.json" -ErrorAction SilentlyContinue | ConvertFrom-Json -ErrorAction SilentlyContinue
-          $count = $races.races.Count ?? 0
-
-          $summaryLines = @(
-              "## 🐴 Fortuna Race Report Summary",
-              "",
-              "**Report Generated:** $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')",
-              "",
-              "**Total Qualified Races:** $count",
-              "",
-              "### Download Artifacts",
-              "- 📄 [HTML Report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})",
-              "- 📊 [Raw JSON Data](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})",
-              "",
-              "### Status",
-              "- ✅ Backend service started",
-              "- ✅ Health check passed",
-              "- ✅ Race data fetched",
-              "- ✅ Report generated"
-          )
-
-          $summary = $summaryLines -join "`n"
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $summary
-
-      - name: 🛑 Cleanup Backend
-        if: always()
-        shell: pwsh
-        run: |
-          Write-Host "Cleaning up backend process..." -ForegroundColor Yellow
-
-          $jobFile = "backend-job.txt"
-          if (Test-Path $jobFile) {
-            $jobId = Get-Content $jobFile
-            try {
-              Stop-Job -Id $jobId -ErrorAction SilentlyContinue
-              Remove-Job -Id $jobId -ErrorAction SilentlyContinue
-              Write-Host "✅ Backend process stopped cleanly"
-            } catch {
-              Write-Host "⚠️ Could not stop job: $_"
-            }
-          }
-
-          # Kill any orphaned python processes
-          Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          path: race-report.html
+          retention-days: 7
