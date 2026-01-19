@@ -117,7 +117,7 @@ def query_races(timeout_seconds=API_QUERY_TIMEOUT):
         return None
 
     try:
-        headers = {"X-API-Key": API_KEY}
+        headers = {"X-API-Key": api_key}
         response = requests.get(API_ENDPOINT, headers=headers, timeout=timeout_seconds)
         response.raise_for_status()
 
