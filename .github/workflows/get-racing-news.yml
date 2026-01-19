@@ -2,6 +2,9 @@ name: 📰 Get Live Racing News
 
 on:
   workflow_dispatch: # Click button to read news
+  push:
+    branches:
+      - main
 
 jobs:
   print-the-news:
