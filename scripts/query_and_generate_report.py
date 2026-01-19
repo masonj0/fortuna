@@ -25,11 +25,12 @@ API_ENDPOINT = "http://127.0.0.1:8000/api/races/qualified/tiny_field_trifecta"
 HEALTH_ENDPOINT = "http://127.0.0.1:8000/api/health"
 TEMPLATE_PATH = "scripts/templates/race_report_template.html"
 OUTPUT_PATH = "race-report.html"
-API_KEY = os.environ.get("API_KEY", "a_secure_test_api_key_that_is_long_enough")
+JSON_OUTPUT_PATH = "qualified_races.json"
+API_KEY = os.environ.get("API_KEY")
 
 # Timeouts (in seconds)
 INITIAL_WAIT = 5  # Give server 5 seconds to start
-HEALTH_CHECK_TIMEOUT = 60  # Total time to wait for health (60 seconds = 12 attempts of 5 sec each)
+HEALTH_CHECK_TIMEOUT = 60  # Total time to wait for health
 HEALTH_CHECK_INTERVAL = 5  # Check every 5 seconds
 API_QUERY_TIMEOUT = 30  # API query timeout
 
@@ -110,6 +111,11 @@ def query_races(timeout_seconds=API_QUERY_TIMEOUT):
     """
     log(f"Querying API: {API_ENDPOINT}", "INFO")
 
+    # Check for API Key
+    if not API_KEY:
+        log("API_KEY environment variable is not set. Cannot authenticate.", "ERROR")
+        return None
+
     try:
         headers = {"X-API-Key": API_KEY}
         response = requests.get(API_ENDPOINT, headers=headers, timeout=timeout_seconds)
@@ -153,7 +159,11 @@ def generate_report(race_data):
         # Check if template exists
         if not os.path.exists(TEMPLATE_PATH):
             log(f"Template not found at {TEMPLATE_PATH}", "ERROR")
-            return False
+            log("Creating minimal fallback HTML...", "WARNING")
+            fallback_html = f"<pre>{json.dumps(race_data, indent=2)}</pre>"
+            with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
+                f.write(fallback_html)
+            return True
 
         with open(TEMPLATE_PATH, "r", encoding="utf-8") as f:
             template = f.read()
@@ -170,6 +180,26 @@ def generate_report(race_data):
 
     except Exception as e:
         log(f"Failed to generate report: {e}", "ERROR")
+        return False
+
+
+def save_json_data(race_data):
+    """
+    Save race data to JSON file.
+
+    Args:
+        race_data: Dictionary containing race information
+
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        with open(JSON_OUTPUT_PATH, "w", encoding="utf-8") as f:
+            json.dump(race_data, f, indent=2)
+        log(f"JSON data saved to {JSON_OUTPUT_PATH}", "SUCCESS")
+        return True
+    except Exception as e:
+        log(f"Failed to save JSON: {e}", "ERROR")
         return False
 
 
@@ -197,7 +227,10 @@ def main():
             log("Failed to fetch race data", "ERROR")
             return 1
 
-        # Step 4: Generate report
+        # Step 4: Save JSON
+        save_json_data(race_data)
+
+        # Step 5: Generate report
         if not generate_report(race_data):
             log("Failed to generate report", "ERROR")
             return 1
@@ -210,7 +243,7 @@ def main():
         return 1
 
     finally:
-        # Step 5: Cleanup
+        # Step 6: Cleanup
         if server_process:
             log("Stopping backend server...", "INFO")
             try:
