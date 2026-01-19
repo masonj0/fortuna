@@ -1,10 +1,11 @@
 name: 🐴 Fortuna - Generate Race Report
+
 on:
   workflow_dispatch:
   push:
     branches: [main]
   schedule:
-    - cron: '0 14 * * *' # Every day at 2 PM UTC
+    - cron: '0 14 * * *'
 
 jobs:
   build-and-report:
@@ -35,6 +36,7 @@ jobs:
         env:
           API_KEY: ${{ secrets.API_KEY }}
           PYTHONPATH: ${{ github.workspace }}
+          PYTHONIOENCODING: UTF-8
         run: python scripts/query_and_generate_report.py
 
       - name: Upload Artifacts
@@ -42,5 +44,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: fortuna-race-report-${{ github.run_number }}
-          path: race-report.html
-          retention-days: 7
+          path: |
+            race-report.html
+            qualified_races.json
+          retention-days: 30
