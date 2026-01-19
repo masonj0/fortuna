@@ -23,6 +23,12 @@ jobs:
           pip install -r web_service/backend/requirements.txt
           pip install requests
 
+      - name: Create Runtime Directories
+        run: |
+          mkdir -p web_service/backend/data
+          mkdir -p web_service/backend/json
+          mkdir -p web_service/backend/logs
+
       - name: Generate Report
         env:
           API_KEY: ${{ secrets.API_KEY }}
@@ -30,7 +36,17 @@ jobs:
         run: python scripts/query_and_generate_report.py
 
       - name: Upload Report Artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: race-report
+          name: race-report-${{ github.run_number }}
           path: race-report.html
+          retention-days: 7
+
+      - name: Upload JSON Data
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: race-data-${{ github.run_number }}
+          path: qualified_races.json
+          retention-days: 7

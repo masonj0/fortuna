@@ -1,7 +1,7 @@
 name: 📰 Get Live Racing News
 
 on:
-  workflow_dispatch: # Click button to read news
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -16,33 +16,30 @@ jobs:
       - name: 🐍 Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.10.11'
           cache: 'pip'
 
       - name: 📦 Install Backend
         shell: pwsh
         run: |
           pip install -r web_service/backend/requirements.txt
-          pip install requests # Needed for the reporter script
+          pip install requests
 
       - name: 🚀 Start Backend Engine
         shell: pwsh
         env:
-          # MAP YOUR SECRETS HERE so the backend can fetch real odds
-          # TVG_API_KEY: ${{ secrets.TVG_API_KEY }}
-          # BETFAIR_USER: ${{ secrets.BETFAIR_USER }}
           PYTHONUTF8: '1'
         run: |
           $env:PYTHONPATH = "."
-          # Start Uvicorn in background
           $job = Start-Job -ScriptBlock {
               param($root)
               Set-Location $root
-              python -m uvicorn web_service.backend.main:app --port 8000
+              python -m uvicorn web_service.backend.main:app --host 127.0.0.1 --port 8000
           } -ArgumentList $pwd
 
           Write-Host "Backend job started (Id: $($job.Id)). Warming up..."
-          Start-Sleep -Seconds 10
+          $job.Id | Out-File -FilePath "backend-job.txt"
+          Start-Sleep -Seconds 5
 
       - name: 🗞️ Fetch & Print News
         shell: pwsh
@@ -56,5 +53,5 @@ jobs:
         if: always()
         shell: pwsh
         run: |
-          Get-Job | Stop-Job
-          Get-Process -Name python -ErrorAction SilentlyContinue | Stop-Process -Force
+          Get-Job | Stop-Job -ErrorAction SilentlyContinue
+          Get-Process -Name python -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
