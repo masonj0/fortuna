@@ -1,12 +1,10 @@
-name: 🐴 Fortuna - Generate Race Report (Adapter-Aware)
+name: 🐴 Fortuna - Debug & Generate Report
 
 on:
   workflow_dispatch:
   push:
     branches:
       - main
-  schedule:
-    - cron: '0 14 * * *'  # Daily at 2 PM UTC
 
 jobs:
   generate-report:
@@ -19,6 +17,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.10.11'
+          cache: 'pip'
 
       - name: 📦 Install Dependencies
         run: |
@@ -31,9 +30,108 @@ jobs:
           mkdir -p web_service/backend/data
           mkdir -p web_service/backend/json
           mkdir -p web_service/backend/logs
+          mkdir -p scripts/templates
 
-      - name: 🚀 Generate Report (No API Keys Needed!)
-        run: python scripts/query_and_generate_report.py
+      - name: 🔍 Debug - Start Backend with Logging
+        env:
+          PYTHONUTF8: '1'
+          API_KEY: ${{ secrets.API_KEY || 'a_secure_test_api_key_that_is_long_enough' }}
+        run: |
+          echo "🚀 Starting backend server..."
+          # Start server in background, capture logs
+          python -m uvicorn web_service.backend.main:app --host 127.0.0.1 --port 8000 > backend.log 2>&1 &
+          BACKEND_PID=$!
+          echo "Backend PID: $BACKEND_PID"
+
+          # Wait for health
+          echo "⏳ Waiting for health check..."
+          for i in {1..30}; do
+            if curl -s http://127.0.0.1:8000/api/health > /dev/null 2>&1; then
+              echo "✅ Backend is healthy!"
+              break
+            fi
+            echo "Attempt $i/30..."
+            sleep 2
+          done
+
+          # Show backend logs so far
+          echo "📋 Backend startup logs:"
+          cat backend.log || echo "No logs yet"
+
+      - name: 🔍 Debug - Inspect Available Endpoints
+        run: |
+          echo "🔍 Testing available endpoints..."
+          echo ""
+
+          echo "1️⃣ Health endpoint (no auth):"
+          curl -v http://127.0.0.1:8000/api/health 2>&1 || true
+          echo ""
+
+          echo "2️⃣ Testing /api/races (with API key):"
+          curl -v -H "X-API-Key: a_secure_test_api_key_that_is_long_enough" \
+               http://127.0.0.1:8000/api/races 2>&1 || true
+          echo ""
+
+          echo "3️⃣ Testing /api/races (without API key):"
+          curl -v http://127.0.0.1:8000/api/races 2>&1 || true
+          echo ""
+
+          echo "4️⃣ Testing qualified endpoint (with API key):"
+          curl -v -H "X-API-Key: a_secure_test_api_key_that_is_long_enough" \
+               http://127.0.0.1:8000/api/races/qualified/tiny_field_trifecta 2>&1 || true
+          echo ""
+
+          echo "5️⃣ Testing qualified endpoint (without API key):"
+          curl -v http://127.0.0.1:8000/api/races/qualified/tiny_field_trifecta 2>&1 || true
+          echo ""
+
+          echo "6️⃣ Adapter status endpoint:"
+          curl -v -H "X-API-Key: a_secure_test_api_key_that_is_long_enough" \
+               http://127.0.0.1:8000/api/adapters/status 2>&1 || true
+          echo ""
+
+      - name: 🔍 Debug - Check Backend Logs for Errors
+        if: always()
+        run: |
+          echo "📋 Full Backend Logs:"
+          cat backend.log || echo "No backend logs found"
+
+      - name: 🔍 Debug - Check Backend Configuration
+        run: |
+          echo "🔍 Checking backend configuration files..."
+
+          if [ -f "web_service/backend/.env" ]; then
+            echo "Found .env file:"
+            cat web_service/backend/.env | grep -v "PASSWORD\|SECRET\|KEY" || true
+          else
+            echo "No .env file found"
+          fi
+
+          echo ""
+          echo "🔍 Checking for config files:"
+          find web_service/backend -name "*.yaml" -o -name "*.yml" -o -name "config.py" 2>/dev/null || echo "No config files found"
+
+      - name: 🚀 Generate Report (with enhanced debugging)
+        env:
+          API_KEY: ${{ secrets.API_KEY || 'a_secure_test_api_key_that_is_long_enough' }}
+        run: |
+          echo "📊 Running report generation script..."
+          python scripts/query_and_generate_report.py || true
+
+          echo ""
+          echo "📋 Checking output files:"
+          ls -lh race-report.html qualified_races.json 2>/dev/null || echo "No output files generated"
+
+      - name: 📤 Upload Debug Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-logs-${{ github.run_number }}
+          path: |
+            backend.log
+            *.log
+          retention-days: 7
+          if-no-files-found: warn
 
       - name: 📤 Upload HTML Report
         if: always()
@@ -42,6 +140,7 @@ jobs:
           name: race-report-${{ github.run_number }}
           path: race-report.html
           retention-days: 30
+          if-no-files-found: warn
 
       - name: 📤 Upload JSON Data
         if: always()
@@ -50,13 +149,49 @@ jobs:
           name: race-data-${{ github.run_number }}
           path: qualified_races.json
           retention-days: 30
+          if-no-files-found: warn
 
-      - name: 📋 Create Job Summary
+      - name: 📋 Create Detailed Summary
         if: always()
         run: |
-          echo "## 🐴 Fortuna Race Report" >> $GITHUB_STEP_SUMMARY
+          echo "## 🐴 Fortuna Debug Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Run:** #${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Time:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
+          echo "### 📊 Output Files" >> $GITHUB_STEP_SUMMARY
           if [ -f "race-report.html" ]; then
-            echo "✅ **HTML Report Generated**" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
+            SIZE=$(du -h race-report.html | cut -f1)
+            echo "- ✅ HTML Report: Generated ($SIZE)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ❌ HTML Report: Not generated" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ -f "qualified_races.json" ]; then
+            SIZE=$(du -h qualified_races.json | cut -f1)
+            RACES=$(jq '.races | length' qualified_races.json 2>/dev/null || echo "unknown")
+            echo "- ✅ JSON Data: Generated ($SIZE, $RACES races)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ❌ JSON Data: Not generated" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔍 Debug Information" >> $GITHUB_STEP_SUMMARY
+          echo "Backend logs have been uploaded as an artifact. Check the workflow artifacts for:" >> $GITHUB_STEP_SUMMARY
+          echo "- \`backend.log\` - Full backend server logs" >> $GITHUB_STEP_SUMMARY
+          echo "- API endpoint test results in step outputs" >> $GITHUB_STEP_SUMMARY
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🎯 Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "1. Review the 'Debug - Inspect Available Endpoints' step output" >> $GITHUB_STEP_SUMMARY
+          echo "2. Check which endpoints return 200 vs 403" >> $GITHUB_STEP_SUMMARY
+          echo "3. Download backend.log artifact to see server-side errors" >> $GITHUB_STEP_SUMMARY
+          echo "4. Verify API key requirements in your backend code" >> $GITHUB_STEP_SUMMARY
+
+      - name: 🧹 Cleanup
+        if: always()
+        run: |
+          echo "🧹 Stopping backend processes..."
+          pkill -f "uvicorn" || true
+          sleep 2
