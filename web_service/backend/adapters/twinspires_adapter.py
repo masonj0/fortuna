@@ -1,6 +1,7 @@
 # python_service/adapters/twinspires_adapter.py
 from datetime import datetime
 from typing import Any
+from typing import Dict
 from typing import List
 
 from bs4 import BeautifulSoup
