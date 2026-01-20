@@ -13,7 +13,6 @@ import os
 from datetime import datetime
 
 
-
 def fetch_news():
     """Fetch and display racing news."""
     base_url = "http://127.0.0.1:8000"
