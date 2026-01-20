@@ -103,8 +103,7 @@ async def main():
 
     try:
         log(f"Fetching all race data for {today_str}...")
-        # We pass an empty set for background_tasks as we are running synchronously here
-        aggregated_data = await odds_engine.fetch_all_odds(today_str, background_tasks=set())
+        aggregated_data = await odds_engine.fetch_all_odds(today_str)
 
         all_races_raw = aggregated_data.get("races", [])
         if not all_races_raw:
