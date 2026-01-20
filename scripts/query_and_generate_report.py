@@ -203,11 +203,6 @@ def query_races(timeout_seconds=API_QUERY_TIMEOUT):
     """
     log(f"Querying API for qualified races...", "INFO")
 
-    # Check for API Key
-    if not API_KEY:
-        log("API_KEY environment variable is not set. Cannot authenticate.", "ERROR")
-        return None
-
     try:
         response = requests.get(API_ENDPOINT, timeout=timeout_seconds)
         response.raise_for_status()

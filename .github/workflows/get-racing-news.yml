@@ -25,15 +25,38 @@ jobs:
           pip install -r web_service/backend/requirements.txt
           pip install requests
 
-      - name: 🚀 Start Backend Engine
+      - name: 🚀 Start and Health Check Backend Engine
         shell: pwsh
         env:
           PYTHONUTF8: '1'
         run: |
           $env:PYTHONPATH = "."
           Start-Process python -ArgumentList "-m", "uvicorn", "web_service.backend.main:app", "--host", "127.0.0.1", "--port", "8000" -NoNewWindow
-          Write-Host "Backend process started. Warming up..."
-          Start-Sleep -Seconds 10
+          Write-Host "Backend process started. Beginning health checks..."
+
+          $timeout = 30
+          $startTime = Get-Date
+          $healthy = $false
+
+          while (((Get-Date) - $startTime).TotalSeconds -lt $timeout) {
+              try {
+                  $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/health" -UseBasicParsing -TimeoutSec 2
+                  if ($response.StatusCode -eq 200) {
+                      Write-Host "✅ Backend is healthy!"
+                      $healthy = $true
+                      break
+                  }
+              }
+              catch {
+                  Write-Host "Waiting for backend..."
+              }
+              Start-Sleep -Seconds 2
+          }
+
+          if (-not $healthy) {
+              Write-Error "❌ Backend did not become healthy within $timeout seconds."
+              exit 1
+          }
 
       - name: 🗞️ Fetch & Print News
         shell: pwsh

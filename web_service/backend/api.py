@@ -145,15 +145,6 @@ async def get_qualified_races(
     except ValueError:
         raise HTTPException(status_code=404, detail=f"Analyzer '{analyzer_name}' not found.")
 
-@router.get("/adapters/status")
-@limiter.limit("60/minute")
-async def get_all_adapter_statuses(
-    request: Request,
-    engine: OddsEngine = Depends(get_engine),
-    _=Depends(verify_api_key),
-):
-    """Gets the current status of all configured data adapters."""
-    return engine.get_all_adapter_statuses()
 
 # Add other endpoints as needed, following the pattern above.
 
@@ -247,12 +238,16 @@ def _adapter_requires_key(adapter) -> bool:
     Helper to determine if an adapter requires an API key.
     Checks for common attributes and class name patterns.
     """
+    if not adapter or not hasattr(adapter, '__class__'):
+        return False
+
     for attr in ['api_key_required', 'requires_api_key', 'requires_key']:
         if hasattr(adapter, attr) and getattr(adapter, attr):
             return True
 
     key_indicators = ['betfair', 'tvg', 'equibase']
-    if any(indicator in adapter.__class__.__name__.lower() for indicator in key_indicators):
+    adapter_class_name = adapter.__class__.__name__.lower()
+    if any(indicator in adapter_class_name for indicator in key_indicators):
         return True
 
     return False
