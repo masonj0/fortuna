@@ -123,58 +123,6 @@ def diagnose_api():
     return False, None
 
 
-def start_server():
-    """Start the backend server."""
-    log("Starting backend server...", "INFO")
-
-    try:
-        # Set environment variable for API key
-        env = os.environ.copy()
-        env["API_KEY"] = API_KEY
-
-        proc = subprocess.Popen(
-            [sys.executable, "-m", "uvicorn", "web_service.backend.main:app",
-             "--host", "127.0.0.1", "--port", "8000"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            env=env
-        )
-        log(f"Backend process started (PID: {proc.pid})", "SUCCESS")
-        log(f"Waiting {INITIAL_WAIT} seconds for initialization...", "INFO")
-        time.sleep(INITIAL_WAIT)
-
-        return proc
-    except Exception as e:
-        log(f"Failed to start server: {e}", "ERROR")
-        return None
-
-
-def wait_for_health(timeout_seconds=HEALTH_CHECK_TIMEOUT):
-    """Wait for backend to become healthy."""
-    log(f"Checking backend health (timeout: {timeout_seconds}s)...", "INFO")
-
-    start_time = time.time()
-    attempt = 0
-
-    while True:
-        elapsed = time.time() - start_time
-        if elapsed > timeout_seconds:
-            log(f"Health check timeout after {elapsed:.0f} seconds", "ERROR")
-            return False
-
-        attempt += 1
-        try:
-            response = requests.get(HEALTH_ENDPOINT, timeout=5)
-            if response.status_code == 200:
-                log(f"Backend is healthy! (attempt {attempt}, {elapsed:.0f}s)", "SUCCESS")
-                return True
-        except requests.RequestException:
-            pass
-
-        if attempt % 3 == 0:  # Log every 3rd attempt
-            log(f"Health check attempt {attempt} failed, retrying...", "WARNING")
-        time.sleep(HEALTH_CHECK_INTERVAL)
 
 
 def query_races():
@@ -286,19 +234,7 @@ def main():
     log("=== Fortuna Enhanced Race Report Generator ===", "INFO")
     log(f"API Key (first 10 chars): {API_KEY[:10]}...", "DEBUG")
 
-    server_process = None
-
     try:
-        # Start server
-        server_process = start_server()
-        if not server_process:
-            return 1
-
-        # Wait for health
-        if not wait_for_health(HEALTH_CHECK_TIMEOUT):
-            log("Backend did not become healthy", "ERROR")
-            return 1
-
         # Query races (with diagnostics)
         race_data = query_races()
         if race_data is None:
@@ -320,20 +256,6 @@ def main():
         import traceback
         traceback.print_exc()
         return 1
-
-    finally:
-        if server_process:
-            log("Stopping backend server...", "INFO")
-            try:
-                server_process.terminate()
-                server_process.wait(timeout=5)
-                log("Backend stopped", "SUCCESS")
-            except subprocess.TimeoutExpired:
-                log("Forcing backend termination...", "WARNING")
-                server_process.kill()
-                server_process.wait()
-            except Exception as e:
-                log(f"Error during cleanup: {e}", "WARNING")
 
 
 if __name__ == "__main__":
