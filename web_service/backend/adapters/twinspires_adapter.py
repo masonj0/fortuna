@@ -47,11 +47,11 @@ class TwinSpiresAdapter(BaseAdapterV3):
             "mock_race_card": {"raceNumber": 5, "postTime": "2025-10-26T16:30:00Z"},
         }
 
-    def _parse_races(self, raw_data: Any) -> List[Race]:
+    def _parse_races(self, raw_data: Any) -> List[Dict[str, Any]]:
         """
         [MODIFIED FOR OFFLINE DEVELOPMENT]
         Parses race and runner data from the mock raw_data object, which now
-        includes the HTML content from the local fixture.
+        includes the HTML content from the local fixture. Returns a list of dictionaries.
         """
         if not raw_data or "html_content" not in raw_data:
             return []
@@ -68,16 +68,16 @@ class TwinSpiresAdapter(BaseAdapterV3):
         try:
             start_time = datetime.fromisoformat(race_card.get("postTime").replace("Z", "+00:00"))
 
-            race = Race(
-                id=f"ts_{track.get('trackId')}_{race_card.get('raceNumber')}",
-                venue=track.get("trackName"),
-                race_number=race_card.get("raceNumber"),
-                start_time=start_time,
-                discipline=track.get("raceType", "Unknown"),
-                runners=runners,
-                source=self.SOURCE_NAME,
-            )
-            return [race]
+            race_dict = {
+                "id": f"ts_{track.get('trackId')}_{race_card.get('raceNumber')}",
+                "venue": track.get("trackName"),
+                "race_number": race_card.get("raceNumber"),
+                "start_time": start_time,
+                "discipline": track.get("raceType", "Unknown"),
+                "runners": [runner.model_dump() for runner in runners],
+                "source": self.SOURCE_NAME,
+            }
+            return [race_dict]
         except Exception as e:
             self.logger.warning(
                 "Failed to parse race card from mock data.",
@@ -131,7 +131,7 @@ class TwinSpiresAdapter(BaseAdapterV3):
 
         return runners
 
-    async def get_races(self, date: str) -> List[Race]:
+    async def get_races(self, date: str) -> List[Dict[str, Any]]:
         """
         Orchestrates the fetching and parsing of race data for a given date.
         This method will be called by the FortunaEngine.
