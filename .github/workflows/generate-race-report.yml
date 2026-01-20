@@ -1,12 +1,10 @@
-name: 🐴 Fortuna - Generate Race Report (Adapter-Aware)
+name: 🐴 Fortuna - Debug & Generate Report
 
 on:
   workflow_dispatch:
   push:
     branches:
       - main
-  schedule:
-    - cron: '0 14 * * *'  # Daily at 2 PM UTC
 
 jobs:
   generate-report:
@@ -19,6 +17,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.10.11'
+          cache: 'pip'
 
       - name: 📦 Install Dependencies
         run: |
@@ -31,32 +30,57 @@ jobs:
           mkdir -p web_service/backend/data
           mkdir -p web_service/backend/json
           mkdir -p web_service/backend/logs
+          mkdir -p scripts/templates
 
-      - name: 🚀 Generate Report (No API Keys Needed!)
-        run: python scripts/query_and_generate_report.py
-
-      - name: 📤 Upload HTML Report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: race-report-${{ github.run_number }}
-          path: race-report.html
-          retention-days: 30
-
-      - name: 📤 Upload JSON Data
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: race-data-${{ github.run_number }}
-          path: qualified_races.json
-          retention-days: 30
-
-      - name: 📋 Create Job Summary
-        if: always()
+      - name: Run Server, Tests, and Report Generation
+        env:
+          PYTHONUTF8: '1'
+          API_KEY: ${{ secrets.API_KEY || 'a_secure_test_api_key_that_is_long_enough' }}
         run: |
-          echo "## 🐴 Fortuna Race Report" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
+          # Start server in background
+          echo "🚀 Starting backend server..."
+          python -m uvicorn web_service.backend.main:app --host 127.0.0.1 --port 8000 > backend.log 2>&1 &
 
+          # Wait for health
+          echo "⏳ Waiting for health check..."
+          for i in {1..30}; do
+            if curl -s http://127.0.0.1:8000/api/health > /dev/null 2>&1; then
+              echo "✅ Backend is healthy!"
+              break
+            fi
+            sleep 2
+          done
+
+          # Debug endpoints
+          echo "🔍 Testing available endpoints..."
+          curl -v http://127.0.0.1:8000/api/health 2>&1 || true
+          curl -v -H "X-API-Key: $API_KEY" http://127.0.0.1:8000/api/races/qualified/tiny_field_trifecta 2>&1 || true
+
+          # Generate report
+          echo "📊 Running report generation script..."
+          python scripts/query_and_generate_report.py
+
+          # Create summary
+          echo "## 🐴 Fortuna Debug Report" >> $GITHUB_STEP_SUMMARY
           if [ -f "race-report.html" ]; then
-            echo "✅ **HTML Report Generated**" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ HTML Report: Generated" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ❌ HTML Report: Not generated" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ -f "qualified_races.json" ]; then
+            echo "- ✅ JSON Data: Generated" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ❌ JSON Data: Not generated" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: 📤 Upload Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-and-logs-${{ github.run_number }}
+          path: |
+            race-report.html
+            qualified_races.json
+            backend.log
+          retention-days: 7
+          if-no-files-found: warn

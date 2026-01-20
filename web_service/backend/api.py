@@ -6,6 +6,7 @@ import os
 import sys
 from pathlib import Path
 from contextlib import asynccontextmanager
+from datetime import date
 from typing import List, Optional
 
 import structlog
@@ -103,6 +104,8 @@ async def get_races(
     _=Depends(verify_api_key),
 ):
     """Fetches all race data for a given date from all or a specific source."""
+    if race_date is None:
+        race_date = date.today().strftime("%Y-%m-%d")
     return await engine.fetch_all_odds(race_date, source)
 
 @router.get("/races/qualified/tiny_field_trifecta", response_model=QualifiedRacesResponse)
@@ -114,6 +117,8 @@ async def get_tiny_field_trifecta_races(
     _=Depends(verify_api_key),
 ):
     """Fetches all race data and runs the tiny_field_trifecta analyzer to find qualified races."""
+    if race_date is None:
+        race_date = date.today().strftime("%Y-%m-%d")
     response = await engine.fetch_all_odds(race_date)
     races = [Race(**r) for r in response.get("races", [])]
 
