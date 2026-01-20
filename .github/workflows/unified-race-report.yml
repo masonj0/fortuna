@@ -42,6 +42,7 @@ jobs:
             race-report.html
             qualified_races.json
           retention-days: 7
+          if-no-files-found: error
 
       - name: '📝 Post Summary to GitHub Actions'
         if: always()

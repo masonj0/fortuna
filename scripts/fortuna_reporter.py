@@ -107,8 +107,8 @@ async def main():
 
         all_races_raw = aggregated_data.get("races", [])
         if not all_races_raw:
-            log("No races returned from OddsEngine. Exiting.", "WARNING")
-            return
+            log("No races returned from OddsEngine. This is a critical failure.", "ERROR")
+            sys.exit(1)
 
         # Pydantic validation
         all_races = [Race(**r) for r in all_races_raw]
