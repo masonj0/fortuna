@@ -131,25 +131,13 @@ class TwinSpiresAdapter(BaseAdapterV3):
 
         return runners
 
-    async def _get_races_async(self, date: str) -> List[Race]:
-        raw_data = await self._fetch_data(date)
-        return self._parse_races(raw_data)
-
-    def get_races(self, date: str) -> List[Race]:
+    async def get_races(self, date: str) -> List[Race]:
         """
         Orchestrates the fetching and parsing of race data for a given date.
         This method will be called by the FortunaEngine.
         """
         self.logger.info(f"Getting races for {date} from {self.SOURCE_NAME}")
-        # This is a synchronous wrapper for the async orchestrator
-        # It's a temporary measure to allow me to see the API response.
-        import asyncio
-
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
-        races = loop.run_until_complete(self._get_races_async(date))
-        return races
+        raw_data = await self._fetch_data(date)
+        if raw_data:
+            return self._parse_races(raw_data)
+        return []

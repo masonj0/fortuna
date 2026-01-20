@@ -2,7 +2,6 @@
 from abc import ABC
 from abc import abstractmethod
 from typing import Any
-from typing import AsyncGenerator
 from typing import List
 
 import httpx
@@ -53,7 +52,7 @@ class BaseAdapterV3(ABC):
         """
         raise NotImplementedError
 
-    async def get_races(self, date: str) -> AsyncGenerator[Race, None]:
+    async def get_races(self, date: str) -> List[Race]:
         """
         Orchestrates the fetch-then-parse pipeline for the adapter.
         This public method should not be overridden by subclasses.
@@ -61,14 +60,10 @@ class BaseAdapterV3(ABC):
         raw_data = None
 
         if self.manual_override_manager:
-            # This is not a full URL, but a representative key for the fetch operation
-            # Subclasses might need to override get_races to provide a more specific URL if needed
             lookup_key = f"{self.base_url}/racecards/{date}"
             manual_data = self.manual_override_manager.get_manual_data(self.source_name, lookup_key)
             if manual_data:
                 self.logger.info("Using manually submitted data for request", url=lookup_key)
-                # Reconstruct a dictionary similar to what _fetch_data would return
-                # This may need adjustment based on adapter specifics
                 raw_data = {"pages": [manual_data[0]], "date": date}
 
         if raw_data is None:
@@ -77,12 +72,12 @@ class BaseAdapterV3(ABC):
             except AdapterHttpError as e:
                 if self.manual_override_manager and self.supports_manual_override:
                     self.manual_override_manager.register_failure(self.source_name, e.url)
-                raise  # Reraise the exception to be handled by the OddsEngine
+                raise
 
         if raw_data is not None:
-            parsed_races = self._parse_races(raw_data)
-            for race in parsed_races:
-                yield race
+            return self._parse_races(raw_data)
+
+        return []
 
     @retry(
         wait=wait_exponential(multiplier=1, min=2, max=10),
