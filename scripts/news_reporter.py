@@ -13,29 +13,11 @@ import os
 from datetime import datetime
 
 
-def wait_for_backend(base_url, timeout=30):
-    """Poll backend health endpoint with timeout."""
-    start = time.time()
-    while time.time() - start < timeout:
-        try:
-            response = requests.get(f"{base_url}/api/health", timeout=2)
-            if response.status_code == 200:
-                print(f"✅ Backend is healthy (took {time.time() - start:.1f}s)")
-                return True
-        except requests.RequestException:
-            pass
-        time.sleep(1)
-    return False
-
 
 def fetch_news():
     """Fetch and display racing news."""
     base_url = "http://127.0.0.1:8000"
     print(f"🗞️ Connecting to Racing News Engine at {base_url}...")
-
-    if not wait_for_backend(base_url, timeout=30):
-        print("❌ Backend failed to start within 30 seconds.")
-        sys.exit(1)
 
     # Fetch races
     try:
