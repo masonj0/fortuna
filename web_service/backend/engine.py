@@ -216,7 +216,13 @@ class OddsEngine:
 
         try:
             race_data_list = await adapter.get_races(date)
-            races = [Race(**race_data) for race_data in race_data_list]
+            processed_races = []
+            for race_data in race_data_list:
+                if isinstance(race_data, Race):
+                    processed_races.append(race_data)
+                else:
+                    processed_races.append(Race(**race_data))
+            races = processed_races
             is_success = True
         except AdapterHttpError as e:
             self.logger.error(
@@ -310,6 +316,9 @@ class OddsEngine:
         Fetches and aggregates race data from all configured adapters.
         The result of this method is cached and broadcasted via WebSocket.
         """
+        if date is None:
+            date = datetime.now().strftime("%Y-%m-%d")
+
         # Construct a cache key
         cache_key = f"fortuna_engine_races:{date}:{source_filter or 'all'}"
         cached_data = await self.get_from_cache(cache_key)
@@ -359,8 +368,13 @@ class OddsEngine:
 
         deduped_races = self._dedupe_races(all_races)
 
+        try:
+            parsed_date = datetime.strptime(date, "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            parsed_date = datetime.now().date()
+
         response_obj = AggregatedResponse(
-            date=datetime.strptime(date, "%Y-%m-%d").date(),
+            date=parsed_date,
             races=deduped_races,
             errors=errors,
             source_info=source_infos,
