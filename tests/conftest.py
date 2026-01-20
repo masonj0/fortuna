@@ -31,6 +31,8 @@ class MockSettings:
     HTTP_POOL_CONNECTIONS = 100
     HTTP_MAX_KEEPALIVE = 20
     MAX_CONCURRENT_REQUESTS = 50
+    THE_RACING_API_KEY = "test"
+    GREYHOUND_API_URL = "test"
     # Add any other required config fields here
 
 @pytest.fixture(scope="session")
@@ -86,6 +88,8 @@ async def app(mock_dangerous_dependencies, test_settings):
 
     # Attach a mock engine to the app state
     fastapi_app.state.engine = OddsEngine(config=test_settings)
+    from python_service.manual_override_manager import ManualOverrideManager
+    fastapi_app.state.manual_override_manager = ManualOverrideManager()
 
     yield fastapi_app
 
@@ -108,12 +112,21 @@ CACHE_DIR = Path("python_service/cache")
 
 @pytest.fixture(autouse=True)
 def clear_cache():
-    """Ensures a clean slate for file-based caches."""
+    """Ensures a clean slate for file-based and in-memory caches."""
+    # Clear file-based cache
     if CACHE_DIR.exists():
         shutil.rmtree(CACHE_DIR)
+
+    # Clear in-memory cache
+    from python_service.cache_manager import cache_manager
+    cache_manager.memory_cache.clear()
+
     yield
+
+    # Teardown: Clear caches again to be thorough
     if CACHE_DIR.exists():
         shutil.rmtree(CACHE_DIR)
+    cache_manager.memory_cache.clear()
 
 # =============================================================================
 # 7. DATA HELPERS (The Logic Validator)
