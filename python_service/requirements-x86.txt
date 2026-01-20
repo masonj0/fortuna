@@ -131,7 +131,7 @@ pygments==2.19.2
     # via pytest
 pyinstaller==6.6.0
     # via -r python_service/requirements.in
-pyinstaller-hooks-contrib==2025.9
+pyinstaller-hooks-contrib==2026.0
     # via pyinstaller
 pyproject-hooks==1.2.0
     # via
