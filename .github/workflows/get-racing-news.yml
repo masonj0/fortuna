@@ -38,7 +38,6 @@ jobs:
       - name: 🗞️ Fetch & Print News
         shell: pwsh
         env:
-          API_KEY: ${{ secrets.API_KEY }}
           PYTHONIOENCODING: UTF-8
         run: |
           python scripts/news_reporter.py

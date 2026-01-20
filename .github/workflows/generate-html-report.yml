@@ -29,10 +29,7 @@ jobs:
           mkdir -p web_service/backend/json
           mkdir -p web_service/backend/logs
 
-      - name: Generate Report
-        env:
-          API_KEY: ${{ secrets.API_KEY }}
-          PYTHONIOENCODING: UTF-8
+      - name: Generate Report (No API Keys Needed!)
         run: python scripts/query_and_generate_report.py
 
       - name: Upload Report Artifact

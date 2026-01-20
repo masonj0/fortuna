@@ -190,5 +190,75 @@ else:
     log.warning(f"Static frontend directory not found at '{static_dir}'. The frontend will not be served.")
 
 
+# --- Adapter Management Endpoints (v3.0.0) ---
+
+from typing import Dict, Any
+
+adapter_router = APIRouter()
+
+@adapter_router.get("/adapters/status", response_model=List[Dict[str, Any]])
+async def get_adapter_status_v3(
+    request: Request,
+    engine: OddsEngine = Depends(get_engine),
+):
+    """
+    Get status of all adapters, including whether they require API keys.
+    This version is designed to be called by the adapter-aware script.
+    """
+    try:
+        statuses = []
+        for name, adapter in engine.adapters.items():
+            statuses.append({
+                "name": name,
+                "adapter_name": name,
+                "status": "active",
+                "enabled": True,
+                "requires_api_key": _adapter_requires_key(adapter),
+                "api_key_required": _adapter_requires_key(adapter),
+            })
+        return statuses
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching adapter status: {str(e)}")
+
+@adapter_router.post("/adapters/disable", response_model=Dict[str, Any])
+async def disable_adapter(
+    payload: Dict[str, str],
+    request: Request,
+    engine: OddsEngine = Depends(get_engine),
+):
+    """
+    Disable a specific adapter at runtime.
+    """
+    adapter_name = payload.get("adapter_name")
+    if not adapter_name:
+        raise HTTPException(status_code=400, detail="adapter_name is required")
+
+    if adapter_name not in engine.adapters:
+        raise HTTPException(status_code=404, detail=f"Adapter '{adapter_name}' not found")
+
+    if not hasattr(engine, 'disabled_adapters'):
+        engine.disabled_adapters = set()
+    engine.disabled_adapters.add(adapter_name)
+
+    return {"success": True, "message": f"Adapter '{adapter_name}' disabled"}
+
+def _adapter_requires_key(adapter) -> bool:
+    """
+    Helper to determine if an adapter requires an API key.
+    Checks for common attributes and class name patterns.
+    """
+    for attr in ['api_key_required', 'requires_api_key', 'requires_key']:
+        if hasattr(adapter, attr) and getattr(adapter, attr):
+            return True
+
+    key_indicators = ['betfair', 'tvg', 'equibase']
+    if any(indicator in adapter.__class__.__name__.lower() for indicator in key_indicators):
+        return True
+
+    return False
+
+# Include the new adapter router
+router.include_router(adapter_router)
+
 # Export app for Uvicorn
 __all__ = ["app"]

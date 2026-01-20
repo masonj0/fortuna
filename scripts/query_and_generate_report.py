@@ -1,15 +1,16 @@
 #!/usr/bin/env python
 """
-Fixed Fortuna Race Report Query Script
+Fortuna Adapter-Aware Race Report Query Script
 
 This script:
 1. Starts the backend server
-2. Waits for health check with proper timeout
-3. Queries filtered races
-4. Generates HTML report
-5. Cleans up gracefully
+2. Queries adapter status to identify key-requiring adapters
+3. Disables adapters that require API keys
+4. Fetches race data from key-free adapters only
+5. Generates HTML report
+6. Cleans up gracefully
 
-CRITICAL: This version has proper error handling and will NOT hang.
+The advantage: Works without ANY API keys! Only uses adapters that need no authentication.
 """
 
 import json
@@ -21,18 +22,18 @@ import requests
 from datetime import datetime
 
 # Configuration
-API_ENDPOINT = "http://127.0.0.1:8000/api/races/qualified/tiny_field_trifecta"
 HEALTH_ENDPOINT = "http://127.0.0.1:8000/api/health"
+ADAPTERS_STATUS_ENDPOINT = "http://127.0.0.1:8000/api/adapters/status"
+API_ENDPOINT = "http://127.0.0.1:8000/api/races/qualified/tiny_field_trifecta"
 TEMPLATE_PATH = "scripts/templates/race_report_template.html"
 OUTPUT_PATH = "race-report.html"
 JSON_OUTPUT_PATH = "qualified_races.json"
-API_KEY = os.environ.get("API_KEY")
 
 # Timeouts (in seconds)
-INITIAL_WAIT = 5  # Give server 5 seconds to start
-HEALTH_CHECK_TIMEOUT = 60  # Total time to wait for health
-HEALTH_CHECK_INTERVAL = 5  # Check every 5 seconds
-API_QUERY_TIMEOUT = 30  # API query timeout
+INITIAL_WAIT = 5
+HEALTH_CHECK_TIMEOUT = 60
+HEALTH_CHECK_INTERVAL = 5
+API_QUERY_TIMEOUT = 30
 
 
 def log(message, level="INFO"):
@@ -99,9 +100,100 @@ def wait_for_health(timeout_seconds=HEALTH_CHECK_TIMEOUT):
         time.sleep(HEALTH_CHECK_INTERVAL)
 
 
+def get_adapter_status():
+    """
+    Get status of all adapters and identify which ones require API keys.
+
+    Returns:
+        Tuple of (all_adapters, key_required_adapters, key_free_adapters)
+    """
+    log("Fetching adapter status...", "INFO")
+
+    try:
+        response = requests.get(ADAPTERS_STATUS_ENDPOINT, timeout=API_QUERY_TIMEOUT)
+        response.raise_for_status()
+        adapters = response.json()
+
+        if not isinstance(adapters, list):
+            adapters = adapters.get("adapters", [])
+
+        # Categorize adapters
+        key_required = []
+        key_free = []
+
+        for adapter in adapters:
+            adapter_name = adapter.get("name") or adapter.get("adapter_name") or "Unknown"
+            requires_key = adapter.get("requires_api_key") or adapter.get("api_key_required") or False
+
+            if requires_key:
+                key_required.append(adapter_name)
+            else:
+                key_free.append(adapter_name)
+
+        log(f"Found {len(adapters)} total adapters", "SUCCESS")
+        log(f"  🔐 {len(key_required)} adapters require API keys (will be SKIPPED)", "WARNING")
+        log(f"  ✅ {len(key_free)} adapters are key-free (will be used)", "SUCCESS")
+
+        if key_required:
+            log(f"Skipping key-required adapters: {', '.join(key_required[:5])}", "INFO")
+            if len(key_required) > 5:
+                log(f"  ... and {len(key_required) - 5} more", "INFO")
+
+        return adapters, key_required, key_free
+
+    except requests.exceptions.Timeout:
+        log(f"Adapter status query timed out after {API_QUERY_TIMEOUT} seconds", "WARNING")
+        return [], [], []
+    except requests.exceptions.ConnectionError as e:
+        log(f"Connection error: {e}", "WARNING")
+        return [], [], []
+    except requests.exceptions.HTTPError as e:
+        log(f"HTTP error: {response.status_code}", "WARNING")
+        return [], [], []
+    except Exception as e:
+        log(f"Unexpected error fetching adapter status: {e}", "WARNING")
+        return [], [], []
+
+
+def disable_key_required_adapters(key_required_adapters):
+    """
+    Attempt to disable adapters that require API keys.
+
+    Args:
+        key_required_adapters: List of adapter names to disable
+
+    Returns:
+        True if successful, False otherwise
+    """
+    if not key_required_adapters:
+        log("No adapters to disable", "INFO")
+        return True
+
+    log(f"Attempting to disable {len(key_required_adapters)} key-required adapters...", "INFO")
+
+    disable_endpoint = "http://127.0.0.1:8000/api/adapters/disable"
+
+    try:
+        for adapter_name in key_required_adapters:
+            payload = {"adapter_name": adapter_name}
+            try:
+                response = requests.post(disable_endpoint, json=payload, timeout=5)
+                if response.status_code == 200:
+                    log(f"  ✅ Disabled: {adapter_name}", "INFO")
+                else:
+                    log(f"  ⚠️ Could not disable {adapter_name} (status: {response.status_code})", "WARNING")
+            except requests.RequestException as e:
+                log(f"  ⚠️ Could not disable {adapter_name}: {e}", "WARNING")
+
+        return True
+    except Exception as e:
+        log(f"Error disabling adapters: {e}", "WARNING")
+        return False
+
+
 def query_races(timeout_seconds=API_QUERY_TIMEOUT):
     """
-    Queries the API for qualified races.
+    Queries the API for qualified races (from key-free adapters only).
 
     Args:
         timeout_seconds: Request timeout in seconds
@@ -109,7 +201,7 @@ def query_races(timeout_seconds=API_QUERY_TIMEOUT):
     Returns:
         Race data dict or None if failed
     """
-    log(f"Querying API: {API_ENDPOINT}", "INFO")
+    log(f"Querying API for qualified races...", "INFO")
 
     # Check for API Key
     if not API_KEY:
@@ -117,13 +209,16 @@ def query_races(timeout_seconds=API_QUERY_TIMEOUT):
         return None
 
     try:
-        headers = {"X-API-Key": api_key}
-        response = requests.get(API_ENDPOINT, headers=headers, timeout=timeout_seconds)
+        response = requests.get(API_ENDPOINT, timeout=timeout_seconds)
         response.raise_for_status()
 
         data = response.json()
         race_count = len(data.get("races", []))
         log(f"Successfully retrieved {race_count} races", "SUCCESS")
+
+        if race_count == 0:
+            log("Note: No races match the filter criteria at this time", "INFO")
+
         return data
 
     except requests.exceptions.Timeout:
@@ -205,7 +300,7 @@ def save_json_data(race_data):
 
 def main():
     """Main entry point."""
-    log("=== Fortuna Race Report Generator ===", "INFO")
+    log("=== Fortuna Adapter-Aware Race Report Generator ===", "INFO")
 
     server_process = None
 
@@ -221,16 +316,23 @@ def main():
             log("Backend did not become healthy in time", "ERROR")
             return 1
 
-        # Step 3: Query races
+        # Step 3: Get adapter status (optional - may not be implemented)
+        adapters, key_required, key_free = get_adapter_status()
+
+        # Step 4: Disable key-required adapters (optional - may not be implemented)
+        if key_required:
+            disable_key_required_adapters(key_required)
+
+        # Step 5: Query races
         race_data = query_races(API_QUERY_TIMEOUT)
         if race_data is None:
             log("Failed to fetch race data", "ERROR")
             return 1
 
-        # Step 4: Save JSON
+        # Step 6: Save JSON
         save_json_data(race_data)
 
-        # Step 5: Generate report
+        # Step 7: Generate report
         if not generate_report(race_data):
             log("Failed to generate report", "ERROR")
             return 1
@@ -243,7 +345,7 @@ def main():
         return 1
 
     finally:
-        # Step 6: Cleanup
+        # Step 8: Cleanup
         if server_process:
             log("Stopping backend server...", "INFO")
             try:
