@@ -95,8 +95,18 @@ async def main():
     """Main entry point for the script."""
     log("=== Fortuna Unified Race Reporter ===")
 
+    KEY_ADAPTERS_TO_EXCLUDE = [
+        "BetfairAdapter",
+        "BetfairGreyhoundAdapter",
+        "GreyhoundAdapter",
+        "RacingAndSportsAdapter",
+        "RacingAndSportsGreyhoundAdapter",
+        "TheRacingApiAdapter",
+        "TVGAdapter",
+    ]
+
     settings = get_settings()
-    odds_engine = OddsEngine(config=settings)
+    odds_engine = OddsEngine(config=settings, exclude_adapters=KEY_ADAPTERS_TO_EXCLUDE)
     analyzer_engine = AnalyzerEngine()
 
     today_str = datetime.now().strftime("%Y-%m-%d")

@@ -59,6 +59,7 @@ class OddsEngine:
         config=None,
         manual_override_manager: ManualOverrideManager = None,
         connection_manager=None,
+        exclude_adapters: Optional[List[str]] = None,
     ):
         # THE FIX: Import the cache_manager singleton here to ensure tests can
         # patch and reload it *before* the engine is initialized.
@@ -68,6 +69,7 @@ class OddsEngine:
         self.logger.info("Initializing FortunaEngine...")
         self.connection_manager = connection_manager
         self.cache_manager = cache_manager
+        self.exclude_adapters = set(exclude_adapters) if exclude_adapters else set()
 
         try:
             try:
@@ -116,22 +118,26 @@ class OddsEngine:
             ]
 
             for adapter_cls in adapter_classes:
+                adapter_name = adapter_cls.__name__
+                if adapter_name in self.exclude_adapters:
+                    self.logger.info(f"Intentionally skipping adapter: {adapter_name}")
+                    continue
                 try:
-                    self.logger.info(f"Attempting to initialize adapter: {adapter_cls.__name__}")
+                    self.logger.info(f"Attempting to initialize adapter: {adapter_name}")
                     adapter_instance = adapter_cls(config=self.config)
-                    self.logger.info(f"Successfully initialized adapter: {adapter_cls.__name__}")
+                    self.logger.info(f"Successfully initialized adapter: {adapter_name}")
                     if manual_override_manager and getattr(adapter_instance, "supports_manual_override", False):
                         adapter_instance.enable_manual_override(manual_override_manager)
                     self.adapters.append(adapter_instance)
                 except AdapterConfigError as e:
                     self.logger.warning(
                         "Skipping adapter due to configuration error",
-                        adapter=adapter_cls.__name__,
+                        adapter=adapter_name,
                         error=str(e),
                     )
                 except Exception:
                     self.logger.error(
-                        f"An unexpected error occurred while initializing {adapter_cls.__name__}",
+                        f"An unexpected error occurred while initializing {adapter_name}",
                         exc_info=True,
                     )
 
