@@ -95,18 +95,54 @@ async def main():
     """Main entry point for the script."""
     log("=== Fortuna Unified Race Reporter ===")
 
-    KEY_ADAPTERS_TO_EXCLUDE = [
+    # Define all known adapters to make exclusion logic robust.
+    ALL_ADAPTERS = [
+        "AtTheRacesAdapter",
         "BetfairAdapter",
         "BetfairGreyhoundAdapter",
+        "BrisnetAdapter",
+        "EquibaseAdapter",
+        "FanDuelAdapter",
+        "GbgbApiAdapter",
         "GreyhoundAdapter",
+        "HarnessAdapter",
+        "HorseRacingNationAdapter",
+        "NYRABetsAdapter",
+        "OddscheckerAdapter",
+        "PuntersAdapter",
         "RacingAndSportsAdapter",
         "RacingAndSportsGreyhoundAdapter",
+        "RacingPostAdapter",
+        "RacingTVAdapter",
+        "SportingLifeAdapter",
+        "TabAdapter",
         "TheRacingApiAdapter",
+        "TimeformAdapter",
+        "TwinSpiresAdapter",
         "TVGAdapter",
+        "XpressbetAdapter",
+        "PointsBetGreyhoundAdapter",
     ]
 
+    # Explicitly define the adapters we want to use for this non-keyed report.
+    RELIABLE_NON_KEYED_ADAPTERS = [
+        "AtTheRacesAdapter",
+        "SportingLifeAdapter",
+        "RacingPostAdapter",
+        "TimeformAdapter",
+        "EquibaseAdapter",
+        "BrisnetAdapter",
+        "OddscheckerAdapter",
+    ]
+
+    # Programmatically determine which adapters to exclude.
+    adapters_to_exclude = [
+        adapter for adapter in ALL_ADAPTERS if adapter not in RELIABLE_NON_KEYED_ADAPTERS
+    ]
+    log(f"Excluding {len(adapters_to_exclude)} adapters to ensure only real data is used.")
+
     settings = get_settings()
-    odds_engine = OddsEngine(config=settings, exclude_adapters=KEY_ADAPTERS_TO_EXCLUDE)
+    odds_engine = OddsEngine(config=settings, exclude_adapters=adapters_to_exclude)
     analyzer_engine = AnalyzerEngine()
 
     today_str = datetime.now().strftime("%Y-%m-%d")
