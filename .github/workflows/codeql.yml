@@ -44,7 +44,6 @@ jobs:
       if: matrix.language == 'python'
       run: |
         python -m pip install uv
-        uv pip install --system -r python_service/requirements-dev.txt
         uv pip install --system -r web_service/backend/requirements-dev.txt
     - name: Install JavaScript dependencies
       if: matrix.language == 'javascript'
@@ -52,12 +51,12 @@ jobs:
         npm install --prefix web_service/frontend
         npm install --prefix electron
     - name: Initialize CodeQL
-      uses: github/codeql-action/init@v3
+      uses: github/codeql-action/init@v4
       with:
         languages: ${{ matrix.language }}
 
     - name: Autobuild
-      uses: github/codeql-action/autobuild@v3
+      uses: github/codeql-action/autobuild@v4
 
     - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v3
+      uses: github/codeql-action/analyze@v4

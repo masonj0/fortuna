@@ -19,9 +19,10 @@ from tenacity import (
     wait_exponential,
 )
 
-from ..core.exceptions import AdapterHttpError
+from ..core.exceptions import AdapterHttpError, AdapterParsingError
 from ..manual_override_manager import ManualOverrideManager
 from ..models import Race
+from ..validators import DataValidationPipeline
 
 T = TypeVar("T")
 
@@ -307,13 +308,27 @@ class BaseAdapterV3(ABC):
 
         # Parse the data
         if raw_data is not None:
-            try:
-                return self._parse_races(raw_data)
-            except Exception as e:
-                self.logger.error("Failed to parse race data", error=str(e))
-                raise
+            return self._validate_and_parse_races(raw_data)
 
         return []
+
+    def _validate_and_parse_races(self, raw_data: Any) -> list[Race]:
+        is_valid, reason = DataValidationPipeline.validate_raw_response(self.source_name, raw_data)
+        if not is_valid:
+            raise AdapterParsingError(self.source_name, f"Raw response validation failed: {reason}")
+
+        try:
+            parsed_races = self._parse_races(raw_data)
+        except Exception as e:
+            self.logger.error("Failed to parse race data", error=str(e))
+            raise AdapterParsingError(self.source_name, "Parsing logic failed.") from e
+
+        validated_races, warnings = DataValidationPipeline.validate_parsed_races(parsed_races)
+
+        if warnings:
+            self.logger.warning("Validation warnings during parsing", warnings=warnings)
+
+        return validated_races
 
     @retry(
         retry=retry_if_exception_type((httpx.RequestError, httpx.HTTPStatusError)),
