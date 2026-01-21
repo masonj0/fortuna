@@ -91,6 +91,16 @@ class BaseAdapterV3(ABC):
         # Ensure the URL is correctly formed, whether it's relative or absolute
         full_url = url if url.startswith("http") else f"{self.base_url.rstrip('/')}/{url.lstrip('/')}"
 
+        # Ensure headers are present and add a standard User-Agent to mimic a browser
+        headers = kwargs.get("headers", {})
+        if "User-Agent" not in headers:
+            headers["User-Agent"] = (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/107.0.0.0 Safari/537.36"
+            )
+        kwargs["headers"] = headers
+
         try:
             self.logger.info("Making request", method=method.upper(), url=full_url)
             response = await http_client.request(method, full_url, timeout=self.timeout, **kwargs)
