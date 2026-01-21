@@ -47,6 +47,8 @@ from .adapters.xpressbet_adapter import XpressbetAdapter
 from .config import get_settings
 from .core.exceptions import AdapterConfigError
 from .core.exceptions import AdapterHttpError
+from .adapter_manager import AdapterHealthMonitor, AdapterHealth, AdapterStatus
+from .cache_manager import StaleDataCache
 from .manual_override_manager import ManualOverrideManager
 from .models import AggregatedResponse
 from .models import Race
@@ -70,6 +72,8 @@ class OddsEngine:
         self.logger.info("Initializing FortunaEngine...")
         self.connection_manager = connection_manager
         self.cache_manager = cache_manager
+        self.health_monitor = AdapterHealthMonitor()
+        self.stale_data_cache = StaleDataCache(max_age_hours=24)
         self.exclude_adapters = set(exclude_adapters) if exclude_adapters else set()
 
         try:
@@ -89,7 +93,7 @@ class OddsEngine:
             # Redis is now handled entirely by the CacheManager.
 
             self.logger.info("Initializing adapters...")
-            self.adapters: List[BaseAdapterV3] = []
+            self.adapters: Dict[str, BaseAdapterV3] = {}
             adapter_classes = [
                 AtTheRacesAdapter,
                 BetfairAdapter,
@@ -129,7 +133,7 @@ class OddsEngine:
                     self.logger.info(f"Successfully initialized adapter: {adapter_name}")
                     if manual_override_manager and getattr(adapter_instance, "supports_manual_override", False):
                         adapter_instance.enable_manual_override(manual_override_manager)
-                    self.adapters.append(adapter_instance)
+                    self.adapters[adapter_instance.source_name] = adapter_instance
                 except AdapterConfigError as e:
                     self.logger.warning(
                         "Skipping adapter due to configuration error",
@@ -142,6 +146,16 @@ class OddsEngine:
                         exc_info=True,
                     )
 
+            for adapter_instance in self.adapters.values():
+                self.health_monitor.statuses[adapter_instance.source_name] = AdapterStatus(
+                    name=adapter_instance.source_name,
+                    health=AdapterHealth.HEALTHY,
+                    success_rate_24h=1.0,
+                    last_success=None,
+                    consecutive_failures=0,
+                    avg_response_time_ms=0,
+                    last_error=None,
+                )
             # Special case for BetfairDataScientistAdapter with extra args - DISABLED
             # try:
             #     bds_adapter = BetfairDataScientistAdapter(
@@ -169,7 +183,7 @@ class OddsEngine:
             self.logger.info("HTTP client initialized.")
 
             # Assign the shared client to each adapter
-            for adapter in self.adapters:
+            for adapter in self.adapters.values():
                 adapter.http_client = self.http_client
 
             # Initialize semaphore for concurrency limiting
@@ -189,7 +203,7 @@ class OddsEngine:
         await self.http_client.aclose()
 
     def get_all_adapter_statuses(self) -> List[Dict[str, Any]]:
-        return [adapter.get_status() for adapter in self.adapters]
+        return [adapter.get_status() for adapter in self.adapters.values()]
 
     async def get_from_cache(self, key):
         return await self.cache_manager.get(key)
@@ -269,6 +283,14 @@ class OddsEngine:
 
         duration = (datetime.now() - start_time).total_seconds()
 
+        # Update health monitor
+        await self.health_monitor.update_adapter_status(
+            adapter_name=adapter.source_name,
+            success=is_success,
+            latency_ms=duration * 1000,
+            error=error_message,
+        )
+
         payload = {
             "races": races,
             "source_info": {
@@ -306,67 +328,101 @@ class OddsEngine:
 
         return list(race_map.values())
 
+    def _calculate_coverage(self, results: List[Dict[str, Any]]) -> float:
+        # Stub implementation
+        return 0.0
+
+    def _merge_adapter_results(self, results: List[Dict[str, Any]]) -> Dict[str, Any]:
+        source_infos = []
+        all_races = []
+        errors = []
+
+        for adapter_result in results:
+            source_info = adapter_result.get("source_info", {})
+            source_infos.append(source_info)
+            if source_info.get("status") == "SUCCESS":
+                all_races.extend(adapter_result.get("races", []))
+            else:
+                errors.append({
+                    "adapter_name": source_info.get("name"),
+                    "error_message": source_info.get("error_message", "Unknown error"),
+                    "attempted_url": source_info.get("attempted_url")
+                })
+
+        deduped_races = self._dedupe_races(all_races)
+
+        return {
+            "races": deduped_races,
+            "errors": errors,
+            "source_info": source_infos
+        }
+
     async def _broadcast_update(self, data: Dict[str, Any]):
         """Helper to broadcast data if the connection manager is available."""
         if self.connection_manager:
             await self.connection_manager.broadcast(data)
 
-    async def fetch_all_odds(self, date: str, source_filter: str = None) -> Dict[str, Any]:
-        """
-        Fetches and aggregates race data from all configured adapters.
-        The result of this method is cached and broadcasted via WebSocket.
-        """
+    async def fetch_all_odds(self, date: str, source_filter: str = None, min_required_adapters: int = 2) -> Dict[str, Any]:
         if date is None:
             date = datetime.now().strftime("%Y-%m-%d")
 
-        # Construct a cache key
+        # Re-introduce live caching
         cache_key = f"fortuna_engine_races:{date}:{source_filter or 'all'}"
         cached_data = await self.get_from_cache(cache_key)
         if cached_data:
             log.info("Cache hit for fetch_all_odds", key=cache_key)
             return json.loads(cached_data)
 
-        log.info("Cache miss for fetch_all_odds", key=cache_key)
-        target_adapters = self.adapters
+        all_payloads = []
+        attempted_adapters = []
+        all_adapter_names = list(self.adapters.keys())
         if source_filter:
-            log.info("Applying source filter", source=source_filter)
-            target_adapters = [a for a in self.adapters if a.source_name.lower() == source_filter.lower()]
+            all_adapter_names = [name for name in all_adapter_names if name.lower() == source_filter.lower()]
 
-        tasks = [self._fetch_with_semaphore(adapter, date) for adapter in target_adapters]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        ordered_adapter_names = self.health_monitor.get_ordered_adapters(all_adapter_names)
 
-        source_infos = []
-        all_races = []
-        errors = []
+        # Tier 1: Healthy
+        healthy_names = [name for name in ordered_adapter_names if self.health_monitor.statuses[name].health == AdapterHealth.HEALTHY]
+        if healthy_names:
+            tasks = [self._fetch_with_semaphore(self.adapters[name], date) for name in healthy_names]
+            attempted_adapters.extend(healthy_names)
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for res in results:
+                if not isinstance(res, Exception):
+                    _adapter_name, payload, _duration = res
+                    all_payloads.append(payload)
 
-        for i, result in enumerate(results):
-            adapter = target_adapters[i]
-            if isinstance(result, Exception):
-                log.error("Adapter fetch task failed with an unhandled exception", adapter=adapter.source_name, error=result)
-                errors.append({
-                    "adapter_name": adapter.source_name,
-                    "error_message": f"Unhandled exception: {str(result)}",
-                    "attempted_url": "Unknown"
-                })
-                source_infos.append({
-                    "name": adapter.source_name,
-                    "status": "FAILED",
-                    "error_message": f"Unhandled exception: {str(result)}",
-                })
-            else:
-                _adapter_name, adapter_result, _duration = result
-                source_info = adapter_result.get("source_info", {})
-                source_infos.append(source_info)
-                if source_info.get("status") == "SUCCESS":
-                    all_races.extend(adapter_result.get("races", []))
-                else:
-                    errors.append({
-                        "adapter_name": adapter.source_name,
-                        "error_message": source_info.get("error_message", "Unknown error"),
-                        "attempted_url": source_info.get("attempted_url")
-                    })
+        successful_count = len([p for p in all_payloads if p['source_info']['status'] == 'SUCCESS'])
 
-        deduped_races = self._dedupe_races(all_races)
+        # Tier 2: Degraded
+        if successful_count < min_required_adapters:
+            degraded_names = [name for name in ordered_adapter_names if self.health_monitor.statuses[name].health == AdapterHealth.DEGRADED]
+            if degraded_names:
+                tasks = [self._fetch_with_semaphore(self.adapters[name], date) for name in degraded_names]
+                attempted_adapters.extend(degraded_names)
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                for res in results:
+                    if not isinstance(res, Exception):
+                        _adapter_name, payload, _duration = res
+                        all_payloads.append(payload)
+
+        # Tier 3: Stale cache fallback
+        if not any(p['source_info']['status'] == 'SUCCESS' for p in all_payloads):
+            log.warning("All live adapters failed, attempting to use stale cache.")
+            stale_data = await self.stale_data_cache.get(date)
+            if stale_data:
+                log.info("Using stale data from cache.", cache_age_hours=stale_data['age_hours'])
+                stale_results = stale_data['data']
+                stale_results['metadata']['data_freshness'] = 'stale'
+                stale_results['warnings'] = ["Using cached data from a previous run as all live sources failed."]
+                return stale_results
+
+        if not all_payloads:
+            log.error("All adapter fetches failed and no stale data available.")
+            return {"races": [], "errors": [{"adapter_name": "all", "error_message": "All adapters failed and no stale data available."}], "source_info": [], "metadata": {}}
+
+        merged_results = self._merge_adapter_results(all_payloads)
+        successful_count = len([s for s in merged_results["source_info"] if s["status"] == "SUCCESS"])
 
         try:
             parsed_date = datetime.strptime(date, "%Y-%m-%d").date()
@@ -375,21 +431,25 @@ class OddsEngine:
 
         response_obj = AggregatedResponse(
             date=parsed_date,
-            races=deduped_races,
-            errors=errors,
-            source_info=source_infos,
+            races=merged_results["races"],
+            errors=merged_results["errors"],
+            source_info=merged_results["source_info"],
             metadata={
                 "fetch_time": datetime.now(),
-                "sources_queried": [a.source_name for a in target_adapters],
-                "sources_successful": len([s for s in source_infos if s["status"] == "SUCCESS"]),
-                "total_races": len(deduped_races),
-                "total_errors": len(errors),
+                "sources_queried": attempted_adapters,
+                "sources_successful": successful_count,
+                "total_races": len(merged_results["races"]),
+                "total_errors": len(merged_results["errors"]),
+                'coverage': self._calculate_coverage(all_payloads),
+                'data_freshness': 'live'
             },
         )
-
         response_data = response_obj.model_dump(by_alias=True)
 
-        # Set the result in the cache
-        await self.set_in_cache(cache_key, json.dumps(response_data, default=str), ttl=300)
+        # Cache successful live results
+        if successful_count > 0:
+            await self.stale_data_cache.set(date, response_data)
+            await self.set_in_cache(cache_key, json.dumps(response_data, default=str), ttl=300)
+
         await self._broadcast_update(response_data)
         return response_data
