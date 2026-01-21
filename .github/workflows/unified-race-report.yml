@@ -1,54 +1,196 @@
+# unified-race-report.yml
 name: 'Unified Race Report'
 
 on:
   workflow_dispatch:
+    inputs:
+      force_refresh:
+        description: 'Force refresh all data (ignore cache)'
+        required: false
+        default: 'false'
+        type: boolean
+      analyzer_type:
+        description: 'Analyzer to use'
+        required: false
+        default: 'tiny_field_trifecta'
+        type: choice
+        options:
+          - tiny_field_trifecta
+          - value_bet
+          - longshot_finder
   push:
     branches:
       - main
+    paths:
+      - 'scripts/**'
+      - 'web_service/backend/**'
+      - '.github/workflows/unified-race-report.yml'
+  schedule:
+    # Run at 6 AM, 12 PM, and 6 PM UTC
+    - cron: '0 6,12,18 * * *'
+
+concurrency:
+  group: race-report-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: '3.11'
+  REPORT_RETENTION_DAYS: 14
+  MAX_RETRIES: 3
+  REQUEST_TIMEOUT: 30
 
 jobs:
   generate-unified-report:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    permissions:
+      contents: read
+      actions: write
+
+    outputs:
+      race_count: ${{ steps.run-reporter.outputs.race_count }}
+      status: ${{ steps.run-reporter.outputs.status }}
+
     steps:
       - name: '📥 Checkout Code'
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       - name: '🐍 Setup Python'
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10.11'
+          python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
+          cache-dependency-path: 'web_service/backend/requirements.txt'
 
       - name: '📦 Install Dependencies'
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip setuptools wheel
           pip install -r web_service/backend/requirements.txt
 
       - name: '📂 Create Runtime Directories'
         run: |
-          mkdir -p web_service/backend/data
-          mkdir -p web_service/backend/json
-          mkdir -p web_service/backend/logs
+          mkdir -p web_service/backend/{data,json,logs}
+          mkdir -p reports/archive
+
+      - name: '🔄 Restore Data Cache'
+        if: inputs.force_refresh != 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            web_service/backend/data/*.cache
+            web_service/backend/json/*.cache
+          key: race-data-${{ runner.os }}-${{ github.run_number }}
+          restore-keys: |
+            race-data-${{ runner.os }}-
 
       - name: '🚀 Run Unified Reporter'
-        run: python scripts/fortuna_reporter.py
+        id: run-reporter
+        env:
+          ANALYZER_TYPE: ${{ inputs.analyzer_type || 'tiny_field_trifecta' }}
+          FORCE_REFRESH: ${{ inputs.force_refresh || 'false' }}
+          MAX_RETRIES: ${{ env.MAX_RETRIES }}
+          REQUEST_TIMEOUT: ${{ env.REQUEST_TIMEOUT }}
+        run: |
+          set -o pipefail
+          python scripts/fortuna_reporter.py 2>&1 | tee reporter_output.log
+
+          # Extract metrics from the log for outputs
+          if [ -f "qualified_races.json" ]; then
+            RACE_COUNT=$(python -c "import json; print(len(json.load(open('qualified_races.json')).get('races', [])))")
+            echo "race_count=${RACE_COUNT}" >> $GITHUB_OUTPUT
+            echo "status=success" >> $GITHUB_OUTPUT
+          else
+            echo "race_count=0" >> $GITHUB_OUTPUT
+            echo "status=failed" >> $GITHUB_OUTPUT
+          fi
 
       - name: '📊 Upload Report Artifacts'
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: race-reports-${{ github.run_number }}
+          name: race-reports-${{ github.run_number }}-${{ github.run_attempt }}
           path: |
             race-report.html
             qualified_races.json
-          retention-days: 7
-          if-no-files-found: error
+            raw_race_data.json
+            reporter_output.log
+          retention-days: ${{ env.REPORT_RETENTION_DAYS }}
+          if-no-files-found: warn
+          compression-level: 9
 
       - name: '📝 Post Summary to GitHub Actions'
         if: always()
         run: |
-          if [ -f "github_summary.md" ]; then
-            cat github_summary.md >> $GITHUB_STEP_SUMMARY
-          else
-            echo "### ⚠️ Markdown Summary Not Found" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## 🐴 Fortuna Race Report Summary"
+            echo ""
+            echo "**Run:** #${{ github.run_number }} | **Status:** ${{ steps.run-reporter.outputs.status || 'unknown' }}"
+            echo "**Analyzer:** ${{ inputs.analyzer_type || 'tiny_field_trifecta' }}"
+            echo ""
+
+            if [ -f "github_summary.md" ]; then
+              cat github_summary.md
+            else
+              echo "### ⚠️ Detailed summary not available"
+              echo ""
+              echo "Check the artifacts for the full report."
+            fi
+
+            echo ""
+            echo "---"
+            echo "*Generated at $(date -u '+%Y-%m-%d %H:%M:%S UTC')*"
+          } >> $GITHUB_STEP_SUMMARY
+
+      - name: '🧹 Cleanup on Failure'
+        if: failure()
+        run: |
+          echo "::warning::Report generation failed. Check logs for details."
+          # Archive any partial data for debugging
+          if ls *.json 1> /dev/null 2>&1; then
+            tar -czf debug-data.tar.gz *.json *.log 2>/dev/null || true
           fi
+
+  notify-on-failure:
+    needs: generate-unified-report
+    runs-on: ubuntu-latest
+    if: failure() && github.event_name == 'schedule'
+    steps:
+      - name: '🚨 Create Failure Issue'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = `🚨 Scheduled Race Report Failed - ${new Date().toISOString().split('T')[0]}`;
+            const body = `
+            ## Automated Report Failure
+
+            The scheduled race report generation failed.
+
+            **Run ID:** ${{ github.run_id }}
+            **Run Number:** ${{ github.run_number }}
+            **Workflow:** ${{ github.workflow }}
+
+            [View Run Logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+            Please investigate and fix any issues.
+            `;
+
+            // Check for existing open issue
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'automated-failure'
+            });
+
+            if (issues.data.length === 0) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: title,
+                body: body,
+                labels: ['automated-failure', 'bug']
+              });
+            }
