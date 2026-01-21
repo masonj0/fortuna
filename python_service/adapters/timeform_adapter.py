@@ -41,12 +41,12 @@ class TimeformAdapter(BaseAdapterV3):
         index_soup = BeautifulSoup(index_response.text, "html.parser")
         links = {a["href"] for a in index_soup.select("a.rp-racecard-off-link[href]")}
 
-        async def fetch_single_html(url_path: str):
+        html_pages = []
+        for url_path in links:
             response = await self.make_request(self.http_client, "GET", url_path)
-            return response.text if response else ""
-
-        tasks = [fetch_single_html(link) for link in links]
-        html_pages = await asyncio.gather(*tasks)
+            if response:
+                html_pages.append(response.text)
+            await asyncio.sleep(1)  # Politeness delay
         return {"pages": html_pages, "date": date}
 
     def _parse_races(self, raw_data: Any) -> List[Race]:
