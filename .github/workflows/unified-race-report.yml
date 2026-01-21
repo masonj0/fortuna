@@ -41,6 +41,7 @@ jobs:
           path: |
             race-report.html
             qualified_races.json
+            raw_race_data.json
           retention-days: 7
           if-no-files-found: error
 
