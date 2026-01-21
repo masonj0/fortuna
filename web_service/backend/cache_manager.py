@@ -7,6 +7,7 @@ from datetime import timedelta
 from functools import wraps
 from typing import Any
 from typing import Callable
+from typing import Optional
 
 import structlog
 
@@ -117,3 +118,45 @@ def cache_async_result(ttl_seconds: int = 300, key_prefix: str = "cache"):
         return wrapper
 
     return decorator
+
+
+class StaleDataCache:
+    """In-memory cache for storing the last known good data for a given date."""
+
+    def __init__(self, max_age_hours: int = 24):
+        self._cache: dict[str, dict] = {}
+        self.max_age = timedelta(hours=max_age_hours)
+        self.logger = structlog.get_logger(cache_type="StaleDataCache")
+
+    async def get(self, date_key: str) -> Optional[dict]:
+        """
+        Retrieves stale data if it exists and is within the max_age.
+        Returns a dictionary with the data and its age, or None.
+        """
+        entry = self._cache.get(date_key)
+        if not entry:
+            self.logger.debug("Cache miss", key=date_key)
+            return None
+
+        now = datetime.utcnow()
+        timestamp = entry["timestamp"]
+        age = now - timestamp
+
+        if age > self.max_age:
+            self.logger.warning("Cache entry expired", key=date_key, age_hours=age.total_seconds() / 3600)
+            del self._cache[date_key]
+            return None
+
+        age_hours = age.total_seconds() / 3600
+        self.logger.info("Cache hit", key=date_key, age_hours=round(age_hours, 2))
+        return {"data": entry["data"], "age_hours": age_hours}
+
+    async def set(self, date_key: str, data: Any):
+        """
+        Stores the latest successful data fetch for a given date.
+        """
+        self.logger.info("Updating stale cache", key=date_key)
+        self._cache[date_key] = {
+            "timestamp": datetime.utcnow(),
+            "data": data,
+        }
