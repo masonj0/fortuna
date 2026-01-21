@@ -360,29 +360,14 @@ class BaseAdapterV3(ABC):
         # Apply rate limiting
         await self.rate_limiter.acquire()
 
-        # Prepare headers
+        # Pop headers and follow_redirects from kwargs to pass them explicitly.
         headers = kwargs.pop("headers", {})
         if "User-Agent" not in headers:
             headers["User-Agent"] = self.DEFAULT_USER_AGENT
 
-        # Ensure redirects are followed
         follow_redirects = kwargs.pop("follow_redirects", True)
 
         start_time = time.monotonic()
-
-        # Ensure headers are present and add a standard User-Agent to mimic a browser
-        headers = kwargs.get("headers", {})
-        if "User-Agent" not in headers:
-            headers["User-Agent"] = (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/107.0.0.0 Safari/537.36"
-            )
-        kwargs["headers"] = headers
-
-        # Ensure redirects are followed, which is crucial for some sites.
-        if 'follow_redirects' not in kwargs:
-            kwargs['follow_redirects'] = True
 
         try:
             self.logger.info("Making request", method=method.upper(), url=full_url)
@@ -393,7 +378,7 @@ class BaseAdapterV3(ABC):
                 timeout=self.timeout,
                 headers=headers,
                 follow_redirects=follow_redirects,
-                **kwargs,
+                **kwargs,  # Pass remaining kwargs
             )
             response.raise_for_status()
 
