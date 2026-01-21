@@ -144,6 +144,47 @@ app.add_middleware(SPAMiddleware)
 // bundled 'ui' directory.
 app.mount("/", StaticFiles(directory=UI_DIR, html=True), name="ui")
 ```
+
+### 3.3 Resilient Fetching Strategy (`web_service/backend/engine.py`)
+
+The `OddsEngine` is designed for resilience, using a multi-tiered fallback strategy to ensure data is returned even when some sources fail.
+
+```pseudocode
+// engine.py
+
+CLASS OddsEngine:
+  INIT():
+    self.adapters: Dict[str, Adapter]
+    self.health_monitor: AdapterHealthMonitor
+    self.stale_data_cache: StaleDataCache
+    // ... other initializations
+
+  ASYNC FUNCTION fetch_all_odds(date):
+    // Tier 1: Attempt to fetch from healthy adapters
+    healthy_adapters <- self.health_monitor.get_healthy_adapters()
+    live_results <- FETCH_IN_PARALLEL(healthy_adapters)
+
+    IF count(live_results) >= MINIMUM_REQUIRED_SOURCES:
+      MERGE and RETURN live_results
+
+    // Tier 2: Augment with degraded adapters if necessary
+    degraded_adapters <- self.health_monitor.get_degraded_adapters()
+    degraded_results <- FETCH_IN_PARALLEL(degraded_adapters)
+    live_results.extend(degraded_results)
+
+    IF count(live_results) > 0:
+      MERGE, CACHE, and RETURN live_results
+
+    // Tier 3: Fall back to stale data from the last successful run
+    stale_data <- self.stale_data_cache.get(date)
+    IF stale_data IS NOT NULL:
+      LOG "Using stale data as a last resort."
+      RETURN stale_data with a 'stale' freshness flag
+
+    // Final fallback: Return an error response
+    RETURN error_response("All live adapters failed and no stale cache was available.")
+
+```
 ---
 
 ## 4. FRONTEND INTERFACE (TYPESCRIPT/NEXT.JS)
@@ -248,6 +289,32 @@ WORKFLOW Build_Fortuna_Monolith_EXE:
 
   // Phase 5: Upload Artifact
   UPLOAD the `fortuna-monolith.exe` as a build artifact
+```
+
+### 6.2 Race Report Generation (`unified-race-report.yml`)
+
+This workflow runs on a schedule or manually to generate the daily race reports.
+
+```pseudocode
+// unified-race-report.yml
+WORKFLOW Generate_Race_Report:
+  // Phase 1: Setup Environment
+  SETUP Python
+  INSTALL dependencies from requirements.txt
+
+  // Phase 2: Run Reporter Script
+  // The script directly invokes the OddsEngine and AnalyzerEngine
+  // without needing a live web server.
+  EXECUTE `scripts/fortuna_reporter.py`
+
+  // Phase 3: Publish Artifacts
+  // The script generates a comprehensive set of artifacts for observability.
+  UPLOAD the following files:
+    - race-report.html (The primary user-facing report)
+    - qualified_races.json (Data for the HTML report)
+    - raw_race_data.json (Unfiltered data for debugging)
+    - reporter_output.log (Full log of the reporter script)
+    - github_summary.md (For display in the GitHub Actions UI)
 ```
 ---
 
