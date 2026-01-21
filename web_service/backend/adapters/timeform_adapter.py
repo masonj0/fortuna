@@ -33,11 +33,8 @@ class TimeformAdapter(BaseAdapterV3):
         Fetches the raw HTML for all race pages for a given date.
         """
         index_url = f"/horse-racing/racecards/{date}"
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36"
-        }
         index_response = await self.make_request(
-            self.http_client, "GET", index_url, headers=headers
+            self.http_client, "GET", index_url, headers=self._get_headers()
         )
         if not index_response:
             self.logger.warning("Failed to fetch Timeform index page", url=index_url)
@@ -48,13 +45,29 @@ class TimeformAdapter(BaseAdapterV3):
 
         async def fetch_single_html(url_path: str):
             response = await self.make_request(
-                self.http_client, "GET", url_path, headers=headers
+                self.http_client, "GET", url_path, headers=self._get_headers()
             )
             return response.text if response else ""
 
         tasks = [fetch_single_html(link) for link in links]
         html_pages = await asyncio.gather(*tasks)
         return {"pages": html_pages, "date": date}
+
+    def _get_headers(self) -> dict:
+        return {
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Cache-Control': 'max-age=0',
+            'Connection': 'keep-alive',
+            'Host': 'www.timeform.com',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+            'Upgrade-Insecure-Requests': '1',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        }
 
     def _parse_races(self, raw_data: Any) -> List[Race]:
         """Parses a list of raw HTML strings into Race objects."""

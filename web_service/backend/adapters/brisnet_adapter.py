@@ -31,8 +31,24 @@ class BrisnetAdapter(BaseAdapterV3):
         # This implementation will need to be improved to dynamically handle different tracks.
         # For now, it is hardcoded to Churchill Downs as a placeholder.
         url = f"/race/{date}/CD"
-        response = await self.make_request(self.http_client, "GET", url)
+        response = await self.make_request(self.http_client, "GET", url, headers=self._get_headers())
         return {"html": response.text, "date": date} if response and response.text else None
+
+    def _get_headers(self) -> dict:
+        return {
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Cache-Control': 'max-age=0',
+            'Connection': 'keep-alive',
+            'Host': 'www.brisnet.com',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+            'Upgrade-Insecure-Requests': '1',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        }
 
     def _parse_races(self, raw_data: Optional[dict]) -> List[Race]:
         """Parses the raw HTML into a list of Race objects."""
