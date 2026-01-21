@@ -28,6 +28,7 @@ TEMPLATE_PATH = "scripts/templates/race_report_template.html"
 HTML_OUTPUT_PATH = "race-report.html"
 JSON_OUTPUT_PATH = "qualified_races.json"
 MARKDOWN_SUMMARY_PATH = "github_summary.md"
+RAW_JSON_OUTPUT_PATH = "raw_race_data.json"
 
 
 def log(message, level="INFO"):
@@ -150,6 +151,14 @@ async def main():
     try:
         log(f"Fetching all race data for {today_str}...")
         aggregated_data = await odds_engine.fetch_all_odds(today_str)
+
+        # Save the raw, unfiltered data before any analysis
+        try:
+            with open(RAW_JSON_OUTPUT_PATH, "w", encoding="utf-8") as f:
+                json.dump(aggregated_data, f, indent=2, default=str)
+            log(f"Successfully saved raw unfiltered data to {RAW_JSON_OUTPUT_PATH}", "SUCCESS")
+        except Exception as e:
+            log(f"Failed to save raw data: {e}", "ERROR")
 
         all_races_raw = aggregated_data.get("races", [])
         if not all_races_raw:
