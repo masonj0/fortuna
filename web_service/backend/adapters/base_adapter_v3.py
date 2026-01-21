@@ -101,6 +101,10 @@ class BaseAdapterV3(ABC):
             )
         kwargs["headers"] = headers
 
+        # Ensure redirects are followed, which is crucial for some sites.
+        if 'follow_redirects' not in kwargs:
+            kwargs['follow_redirects'] = True
+
         try:
             self.logger.info("Making request", method=method.upper(), url=full_url)
             response = await http_client.request(method, full_url, timeout=self.timeout, **kwargs)
