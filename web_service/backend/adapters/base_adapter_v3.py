@@ -370,6 +370,20 @@ class BaseAdapterV3(ABC):
 
         start_time = time.monotonic()
 
+        # Ensure headers are present and add a standard User-Agent to mimic a browser
+        headers = kwargs.get("headers", {})
+        if "User-Agent" not in headers:
+            headers["User-Agent"] = (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/107.0.0.0 Safari/537.36"
+            )
+        kwargs["headers"] = headers
+
+        # Ensure redirects are followed, which is crucial for some sites.
+        if 'follow_redirects' not in kwargs:
+            kwargs['follow_redirects'] = True
+
         try:
             self.logger.info("Making request", method=method.upper(), url=full_url)
 
