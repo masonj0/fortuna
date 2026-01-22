@@ -90,6 +90,8 @@ class TrifectaAnalyzer(BaseAnalyzer):
         """Scores all races and returns a dictionary with criteria and a sorted list."""
         qualified_races = []
         for race in races:
+            if not self.is_race_qualified(race):
+                continue
             score = self._evaluate_race(race)
             if score > 0:
                 race.qualification_score = score
