@@ -33,7 +33,7 @@ class SportingLifeAdapter(BaseAdapterV3):
         Fetches the raw HTML for all race pages for a given date.
         Returns a dictionary containing the HTML content and the date.
         """
-        index_url = f"/horse-racing/racecards/{date}"
+        index_url = f"/racing/racecards/{date}"
         index_response = await self.make_request(
             self.http_client, "GET", index_url, headers=self._get_headers()
         )
