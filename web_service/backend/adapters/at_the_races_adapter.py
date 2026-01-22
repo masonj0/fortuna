@@ -43,7 +43,7 @@ class AtTheRacesAdapter(BaseAdapterV3):
             return None
 
         index_soup = BeautifulSoup(index_response.text, "html.parser")
-        links = {a["href"] for a in index_soup.select("a.race-time-link[href]")}
+        links = {a["href"] for a in index_soup.select("a[data-test-selector='RC-meetingItem__link_race'][href]")}
 
         async def fetch_single_html(url_path: str):
             response = await self.make_request(
@@ -110,7 +110,7 @@ class AtTheRacesAdapter(BaseAdapterV3):
 
                 start_time = datetime.combine(race_date, datetime.strptime(race_time, "%H:%M").time())
 
-                runners = [self._parse_runner(row) for row in soup.select("div.card-horse")]
+                runners = [self._parse_runner(row) for row in soup.select("div.table-default__row--card-runner")]
                 race = Race(
                     id=f"atr_{track_name.replace(' ', '')}_{start_time.strftime('%Y%m%d')}_R{race_number}",
                     venue=track_name,
@@ -130,18 +130,18 @@ class AtTheRacesAdapter(BaseAdapterV3):
 
     def _parse_runner(self, row: Tag) -> Optional[Runner]:
         try:
-            name_element = row.select_one("h3.horse-name a")
+            name_element = row.select_one("span.runner-cloth-name__name")
             if not name_element:
                 return None
             name = clean_text(name_element.get_text())
 
-            num_element = row.select_one("span.horse-number")
+            num_element = row.select_one("span.runner-number__no")
             if not num_element:
                 return None
             num_str = clean_text(num_element.get_text())
             number = int("".join(filter(str.isdigit, num_str)))
 
-            odds_element = row.select_one("button.best-odds")
+            odds_element = row.select_one("button.bet-selector__odds")
             odds_str = clean_text(odds_element.get_text()) if odds_element else ""
 
             win_odds = parse_odds_to_decimal(odds_str)
