@@ -167,11 +167,11 @@ class TrifectaAnalyzer(BaseAnalyzer):
 
 
 class TinyFieldTrifectaAnalyzer(TrifectaAnalyzer):
-    """A specialized TrifectaAnalyzer that only considers races with 8 or fewer runners."""
+    """A specialized TrifectaAnalyzer that only considers races with 6 or fewer runners."""
 
     def __init__(self, **kwargs):
-        # Override the max_field_size to 8 for "tiny field" analysis
-        super().__init__(max_field_size=8, min_favorite_odds=0.75, min_second_favorite_odds=2.0, **kwargs)
+        # Override the max_field_size to 6 for "tiny field" analysis
+        super().__init__(max_field_size=6, min_favorite_odds=0.75, min_second_favorite_odds=2.0, **kwargs)
 
     @property
     def name(self) -> str:
