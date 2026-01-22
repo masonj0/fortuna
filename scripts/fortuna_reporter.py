@@ -70,16 +70,31 @@ class ReporterConfig:
         "PointsBetGreyhoundAdapter",
     )
 
-    # Reliable adapters that don't require API keys
+    # Reliable adapters that don't require API keys.
+    # Timeform, Equibase, and Brisnet are temporarily disabled due to persistent,
+    # unrecoverable errors (e.g., Incapsula blocking, 500 errors).
     RELIABLE_NON_KEYED_ADAPTERS: tuple[str, ...] = (
-        "AtTheRacesAdapter", "SportingLifeAdapter", "RacingPostAdapter",
-        "TimeformAdapter", "EquibaseAdapter", "BrisnetAdapter", "OddscheckerAdapter",
+        "AtTheRacesAdapter", "SportingLifeAdapter", "RacingPostAdapter", "OddscheckerAdapter",
     )
 
     @property
     def excluded_adapters(self) -> list[str]:
         """Calculate which adapters to exclude."""
         return [a for a in self.ALL_ADAPTERS if a not in self.RELIABLE_NON_KEYED_ADAPTERS]
+
+    def __post_init__(self) -> None:
+        """Validate configuration after initialization."""
+        if self.max_retries < 1:
+            raise ValueError("max_retries must be at least 1")
+        if self.request_timeout < 1:
+            raise ValueError("request_timeout must be at least 1 second")
+        if self.max_summary_races < 1:
+            raise ValueError("max_summary_races must be at least 1")
+
+        # Ensure output directories exist
+        for path in (self.html_output_path, self.json_output_path,
+                     self.markdown_summary_path, self.raw_json_output_path):
+            path.parent.mkdir(parents=True, exist_ok=True)
 
 
 @dataclass
@@ -302,7 +317,7 @@ class Reporter:
         raise RuntimeError(f"All {self.config.max_retries} fetch attempts failed. Last error: {last_error}")
 
     async def run(self) -> bool:
-        """Main entry point for the reporter."""
+        """Main entry point with graceful degradation."""
         self.log("=== Fortuna Unified Race Reporter ===")
         self.log(f"Analyzer: {self.config.analyzer_type}")
         self.log(f"Excluding {len(self.config.excluded_adapters)} adapters")
@@ -312,50 +327,47 @@ class Reporter:
         analyzer_engine = AnalyzerEngine()
 
         today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        success = True
+
+        outputs_generated = {
+            "raw_json": False,
+            "qualified_json": False,
+            "html": False,
+            "markdown": False,
+        }
 
         try:
-            # Fetch data with retries
             aggregated_data = await self.fetch_with_retry(odds_engine, today_str)
-
-            # Save raw data
-            self.save_json(aggregated_data, self.config.raw_json_output_path, "raw race data")
+            outputs_generated["raw_json"] = self.save_json(
+                aggregated_data, self.config.raw_json_output_path, "raw race data"
+            )
 
             all_races_raw = aggregated_data.get("races", [])
             self.metrics.total_races_fetched = len(all_races_raw)
 
             if not all_races_raw:
                 self.log("No races returned from OddsEngine. This is a critical failure.", LogLevel.ERROR)
-                success = False
-                all_races = []
-            else:
-                # Validate races with error tolerance
-                all_races = []
-                for i, race_data in enumerate(all_races_raw):
-                    try:
-                        all_races.append(Race(**race_data))
-                    except Exception as e:
-                        self.log(f"Failed to validate race {i}: {e}", LogLevel.WARNING)
+                self.metrics.end_time = datetime.now(timezone.utc)
+                self.generate_markdown_summary([]) # Generate a summary showing failure
+                return False
 
-                self.log(f"Validated {len(all_races)}/{len(all_races_raw)} races")
+            all_races = []
+            for i, race_data in enumerate(all_races_raw):
+                try:
+                    all_races.append(Race(**race_data))
+                except Exception as e:
+                    self.log(f"Failed to validate race {i}: {e}", LogLevel.WARNING)
 
-            # Analyze races
+            self.log(f"Validated {len(all_races)}/{len(all_races_raw)} races")
+
             self.log(f"Analyzing with '{self.config.analyzer_type}' analyzer...")
-
-            try:
-                analyzer = analyzer_engine.get_analyzer(self.config.analyzer_type)
-                result = analyzer.qualify_races(all_races)
-            except Exception as e:
-                self.log(f"Analyzer failed: {e}", LogLevel.ERROR)
-                result = {"races": [], "criteria": {}}
+            analyzer = analyzer_engine.get_analyzer(self.config.analyzer_type)
+            result = analyzer.qualify_races(all_races)
 
             qualified_races = result.get("races", [])
             criteria = result.get("criteria", {})
             self.metrics.qualified_races = len(qualified_races)
-
             self.log(f"Found {len(qualified_races)} qualified races", LogLevel.SUCCESS)
 
-            # Prepare report data
             report_data = {
                 "races": [r.model_dump(mode='json') for r in qualified_races],
                 "analysis_metadata": criteria,
@@ -363,23 +375,25 @@ class Reporter:
                 "analyzer": self.config.analyzer_type,
             }
 
-            # Generate all outputs
-            self.save_json(report_data, self.config.json_output_path, "qualified races JSON")
-            self.generate_html_report(report_data)
-            self.generate_markdown_summary(qualified_races)
+            outputs_generated["qualified_json"] = self.save_json(
+                report_data, self.config.json_output_path, "qualified races JSON"
+            )
+            outputs_generated["html"] = self.generate_html_report(report_data)
+            outputs_generated["markdown"] = self.generate_markdown_summary(qualified_races)
 
         except Exception as e:
             self.log(f"Critical error: {e}", LogLevel.ERROR)
-            import traceback
-            traceback.print_exc()
-            success = False
+            # Still try to generate a failure report
+            self.generate_markdown_summary([])
 
         finally:
             self.metrics.end_time = datetime.now(timezone.utc)
             await odds_engine.close()
-            self.log(f"Reporter finished in {self.metrics.duration_seconds:.1f}s")
 
-        return success
+            successful_outputs = sum(outputs_generated.values())
+            self.log(f"Generated {successful_outputs}/{len(outputs_generated)} outputs")
+
+        return all(outputs_generated.values())
 
 
 async def main() -> int:

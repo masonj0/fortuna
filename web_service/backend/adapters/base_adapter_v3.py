@@ -36,7 +36,7 @@ class CircuitState(Enum):
 
 @dataclass
 class CircuitBreaker:
-    """Simple circuit breaker implementation."""
+    """Thread-safe circuit breaker implementation."""
     failure_threshold: int = 5
     recovery_timeout: float = 60.0
     half_open_max_calls: int = 3
@@ -45,41 +45,46 @@ class CircuitBreaker:
     _last_failure_time: float = field(default=0.0, repr=False)
     _state: CircuitState = field(default=CircuitState.CLOSED, repr=False)
     _half_open_calls: int = field(default=0, repr=False)
+    _lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False, repr=False)
 
     @property
     def state(self) -> CircuitState:
-        if self._state == CircuitState.OPEN:
-            if time.monotonic() - self._last_failure_time >= self.recovery_timeout:
-                self._state = CircuitState.HALF_OPEN
-                self._half_open_calls = 0
+        """Returns current state without mutation. Use check_state() for transitions."""
         return self._state
 
-    def record_success(self) -> None:
+    async def check_and_transition_state(self) -> CircuitState:
+        """Check state and handle OPEN -> HALF_OPEN transition atomically."""
+        async with self._lock:
+            if self._state == CircuitState.OPEN:
+                if time.monotonic() - self._last_failure_time >= self.recovery_timeout:
+                    self._state = CircuitState.HALF_OPEN
+                    self._half_open_calls = 0
+            return self._state
+
+    async def record_success(self) -> None:
         """Record a successful call."""
-        self._failure_count = 0
-        if self._state == CircuitState.HALF_OPEN:
-            self._half_open_calls += 1
-            if self._half_open_calls >= self.half_open_max_calls:
-                self._state = CircuitState.CLOSED
+        async with self._lock:
+            self._failure_count = 0
+            if self._state == CircuitState.HALF_OPEN:
+                self._half_open_calls += 1
+                if self._half_open_calls >= self.half_open_max_calls:
+                    self._state = CircuitState.CLOSED
 
-    def record_failure(self) -> None:
+    async def record_failure(self) -> None:
         """Record a failed call."""
-        self._failure_count += 1
-        self._last_failure_time = time.monotonic()
+        async with self._lock:
+            self._failure_count += 1
+            self._last_failure_time = time.monotonic()
 
-        if self._failure_count >= self.failure_threshold:
-            self._state = CircuitState.OPEN
-        elif self._state == CircuitState.HALF_OPEN:
-            self._state = CircuitState.OPEN
+            if self._failure_count >= self.failure_threshold:
+                self._state = CircuitState.OPEN
+            elif self._state == CircuitState.HALF_OPEN:
+                self._state = CircuitState.OPEN
 
-    def allow_request(self) -> bool:
+    async def allow_request(self) -> bool:
         """Check if a request should be allowed."""
-        state = self.state
-        if state == CircuitState.CLOSED:
-            return True
-        if state == CircuitState.HALF_OPEN:
-            return True
-        return False
+        state = await self.check_and_transition_state()
+        return state in (CircuitState.CLOSED, CircuitState.HALF_OPEN)
 
 
 @dataclass
@@ -135,9 +140,15 @@ class ResponseCache:
 
     @staticmethod
     def _make_key(method: str, url: str, **kwargs) -> str:
-        """Generate a cache key from request parameters."""
-        key_data = f"{method}:{url}:{sorted(kwargs.items())}"
-        return hashlib.md5(key_data.encode()).hexdigest()
+        """Generate a stable cache key from request parameters."""
+        # Filter out non-hashable or irrelevant kwargs
+        cacheable_kwargs = {
+            k: v for k, v in kwargs.items()
+            if k not in ('headers', 'timeout', 'follow_redirects')
+            and isinstance(v, (str, int, float, bool, tuple, type(None)))
+        }
+        key_data = f"{method}:{url}:{json.dumps(cacheable_kwargs, sort_keys=True, default=str)}"
+        return hashlib.sha256(key_data.encode()).hexdigest()[:32]
 
     async def get(self, method: str, url: str, **kwargs) -> Any | None:
         """Get a cached response if available and not expired."""
@@ -256,6 +267,24 @@ class BaseAdapterV3(ABC):
         self.manual_override_manager: ManualOverrideManager | None = None
         self.supports_manual_override = True
 
+    async def __aenter__(self) -> "BaseAdapterV3":
+        """Async context manager entry."""
+        if self.http_client is None:
+            self.http_client = httpx.AsyncClient(timeout=self.timeout)
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Async context manager exit with cleanup."""
+        await self.close()
+
+    async def close(self) -> None:
+        """Clean up resources."""
+        if self.http_client:
+            await self.http_client.aclose()
+            self.http_client = None
+        if self.cache:
+            await self.cache.clear()
+        self.logger.debug("Adapter resources cleaned up")
         # Resilience components
         self.circuit_breaker = CircuitBreaker()
         self.rate_limiter = RateLimiter(requests_per_second=rate_limit)
@@ -421,6 +450,9 @@ class BaseAdapterV3(ABC):
                 adapter_name=self.source_name,
                 status_code=e.response.status_code,
                 url=str(e.request.url),
+                message=f"HTTP {e.response.status_code}: {e.response.reason_phrase}",
+                response_body=e.response.text[:500] if e.response.text else None,
+                request_method=method.upper(),
             ) from e
 
         except (httpx.RequestError, RetryError) as e:
