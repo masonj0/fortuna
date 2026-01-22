@@ -1,0 +1,83 @@
+{
+  "races": [],
+  "errors": [
+    {
+      "adapterName": "Brisnet",
+      "errorMessage": "HTTP Error 503 for https://www.brisnet.com/cgi-bin/intoday.cgi",
+      "attemptedUrl": "https://www.brisnet.com/cgi-bin/intoday.cgi"
+    },
+    {
+      "adapterName": "Equibase",
+      "errorMessage": "HTTP Error 404 for https://www.equibase.com/entries/2026-01-22",
+      "attemptedUrl": "https://www.equibase.com/entries/2026-01-22"
+    },
+    {
+      "adapterName": "SportingLife",
+      "errorMessage": "HTTP Error 404 for https://www.sportinglife.com/horse-racing/racecards/2026-01-22",
+      "attemptedUrl": "https://www.sportinglife.com/horse-racing/racecards/2026-01-22"
+    },
+    {
+      "adapterName": "Timeform",
+      "errorMessage": "HTTP Error 500 for https://www.timeform.com/horse-racing/something-has-gone-wrong",
+      "attemptedUrl": "https://www.timeform.com/horse-racing/something-has-gone-wrong"
+    }
+  ],
+  "sourceInfo": [
+    {
+      "name": "AtTheRaces",
+      "status": "SUCCESS",
+      "racesFetched": 0,
+      "fetchDuration": 0.929185,
+      "errorMessage": null,
+      "attemptedUrl": null
+    },
+    {
+      "name": "Brisnet",
+      "status": "FAILED",
+      "racesFetched": 1,
+      "fetchDuration": 20.09693,
+      "errorMessage": "HTTP Error 503 for https://www.brisnet.com/cgi-bin/intoday.cgi",
+      "attemptedUrl": "https://www.brisnet.com/cgi-bin/intoday.cgi"
+    },
+    {
+      "name": "Equibase",
+      "status": "FAILED",
+      "racesFetched": 1,
+      "fetchDuration": 0.940595,
+      "errorMessage": "HTTP Error 404 for https://www.equibase.com/entries/2026-01-22",
+      "attemptedUrl": "https://www.equibase.com/entries/2026-01-22"
+    },
+    {
+      "name": "Oddschecker",
+      "status": "SUCCESS",
+      "racesFetched": 0,
+      "fetchDuration": 0.951455,
+      "errorMessage": null,
+      "attemptedUrl": null
+    },
+    {
+      "name": "RacingPost",
+      "status": "SUCCESS",
+      "racesFetched": 0,
+      "fetchDuration": 1.238822,
+      "errorMessage": null,
+      "attemptedUrl": null
+    },
+    {
+      "name": "SportingLife",
+      "status": "FAILED",
+      "racesFetched": 1,
+      "fetchDuration": 0.942575,
+      "errorMessage": "HTTP Error 404 for https://www.sportinglife.com/horse-racing/racecards/2026-01-22",
+      "attemptedUrl": "https://www.sportinglife.com/horse-racing/racecards/2026-01-22"
+    },
+    {
+      "name": "Timeform",
+      "status": "FAILED",
+      "racesFetched": 1,
+      "fetchDuration": 1.240816,
+      "errorMessage": "HTTP Error 500 for https://www.timeform.com/horse-racing/something-has-gone-wrong",
+      "attemptedUrl": "https://www.timeform.com/horse-racing/something-has-gone-wrong"
+    }
+  ]
+}
