@@ -23,7 +23,7 @@ class TimeformAdapter(BaseAdapterV3):
     """
 
     SOURCE_NAME = "Timeform"
-    BASE_URL = "https://www.timeform.com"
+    BASE_URL = "https://www.timeform.com/horse-racing"
 
     def __init__(self, config=None):
         super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
@@ -32,7 +32,7 @@ class TimeformAdapter(BaseAdapterV3):
         """
         Fetches the raw HTML for all race pages for a given date.
         """
-        index_url = f"/horse-racing/racecards/{date}"
+        index_url = f"/racecards/{date}"
         index_response = await self.make_request(
             self.http_client, "GET", index_url, headers=self._get_headers()
         )
@@ -55,18 +55,21 @@ class TimeformAdapter(BaseAdapterV3):
 
     def _get_headers(self) -> dict:
         return {
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Cache-Control': 'max-age=0',
-            'Connection': 'keep-alive',
-            'Host': 'www.timeform.com',
-            'Sec-Fetch-Dest': 'document',
-            'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'none',
-            'Sec-Fetch-User': '?1',
-            'Upgrade-Insecure-Requests': '1',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Host": "www.timeform.com",
+            "Pragma": "no-cache",
+            "sec-ch-ua": '"Google Chrome";v="125", "Chromium";v="125", "Not.A/Brand";v="24"',
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": '"Windows"',
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "none",
+            "Sec-Fetch-User": "?1",
+            "Upgrade-Insecure-Requests": "1",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
         }
 
     def _parse_races(self, raw_data: Any) -> List[Race]:

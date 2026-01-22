@@ -35,7 +35,9 @@ class AtTheRacesAdapter(BaseAdapterV3):
         Returns a dictionary containing the HTML content and the date.
         """
         index_url = f"/racecards/{date}"
-        index_response = await self.make_request(self.http_client, "GET", index_url)
+        index_response = await self.make_request(
+            self.http_client, "GET", index_url, headers=self._get_headers()
+        )
         if not index_response:
             self.logger.warning("Failed to fetch AtTheRaces index page", url=index_url)
             return None
@@ -44,12 +46,33 @@ class AtTheRacesAdapter(BaseAdapterV3):
         links = {a["href"] for a in index_soup.select("a.race-time-link[href]")}
 
         async def fetch_single_html(url_path: str):
-            response = await self.make_request(self.http_client, "GET", url_path)
+            response = await self.make_request(
+                self.http_client, "GET", url_path, headers=self._get_headers()
+            )
             return response.text if response else ""
 
         tasks = [fetch_single_html(link) for link in links]
         html_pages = await asyncio.gather(*tasks)
         return {"pages": html_pages, "date": date}
+
+    def _get_headers(self) -> dict:
+        return {
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Host": "www.attheraces.com",
+            "Pragma": "no-cache",
+            "sec-ch-ua": '"Google Chrome";v="125", "Chromium";v="125", "Not.A/Brand";v="24"',
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": '"Windows"',
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "none",
+            "Sec-Fetch-User": "?1",
+            "Upgrade-Insecure-Requests": "1",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        }
 
     def _parse_races(self, raw_data: Any) -> List[Race]:
         """Parses a list of raw HTML strings into Race objects."""
