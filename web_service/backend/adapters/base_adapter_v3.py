@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -291,6 +292,25 @@ class BaseAdapterV3(ABC):
         self.cache = ResponseCache(default_ttl=cache_ttl) if enable_cache else None
         self.metrics = AdapterMetrics()
 
+    async def __aenter__(self) -> "BaseAdapterV3":
+        """Async context manager entry."""
+        if self.http_client is None:
+            self.http_client = httpx.AsyncClient(timeout=self.timeout)
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Async context manager exit with cleanup."""
+        await self.close()
+
+    async def close(self) -> None:
+        """Clean up resources."""
+        if self.http_client:
+            await self.http_client.aclose()
+            self.http_client = None
+        if self.cache:
+            await self.cache.clear()
+        self.logger.debug("Adapter resources cleaned up")
+
     def enable_manual_override(self, manager: ManualOverrideManager) -> None:
         """Injects the manual override manager into the adapter."""
         self.manual_override_manager = manager
@@ -385,7 +405,7 @@ class BaseAdapterV3(ABC):
         full_url = url if url.startswith("http") else f"{self.base_url}/{url.lstrip('/')}"
 
         # Check circuit breaker
-        if not self.circuit_breaker.allow_request():
+        if not await self.circuit_breaker.allow_request():
             self.logger.warning("Circuit breaker open, rejecting request", url=full_url)
             raise AdapterHttpError(
                 adapter_name=self.source_name,
@@ -428,8 +448,8 @@ class BaseAdapterV3(ABC):
 
             # Record success
             latency_ms = (time.monotonic() - start_time) * 1000
-            self.metrics.record_success(latency_ms)
-            self.circuit_breaker.record_success()
+            await self.metrics.record_success(latency_ms)
+            await self.circuit_breaker.record_success()
 
             # Cache successful GET responses
             if use_cache and self.cache and method.upper() == "GET":
@@ -443,8 +463,8 @@ class BaseAdapterV3(ABC):
                 status_code=e.response.status_code,
                 url=str(e.request.url),
             )
-            self.metrics.record_failure(f"HTTP {e.response.status_code}")
-            self.circuit_breaker.record_failure()
+            await self.metrics.record_failure(f"HTTP {e.response.status_code}")
+            await self.circuit_breaker.record_failure()
 
             raise AdapterHttpError(
                 adapter_name=self.source_name,
@@ -457,8 +477,8 @@ class BaseAdapterV3(ABC):
 
         except (httpx.RequestError, RetryError) as e:
             self.logger.error("Request error", error=str(e))
-            self.metrics.record_failure(str(e))
-            self.circuit_breaker.record_failure()
+            await self.metrics.record_failure(str(e))
+            await self.circuit_breaker.record_failure()
 
             raise AdapterHttpError(
                 adapter_name=self.source_name,

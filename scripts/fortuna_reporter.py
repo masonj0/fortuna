@@ -71,10 +71,18 @@ class ReporterConfig:
     )
 
     # Reliable adapters that don't require API keys.
-    # Timeform, Equibase, and Brisnet are temporarily disabled due to persistent,
-    # unrecoverable errors (e.g., Incapsula blocking, 500 errors).
+    # Note: The following adapters may experience issues and should be monitored:
+    # - Timeform: Occasional 500 errors (redirect to error page)
+    # - Equibase: 404 errors on some dates
+    # - Brisnet: Timeout/503 errors, possible rate limiting
+    # - Oddschecker: 403 Forbidden (bot detection)
+    # - RacingPost: 406 Not Acceptable (user agent issues)
     RELIABLE_NON_KEYED_ADAPTERS: tuple[str, ...] = (
-        "AtTheRacesAdapter", "SportingLifeAdapter", "RacingPostAdapter", "OddscheckerAdapter",
+        "AtTheRacesAdapter",
+        "SportingLifeAdapter",
+        # Conditionally reliable - monitor closely:
+        # "RacingPostAdapter",  # 406 errors observed
+        # "OddscheckerAdapter", # 403 errors observed
     )
 
     @property
@@ -326,6 +334,21 @@ class Reporter:
         odds_engine = OddsEngine(config=settings, exclude_adapters=self.config.excluded_adapters)
         analyzer_engine = AnalyzerEngine()
 
+        # Pre-flight health check
+        healthy_adapters = []
+        for name, adapter in odds_engine.adapters.items():
+            try:
+                health = await adapter.health_check()
+                if health.get('circuit_breaker_state') == 'closed':
+                    healthy_adapters.append(name)
+            except Exception as e:
+                self.log(f"Health check failed for {name}: {e}", LogLevel.WARNING)
+
+        self.log(f"Healthy adapters: {len(healthy_adapters)}/{len(odds_engine.adapters)}")
+
+        if len(healthy_adapters) < 2:
+            self.log("Insufficient healthy adapters, report may be degraded", LogLevel.WARNING)
+
         today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
         outputs_generated = {
@@ -351,13 +374,31 @@ class Reporter:
                 return False
 
             all_races = []
+            validation_errors = []
+
             for i, race_data in enumerate(all_races_raw):
                 try:
                     all_races.append(Race(**race_data))
                 except Exception as e:
+                    error_msg = f"Race {i} ({race_data.get('venue', 'unknown')}): {str(e)}"
+                    validation_errors.append(error_msg)
                     self.log(f"Failed to validate race {i}: {e}", LogLevel.WARNING)
 
             self.log(f"Validated {len(all_races)}/{len(all_races_raw)} races")
+
+            if len(all_races) == 0 and len(all_races_raw) > 0:
+                self.log("All races failed validation! Check schema compatibility.", LogLevel.ERROR)
+                self.save_json({
+                    "error": "All races failed validation",
+                    "total_raw_races": len(all_races_raw),
+                    "validation_errors": validation_errors[:10]
+                }, Path("validation_errors.json"), "validation errors")
+                return False
+
+            if validation_errors:
+                self.save_json({
+                    "validation_errors": validation_errors
+                }, Path("validation_warnings.json"), "validation warnings")
 
             self.log(f"Analyzing with '{self.config.analyzer_type}' analyzer...")
             analyzer = analyzer_engine.get_analyzer(self.config.analyzer_type)
