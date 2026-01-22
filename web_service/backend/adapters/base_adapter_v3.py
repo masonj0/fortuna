@@ -288,6 +288,12 @@ class BaseAdapterV3(ABC):
         self.manual_override_manager: ManualOverrideManager | None = None
         self.supports_manual_override = True
 
+        # Resilience components
+        self.circuit_breaker = CircuitBreaker()
+        self.rate_limiter = RateLimiter(requests_per_second=rate_limit)
+        self.cache = ResponseCache(default_ttl=cache_ttl) if enable_cache else None
+        self.metrics = AdapterMetrics()
+
     async def __aenter__(self) -> "BaseAdapterV3":
         """Async context manager entry."""
         if self.http_client is None:
@@ -306,11 +312,6 @@ class BaseAdapterV3(ABC):
         if self.cache:
             await self.cache.clear()
         self.logger.debug("Adapter resources cleaned up")
-        # Resilience components
-        self.circuit_breaker = CircuitBreaker()
-        self.rate_limiter = RateLimiter(requests_per_second=rate_limit)
-        self.cache = ResponseCache(default_ttl=cache_ttl) if enable_cache else None
-        self.metrics = AdapterMetrics()
 
     async def __aenter__(self) -> "BaseAdapterV3":
         """Async context manager entry."""
