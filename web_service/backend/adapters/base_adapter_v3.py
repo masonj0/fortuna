@@ -194,38 +194,58 @@ class ResponseCache:
 
 @dataclass
 class AdapterMetrics:
-    """Metrics for adapter health monitoring."""
-    total_requests: int = 0
-    successful_requests: int = 0
-    failed_requests: int = 0
-    total_latency_ms: float = 0.0
-    last_success: float | None = None
-    last_failure: float | None = None
-    last_error: str | None = None
+    """Thread-safe metrics for adapter health monitoring."""
+    _lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False, repr=False)
+    _total_requests: int = field(default=0, repr=False)
+    _successful_requests: int = field(default=0, repr=False)
+    _failed_requests: int = field(default=0, repr=False)
+    _total_latency_ms: float = field(default=0.0, repr=False)
+    _last_success: float | None = field(default=None, repr=False)
+    _last_failure: float | None = field(default=None, repr=False)
+    _last_error: str | None = field(default=None, repr=False)
+
+    @property
+    def total_requests(self) -> int:
+        return self._total_requests
 
     @property
     def success_rate(self) -> float:
-        if self.total_requests == 0:
+        if self._total_requests == 0:
             return 1.0
-        return self.successful_requests / self.total_requests
+        return self._successful_requests / self._total_requests
 
     @property
     def avg_latency_ms(self) -> float:
-        if self.successful_requests == 0:
+        if self._successful_requests == 0:
             return 0.0
-        return self.total_latency_ms / self.successful_requests
+        return self._total_latency_ms / self._successful_requests
 
-    def record_success(self, latency_ms: float) -> None:
-        self.total_requests += 1
-        self.successful_requests += 1
-        self.total_latency_ms += latency_ms
-        self.last_success = time.time()
+    async def record_success(self, latency_ms: float) -> None:
+        async with self._lock:
+            self._total_requests += 1
+            self._successful_requests += 1
+            self._total_latency_ms += latency_ms
+            self._last_success = time.time()
 
-    def record_failure(self, error: str) -> None:
-        self.total_requests += 1
-        self.failed_requests += 1
-        self.last_failure = time.time()
-        self.last_error = error
+    async def record_failure(self, error: str) -> None:
+        async with self._lock:
+            self._total_requests += 1
+            self._failed_requests += 1
+            self._last_failure = time.time()
+            self._last_error = error
+
+    def snapshot(self) -> dict[str, Any]:
+        """Return a point-in-time snapshot of metrics."""
+        return {
+            "total_requests": self._total_requests,
+            "successful_requests": self._successful_requests,
+            "failed_requests": self._failed_requests,
+            "success_rate": self.success_rate,
+            "avg_latency_ms": self.avg_latency_ms,
+            "last_success": self._last_success,
+            "last_failure": self._last_failure,
+            "last_error": self._last_error,
+        }
 
 
 class BaseAdapterV3(ABC):
@@ -495,14 +515,7 @@ class BaseAdapterV3(ABC):
             "adapter_name": self.source_name,
             "base_url": self.base_url,
             "circuit_breaker_state": self.circuit_breaker.state.value,
-            "metrics": {
-                "total_requests": self.metrics.total_requests,
-                "success_rate": round(self.metrics.success_rate, 3),
-                "avg_latency_ms": round(self.metrics.avg_latency_ms, 1),
-                "last_success": self.metrics.last_success,
-                "last_failure": self.metrics.last_failure,
-                "last_error": self.metrics.last_error,
-            },
+            "metrics": self.metrics.snapshot(),
         }
 
     def get_status(self) -> dict[str, Any]:
