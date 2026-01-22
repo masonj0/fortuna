@@ -6,7 +6,7 @@
       "name": "AtTheRaces",
       "status": "SUCCESS",
       "racesFetched": 0,
-      "fetchDuration": 2.438407,
+      "fetchDuration": 1.0704,
       "errorMessage": null,
       "attemptedUrl": null
     },
@@ -14,7 +14,7 @@
       "name": "Oddschecker",
       "status": "SUCCESS",
       "racesFetched": 0,
-      "fetchDuration": 2.767941,
+      "fetchDuration": 1.083163,
       "errorMessage": null,
       "attemptedUrl": null
     },
@@ -22,7 +22,7 @@
       "name": "RacingPost",
       "status": "SUCCESS",
       "racesFetched": 0,
-      "fetchDuration": 1.14258,
+      "fetchDuration": 1.257824,
       "errorMessage": null,
       "attemptedUrl": null
     },
@@ -30,7 +30,7 @@
       "name": "SportingLife",
       "status": "SUCCESS",
       "racesFetched": 0,
-      "fetchDuration": 0.879321,
+      "fetchDuration": 1.21415,
       "errorMessage": null,
       "attemptedUrl": null
     }

@@ -327,15 +327,16 @@ class Reporter:
 
             if not all_races_raw:
                 self.log("No races returned from OddsEngine. This is a critical failure.", LogLevel.ERROR)
-                success = False
-                all_races = []
-            else:
-                # Validate races with error tolerance
-                all_races = []
-                for i, race_data in enumerate(all_races_raw):
-                    try:
-                        all_races.append(Race(**race_data))
-                    except Exception as e:
+                self.metrics.end_time = datetime.now(timezone.utc)
+                self.generate_markdown_summary([]) # Generate a summary showing failure
+                return False # Exit with failure status
+
+            # Validate races with error tolerance
+            all_races = []
+            for i, race_data in enumerate(all_races_raw):
+                try:
+                    all_races.append(Race(**race_data))
+                except Exception as e:
                         self.log(f"Failed to validate race {i}: {e}", LogLevel.WARNING)
 
                 self.log(f"Validated {len(all_races)}/{len(all_races_raw)} races")
