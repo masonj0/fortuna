@@ -1,52 +1,20 @@
 {
   "races": [],
-  "errors": [
-    {
-      "adapterName": "Brisnet",
-      "errorMessage": "HTTP Error 503 for https://www.brisnet.com/cgi-bin/intoday.cgi",
-      "attemptedUrl": "https://www.brisnet.com/cgi-bin/intoday.cgi"
-    },
-    {
-      "adapterName": "Equibase",
-      "errorMessage": "HTTP Error 404 for https://www.equibase.com/entries/2026-01-22",
-      "attemptedUrl": "https://www.equibase.com/entries/2026-01-22"
-    },
-    {
-      "adapterName": "Timeform",
-      "errorMessage": "HTTP Error 500 for https://www.timeform.com/horse-racing/something-has-gone-wrong",
-      "attemptedUrl": "https://www.timeform.com/horse-racing/something-has-gone-wrong"
-    }
-  ],
+  "errors": [],
   "sourceInfo": [
     {
       "name": "AtTheRaces",
       "status": "SUCCESS",
       "racesFetched": 0,
-      "fetchDuration": 0.903936,
+      "fetchDuration": 2.438407,
       "errorMessage": null,
       "attemptedUrl": null
-    },
-    {
-      "name": "Brisnet",
-      "status": "FAILED",
-      "racesFetched": 1,
-      "fetchDuration": 20.094388,
-      "errorMessage": "HTTP Error 503 for https://www.brisnet.com/cgi-bin/intoday.cgi",
-      "attemptedUrl": "https://www.brisnet.com/cgi-bin/intoday.cgi"
-    },
-    {
-      "name": "Equibase",
-      "status": "FAILED",
-      "racesFetched": 1,
-      "fetchDuration": 0.912727,
-      "errorMessage": "HTTP Error 404 for https://www.equibase.com/entries/2026-01-22",
-      "attemptedUrl": "https://www.equibase.com/entries/2026-01-22"
     },
     {
       "name": "Oddschecker",
       "status": "SUCCESS",
       "racesFetched": 0,
-      "fetchDuration": 0.918005,
+      "fetchDuration": 2.767941,
       "errorMessage": null,
       "attemptedUrl": null
     },
@@ -54,7 +22,7 @@
       "name": "RacingPost",
       "status": "SUCCESS",
       "racesFetched": 0,
-      "fetchDuration": 1.214056,
+      "fetchDuration": 1.14258,
       "errorMessage": null,
       "attemptedUrl": null
     },
@@ -62,17 +30,9 @@
       "name": "SportingLife",
       "status": "SUCCESS",
       "racesFetched": 0,
-      "fetchDuration": 1.33547,
+      "fetchDuration": 0.879321,
       "errorMessage": null,
       "attemptedUrl": null
-    },
-    {
-      "name": "Timeform",
-      "status": "FAILED",
-      "racesFetched": 1,
-      "fetchDuration": 1.165231,
-      "errorMessage": "HTTP Error 500 for https://www.timeform.com/horse-racing/something-has-gone-wrong",
-      "attemptedUrl": "https://www.timeform.com/horse-racing/something-has-gone-wrong"
     }
   ]
 }

@@ -70,10 +70,11 @@ class ReporterConfig:
         "PointsBetGreyhoundAdapter",
     )
 
-    # Reliable adapters that don't require API keys
+    # Reliable adapters that don't require API keys.
+    # Timeform, Equibase, and Brisnet are temporarily disabled due to persistent,
+    # unrecoverable errors (e.g., Incapsula blocking, 500 errors).
     RELIABLE_NON_KEYED_ADAPTERS: tuple[str, ...] = (
-        "AtTheRacesAdapter", "SportingLifeAdapter", "RacingPostAdapter",
-        "TimeformAdapter", "EquibaseAdapter", "BrisnetAdapter", "OddscheckerAdapter",
+        "AtTheRacesAdapter", "SportingLifeAdapter", "RacingPostAdapter", "OddscheckerAdapter",
     )
 
     @property
