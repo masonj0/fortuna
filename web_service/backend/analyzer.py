@@ -144,13 +144,12 @@ class TrifectaAnalyzer(BaseAnalyzer):
         odds_score = (fav_odds_score * FAV_ODDS_WEIGHT) + (sec_fav_odds_score * SEC_FAV_ODDS_WEIGHT)
         final_score = (field_score * FIELD_SIZE_SCORE_WEIGHT) + (odds_score * ODDS_SCORE_WEIGHT)
 
-        # --- Apply a penalty if hard filters are not met, instead of returning None ---
+        # --- Apply hard filters before scoring ---
         if (
             len(active_runners) > self.max_field_size
             or favorite_odds < self.min_favorite_odds
             or second_favorite_odds < self.min_second_favorite_odds
         ):
-            # Assign a score of 0 to races that would have been filtered out
             return 0.0
 
         score = round(final_score * 100, 2)
