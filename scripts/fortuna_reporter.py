@@ -325,8 +325,8 @@ class Reporter:
             self.metrics.total_races_fetched = len(all_races_raw)
 
             if not all_races_raw:
-                self.log("No races returned from OddsEngine", LogLevel.WARNING)
-                # Continue with empty data instead of failing
+                self.log("No races returned from OddsEngine. This is a critical failure.", LogLevel.ERROR)
+                success = False
                 all_races = []
             else:
                 # Validate races with error tolerance
