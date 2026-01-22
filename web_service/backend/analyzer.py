@@ -32,13 +32,20 @@ def _get_best_win_odds(runner: Runner) -> Optional[Decimal]:
     if not runner.odds:
         return None
 
-    # Filter out invalid or placeholder odds (e.g., > 999)
-    valid_odds = [o.win for o in runner.odds.values() if o.win is not None and o.win > 0 and o.win < 999]
+    valid_odds = []
+    for source_data in runner.odds.values():
+        # Handle both dict and primitive formats
+        if isinstance(source_data, dict):
+            win = source_data.get('win')
+        elif hasattr(source_data, 'win'):
+            win = source_data.win
+        else:
+            win = source_data
 
-    if not valid_odds:
-        return None
+        if win is not None and 0 < win < 999:
+            valid_odds.append(win)
 
-    return min(valid_odds)
+    return min(valid_odds) if valid_odds else None
 
 
 class BaseAnalyzer(ABC):
@@ -158,11 +165,11 @@ class TrifectaAnalyzer(BaseAnalyzer):
 
 
 class TinyFieldTrifectaAnalyzer(TrifectaAnalyzer):
-    """A specialized TrifectaAnalyzer that only considers races with 7 or fewer runners."""
+    """A specialized TrifectaAnalyzer that only considers races with 8 or fewer runners."""
 
     def __init__(self, **kwargs):
-        # Override the max_field_size to 7 for "tiny field" analysis
-        super().__init__(max_field_size=7, min_favorite_odds=0.75, min_second_favorite_odds=2.0, **kwargs)
+        # Override the max_field_size to 8 for "tiny field" analysis
+        super().__init__(max_field_size=8, min_favorite_odds=0.75, min_second_favorite_odds=2.0, **kwargs)
 
     @property
     def name(self) -> str:
