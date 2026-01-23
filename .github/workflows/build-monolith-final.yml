@@ -204,6 +204,8 @@ jobs:
           $url = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
           Invoke-WebRequest -Uri $url -OutFile vc_redist.x64.exe
           .\vc_redist.x64.exe /install /quiet /norestart
+          Start-Sleep -Seconds 5
+          Get-Command vc_redist.x64.exe -ErrorAction SilentlyContinue
 
       - name: 🧪 Smoke Test
         continue-on-error: true
@@ -230,15 +232,26 @@ jobs:
           Write-Host "--- 3. Starting Executable ---" -ForegroundColor Yellow
           Write-Host "Starting: $exe"
           cmd /c "start /b `"$exe`" > `"$outputLog`" 2>&1"
-          Start-Sleep -Seconds 10 # Increased wait for GUI app
 
-          $proc = Get-Process -Name "Fortuna-Desktop" -ErrorAction SilentlyContinue
+          # Wait for process to start
+          $proc = $null
+          $maxWait = 30
+          Write-Host "Waiting up to $maxWait seconds for process to start..."
+          for ($i = 0; $i -lt $maxWait; $i++) {
+              $proc = Get-Process -Name "Fortuna-Desktop" -ErrorAction SilentlyContinue
+              if ($proc) {
+                  Write-Host "✅ Process started with PID: $($proc.Id)"
+                  break
+              }
+              Start-Sleep -Seconds 1
+          }
+
           if (-not $proc) {
-              Write-Host "❌ Process failed to start!" -ForegroundColor Red
+              Write-Host "❌ Process failed to start within $maxWait seconds!" -ForegroundColor Red
               # Failure analysis will run at the end
               $success = $false
           } else {
-              Write-Host "PID: $($proc.Id). Waiting up to 45 seconds for health check..."
+              Write-Host "Waiting up to 45 seconds for health check..."
               $success = $false
               for ($i = 1; $i -le 45; $i++) {
                   if ($proc.HasExited) {
