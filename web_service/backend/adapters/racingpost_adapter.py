@@ -39,8 +39,11 @@ class RacingPostAdapter(BaseAdapterV3):
             return None
 
         # Save the raw HTML for debugging in CI
-        with open("racingpost_debug.html", "w", encoding="utf-8") as f:
-            f.write(index_response.text)
+        try:
+            with open("racingpost_debug.html", "w", encoding="utf-8") as f:
+                f.write(index_response.text)
+        except Exception as e:
+            self.logger.warning("Failed to save debug HTML for RacingPost", error=str(e))
 
         index_parser = HTMLParser(index_response.text)
         links = index_parser.css('a[data-test-selector^="RC-meetingItem__link_race"]')

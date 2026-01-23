@@ -46,8 +46,11 @@ class SportingLifeAdapter(BaseAdapterV3):
             return None
 
         # Save the raw HTML for debugging in CI
-        with open("sl_debug.html", "w", encoding="utf-8") as f:
-            f.write(index_response.text)
+        try:
+            with open("sl_debug.html", "w", encoding="utf-8") as f:
+                f.write(index_response.text)
+        except Exception as e:
+            self.logger.warning("Failed to save debug HTML for SportingLife", error=str(e))
 
         index_soup = BeautifulSoup(index_response.text, "html.parser")
         links = {

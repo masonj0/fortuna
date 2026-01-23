@@ -10,7 +10,7 @@ def get_race_count():
         with open('qualified_races.json') as f:
             data = json.load(f)
         print(len(data.get('races', [])))
-    except (json.JSONDecodeError, IOError):
+    except Exception:
         print(0)
 
 if __name__ == "__main__":

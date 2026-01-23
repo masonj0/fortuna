@@ -38,8 +38,11 @@ class OddscheckerAdapter(BaseAdapterV3):
             return None
 
         # Save the raw HTML for debugging in CI
-        with open("oddschecker_debug.html", "w", encoding="utf-8") as f:
-            f.write(index_response.text)
+        try:
+            with open("oddschecker_debug.html", "w", encoding="utf-8") as f:
+                f.write(index_response.text)
+        except Exception as e:
+            self.logger.warning("Failed to save debug HTML for Oddschecker", error=str(e))
 
         index_soup = BeautifulSoup(index_response.text, "html.parser")
         # Find all links to individual race pages

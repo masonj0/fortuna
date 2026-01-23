@@ -39,20 +39,20 @@ def main():
     input_filepath = sys.argv[1]
     output_filepath = sys.argv[2]
 
-    output_data = {}
+    output_data = {"links": [], "error": None}
 
     try:
         with open(input_filepath, 'r', encoding='utf-8') as f:
             html_content = f.read()
             if not html_content.strip():
-                output_data = {"error": f"File is empty: {input_filepath}"}
+                output_data["error"] = f"File is empty: {input_filepath}"
             else:
-                output_data = analyze_html_structure(html_content)
+                output_data["links"] = analyze_html_structure(html_content)
 
     except FileNotFoundError:
-        output_data = {"error": f"File not found: {input_filepath}"}
+        output_data["error"] = f"File not found: {input_filepath}"
     except Exception as e:
-        output_data = {"error": f"An unexpected error occurred while reading {input_filepath}: {e}"}
+        output_data["error"] = f"An unexpected error occurred while reading {input_filepath}: {e}"
 
     try:
         with open(output_filepath, 'w', encoding='utf-8') as f:

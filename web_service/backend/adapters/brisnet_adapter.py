@@ -33,8 +33,11 @@ class BrisnetAdapter(BaseAdapterV3):
             return None
 
         # Save the raw HTML for debugging in CI
-        with open("brisnet_debug.html", "w", encoding="utf-8") as f:
-            f.write(response.text)
+        try:
+            with open("brisnet_debug.html", "w", encoding="utf-8") as f:
+                f.write(response.text)
+        except Exception as e:
+            self.logger.warning("Failed to save debug HTML for Brisnet", error=str(e))
 
         return {"html": response.text, "date": date}
 

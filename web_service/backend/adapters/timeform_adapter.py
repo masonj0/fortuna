@@ -41,8 +41,11 @@ class TimeformAdapter(BaseAdapterV3):
             return None
 
         # Save the raw HTML for debugging in CI
-        with open("timeform_debug.html", "w", encoding="utf-8") as f:
-            f.write(index_response.text)
+        try:
+            with open("timeform_debug.html", "w", encoding="utf-8") as f:
+                f.write(index_response.text)
+        except Exception as e:
+            self.logger.warning("Failed to save debug HTML for Timeform", error=str(e))
 
         index_soup = BeautifulSoup(index_response.text, "html.parser")
         links = {a["href"] for a in index_soup.select("a.rp-racecard-off-link[href]")}

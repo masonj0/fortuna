@@ -38,8 +38,11 @@ class EquibaseAdapter(BaseAdapterV3):
             return None
 
         # Save the raw HTML for debugging in CI
-        with open("equibase_debug.html", "w", encoding="utf-8") as f:
-            f.write(index_response.text)
+        try:
+            with open("equibase_debug.html", "w", encoding="utf-8") as f:
+                f.write(index_response.text)
+        except Exception as e:
+            self.logger.warning("Failed to save debug HTML for Equibase", error=str(e))
 
         parser = HTMLParser(index_response.text)
         race_links = [link.attributes["href"] for link in parser.css("a.entry-race-level")]
