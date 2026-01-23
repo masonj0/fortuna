@@ -1,53 +1,45 @@
-# fortuna-desktop.spec
-# This spec file is for creating a windowed, GUI-based application
-# using pywebview. It is based on fortuna-monolith.spec.
-
-from PyInstaller.utils.hooks import collect_submodules
+# -*- mode: python ; coding: utf-8 -*-
+from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 from pathlib import Path
 import sys
 import os
 
 block_cipher = None
 
-# ===== GET PROJECT ROOT =====
-spec_path = Path(SPECPATH) if 'SPECPATH' in dir() else Path(os.path.dirname(os.path.abspath(__file__)))
-project_root = spec_path.parent if spec_path.name == 'fortuna-desktop.spec' else spec_path
-
-# ===== FRONTEND VALIDATION =====
-frontend_out = project_root / 'web_service' / 'frontend' / 'public'
-if not frontend_out.exists() or not (frontend_out / 'index.html').exists():
-    print("[ERROR] FATAL: Frontend 'public' directory with index.html not found!")
-    sys.exit(1)
-
-# ===== BACKEND VALIDATION =====
+# Absolute paths avoid CI confusion
+project_root = Path(os.getcwd()).absolute()
 backend_root = project_root / 'web_service' / 'backend'
-main_script = project_root / 'run_desktop_app.py'
-if not main_script.exists():
-    print(f"[ERROR] FATAL: Main script not found at {main_script}!")
-    sys.exit(1)
+frontend_out = project_root / 'web_service' / 'frontend' / 'public'
 
-# ===== DATA FILES =====
+print(f"[SPEC] Project Root: {project_root}")
+print(f"[SPEC] Frontend: {frontend_out}")
+
+if not frontend_out.exists():
+    print("[SPEC] WARNING: Frontend public dir not found. Build might fail at runtime.")
+
 datas = [
-    (str(frontend_out), 'public')
+    (str(frontend_out), 'public'),
+    (str(backend_root / 'data'), 'web_service/backend/data'),
+    (str(backend_root / 'json'), 'web_service/backend/json')
 ]
 
-# ===== HIDDEN IMPORTS =====
-hiddenimports = list(set(
-    collect_submodules('web_service.backend') +
-    [
-        'uvicorn', 'uvicorn.logging', 'uvicorn.loops', 'uvicorn.loops.auto',
-        'uvicorn.protocols', 'uvicorn.protocols.http', 'uvicorn.protocols.http.auto',
-        'uvicorn.protocols.http.h11_impl', 'uvicorn.lifespan', 'uvicorn.lifespan.on',
-        'fastapi', 'starlette', 'pydantic', 'anyio', 'structlog', 'tenacity',
-        'sqlalchemy', 'greenlet', 'win32timezone',
-        'clr', 'win32com', 'win32api', 'win32file'
-    ]
-))
+# Collect Uvicorn & FastAPI internals
+datas += collect_data_files('uvicorn')
+datas += collect_data_files('fastapi')
 
-# ===== ANALYSIS =====
+hiddenimports = [
+    'uvicorn', 'uvicorn.logging', 'uvicorn.loops', 'uvicorn.loops.auto',
+    'uvicorn.protocols', 'uvicorn.protocols.http', 'uvicorn.protocols.http.auto',
+    'uvicorn.lifespan.on',
+    'fastapi', 'starlette', 'pydantic', 'structlog', 'tenacity',
+    'webview', 'webview.platforms.winforms', 'clr',
+    'win32timezone', 'win32service', 'win32event', 'servicemanager'
+]
+hiddenimports += collect_submodules('web_service.backend')
+
 a = Analysis(
-    [str(main_script)],
-    pathex=[str(project_root), str(backend_root)],
+    ['run_desktop_app.py'],
+    pathex=[str(project_root)],
     binaries=[],
     datas=datas,
     hiddenimports=hiddenimports,
@@ -55,32 +47,29 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[],
+    win_no_prefer_redirects=False,
+    win_private_assemblies=False,
     cipher=block_cipher,
     noarchive=False,
 )
-
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
-
-# ===== BUILD EXECUTABLE (WINDOWED) =====
 exe = EXE(
-    pyz, a.scripts, a.binaries, a.zipfiles, a.datas, [],
+    pyz,
+    a.scripts,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
     name='Fortuna-Desktop',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
+    upx_exclude=[],
     runtime_tmpdir=None,
-    console=False,  # This creates a windowed application
+    console=False, # GUI Mode
     disable_windowed_traceback=False,
+    argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None # Consider adding an icon here later
-)
-
-coll = COLLECT(
-    exe, a.binaries, a.zipfiles, a.datas,
-    strip=False,
-    upx=True,
-    name='Fortuna-Desktop'
 )
