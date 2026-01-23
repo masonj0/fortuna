@@ -146,6 +146,14 @@ jobs:
             echo "*Generated at $(date -u '+%Y-%m-%d %H:%M:%S UTC')*"
           } >> $GITHUB_STEP_SUMMARY
 
+      - name: 'Analyze HTML on Failure'
+        if: failure()
+        run: |
+          echo "--- Analyzing sl_debug.html ---"
+          python scripts/debug_html_parser.py sl_debug.html || echo "sl_debug.html not found or script failed."
+          echo "--- Analyzing atr_debug.html ---"
+          python scripts/debug_html_parser.py atr_debug.html || echo "atr_debug.html not found or script failed."
+
       - name: '🧹 Cleanup on Failure'
         if: failure()
         run: |
