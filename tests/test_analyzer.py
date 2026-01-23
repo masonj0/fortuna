@@ -175,25 +175,37 @@ def test_trifecta_analyzer_rejects_races_with_too_few_runners(trifecta_analyzer)
 
 def test_tiny_field_trifecta_analyzer_filters_by_field_size(sample_races_for_true_trifecta):
     """
-    Tests that the TinyFieldTrifectaAnalyzer correctly applies its max_field_size of 6.
+    Tests that the TinyFieldTrifectaAnalyzer correctly applies its max_field_size of 8.
     """
     engine = AnalyzerEngine()
     analyzer = engine.get_analyzer("tiny_field_trifecta")
 
-    # Add a race with 7 runners, which should be filtered out
+    # This race has 7 runners, so it should now PASS the filter
     race_with_7_runners = Race(
-        id="race_fail_tiny_field",
+        id="race_pass_tiny_field",
         venue="Test Park",
         race_number=6,
         start_time=datetime.now(),
         source="Test",
         runners=[create_runner(i, 5.0 + i) for i in range(1, 8)],  # 7 runners
     )
+    # This race has 9 runners, so it should be filtered out
+    race_with_9_runners = Race(
+        id="race_fail_tiny_field",
+        venue="Test Park",
+        race_number=7,
+        start_time=datetime.now(),
+        source="Test",
+        runners=[create_runner(i, 5.0 + i) for i in range(1, 10)],  # 9 runners
+    )
     sample_races_for_true_trifecta.append(race_with_7_runners)
+    sample_races_for_true_trifecta.append(race_with_9_runners)
 
     result = analyzer.qualify_races(sample_races_for_true_trifecta)
     qualified_races = result["races"]
 
-    assert len(qualified_races) == 2  # Should be the same two as the original test
+    # The original 2 passing races + the 7-runner race should now be qualified
+    assert len(qualified_races) == 3
+    assert "race_pass_tiny_field" in [r.id for r in qualified_races]
     assert "race_fail_tiny_field" not in [r.id for r in qualified_races]
-    assert result["criteria"]["max_field_size"] == 6
+    assert result["criteria"]["max_field_size"] == 8

@@ -32,11 +32,22 @@ class AdapterRequestError(AdapterError):
 class AdapterHttpError(AdapterRequestError):
     """Raised for unsuccessful HTTP responses (e.g., 4xx or 5xx status codes)."""
 
-    def __init__(self, adapter_name: str, status_code: int, url: str):
+    def __init__(
+        self,
+        adapter_name: str,
+        status_code: int,
+        url: str,
+        message: str | None = None,
+        response_body: str | None = None,
+        request_method: str | None = None,
+    ):
         self.status_code = status_code
         self.url = url
-        message = f"Received HTTP {status_code} from {url}"
-        super().__init__(adapter_name, message)
+        self.response_body = response_body
+        self.request_method = request_method
+
+        final_message = message or f"Received HTTP {status_code} from {url}"
+        super().__init__(adapter_name, final_message)
 
 
 class AdapterAuthError(AdapterHttpError):
