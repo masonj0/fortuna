@@ -97,20 +97,9 @@ jobs:
           set -o pipefail
           python scripts/fortuna_reporter.py 2>&1 | tee reporter_output.log
 
-          # Create a python script to extract race count
-          cat <<'EOF' > get_race_count.py
-import json
-import sys
-try:
-    with open('qualified_races.json') as f:
-        data = json.load(f)
-    print(len(data.get('races', [])))
-except (json.JSONDecodeError, IOError):
-    print(0)
-EOF
           # Extract metrics from the log for outputs
           if [ -f "qualified_races.json" ]; then
-            RACE_COUNT=$(python get_race_count.py)
+            RACE_COUNT=$(python scripts/get_race_count.py)
             echo "race_count=${RACE_COUNT}" >> $GITHUB_OUTPUT
             echo "status=success" >> $GITHUB_OUTPUT
           else
