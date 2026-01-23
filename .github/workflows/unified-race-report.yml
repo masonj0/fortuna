@@ -99,7 +99,9 @@ jobs:
 
           # Extract metrics from the log for outputs
           if [ -f "qualified_races.json" ]; then
-            RACE_COUNT=$(python -c "import json; import sys;
+            RACE_COUNT=$(python -c "
+import json
+import sys
 try:
     with open('qualified_races.json') as f:
         data = json.load(f)
