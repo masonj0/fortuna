@@ -39,7 +39,8 @@ hiddenimports = list(set(
         'uvicorn.protocols', 'uvicorn.protocols.http', 'uvicorn.protocols.http.auto',
         'uvicorn.protocols.http.h11_impl', 'uvicorn.lifespan', 'uvicorn.lifespan.on',
         'fastapi', 'starlette', 'pydantic', 'anyio', 'structlog', 'tenacity',
-        'sqlalchemy', 'greenlet', 'win32timezone'
+        'sqlalchemy', 'greenlet', 'win32timezone',
+        'clr', 'win32com', 'win32api', 'win32file'
     ]
 ))
 
