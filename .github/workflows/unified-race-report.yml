@@ -82,7 +82,7 @@ jobs:
           path: |
             web_service/backend/data/*.cache
             web_service/backend/json/*.cache
-          key: race-data-${{ runner.os }}-${{ github.run_number }}
+          key: race-data-${{ runner.os }}-${{ hashFiles('web_service/backend/requirements.txt') }}
           restore-keys: |
             race-data-${{ runner.os }}-
 
@@ -99,7 +99,14 @@ jobs:
 
           # Extract metrics from the log for outputs
           if [ -f "qualified_races.json" ]; then
-            RACE_COUNT=$(python -c "import json; print(len(json.load(open('qualified_races.json')).get('races', [])))")
+            RACE_COUNT=$(python -c "import json; import sys;
+try:
+    with open('qualified_races.json') as f:
+        data = json.load(f)
+    print(len(data.get('races', [])))
+except (json.JSONDecodeError, IOError):
+    print(0)
+")
             echo "race_count=${RACE_COUNT}" >> $GITHUB_OUTPUT
             echo "status=success" >> $GITHUB_OUTPUT
           else
@@ -179,15 +186,16 @@ jobs:
             Please investigate and fix any issues.
             `;
 
-            // Check for existing open issue
-            const issues = await github.rest.issues.listForRepo({
+            // Check for existing open issue with the same title
+            const { data: issues } = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
               state: 'open',
-              labels: 'automated-failure'
+              labels: 'automated-failure',
+              title: title
             });
 
-            if (issues.data.length === 0) {
+            if (issues.length === 0) {
               await github.rest.issues.create({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -195,4 +203,6 @@ jobs:
                 body: body,
                 labels: ['automated-failure', 'bug']
               });
+            } else {
+              console.log(`An open issue with the title "${title}" already exists. Skipping creation.`);
             }
