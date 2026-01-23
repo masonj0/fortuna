@@ -42,6 +42,10 @@ class AtTheRacesAdapter(BaseAdapterV3):
             self.logger.warning("Failed to fetch AtTheRaces index page", url=index_url)
             return None
 
+        # Save the raw HTML for debugging in CI
+        with open("atr_debug.html", "w", encoding="utf-8") as f:
+            f.write(index_response.text)
+
         index_soup = BeautifulSoup(index_response.text, "html.parser")
         links = {a["href"] for a in index_soup.select("a.race-card-header__link")}
 
