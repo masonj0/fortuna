@@ -41,8 +41,16 @@ class SportingLifeAdapter(BaseAdapterV3):
             self.logger.warning("Failed to fetch SportingLife index page", url=index_url)
             return None
 
+        # Save the raw HTML for debugging in CI
+        with open("sl_debug.html", "w", encoding="utf-8") as f:
+            f.write(index_response.text)
+
         index_soup = BeautifulSoup(index_response.text, "html.parser")
-        links = {a["href"] for a in index_soup.select("a.hr-race-card-meeting__race-link[href]")}
+        links = {
+            a["href"]
+            for a in index_soup.select("a.hr-race-card-race-link")
+            if "racecard" in a.get("href", "") and any(char.isdigit() for char in a["href"])
+        }
 
         async def fetch_single_html(url_path: str):
             response = await self.make_request(
@@ -62,7 +70,7 @@ class SportingLifeAdapter(BaseAdapterV3):
             "Connection": "keep-alive",
             "Host": "www.sportinglife.com",
             "Pragma": "no-cache",
-            "sec-ch-ua": '"Google Chrome";v="125", "Chromium";v="125", "Not.A/Brand";v="24"',
+            "sec-ch-ua": '"Not/A)Brand";v="99", "Google Chrome";v="115", "Chromium";v="115"',
             "sec-ch-ua-mobile": "?0",
             "sec-ch-ua-platform": '"Windows"',
             "Sec-Fetch-Dest": "document",
@@ -70,7 +78,8 @@ class SportingLifeAdapter(BaseAdapterV3):
             "Sec-Fetch-Site": "none",
             "Sec-Fetch-User": "?1",
             "Upgrade-Insecure-Requests": "1",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36",
+            "Referer": "https://www.sportinglife.com/racing/racecards",
         }
 
     def _parse_races(self, raw_data: Any) -> List[Race]:
@@ -94,28 +103,24 @@ class SportingLifeAdapter(BaseAdapterV3):
             try:
                 soup = BeautifulSoup(html, "html.parser")
 
-                track_name_node = soup.select_one("a.hr-race-header-course-name__link")
-                if not track_name_node:
-                    continue
-                track_name = clean_text(track_name_node.get_text())
-
-                race_time_node = soup.select_one("span.hr-race-header-time__time")
-                if not race_time_node:
-                    continue
-                race_time_str = clean_text(race_time_node.get_text())
+                header_text = clean_text(soup.select_one("h1.hr-race-header-title__text").get_text())
+                parts = header_text.split()
+                race_time_str = parts[0]
+                track_name = " ".join(parts[1:])
 
                 start_time = datetime.combine(race_date, datetime.strptime(race_time_str, "%H:%M").time())
 
-                active_link = soup.select_one("a.hr-race-header-navigation-link--active")
                 race_number = 1
-                if active_link:
-                    all_links = soup.select("a.hr-race-header-navigation-link")
+                nav_links = soup.select("a.hr-race-header-navigation-link")
+                active_link = soup.select_one("a.hr-race-header-navigation-link--active")
+                if active_link and nav_links:
                     try:
-                        race_number = all_links.index(active_link) + 1
+                        # Add 1 because list index is 0-based
+                        race_number = nav_links.index(active_link) + 1
                     except ValueError:
-                        pass  # Keep default race number if active link not in all links
+                        self.logger.warning("Active race link not found in navigation links.")
 
-                runners = [self._parse_runner(row) for row in soup.select("div.hr-racing-runner-card")]
+                runners = [self._parse_runner(row) for row in soup.select("div.hr-racing-runner-card-wrapper")]
 
                 race = Race(
                     id=f"sl_{track_name.replace(' ', '')}_{start_time.strftime('%Y%m%d')}_R{race_number}",
@@ -136,18 +141,19 @@ class SportingLifeAdapter(BaseAdapterV3):
 
     def _parse_runner(self, row: Tag) -> Optional[Runner]:
         try:
-            name_node = row.select_one("a.hr-racing-runner-horse-name")
+            name_node = row.select_one("a[href*='/racing/profiles/horse/']")
             if not name_node:
                 return None
-            name = clean_text(name_node.get_text())
+            # Extract the name, removing any non-alphanumeric trailing characters
+            name = clean_text(name_node.get_text()).splitlines()[0].strip()
 
-            num_node = row.select_one("span.hr-racing-runner-saddle-cloth-no")
+            num_node = row.select_one("span.hr-racing-runner-saddle-cloth-number")
             if not num_node:
                 return None
             num_str = clean_text(num_node.get_text())
             number = int("".join(filter(str.isdigit, num_str)))
 
-            odds_node = row.select_one("span.hr-racing-runner-odds")
+            odds_node = row.select_one("span.hr-racing-runner-betting-odds__odd")
             odds_str = clean_text(odds_node.get_text()) if odds_node else ""
 
             win_odds = parse_odds_to_decimal(odds_str)
