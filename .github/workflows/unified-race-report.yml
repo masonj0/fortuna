@@ -117,6 +117,8 @@ jobs:
             qualified_races.json
             raw_race_data.json
             reporter_output.log
+            atr_debug.html
+            sl_debug.html
           retention-days: ${{ env.REPORT_RETENTION_DAYS }}
           if-no-files-found: warn
           compression-level: 9
