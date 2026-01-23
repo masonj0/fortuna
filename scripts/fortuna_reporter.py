@@ -90,8 +90,8 @@ class ReporterConfig:
 
     @property
     def excluded_adapters(self) -> list[str]:
-        """Calculate which adapters to exclude."""
-        return [a for a in self.ALL_ADAPTERS if a not in self.RELIABLE_NON_KEYED_ADAPTERS]
+        """No adapters will be excluded."""
+        return []
 
     def __post_init__(self) -> None:
         """Validate configuration after initialization."""
