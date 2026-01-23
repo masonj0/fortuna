@@ -29,7 +29,14 @@ class BrisnetAdapter(BaseAdapterV3):
         """Fetches the raw HTML from the Brisnet race page."""
         url = "/cgi-bin/intoday.cgi"
         response = await self.make_request(self.http_client, "GET", url, headers=self._get_headers())
-        return {"html": response.text, "date": date} if response and response.text else None
+        if not response or not response.text:
+            return None
+
+        # Save the raw HTML for debugging in CI
+        with open("brisnet_debug.html", "w", encoding="utf-8") as f:
+            f.write(response.text)
+
+        return {"html": response.text, "date": date}
 
     def _get_headers(self) -> dict:
         return {

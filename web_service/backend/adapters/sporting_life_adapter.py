@@ -52,8 +52,7 @@ class SportingLifeAdapter(BaseAdapterV3):
         index_soup = BeautifulSoup(index_response.text, "html.parser")
         links = {
             a["href"]
-            for a in index_soup.select("a.hr-race-card-race-link")
-            if "racecard" in a.get("href", "") and any(char.isdigit() for char in a["href"])
+            for a in index_soup.select('li[class^="MeetingSummary__LineWrapper"] a[href*="/racecard/"]')
         }
 
         async def fetch_single_html(url_path: str):
