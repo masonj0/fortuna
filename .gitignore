@@ -32,3 +32,6 @@ Thumbs.db
 /web_service/frontend/public
 /web_service/frontend/build
 /web_service/frontend/.next
+
+# Jules's temporary log files
+new_logs*.txt

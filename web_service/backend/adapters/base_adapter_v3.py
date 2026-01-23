@@ -288,24 +288,6 @@ class BaseAdapterV3(ABC):
         self.manual_override_manager: ManualOverrideManager | None = None
         self.supports_manual_override = True
 
-    async def __aenter__(self) -> "BaseAdapterV3":
-        """Async context manager entry."""
-        if self.http_client is None:
-            self.http_client = httpx.AsyncClient(timeout=self.timeout)
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
-        """Async context manager exit with cleanup."""
-        await self.close()
-
-    async def close(self) -> None:
-        """Clean up resources."""
-        if self.http_client:
-            await self.http_client.aclose()
-            self.http_client = None
-        if self.cache:
-            await self.cache.clear()
-        self.logger.debug("Adapter resources cleaned up")
         # Resilience components
         self.circuit_breaker = CircuitBreaker()
         self.rate_limiter = RateLimiter(requests_per_second=rate_limit)
