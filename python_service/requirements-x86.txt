@@ -95,7 +95,7 @@ numpy==2.3.4
     #   -r python_service/requirements.in
     #   pandas
     #   scipy
-packaging==25.0
+packaging==26.0
     # via
     #   black
     #   build
