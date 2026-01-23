@@ -43,11 +43,14 @@ class AtTheRacesAdapter(BaseAdapterV3):
             return None
 
         # Save the raw HTML for debugging in CI
-        with open("atr_debug.html", "w", encoding="utf-8") as f:
-            f.write(index_response.text)
+        try:
+            with open("atr_debug.html", "w", encoding="utf-8") as f:
+                f.write(index_response.text)
+        except Exception as e:
+            self.logger.warning("Failed to save debug HTML for AtTheRaces", error=str(e))
 
         index_soup = BeautifulSoup(index_response.text, "html.parser")
-        links = {a["href"] for a in index_soup.select("a.race-card-header__link")}
+        links = {a["href"] for a in index_soup.select('a[href^="/racecard/"]')}
 
         async def fetch_single_html(url_path: str):
             response = await self.make_request(
@@ -116,12 +119,7 @@ class AtTheRacesAdapter(BaseAdapterV3):
                     race_date, datetime.strptime(race_time_str, "%H:%M").time()
                 )
 
-                race_number = 1
-                try:
-                    parts = url_path.split("/")
-                    race_number = int([part for part in parts if part.isdigit()][-1])
-                except (ValueError, IndexError):
-                    self.logger.warning("Could not parse race number from URL", url=url_path)
+                race_number = 1  # Defaulting to 1 as the race number is not in the URL
 
                 runners = [self._parse_runner(row) for row in soup.select("atr-horse-in-racecard")]
 
