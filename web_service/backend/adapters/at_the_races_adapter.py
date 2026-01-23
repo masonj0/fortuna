@@ -47,7 +47,12 @@ class AtTheRacesAdapter(BaseAdapterV3):
             f.write(index_response.text)
 
         index_soup = BeautifulSoup(index_response.text, "html.parser")
-        links = {a["href"] for a in index_soup.select("a.race-card-header__link")}
+        links = {
+            a["href"]
+            for a in index_soup.select(
+                'a[href*="/racecards/"][class*="button"]:not([href*="tomorrow"]):not([href*="SmartStats"])'
+            )
+        }
 
         async def fetch_single_html(url_path: str):
             response = await self.make_request(

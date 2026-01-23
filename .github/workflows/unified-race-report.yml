@@ -99,16 +99,7 @@ jobs:
 
           # Extract metrics from the log for outputs
           if [ -f "qualified_races.json" ]; then
-            RACE_COUNT=$(python -c "
-import json
-import sys
-try:
-    with open('qualified_races.json') as f:
-        data = json.load(f)
-    print(len(data.get('races', [])))
-except (json.JSONDecodeError, IOError):
-    print(0)
-")
+            RACE_COUNT=$(python scripts/get_race_count.py)
             echo "race_count=${RACE_COUNT}" >> $GITHUB_OUTPUT
             echo "status=success" >> $GITHUB_OUTPUT
           else
@@ -154,6 +145,14 @@ except (json.JSONDecodeError, IOError):
             echo "---"
             echo "*Generated at $(date -u '+%Y-%m-%d %H:%M:%S UTC')*"
           } >> $GITHUB_STEP_SUMMARY
+
+      - name: 'Analyze HTML on Failure'
+        if: failure()
+        run: |
+          echo "--- Analyzing sl_debug.html ---"
+          python scripts/debug_html_parser.py sl_debug.html || echo "sl_debug.html not found or script failed."
+          echo "--- Analyzing atr_debug.html ---"
+          python scripts/debug_html_parser.py atr_debug.html || echo "atr_debug.html not found or script failed."
 
       - name: '🧹 Cleanup on Failure'
         if: failure()
