@@ -436,6 +436,8 @@ class BaseAdapterV3(ABC):
                 await self.metrics.record_success(latency_ms)
                 await self.circuit_breaker.record_success()
 
+                self.logger.info("Request successful", method=method.upper(), url=full_url, status_code=response.status_code)
+
                 return response
             except httpx.HTTPStatusError as e:
                 await self.metrics.record_failure(f"HTTP {e.response.status_code}")
