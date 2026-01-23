@@ -30,31 +30,37 @@ def analyze_html_structure(html_content):
 
 def main():
     """
-    Main function to read file, parse it, and print JSON structure.
+    Main function to read an HTML file, parse it, and save the JSON structure to an output file.
     """
-    if len(sys.argv) < 2:
-        print(json.dumps({"error": "No HTML file path provided."}), file=sys.stderr)
+    if len(sys.argv) < 3:
+        print("Usage: python debug_html_parser.py <input_html_path> <output_json_path>", file=sys.stderr)
         sys.exit(1)
 
-    filepath = sys.argv[1]
+    input_filepath = sys.argv[1]
+    output_filepath = sys.argv[2]
+
+    output_data = {}
 
     try:
-        with open(filepath, 'r', encoding='utf-8') as f:
+        with open(input_filepath, 'r', encoding='utf-8') as f:
             html_content = f.read()
+            if not html_content.strip():
+                output_data = {"error": f"File is empty: {input_filepath}"}
+            else:
+                output_data = analyze_html_structure(html_content)
+
     except FileNotFoundError:
-        print(json.dumps({"error": f"File not found: {filepath}"}), file=sys.stderr)
-        sys.exit(1)
+        output_data = {"error": f"File not found: {input_filepath}"}
     except Exception as e:
-        print(json.dumps({"error": f"Error reading file: {e}"}), file=sys.stderr)
+        output_data = {"error": f"An unexpected error occurred while reading {input_filepath}: {e}"}
+
+    try:
+        with open(output_filepath, 'w', encoding='utf-8') as f:
+            json.dump(output_data, f, indent=2)
+    except Exception as e:
+        # If we can't write the file, print the error to stderr as a last resort
+        print(f"Critical error: Could not write to output file {output_filepath}. Reason: {e}", file=sys.stderr)
         sys.exit(1)
-
-    if not html_content.strip():
-        print(json.dumps({"error": f"File is empty: {filepath}"}))
-        return
-
-    extracted_data = analyze_html_structure(html_content)
-
-    print(json.dumps(extracted_data, indent=2))
 
 if __name__ == "__main__":
     main()

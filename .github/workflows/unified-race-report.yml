@@ -148,11 +148,19 @@ jobs:
 
       - name: 'Analyze HTML on Failure'
         if: failure()
+        id: analyze-html
         run: |
-          echo "--- Analyzing sl_debug.html ---"
-          python scripts/debug_html_parser.py sl_debug.html || echo "sl_debug.html not found or script failed."
-          echo "--- Analyzing atr_debug.html ---"
-          python scripts/debug_html_parser.py atr_debug.html || echo "atr_debug.html not found or script failed."
+          mkdir -p debug-analysis
+          python scripts/debug_html_parser.py sl_debug.html debug-analysis/sl_analysis.json
+          python scripts/debug_html_parser.py atr_debug.html debug-analysis/atr_analysis.json
+
+      - name: 'Upload Debug Analysis Artifact'
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-analysis
+          path: debug-analysis/
+          retention-days: ${{ env.REPORT_RETENTION_DAYS }}
 
       - name: '🧹 Cleanup on Failure'
         if: failure()
