@@ -99,16 +99,7 @@ jobs:
 
           # Extract metrics from the log for outputs
           if [ -f "qualified_races.json" ]; then
-            RACE_COUNT=$(python -c "
-import json
-import sys
-try:
-    with open('qualified_races.json') as f:
-        data = json.load(f)
-    print(len(data.get('races', [])))
-except (json.JSONDecodeError, IOError):
-    print(0)
-")
+            RACE_COUNT=$(python scripts/get_race_count.py)
             echo "race_count=${RACE_COUNT}" >> $GITHUB_OUTPUT
             echo "status=success" >> $GITHUB_OUTPUT
           else
