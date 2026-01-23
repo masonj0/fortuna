@@ -33,9 +33,13 @@ class SportingLifeAdapter(BaseAdapterV3):
         Fetches the raw HTML for all race pages for a given date.
         Returns a dictionary containing the HTML content and the date.
         """
-        index_url = f"/racing/racecards/{date}"
+        index_url = "/racing/racecards"  # The dated URL is causing a 307 redirect
         index_response = await self.make_request(
-            self.http_client, "GET", index_url, headers=self._get_headers()
+            self.http_client,
+            "GET",
+            index_url,
+            headers=self._get_headers(),
+            follow_redirects=True,
         )
         if not index_response:
             self.logger.warning("Failed to fetch SportingLife index page", url=index_url)
@@ -48,8 +52,7 @@ class SportingLifeAdapter(BaseAdapterV3):
         index_soup = BeautifulSoup(index_response.text, "html.parser")
         links = {
             a["href"]
-            for a in index_soup.select("a.hr-race-card-race-link")
-            if "racecard" in a.get("href", "") and any(char.isdigit() for char in a["href"])
+            for a in index_soup.select('li[class^="MeetingSummary__LineWrapper"] a[href*="/racecard/"]')
         }
 
         async def fetch_single_html(url_path: str):

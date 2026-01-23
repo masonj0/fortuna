@@ -33,9 +33,13 @@ class EquibaseAdapter(BaseAdapterV3):
         """
         index_url = f"/entries/{date}"
         index_response = await self.make_request(self.http_client, "GET", index_url, headers=self._get_headers())
-        if not index_response:
+        if not index_response or not index_response.text:
             self.logger.warning("Failed to fetch Equibase index page", url=index_url)
             return None
+
+        # Save the raw HTML for debugging in CI
+        with open("equibase_debug.html", "w", encoding="utf-8") as f:
+            f.write(index_response.text)
 
         parser = HTMLParser(index_response.text)
         race_links = [link.attributes["href"] for link in parser.css("a.entry-race-level")]

@@ -33,9 +33,13 @@ class OddscheckerAdapter(BaseAdapterV3):
         # but we build the URL as if it does for future compatibility.
         index_url = f"/horse-racing/{date}"
         index_response = await self.make_request(self.http_client, "GET", index_url, headers=self._get_headers())
-        if not index_response:
+        if not index_response or not index_response.text:
             self.logger.warning("Failed to fetch Oddschecker index page", url=index_url)
             return None
+
+        # Save the raw HTML for debugging in CI
+        with open("oddschecker_debug.html", "w", encoding="utf-8") as f:
+            f.write(index_response.text)
 
         index_soup = BeautifulSoup(index_response.text, "html.parser")
         # Find all links to individual race pages
