@@ -288,24 +288,6 @@ class BaseAdapterV3(ABC):
         self.manual_override_manager: ManualOverrideManager | None = None
         self.supports_manual_override = True
 
-    async def __aenter__(self) -> "BaseAdapterV3":
-        """Async context manager entry."""
-        if self.http_client is None:
-            self.http_client = httpx.AsyncClient(timeout=self.timeout)
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
-        """Async context manager exit with cleanup."""
-        await self.close()
-
-    async def close(self) -> None:
-        """Clean up resources."""
-        if self.http_client:
-            await self.http_client.aclose()
-            self.http_client = None
-        if self.cache:
-            await self.cache.clear()
-        self.logger.debug("Adapter resources cleaned up")
         # Resilience components
         self.circuit_breaker = CircuitBreaker()
         self.rate_limiter = RateLimiter(requests_per_second=rate_limit)
@@ -399,12 +381,6 @@ class BaseAdapterV3(ABC):
 
         return validated_races
 
-    @retry(
-        retry=retry_if_exception_type((httpx.RequestError, httpx.HTTPStatusError)),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
-        stop=stop_after_attempt(3),
-        reraise=True,
-    )
     async def make_request(
         self,
         http_client: httpx.AsyncClient,
@@ -415,96 +391,88 @@ class BaseAdapterV3(ABC):
         **kwargs,
     ) -> httpx.Response:
         """
-        Makes a resilient HTTP request with:
-        - Circuit breaker protection
-        - Rate limiting
-        - Response caching
-        - Retry logic with exponential backoff
+        Makes a resilient HTTP request with circuit breaker, rate limiting, caching, and retries.
         """
-        # Build full URL
         full_url = url if url.startswith("http") else f"{self.base_url}/{url.lstrip('/')}"
 
-        # Check circuit breaker
-        if not await self.circuit_breaker.allow_request():
-            self.logger.warning("Circuit breaker open, rejecting request", url=full_url)
-            raise AdapterHttpError(
-                adapter_name=self.source_name,
-                status_code=503,
-                url=full_url,
-                message="Circuit breaker is open"
-            )
-
-        # Check cache for GET requests
+        # Check cache first for GET requests
         if use_cache and self.cache and method.upper() == "GET":
             cached = await self.cache.get(method, full_url, **kwargs)
             if cached is not None:
                 self.logger.debug("Cache hit", url=full_url)
                 return cached
 
-        # Apply rate limiting
-        await self.rate_limiter.acquire()
+        @retry(
+            retry=retry_if_exception_type((httpx.RequestError, httpx.HTTPStatusError)),
+            wait=wait_exponential(multiplier=1, min=2, max=10),
+            stop=stop_after_attempt(3),
+            reraise=True,
+        )
+        async def _attempt_request():
+            # Check circuit breaker before each attempt
+            if not await self.circuit_breaker.allow_request():
+                self.logger.warning("Circuit breaker open, rejecting request", url=full_url)
+                raise AdapterHttpError(
+                    adapter_name=self.source_name,
+                    status_code=503,
+                    url=full_url,
+                    message="Circuit breaker is open",
+                )
 
-        # Pop headers and follow_redirects from kwargs to pass them explicitly.
-        headers = kwargs.pop("headers", {})
-        if "User-Agent" not in headers:
-            headers["User-Agent"] = self.DEFAULT_USER_AGENT
+            # Apply rate limiting
+            await self.rate_limiter.acquire()
 
-        follow_redirects = kwargs.pop("follow_redirects", True)
+            headers = kwargs.get("headers", {})
+            if "User-Agent" not in headers:
+                headers["User-Agent"] = self.DEFAULT_USER_AGENT
 
-        start_time = time.monotonic()
+            start_time = time.monotonic()
+            try:
+                self.logger.info("Making request attempt", method=method.upper(), url=full_url)
+                response = await http_client.request(
+                    method, full_url, timeout=self.timeout, **kwargs
+                )
+                response.raise_for_status()
+
+                latency_ms = (time.monotonic() - start_time) * 1000
+                await self.metrics.record_success(latency_ms)
+                await self.circuit_breaker.record_success()
+
+                return response
+            except httpx.HTTPStatusError as e:
+                await self.metrics.record_failure(f"HTTP {e.response.status_code}")
+                await self.circuit_breaker.record_failure()
+                raise  # Re-raise to trigger tenacity retry
+            except httpx.RequestError as e:
+                await self.metrics.record_failure(str(e))
+                await self.circuit_breaker.record_failure()
+                raise  # Re-raise to trigger tenacity retry
 
         try:
-            self.logger.info("Making request", method=method.upper(), url=full_url)
-
-            response = await http_client.request(
-                method,
-                full_url,
-                timeout=self.timeout,
-                headers=headers,
-                follow_redirects=follow_redirects,
-                **kwargs,  # Pass remaining kwargs
-            )
-            response.raise_for_status()
-
-            # Record success
-            latency_ms = (time.monotonic() - start_time) * 1000
-            await self.metrics.record_success(latency_ms)
-            await self.circuit_breaker.record_success()
+            response = await _attempt_request()
 
             # Cache successful GET responses
             if use_cache and self.cache and method.upper() == "GET":
                 await self.cache.set(method, full_url, response, ttl=cache_ttl, **kwargs)
 
             return response
+        except (RetryError, httpx.HTTPStatusError) as e:
+            final_exception = e.last_attempt.exception() if isinstance(e, RetryError) else e
+            self.logger.error("Request failed after multiple retries", error=str(final_exception))
 
-        except httpx.HTTPStatusError as e:
-            self.logger.error(
-                "HTTP status error",
-                status_code=e.response.status_code,
-                url=str(e.request.url),
-            )
-            await self.metrics.record_failure(f"HTTP {e.response.status_code}")
-            await self.circuit_breaker.record_failure()
-
-            raise AdapterHttpError(
-                adapter_name=self.source_name,
-                status_code=e.response.status_code,
-                url=str(e.request.url),
-                message=f"HTTP {e.response.status_code}: {e.response.reason_phrase}",
-                response_body=e.response.text[:500] if e.response.text else None,
-                request_method=method.upper(),
-            ) from e
-
-        except (httpx.RequestError, RetryError) as e:
-            self.logger.error("Request error", error=str(e))
-            await self.metrics.record_failure(str(e))
-            await self.circuit_breaker.record_failure()
-
-            raise AdapterHttpError(
-                adapter_name=self.source_name,
-                status_code=503,
-                url=full_url,
-            ) from e
+            if isinstance(final_exception, httpx.HTTPStatusError):
+                raise AdapterHttpError(
+                    adapter_name=self.source_name,
+                    status_code=final_exception.response.status_code,
+                    url=str(final_exception.request.url),
+                    message=f"HTTP {final_exception.response.status_code}: {final_exception.response.reason_phrase}",
+                    response_body=final_exception.response.text[:500] if final_exception.response.text else None,
+                    request_method=method.upper(),
+                ) from final_exception
+            else:
+                raise AdapterHttpError(
+                    adapter_name=self.source_name, status_code=503, url=full_url
+                ) from final_exception
 
     async def health_check(self) -> dict[str, Any]:
         """
