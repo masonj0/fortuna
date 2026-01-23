@@ -36,9 +36,13 @@ class TimeformAdapter(BaseAdapterV3):
         index_response = await self.make_request(
             self.http_client, "GET", index_url, headers=self._get_headers()
         )
-        if not index_response:
+        if not index_response or not index_response.text:
             self.logger.warning("Failed to fetch Timeform index page", url=index_url)
             return None
+
+        # Save the raw HTML for debugging in CI
+        with open("timeform_debug.html", "w", encoding="utf-8") as f:
+            f.write(index_response.text)
 
         index_soup = BeautifulSoup(index_response.text, "html.parser")
         links = {a["href"] for a in index_soup.select("a.rp-racecard-off-link[href]")}

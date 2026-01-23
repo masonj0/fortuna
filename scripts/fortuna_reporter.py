@@ -80,9 +80,12 @@ class ReporterConfig:
     RELIABLE_NON_KEYED_ADAPTERS: tuple[str, ...] = (
         "AtTheRacesAdapter",
         "SportingLifeAdapter",
-        # Conditionally reliable - monitor closely:
-        # "RacingPostAdapter",  # 406 errors observed
-        # "OddscheckerAdapter", # 403 errors observed
+        # The following adapters are added for debugging purposes to generate debug artifacts
+        "BrisnetAdapter",
+        "EquibaseAdapter",
+        "OddscheckerAdapter",
+        "RacingPostAdapter",
+        "TimeformAdapter",
     )
 
     @property
