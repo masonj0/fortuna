@@ -2,15 +2,15 @@ import sys
 import json
 from bs4 import BeautifulSoup
 
-def analyze_html_structure(html_content):
+def analyze_html_structure(html_content, selector='a[href*="racecard"]'):
     """
     Parses HTML to find potential race links and returns their structure.
     """
     soup = BeautifulSoup(html_content, 'html.parser')
     links_data = []
 
-    # A broad but targeted search for links that are likely racecards
-    possible_links = soup.select('a[href*="racecard"]')
+    # Use the provided selector or the default
+    possible_links = soup.select(selector)
 
     for link in possible_links:
         parent = link.parent
@@ -33,11 +33,12 @@ def main():
     Main function to read an HTML file, parse it, and save the JSON structure to an output file.
     """
     if len(sys.argv) < 3:
-        print("Usage: python debug_html_parser.py <input_html_path> <output_json_path>", file=sys.stderr)
+        print("Usage: python debug_html_parser.py <input_html_path> <output_json_path> [css_selector]", file=sys.stderr)
         sys.exit(1)
 
     input_filepath = sys.argv[1]
     output_filepath = sys.argv[2]
+    selector = sys.argv[3] if len(sys.argv) > 3 else 'a[href*="racecard"]'
 
     output_data = {"links": [], "error": None}
 
@@ -47,7 +48,7 @@ def main():
             if not html_content.strip():
                 output_data["error"] = f"File is empty: {input_filepath}"
             else:
-                output_data["links"] = analyze_html_structure(html_content)
+                output_data["links"] = analyze_html_structure(html_content, selector)
 
     except FileNotFoundError:
         output_data["error"] = f"File not found: {input_filepath}"

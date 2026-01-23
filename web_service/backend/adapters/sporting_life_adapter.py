@@ -109,7 +109,12 @@ class SportingLifeAdapter(BaseAdapterV3):
             try:
                 soup = BeautifulSoup(html, "html.parser")
 
-                header_text = clean_text(soup.select_one("h1.hr-race-header-title__text").get_text())
+                header = soup.select_one('h1[class*="RaceHeader__Title"]')
+                if not header:
+                    self.logger.warning("Could not find race header.")
+                    continue
+
+                header_text = clean_text(header.get_text())
                 parts = header_text.split()
                 race_time_str = parts[0]
                 track_name = " ".join(parts[1:])
@@ -117,16 +122,15 @@ class SportingLifeAdapter(BaseAdapterV3):
                 start_time = datetime.combine(race_date, datetime.strptime(race_time_str, "%H:%M").time())
 
                 race_number = 1
-                nav_links = soup.select("a.hr-race-header-navigation-link")
-                active_link = soup.select_one("a.hr-race-header-navigation-link--active")
+                nav_links = soup.select('a[class*="SubNavigation__Link"]')
+                active_link = soup.select_one('a[class*="SubNavigation__Link--active"]')
                 if active_link and nav_links:
                     try:
-                        # Add 1 because list index is 0-based
                         race_number = nav_links.index(active_link) + 1
                     except ValueError:
                         self.logger.warning("Active race link not found in navigation links.")
 
-                runners = [self._parse_runner(row) for row in soup.select("div.hr-racing-runner-card-wrapper")]
+                runners = [self._parse_runner(row) for row in soup.select('div[class*="RunnerCard"]')]
 
                 race = Race(
                     id=f"sl_{track_name.replace(' ', '')}_{start_time.strftime('%Y%m%d')}_R{race_number}",
@@ -137,7 +141,7 @@ class SportingLifeAdapter(BaseAdapterV3):
                     source=self.source_name,
                 )
                 all_races.append(race)
-            except (AttributeError, ValueError):
+            except (AttributeError, ValueError) as e:
                 self.logger.warning(
                     "Error parsing a race from SportingLife, skipping race.",
                     exc_info=True,
@@ -147,19 +151,18 @@ class SportingLifeAdapter(BaseAdapterV3):
 
     def _parse_runner(self, row: Tag) -> Optional[Runner]:
         try:
-            name_node = row.select_one("a[href*='/racing/profiles/horse/']")
+            name_node = row.select_one('a[href*="/racing/profiles/horse/"]')
             if not name_node:
                 return None
-            # Extract the name, removing any non-alphanumeric trailing characters
             name = clean_text(name_node.get_text()).splitlines()[0].strip()
 
-            num_node = row.select_one("span.hr-racing-runner-saddle-cloth-number")
+            num_node = row.select_one('span[class*="SaddleCloth__Number"]')
             if not num_node:
                 return None
             num_str = clean_text(num_node.get_text())
             number = int("".join(filter(str.isdigit, num_str)))
 
-            odds_node = row.select_one("span.hr-racing-runner-betting-odds__odd")
+            odds_node = row.select_one('span[class*="Odds__Price"]')
             odds_str = clean_text(odds_node.get_text()) if odds_node else ""
 
             win_odds = parse_odds_to_decimal(odds_str)

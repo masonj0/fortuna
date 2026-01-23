@@ -204,90 +204,66 @@ jobs:
           $url = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
           Invoke-WebRequest -Uri $url -OutFile vc_redist.x64.exe
           .\vc_redist.x64.exe /install /quiet /norestart
+          Start-Sleep -Seconds 5
+          Get-Command vc_redist.x64.exe -ErrorAction SilentlyContinue
 
       - name: 🧪 Smoke Test
-        continue-on-error: true
         shell: pwsh
         timeout-minutes: 5
         run: |
           Write-Host "=== SMOKE TEST ===" -ForegroundColor Cyan
-          $distDir = "dist/Fortuna-Desktop"
-          $exe = "$distDir/Fortuna-Desktop.exe"
-          $outputLog = "$distDir/smoke-test-output.log"
-          $internalLog = "$distDir/fortuna-desktop.log" # Assumes log is named after exe
+          $exe = "dist/Fortuna-Desktop/Fortuna-Desktop.exe"
 
-          Write-Host "--- 1. Directory Manifest ---" -ForegroundColor Yellow
-          Get-ChildItem -Path $distDir -Recurse | Format-Table Name, Length
-          if (-not (Test-Path $exe)) {
-            Write-Error "FATAL: Executable not found at $exe"
-            exit 1
-          }
+          # 1. Launch App
+          Write-Host "🚀 Launching $exe..."
+          $process = Start-Process -FilePath $exe -PassThru
+          $pid = $process.Id
+          Write-Host "   PID: $pid"
 
-          Write-Host "--- 2. Network State Dump ---" -ForegroundColor Yellow
-          netstat -ano
-          Write-Host "--- End of Network State ---"
+          # 2. Wait & Check Health
+          $url = "http://127.0.0.1:8000/api/health"
+          $maxRetries = 20
+          $success = $false
 
-          Write-Host "--- 3. Starting Executable ---" -ForegroundColor Yellow
-          Write-Host "Starting: $exe"
-          cmd /c "start /b `"$exe`" > `"$outputLog`" 2>&1"
-          Start-Sleep -Seconds 10 # Increased wait for GUI app
-
-          $proc = Get-Process -Name "Fortuna-Desktop" -ErrorAction SilentlyContinue
-          if (-not $proc) {
-              Write-Host "❌ Process failed to start!" -ForegroundColor Red
-              # Failure analysis will run at the end
-              $success = $false
-          } else {
-              Write-Host "PID: $($proc.Id). Waiting up to 45 seconds for health check..."
-              $success = $false
-              for ($i = 1; $i -le 45; $i++) {
-                  if ($proc.HasExited) {
-                      Write-Host "❌ Process exited prematurely (code: $($proc.ExitCode))" -ForegroundColor Red
-                      break
-                  }
-                  try {
-                      $response = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/health" -UseBasicParsing -TimeoutSec 1 -ErrorAction Stop
-                      if ($response.StatusCode -eq 200) {
-                          Write-Host "✅ SMOKE TEST PASSED!" -ForegroundColor Green
-                          $success = $true
-                          break
-                      }
-                  } catch {
-                      Write-Host "Health check attempt $i failed. Retrying... Error: $($_.Exception.Message)"
-                      Start-Sleep -Seconds 1
-                  }
+          for ($i=1; $i -le $maxRetries; $i++) {
+            if ($process.HasExited) {
+              Write-Error "❌ Process crashed immediately! Exit Code: $($process.ExitCode)"
+              break
+            }
+            try {
+              $resp = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 2
+              if ($resp.StatusCode -eq 200) {
+                Write-Host "✅ Backend is HEALTHY!" -ForegroundColor Green
+                $success = $true
+                break
               }
-          }
-
-          # --- Cleanup ---
-          if ($proc -and -not $proc.HasExited) {
-              Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-          }
-
-          # --- Final Verdict & Diagnostics ---
-          if ($success) {
-            Write-Host "Smoke test SUCCEEDED."
-            exit 0
-          } else {
-            Write-Error "SMOKE TEST FAILED."
-
-            Write-Host "--- 4. Failure Analysis ---" -ForegroundColor Yellow
-            if (Test-Path $outputLog) {
-                Write-Host "--- Displaying startup output log (smoke-test-output.log) ---"
-                Get-Content $outputLog -ErrorAction SilentlyContinue
-            } else {
-                Write-Host "--- WARNING: Startup output log not found! ($outputLog) ---"
+            } catch {
+              Write-Host "   Ping failed ($i/$maxRetries)..."
+              Start-Sleep -Seconds 2
             }
+          }
 
-            if (Test-Path $internalLog) {
-                Write-Host "--- Displaying internal application log (fortuna-monolith.log) ---"
-                Get-Content $internalLog -ErrorAction SilentlyContinue
+          # 3. Cleanup
+          if (-not $process.HasExited) {
+            Stop-Process -Id $pid -Force
+          }
+
+          # 4. Diagnostics (If Failed)
+          if (-not $success) {
+            Write-Host "❌ SMOKE TEST FAILED" -ForegroundColor Red
+
+            # Check for the log file created by run_desktop_app.py
+            $logPath = "$env:TEMP\fortuna-desktop.log"
+            if (Test-Path $logPath) {
+              Write-Host "--- APPLICATION LOG ($logPath) ---" -ForegroundColor Yellow
+              Get-Content $logPath
+              Write-Host "----------------------------------"
             } else {
-                Write-Host "--- WARNING: Internal application log not found! ($internalLog) ---"
-                Write-Host "This usually means the application crashed before it could initialize its logging."
+              Write-Host "⚠️ No application log found at $logPath"
             }
             exit 1
           }
+          Write-Host "✅ Test Complete."
 
       - name: 📋 Upload Build Log
         if: always()
