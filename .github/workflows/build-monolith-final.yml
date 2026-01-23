@@ -109,12 +109,14 @@ jobs:
       - name: 🐍 Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10.11'
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: 'web_service/backend/requirements.txt'
 
       - name: 📦 Install Python Dependencies
         shell: pwsh
         run: |
-          pip install --upgrade pip wheel
+          python -m pip install --upgrade pip wheel
           pip install pyinstaller==6.6.0
           pip install pywin32 # CRITICAL: Provides the 'win32timezone' hidden import
           pip install -r web_service/backend/requirements.txt
