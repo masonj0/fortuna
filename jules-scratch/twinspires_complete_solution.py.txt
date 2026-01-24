@@ -155,7 +155,6 @@ class TwinSpiresAdapter(BaseAdapterV3):
             '[data-testid*="race"]',
         ]
 
-        
         race_elements = []
         for selector in potential_selectors:
             race_elements = page.css(selector)
@@ -163,7 +162,6 @@ class TwinSpiresAdapter(BaseAdapterV3):
                 self.logger.info(f"Found {len(race_elements)} races using selector: {selector}")
                 break
 
-        
         if not race_elements:
             self.logger.warning("Could not find race elements with any known selector")
             # Return the full page as a single "race" for parsing
@@ -173,7 +171,7 @@ class TwinSpiresAdapter(BaseAdapterV3):
                 "race_number": 1,
                 "date": date
             }]
-        
+
         # Extract data from each race element
         for i, race_elem in enumerate(race_elements, 1):
             try:
