@@ -34,7 +34,7 @@ class GreyhoundAdapter(BaseAdapterV3):
     async def _fetch_data(self, date: str) -> Any:
         """Fetches the raw card data from the greyhound API."""
         endpoint = f"v1/cards/{date}"
-        response = await self.make_request(self.http_client, "GET", endpoint)
+        response = await self.make_request("GET", endpoint)
         return response.json() if response else None
 
     def _parse_races(self, raw_data: Any) -> List[Race]:

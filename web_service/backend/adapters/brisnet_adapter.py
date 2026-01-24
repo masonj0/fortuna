@@ -28,7 +28,7 @@ class BrisnetAdapter(BaseAdapterV3):
     async def _fetch_data(self, date: str) -> Optional[dict]:
         """Fetches the raw HTML from the Brisnet race page."""
         url = "/cgi-bin/intoday.cgi"
-        response = await self.make_request(self.http_client, "GET", url, headers=self._get_headers())
+        response = await self.make_request("GET", url, headers=self._get_headers())
         if not response or not response.text:
             return None
 

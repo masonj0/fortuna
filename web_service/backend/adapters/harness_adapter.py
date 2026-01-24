@@ -24,7 +24,7 @@ class HarnessAdapter(BaseAdapterV3):
 
     async def _fetch_data(self, date: str) -> Optional[Dict[str, Any]]:
         """Fetches all harness races for a given date."""
-        response = await self.make_request(self.http_client, "GET", f"card/{date}")
+        response = await self.make_request("GET", f"card/{date}")
 
         if not response:
             return None

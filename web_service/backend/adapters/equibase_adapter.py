@@ -32,7 +32,7 @@ class EquibaseAdapter(BaseAdapterV3):
         Fetches the raw HTML for all race pages for a given date.
         """
         index_url = f"/entries/{date}"
-        index_response = await self.make_request(self.http_client, "GET", index_url, headers=self._get_headers())
+        index_response = await self.make_request("GET", index_url, headers=self._get_headers())
         if not index_response or not index_response.text:
             self.logger.warning("Failed to fetch Equibase index page", url=index_url)
             return None
