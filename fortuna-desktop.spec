@@ -38,7 +38,7 @@ hiddenimports = [
 hiddenimports += collect_submodules('web_service.backend')
 
 a = Analysis(
-    ['run_desktop_app.py'],
+    [str(project_root / 'run_desktop_app.py')],
     pathex=[str(project_root)],
     binaries=[],
     datas=datas,
@@ -72,4 +72,14 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+)
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    name='Fortuna-Desktop',
 )
