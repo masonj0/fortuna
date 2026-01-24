@@ -13,8 +13,10 @@ This adapter uses Scrapling's StealthyFetcher with modified Firefox.
 from datetime import datetime, timedelta
 from typing import Any, List, Optional
 import re
+import os
 
 from scrapling.fetchers import StealthySession
+from scrapling import Adaptor
 
 from ..models import OddsData, Race, Runner
 from ..utils.odds import parse_odds_to_decimal
@@ -61,76 +63,66 @@ class TwinSpiresAdapter(BaseAdapterV3):
         """
         self.logger.info(f"Fetching TwinSpires races for {date}")
 
+        session = None
         try:
-            async with StealthySession(
+            session = StealthySession(
                 headless=True,
                 google_search=True,
                 block_webrtc=True,
                 disable_images=True,  # Faster loading
                 disable_webgl=True,
                 humanize=True,
-            ) as session:
+            )
 
-                # TwinSpires shows today's races at /bet/todays-races/time
-                # The page loads races sorted by post time
-                index_url = f"{self.BASE_URL}/bet/todays-races/time"
+            # TwinSpires shows today's races at /bet/todays-races/time
+            index_url = f"{self.BASE_URL}/bet/todays-races/time"
+            self.logger.info(f"Fetching: {index_url}")
 
-                self.logger.info(f"Fetching: {index_url}")
+            # Fetch with extended timeout for JS to render
+            index_page = await session.async_fetch(
+                index_url,
+                network_idle=True,  # Wait for all network requests
+                timeout=45000,      # 45 second timeout
+                wait_selector='div[class*="race"], div[data-track], .race-card, [class*="RaceCard"]',
+                page_action=lambda page: page.wait_for_timeout(3000)
+            )
 
-                # Fetch with extended timeout for JS to render
-                index_page = await session.async_fetch(
-                    index_url,
-                    network_idle=True,  # Wait for all network requests
-                    timeout=45000,      # 45 second timeout
-                    # Wait for race cards to appear (adjust selector after inspection)
-                    wait_selector='div[class*="race"], div[data-track], .race-card, [class*="RaceCard"]',
-                    # Give extra time for dynamic content
-                    page_action=lambda page: page.wait_for_timeout(3000)
-                )
+            if index_page.status != 200:
+                self.logger.error(f"Failed to fetch index: status {index_page.status}")
+                return None
 
-                if index_page.status != 200:
-                    self.logger.error(f"Failed to fetch index: status {index_page.status}")
-                    return None
-
-                # Save debug HTML to inspect structure
+            # Save debug HTML if DEBUG_ADAPTERS is set
+            if os.getenv("DEBUG_ADAPTERS", "false").lower() == "true":
                 try:
                     with open("twinspires_debug.html", "w", encoding="utf-8") as f:
                         f.write(index_page.text)
-                    self.logger.info("Saved debug HTML - inspect to find correct selectors")
+                    self.logger.info("Saved debug HTML to twinspires_debug.html")
                 except Exception as e:
                     self.logger.warning(f"Failed to save debug HTML: {e}")
 
-                # Check if page actually loaded content
-                if len(index_page.text) < 5000:  # Too short = probably failed
-                    self.logger.error(
-                        f"Page content suspiciously short ({len(index_page.text)} chars). "
-                        "JS may not have rendered."
-                    )
-                    return None
+            if len(index_page.text) < 5000:
+                self.logger.error(f"Page content suspiciously short ({len(index_page.text)} chars). JS may not have rendered.")
+                return None
 
-                # Parse races from the single page
-                # TwinSpires shows all races on one page, we don't need to fetch individual pages
-                races_data = self._extract_races_from_page(index_page, date)
+            races_data = self._extract_races_from_page(index_page, date)
+            if not races_data:
+                self.logger.error("No races extracted from page")
+                return None
 
-                if not races_data:
-                    self.logger.error("No races extracted from page")
-                    return None
+            self.logger.info(f"Extracted {len(races_data)} races from TwinSpires")
 
-                self.logger.info(f"Extracted {len(races_data)} races from TwinSpires")
-
-                return {
-                    "races": races_data,
-                    "date": date,
-                    "source": "twinspires_live"
-                }
+            return {
+                "races": races_data,
+                "date": date,
+                "source": "twinspires_live"
+            }
 
         except Exception as e:
-            self.logger.error(
-                "Critical error during TwinSpires fetch",
-                error=str(e),
-                exc_info=True
-            )
+            self.logger.error("Critical error during TwinSpires fetch", error=str(e), exc_info=True)
             return None
+        finally:
+            if session:
+                await session.close()
 
     def _extract_races_from_page(self, page, date: str) -> List[dict]:
         """
@@ -250,8 +242,6 @@ class TwinSpiresAdapter(BaseAdapterV3):
         Returns:
             Race object or None
         """
-        from scrapling import Adaptor
-
         html = race_data.get("html", "")
         if not html:
             return None
@@ -275,8 +265,8 @@ class TwinSpiresAdapter(BaseAdapterV3):
         # Parse runners
         runners = self._parse_runners(page)
 
-        if not runners:
-            self.logger.debug(f"No runners found for {track_name} R{race_number}")
+        if not runners or not start_time:
+            self.logger.debug(f"Skipping race due to missing runners or start time", track=track_name, race=race_number)
             return None
 
         # Generate race ID
@@ -293,7 +283,7 @@ class TwinSpiresAdapter(BaseAdapterV3):
             source=self.SOURCE_NAME,
         )
 
-    def _extract_post_time(self, page, date_str: str) -> datetime:
+    def _extract_post_time(self, page, date_str: str) -> Optional[datetime]:
         """
         Extract post time from race HTML.
 
@@ -341,8 +331,8 @@ class TwinSpiresAdapter(BaseAdapterV3):
                     except Exception:
                         pass
 
-        # Fallback to current time
-        return datetime.now()
+        self.logger.warning("Could not determine post time")
+        return None
 
     def _parse_runners(self, page) -> List[Runner]:
         """

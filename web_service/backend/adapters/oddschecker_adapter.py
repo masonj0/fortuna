@@ -32,7 +32,7 @@ class OddscheckerAdapter(BaseAdapterV3):
         # Note: Oddschecker doesn't seem to support historical dates well in its main nav,
         # but we build the URL as if it does for future compatibility.
         index_url = f"/horse-racing/{date}"
-        index_response = await self.make_request(self.http_client, "GET", index_url, headers=self._get_headers())
+        index_response = await self.make_request("GET", index_url, headers=self._get_headers())
         if not index_response or not index_response.text:
             self.logger.warning("Failed to fetch Oddschecker index page", url=index_url)
             return None
