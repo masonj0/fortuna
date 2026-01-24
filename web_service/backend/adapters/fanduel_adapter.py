@@ -33,7 +33,7 @@ class FanDuelAdapter(BaseAdapterV3):
         event_id = "38183.3"
         self.logger.info(f"Fetching races from FanDuel for event_id: {event_id}")
         endpoint = f"markets?_ak=Fh2e68s832c41d4b&eventId={event_id}"
-        response = await self.make_request(self.http_client, "GET", endpoint)
+        response = await self.make_request("GET", endpoint)
         return response.json() if response else None
 
     def _parse_races(self, raw_data: Optional[Dict[str, Any]]) -> List[Race]:

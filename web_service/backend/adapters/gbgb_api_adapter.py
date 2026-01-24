@@ -27,7 +27,7 @@ class GbgbApiAdapter(BaseAdapterV3):
     async def _fetch_data(self, date: str) -> Optional[List[Dict[str, Any]]]:
         """Fetches the raw meeting data from the GBGB API."""
         endpoint = f"results/meeting/{date}"
-        response = await self.make_request(self.http_client, "GET", endpoint)
+        response = await self.make_request("GET", endpoint)
         return response.json() if response else None
 
     def _parse_races(self, meetings_data: Optional[List[Dict[str, Any]]]) -> List[Race]:

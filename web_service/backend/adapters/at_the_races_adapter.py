@@ -35,9 +35,7 @@ class AtTheRacesAdapter(BaseAdapterV3):
         Returns a dictionary containing a list of (URL, HTML content) tuples and the date.
         """
         index_url = f"/racecards/{date}"
-        index_response = await self.make_request(
-            self.http_client, "GET", index_url, headers=self._get_headers()
-        )
+        index_response = await self.make_request("GET", index_url, headers=self._get_headers())
         if not index_response:
             self.logger.warning("Failed to fetch AtTheRaces index page", url=index_url)
             return None
@@ -53,9 +51,7 @@ class AtTheRacesAdapter(BaseAdapterV3):
         links = {a["href"] for a in index_soup.select('a[href^="/racecard/"]')}
 
         async def fetch_single_html(url_path: str):
-            response = await self.make_request(
-                self.http_client, "GET", url_path, headers=self._get_headers()
-            )
+            response = await self.make_request("GET", url_path, headers=self._get_headers())
             return (url_path, response.text) if response else (url_path, "")
 
         tasks = [fetch_single_html(link) for link in links]
