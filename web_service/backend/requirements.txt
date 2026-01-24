@@ -30,7 +30,7 @@ wsproto==1.2.0
 # Http Client
 requests==2.31.0
 urllib3==2.1.0
-certifi==2023.7.22
+certifi>=2024.2.2
 charset-normalizer==3.3.2
 idna==3.6
 
