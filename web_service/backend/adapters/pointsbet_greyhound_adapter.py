@@ -26,7 +26,7 @@ class PointsBetGreyhoundAdapter(BaseAdapterV3):
     async def _fetch_data(self, date: str) -> Optional[List[Dict[str, Any]]]:
         """Fetches all greyhound events for a given date."""
         endpoint = f"sports/greyhound-racing/events/by-date/{date}"
-        response = await self.make_request(self.http_client, "GET", endpoint)
+        response = await self.make_request("GET", endpoint)
         return response.json().get("events", []) if response else None
 
     def _parse_races(self, raw_data: Optional[List[Dict[str, Any]]]) -> List[Race]:

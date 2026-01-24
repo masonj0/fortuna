@@ -42,7 +42,7 @@ env:
 jobs:
   generate-unified-report:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20  # Increased from 15 for browser automation
 
     permissions:
       contents: read
@@ -70,6 +70,18 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           pip install -r web_service/backend/requirements.txt
 
+      # NEW: Install Scrapling browsers
+      - name: '🌐 Install Scrapling Browsers'
+        run: |
+          # Install Scrapling's browser dependencies
+          # This downloads Chromium and modified Firefox (Camoufox)
+          scrapling install
+
+          # Verify installation
+          echo "Scrapling browsers installed successfully"
+
+        continue-on-error: false  # Fail if browser installation fails
+
       - name: '📂 Create Runtime Directories'
         run: |
           mkdir -p web_service/backend/{data,json,logs}
@@ -93,7 +105,13 @@ jobs:
           FORCE_REFRESH: ${{ inputs.force_refresh || 'false' }}
           MAX_RETRIES: ${{ env.MAX_RETRIES }}
           REQUEST_TIMEOUT: ${{ env.REQUEST_TIMEOUT }}
+          # Browser automation needs display (for headless mode)
+          DISPLAY: ':99'
         run: |
+          # Start virtual display for headless browser
+          sudo Xvfb :99 -screen 0 1920x1080x24 > /dev/null 2>&1 &
+          sleep 2
+
           set -o pipefail
           python scripts/fortuna_reporter.py 2>&1 | tee reporter_output.log
 
@@ -124,6 +142,7 @@ jobs:
             oddschecker_debug.html
             racingpost_debug.html
             timeform_debug.html
+            twinspires_debug.html
           retention-days: ${{ env.REPORT_RETENTION_DAYS }}
           if-no-files-found: warn
           compression-level: 9
@@ -163,6 +182,7 @@ jobs:
           [ -f "oddschecker_debug.html" ] && python scripts/debug_html_parser.py oddschecker_debug.html debug-analysis/oddschecker_analysis.json || echo "oddschecker_debug.html not found, skipping analysis."
           [ -f "racingpost_debug.html" ] && python scripts/debug_html_parser.py racingpost_debug.html debug-analysis/racingpost_analysis.json "a[href*='/racecards/']" || echo "racingpost_debug.html not found, skipping analysis."
           [ -f "timeform_debug.html" ] && python scripts/debug_html_parser.py timeform_debug.html debug-analysis/timeform_analysis.json || echo "timeform_debug.html not found, skipping analysis."
+          [ -f "twinspires_debug.html" ] && python scripts/debug_html_parser.py twinspires_debug.html debug-analysis/twinspires_analysis.json "div[class*='race'], div[data-track]" || echo "twinspires_debug.html not found, skipping analysis."
 
       - name: 'Upload Debug Analysis Artifact'
         if: failure()

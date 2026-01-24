@@ -1,144 +1,459 @@
 # python_service/adapters/twinspires_adapter.py
-from datetime import datetime
-from typing import Any
-from typing import Dict
-from typing import List
+"""
+TwinSpires Adapter using Scrapling's StealthyFetcher
 
-from bs4 import BeautifulSoup
+TwinSpires is a heavily JavaScript-rendered site that requires:
+- Full browser automation (not simple HTTP requests)
+- Anti-bot detection bypass
+- Wait for dynamic content to load
 
-from ..models import OddsData
-from ..models import Race
-from ..models import Runner
+This adapter uses Scrapling's StealthyFetcher with modified Firefox.
+"""
+
+from datetime import datetime, timedelta
+from typing import Any, List, Optional
+import re
+import os
+
+from scrapling.fetchers import StealthySession
+from scrapling import Adaptor
+
+from ..models import OddsData, Race, Runner
 from ..utils.odds import parse_odds_to_decimal
 from .base_adapter_v3 import BaseAdapterV3
 
 
 class TwinSpiresAdapter(BaseAdapterV3):
     """
-    Adapter for twinspires.com.
-    This is a placeholder for a full implementation using the discovered JSON API.
+    Production adapter for twinspires.com using Scrapling.
+
+    TwinSpires uses heavy JavaScript rendering, so we need:
+    - Browser automation (DynamicFetcher/StealthyFetcher)
+    - Wait for network idle
+    - Wait for specific elements to load
     """
 
     SOURCE_NAME = "TwinSpires"
     BASE_URL = "https://www.twinspires.com"
 
     def __init__(self, config=None):
-        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
+        super().__init__(
+            source_name=self.SOURCE_NAME,
+            base_url=self.BASE_URL,
+            config=config,
+            enable_cache=True,
+            cache_ttl=180.0,  # 3 minute cache (races change frequently)
+            rate_limit=2.0    # Slower rate limit for browser automation
+        )
 
-    async def _fetch_data(self, date: str) -> Any:
+    async def _fetch_data(self, date: str) -> Optional[dict]:
         """
-        [MODIFIED FOR OFFLINE DEVELOPMENT]
-        Reads HTML content from a local fixture file instead of making a live API call.
-        This is a temporary measure to allow development while the live API is blocking requests.
+        Fetches live race data from TwinSpires' dynamic JavaScript page.
+
+        TwinSpires renders everything via JavaScript, so we need:
+        1. Full browser automation
+        2. Wait for network requests to complete
+        3. Wait for race elements to appear in DOM
+
+        Args:
+            date: Date string in YYYY-MM-DD format
+
+        Returns:
+            Dictionary containing race data and metadata
         """
-        # Read the local HTML fixture
+        self.logger.info(f"Fetching TwinSpires races for {date}")
+
+        session = None
         try:
-            with open("tests/fixtures/twinspires_sample.html", "r") as f:
-                html_content = f.read()
-        except FileNotFoundError:
-            self.logger.error("TwinSpires test fixture not found.")
+            session = StealthySession(
+                headless=True,
+                google_search=True,
+                block_webrtc=True,
+                disable_images=True,  # Faster loading
+                disable_webgl=True,
+                humanize=True,
+            )
+
+            # TwinSpires shows today's races at /bet/todays-races/time
+            index_url = f"{self.BASE_URL}/bet/todays-races/time"
+            self.logger.info(f"Fetching: {index_url}")
+
+            # Fetch with extended timeout for JS to render
+            index_page = await session.async_fetch(
+                index_url,
+                network_idle=True,  # Wait for all network requests
+                timeout=45000,      # 45 second timeout
+                wait_selector='div[class*="race"], div[data-track], .race-card, [class*="RaceCard"]',
+                page_action=lambda page: page.wait_for_timeout(3000)
+            )
+
+            if index_page.status != 200:
+                self.logger.error(f"Failed to fetch index: status {index_page.status}")
+                return None
+
+            # Save debug HTML if DEBUG_ADAPTERS is set
+            if os.getenv("DEBUG_ADAPTERS", "false").lower() == "true":
+                try:
+                    with open("twinspires_debug.html", "w", encoding="utf-8") as f:
+                        f.write(index_page.text)
+                    self.logger.info("Saved debug HTML to twinspires_debug.html")
+                except Exception as e:
+                    self.logger.warning(f"Failed to save debug HTML: {e}")
+
+            if len(index_page.text) < 5000:
+                self.logger.error(f"Page content suspiciously short ({len(index_page.text)} chars). JS may not have rendered.")
+                return None
+
+            races_data = self._extract_races_from_page(index_page, date)
+            if not races_data:
+                self.logger.error("No races extracted from page")
+                return None
+
+            self.logger.info(f"Extracted {len(races_data)} races from TwinSpires")
+
+            return {
+                "races": races_data,
+                "date": date,
+                "source": "twinspires_live"
+            }
+
+        except Exception as e:
+            self.logger.error("Critical error during TwinSpires fetch", error=str(e), exc_info=True)
+            return None
+        finally:
+            if session:
+                await session.close()
+
+    def _extract_races_from_page(self, page, date: str) -> List[dict]:
+        """
+        Extract race information from the main TwinSpires page.
+
+        TwinSpires shows all races on one page, organized by track and time.
+        We need to parse the structure and extract race details.
+
+        Returns:
+            List of dictionaries containing race HTML and metadata
+        """
+        races_data = []
+
+        # Try multiple selector patterns to find race containers
+        # These are guesses - adjust after inspecting twinspires_debug.html
+        potential_selectors = [
+            'div[class*="RaceCard"]',
+            'div[data-race]',
+            'div[class*="race-card"]',
+            'div.race-container',
+            'section[class*="race"]',
+            '[data-testid*="race"]',
+        ]
+
+        race_elements = []
+        for selector in potential_selectors:
+            race_elements = page.css(selector)
+            if race_elements:
+                self.logger.info(f"Found {len(race_elements)} races using selector: {selector}")
+                break
+
+        if not race_elements:
+            self.logger.warning("Could not find race elements with any known selector")
+            # Return the full page as a single "race" for parsing
+            return [{
+                "html": page.text,
+                "track": "Unknown",
+                "race_number": 1,
+                "date": date
+            }]
+
+        # Extract data from each race element
+        for i, race_elem in enumerate(race_elements, 1):
+            try:
+                # Extract track name
+                track_elem = race_elem.css_first('[class*="track"], [data-track], h2, h3')
+                track_name = track_elem.text.strip() if track_elem else f"Track {i}"
+
+                # Extract race number
+                race_num_elem = race_elem.css_first('[class*="race-number"], [class*="raceNum"]')
+                race_number = i  # Default
+                if race_num_elem:
+                    try:
+                        race_number = int(''.join(filter(str.isdigit, race_num_elem.text)))
+                    except ValueError:
+                        pass
+
+                races_data.append({
+                    "html": str(race_elem),  # Convert element to HTML string
+                    "track": track_name,
+                    "race_number": race_number,
+                    "date": date
+                })
+
+            except Exception as e:
+                self.logger.warning(f"Failed to extract race {i}: {e}")
+                continue
+
+        return races_data
+
+    def _parse_races(self, raw_data: Any) -> List[Race]:
+        """
+        Parse extracted race data into Race objects.
+
+        Args:
+            raw_data: Dictionary with 'races' list and 'date'
+
+        Returns:
+            List of Race objects
+        """
+        if not raw_data or "races" not in raw_data:
+            self.logger.warning("No races data to parse")
+            return []
+
+        races_list = raw_data["races"]
+        date_str = raw_data.get("date", datetime.now().strftime("%Y-%m-%d"))
+
+        self.logger.info(f"Parsing {len(races_list)} races")
+
+        parsed_races = []
+
+        for race_data in races_list:
+            try:
+                race = self._parse_single_race(race_data, date_str)
+                if race:
+                    parsed_races.append(race)
+            except Exception as e:
+                self.logger.warning(
+                    f"Failed to parse race",
+                    track=race_data.get("track"),
+                    error=str(e),
+                    exc_info=True
+                )
+                continue
+
+        self.logger.info(f"Successfully parsed {len(parsed_races)} races")
+        return parsed_races
+
+    def _parse_single_race(self, race_data: dict, date_str: str) -> Optional[Race]:
+        """
+        Parse a single race from HTML.
+
+        Args:
+            race_data: Dict with 'html', 'track', 'race_number', 'date'
+            date_str: Date string YYYY-MM-DD
+
+        Returns:
+            Race object or None
+        """
+        html = race_data.get("html", "")
+        if not html:
             return None
 
-        # To maintain the data structure the parser expects, we will create a mock
-        # raw_data object that resembles the original API response, but includes
-        # the HTML content.
-        return {
-            "html_content": html_content,
-            "mock_track_data": {"trackId": "cd", "trackName": "Churchill Downs", "raceType": "Thoroughbred"},
-            "mock_race_card": {"raceNumber": 5, "postTime": "2025-10-26T16:30:00Z"},
-        }
+        # Parse HTML with Scrapling
+        page = Adaptor(html)
 
-    def _parse_races(self, raw_data: Any) -> List[Dict[str, Any]]:
+        # Extract track name
+        track_name = race_data.get("track", "Unknown")
+
+        # Extract race number
+        race_number = race_data.get("race_number", 1)
+
+        # Extract post time
+        start_time = self._extract_post_time(page, date_str)
+
+        # Extract discipline/race type
+        discipline_elem = page.css_first('[class*="breed"], [class*="type"]')
+        discipline = discipline_elem.text.strip() if discipline_elem else "Thoroughbred"
+
+        # Parse runners
+        runners = self._parse_runners(page)
+
+        if not runners or not start_time:
+            self.logger.debug(f"Skipping race due to missing runners or start time", track=track_name, race=race_number)
+            return None
+
+        # Generate race ID
+        track_id = re.sub(r'[^a-z0-9]', '', track_name.lower())
+        race_id = f"ts_{track_id}_{date_str.replace('-', '')}_R{race_number}"
+
+        return Race(
+            id=race_id,
+            venue=track_name,
+            race_number=race_number,
+            start_time=start_time,
+            discipline=discipline,
+            runners=runners,
+            source=self.SOURCE_NAME,
+        )
+
+    def _extract_post_time(self, page, date_str: str) -> Optional[datetime]:
         """
-        [MODIFIED FOR OFFLINE DEVELOPMENT]
-        Parses race and runner data from the mock raw_data object, which now
-        includes the HTML content from the local fixture. Returns a list of dictionaries.
+        Extract post time from race HTML.
+
+        Args:
+            page: Scrapling Adaptor object
+            date_str: Date string YYYY-MM-DD
+
+        Returns:
+            datetime object
         """
-        if not raw_data or "html_content" not in raw_data:
-            return []
+        # Try to find time element
+        time_selectors = [
+            'time[datetime]',
+            '[class*="post-time"]',
+            '[class*="postTime"]',
+            '[data-time]',
+        ]
 
-        self.logger.info("Parsing TwinSpires data from local fixture.")
+        for selector in time_selectors:
+            time_elem = page.css_first(selector)
+            if time_elem:
+                # Try datetime attribute
+                dt_attr = time_elem.attrib.get('datetime')
+                if dt_attr:
+                    try:
+                        return datetime.fromisoformat(dt_attr.replace('Z', '+00:00'))
+                    except ValueError:
+                        pass
 
-        html_content = raw_data["html_content"]
-        track = raw_data["mock_track_data"]
-        race_card = raw_data["mock_race_card"]
+                # Try parsing text like "3:45 PM EST"
+                time_text = time_elem.text.strip()
+                if time_text:
+                    try:
+                        # Remove timezone abbreviations
+                        time_clean = re.sub(r'\s+(EST|EDT|CST|CDT|MST|MDT|PST|PDT)$', '', time_text)
 
-        # Parse the runners from the HTML content
-        runners = self._parse_runners_from_html(html_content)
+                        # Try parsing 12-hour format
+                        for fmt in ['%I:%M %p', '%I:%M%p', '%H:%M']:
+                            try:
+                                time_obj = datetime.strptime(time_clean, fmt).time()
+                                date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
+                                return datetime.combine(date_obj, time_obj)
+                            except ValueError:
+                                continue
+                    except Exception:
+                        pass
 
-        try:
-            start_time = datetime.fromisoformat(race_card.get("postTime").replace("Z", "+00:00"))
+        self.logger.warning("Could not determine post time")
+        return None
 
-            race_dict = {
-                "id": f"ts_{track.get('trackId')}_{race_card.get('raceNumber')}",
-                "venue": track.get("trackName"),
-                "race_number": race_card.get("raceNumber"),
-                "start_time": start_time,
-                "discipline": track.get("raceType", "Unknown"),
-                "runners": [runner.model_dump() for runner in runners],
-                "source": self.SOURCE_NAME,
-            }
-            return [race_dict]
-        except Exception as e:
-            self.logger.warning(
-                "Failed to parse race card from mock data.",
-                error=e,
-                exc_info=True,
-            )
-            return []
+    def _parse_runners(self, page) -> List[Runner]:
+        """
+        Parse runner information from race HTML.
 
-    def _parse_runners_from_html(self, html_content: str) -> List[Runner]:
-        """Parses runner data from a race card's HTML content."""
+        Args:
+            page: Scrapling Adaptor object
+
+        Returns:
+            List of Runner objects
+        """
         runners = []
-        soup = BeautifulSoup(html_content, "html.parser")
-        runner_elements = soup.select("li.runner")
 
-        for element in runner_elements:
+        # Try multiple selector patterns for runner rows
+        runner_selectors = [
+            'tr[class*="runner"]',
+            'div[class*="runner"]',
+            'li[class*="horse"]',
+            '[data-runner]',
+            '.horse-entry',
+        ]
+
+        runner_elements = []
+        for selector in runner_selectors:
+            runner_elements = page.css(selector)
+            if runner_elements:
+                self.logger.debug(f"Found {len(runner_elements)} runners with: {selector}")
+                break
+
+        for elem in runner_elements:
             try:
-                scratched = "scratched" in element.get("class", [])
-
-                number_tag = element.select_one("span.runner-number")
-                name_tag = element.select_one("span.runner-name")
-                odds_tag = element.select_one("span.runner-odds")
-
-                if not all([number_tag, name_tag, odds_tag]):
-                    continue
-
-                number = int(number_tag.text.strip())
-                name = name_tag.text.strip()
-                odds_str = odds_tag.text.strip()
-
-                odds = {}
-                if not scratched and odds_str not in ["SCR", ""]:
-                    win_odds = parse_odds_to_decimal(odds_str)
-                    if win_odds:
-                        odds[self.SOURCE_NAME] = OddsData(
-                            win=win_odds,
-                            source=self.SOURCE_NAME,
-                            last_updated=datetime.now(),
-                        )
-
-                runners.append(
-                    Runner(
-                        number=number,
-                        name=name,
-                        scratched=scratched,
-                        odds=odds,
-                    )
-                )
-            except (ValueError, TypeError) as e:
-                self.logger.warning("Failed to parse a runner, skipping.", error=e, exc_info=True)
+                runner = self._parse_single_runner(elem)
+                if runner:
+                    runners.append(runner)
+            except Exception as e:
+                self.logger.debug(f"Failed to parse runner: {e}")
                 continue
 
         return runners
 
-    async def get_races(self, date: str) -> List[Dict[str, Any]]:
-        """
-        Orchestrates the fetching and parsing of race data for a given date.
-        This method will be called by the FortunaEngine.
-        """
-        self.logger.info(f"Getting races for {date} from {self.SOURCE_NAME}")
-        raw_data = await self._fetch_data(date)
-        if raw_data:
-            return self._parse_races(raw_data)
-        return []
+    def _parse_single_runner(self, elem) -> Optional[Runner]:
+        """Parse a single runner element."""
+        try:
+            # Check if scratched
+            scratched = (
+                'scratched' in str(elem.attrib.get('class', '')).lower() or
+                'scr' in str(elem.attrib.get('class', '')).lower() or
+                bool(elem.css_first('[class*="scratch"]'))
+            )
+
+            # Extract program number
+            number_selectors = [
+                '[class*="program-number"]',
+                '[class*="saddle-cloth"]',
+                '[class*="post-position"]',
+                '[data-number]',
+                'span.number',
+            ]
+
+            number = None
+            for selector in number_selectors:
+                num_elem = elem.css_first(selector)
+                if num_elem:
+                    try:
+                        number = int(''.join(filter(str.isdigit, num_elem.text)))
+                        break
+                    except ValueError:
+                        continue
+
+            if not number:
+                return None
+
+            # Extract horse name
+            name_selectors = [
+                '[class*="horse-name"]',
+                '[class*="horseName"]',
+                'a[class*="name"]',
+                '[data-horse-name]',
+            ]
+
+            name = None
+            for selector in name_selectors:
+                name_elem = elem.css_first(selector)
+                if name_elem:
+                    name = name_elem.text.strip()
+                    if name:
+                        break
+
+            if not name:
+                return None
+
+            # Extract odds
+            odds_selectors = [
+                '[class*="odds"]',
+                '[class*="morning-line"]',
+                '[data-odds]',
+            ]
+
+            odds = {}
+            if not scratched:
+                for selector in odds_selectors:
+                    odds_elem = elem.css_first(selector)
+                    if odds_elem:
+                        odds_str = odds_elem.text.strip()
+                        if odds_str and odds_str.upper() not in ['SCR', 'SCRATCHED']:
+                            win_odds = parse_odds_to_decimal(odds_str)
+                            if win_odds and win_odds < 999:
+                                odds[self.SOURCE_NAME] = OddsData(
+                                    win=win_odds,
+                                    source=self.SOURCE_NAME,
+                                    last_updated=datetime.now(),
+                                )
+                            break
+
+            return Runner(
+                number=number,
+                name=name,
+                scratched=scratched,
+                odds=odds,
+            )
+
+        except Exception as e:
+            self.logger.debug(f"Runner parse error: {e}")
+            return None
