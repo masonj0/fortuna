@@ -157,11 +157,11 @@ jobs:
         run: |
           mkdir -p debug-analysis
           [ -f "sl_debug.html" ] && python scripts/debug_html_parser.py sl_debug.html debug-analysis/sl_analysis.json || echo "sl_debug.html not found, skipping analysis."
-          [ -f "atr_debug.html" ] && python scripts/debug_html_parser.py atr_debug.html debug-analysis/atr_analysis.json || echo "atr_debug.html not found, skipping analysis."
+          [ -f "atr_debug.html" ] && python scripts/debug_html_parser.py atr_debug.html debug-analysis/atr_analysis.json "a[href^='/racecard/']" || echo "atr_debug.html not found, skipping analysis."
           [ -f "brisnet_debug.html" ] && python scripts/debug_html_parser.py brisnet_debug.html debug-analysis/brisnet_analysis.json || echo "brisnet_debug.html not found, skipping analysis."
           [ -f "equibase_debug.html" ] && python scripts/debug_html_parser.py equibase_debug.html debug-analysis/equibase_analysis.json || echo "equibase_debug.html not found, skipping analysis."
           [ -f "oddschecker_debug.html" ] && python scripts/debug_html_parser.py oddschecker_debug.html debug-analysis/oddschecker_analysis.json || echo "oddschecker_debug.html not found, skipping analysis."
-          [ -f "racingpost_debug.html" ] && python scripts/debug_html_parser.py racingpost_debug.html debug-analysis/racingpost_analysis.json || echo "racingpost_debug.html not found, skipping analysis."
+          [ -f "racingpost_debug.html" ] && python scripts/debug_html_parser.py racingpost_debug.html debug-analysis/racingpost_analysis.json "a[href*='/racecards/']" || echo "racingpost_debug.html not found, skipping analysis."
           [ -f "timeform_debug.html" ] && python scripts/debug_html_parser.py timeform_debug.html debug-analysis/timeform_analysis.json || echo "timeform_debug.html not found, skipping analysis."
 
       - name: 'Upload Debug Analysis Artifact'
