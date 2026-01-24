@@ -282,13 +282,11 @@ class BaseAdapterV3(ABC):
         self.base_url = base_url.rstrip("/")
         self.config = config
         self.timeout = timeout
-
         self.logger = structlog.get_logger(adapter_name=self.source_name)
-        self.http_client: httpx.AsyncClient = httpx.AsyncClient(timeout=self.timeout)
+        self.http_client: httpx.AsyncClient | None = None
         self.manual_override_manager: ManualOverrideManager | None = None
         self.supports_manual_override = True
-
-        # Resilience components
+        # ✅ THESE 4 LINES MUST BE HERE (not in close()):
         self.circuit_breaker = CircuitBreaker()
         self.rate_limiter = RateLimiter(requests_per_second=rate_limit)
         self.cache = ResponseCache(default_ttl=cache_ttl) if enable_cache else None
@@ -296,6 +294,8 @@ class BaseAdapterV3(ABC):
 
     async def __aenter__(self) -> "BaseAdapterV3":
         """Async context manager entry."""
+        if self.http_client is None:
+            self.http_client = httpx.AsyncClient(timeout=self.timeout)
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
@@ -435,6 +435,8 @@ class BaseAdapterV3(ABC):
                 latency_ms = (time.monotonic() - start_time) * 1000
                 await self.metrics.record_success(latency_ms)
                 await self.circuit_breaker.record_success()
+
+                self.logger.info("Request successful", method=method.upper(), url=full_url, status_code=response.status_code)
 
                 return response
             except httpx.HTTPStatusError as e:
