@@ -217,8 +217,8 @@ jobs:
           # 1. Launch App
           Write-Host "🚀 Launching $exe..."
           $process = Start-Process -FilePath $exe -PassThru
-          $pid = $process.Id
-          Write-Host "   PID: $pid"
+          $processId = $process.Id
+          Write-Host "   PID: $processId"
 
           # 2. Wait & Check Health
           $url = "http://127.0.0.1:8000/api/health"
@@ -245,7 +245,7 @@ jobs:
 
           # 3. Cleanup
           if (-not $process.HasExited) {
-            Stop-Process -Id $pid -Force
+            Stop-Process -Id $processId -Force
           }
 
           # 4. Diagnostics (If Failed)
