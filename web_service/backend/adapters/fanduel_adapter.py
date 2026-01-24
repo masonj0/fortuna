@@ -23,8 +23,8 @@ class FanDuelAdapter(BaseAdapterV3):
     SOURCE_NAME = "FanDuel"
     BASE_URL = "https://sb-api.nj.sportsbook.fanduel.com/api/"
 
-    def __init__(self, config=None):
-        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
+    def __init__(self, config=None, session=None):
+        super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config, session=session)
 
     async def _fetch_data(self, date: str) -> Optional[Dict[str, Any]]:
         """Fetches the raw market data from the FanDuel API."""

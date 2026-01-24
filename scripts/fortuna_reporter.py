@@ -79,19 +79,12 @@ class ReporterConfig:
     # - RacingPost: 406 Not Acceptable (user agent issues)
     RELIABLE_NON_KEYED_ADAPTERS: tuple[str, ...] = (
         "AtTheRacesAdapter",
-        "SportingLifeAdapter",
-        # The following adapters are added for debugging purposes to generate debug artifacts
-        "BrisnetAdapter",
-        "EquibaseAdapter",
-        "OddscheckerAdapter",
-        "RacingPostAdapter",
-        "TimeformAdapter",
     )
 
     @property
     def excluded_adapters(self) -> list[str]:
-        """Calculate which adapters to exclude."""
-        return [a for a in self.ALL_ADAPTERS if a not in self.RELIABLE_NON_KEYED_ADAPTERS]
+        """No adapters will be excluded."""
+        return []
 
     def __post_init__(self) -> None:
         """Validate configuration after initialization."""

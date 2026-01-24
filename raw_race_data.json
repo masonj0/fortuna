@@ -1,6 +1,12 @@
 {
   "races": [],
-  "errors": [],
+  "errors": [
+    {
+      "adapterName": "AtTheRaces",
+      "errorMessage": "HTTP Error 403 for https://www.attheraces.com/racecard/Tampa-Bay-Downs/24-January-2026/2135",
+      "attemptedUrl": "https://www.attheraces.com/racecard/Tampa-Bay-Downs/24-January-2026/2135"
+    }
+  ],
   "sourceInfo": [
     {
       "name": "RacingPost",
