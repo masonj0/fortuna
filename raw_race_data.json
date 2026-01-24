@@ -1,38 +1,20 @@
 {
   "races": [],
-  "errors": [],
+  "errors": [
+    {
+      "adapterName": "AtTheRaces",
+      "errorMessage": "HTTP Error 403 for https://www.attheraces.com/racecard/Tampa-Bay-Downs/24-January-2026/2135",
+      "attemptedUrl": "https://www.attheraces.com/racecard/Tampa-Bay-Downs/24-January-2026/2135"
+    }
+  ],
   "sourceInfo": [
     {
       "name": "AtTheRaces",
-      "status": "SUCCESS",
-      "racesFetched": 0,
-      "fetchDuration": 1.0704,
-      "errorMessage": null,
-      "attemptedUrl": null
-    },
-    {
-      "name": "Oddschecker",
-      "status": "SUCCESS",
-      "racesFetched": 0,
-      "fetchDuration": 1.083163,
-      "errorMessage": null,
-      "attemptedUrl": null
-    },
-    {
-      "name": "RacingPost",
-      "status": "SUCCESS",
-      "racesFetched": 0,
-      "fetchDuration": 1.257824,
-      "errorMessage": null,
-      "attemptedUrl": null
-    },
-    {
-      "name": "SportingLife",
-      "status": "SUCCESS",
-      "racesFetched": 0,
-      "fetchDuration": 1.21415,
-      "errorMessage": null,
-      "attemptedUrl": null
+      "status": "FAILED",
+      "racesFetched": 1,
+      "fetchDuration": 18.688184,
+      "errorMessage": "HTTP Error 403 for https://www.attheraces.com/racecard/Tampa-Bay-Downs/24-January-2026/2135",
+      "attemptedUrl": "https://www.attheraces.com/racecard/Tampa-Bay-Downs/24-January-2026/2135"
     }
   ]
 }

@@ -79,13 +79,6 @@ class ReporterConfig:
     # - RacingPost: 406 Not Acceptable (user agent issues)
     RELIABLE_NON_KEYED_ADAPTERS: tuple[str, ...] = (
         "AtTheRacesAdapter",
-        "SportingLifeAdapter",
-        # The following adapters are added for debugging purposes to generate debug artifacts
-        "BrisnetAdapter",
-        "EquibaseAdapter",
-        "OddscheckerAdapter",
-        "RacingPostAdapter",
-        "TimeformAdapter",
     )
 
     @property

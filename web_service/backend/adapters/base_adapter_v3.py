@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import random
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -261,12 +262,18 @@ class BaseAdapterV3(ABC):
     - Comprehensive metrics
     """
 
-    # Default User-Agent for requests
-    DEFAULT_USER_AGENT = (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/120.0.0.0 Safari/537.36"
-    )
+    # List of common User-Agent strings for rotation
+    USER_AGENTS = [
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0",
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    ]
+
+    @property
+    def DEFAULT_USER_AGENT(self) -> str:
+        """Return a randomly selected User-Agent."""
+        return random.choice(self.USER_AGENTS)
 
     def __init__(
         self,
@@ -381,7 +388,6 @@ class BaseAdapterV3(ABC):
 
     async def make_request(
         self,
-        http_client: httpx.AsyncClient,
         method: str,
         url: str,
         use_cache: bool = True,
@@ -417,17 +423,24 @@ class BaseAdapterV3(ABC):
                     message="Circuit breaker is open",
                 )
 
-            # Apply rate limiting
+            # Apply rate limiting and a small random delay
             await self.rate_limiter.acquire()
+            await asyncio.sleep(random.uniform(0.5, 2.5))
 
-            headers = kwargs.get("headers", {})
-            if "User-Agent" not in headers:
-                headers["User-Agent"] = self.DEFAULT_USER_AGENT
+            headers = {
+                "User-Agent": self.DEFAULT_USER_AGENT,
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Referer": "https://www.google.com/",
+                "DNT": "1",
+                "Upgrade-Insecure-Requests": "1",
+                **kwargs.get("headers", {}),
+            }
 
             start_time = time.monotonic()
             try:
                 self.logger.info("Making request attempt", method=method.upper(), url=full_url)
-                response = await http_client.request(
+                response = await self.http_client.request(
                     method, full_url, timeout=self.timeout, **kwargs
                 )
                 response.raise_for_status()
