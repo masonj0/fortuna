@@ -24,7 +24,7 @@ from .base_adapter_v3 import BaseAdapterV3
 class TwinSpiresAdapter(BaseAdapterV3):
     """
     Production adapter for twinspires.com using Scrapling.
-    
+
     TwinSpires uses heavy JavaScript rendering, so we need:
     - Browser automation (DynamicFetcher/StealthyFetcher)
     - Wait for network idle
@@ -36,8 +36,8 @@ class TwinSpiresAdapter(BaseAdapterV3):
 
     def __init__(self, config=None):
         super().__init__(
-            source_name=self.SOURCE_NAME, 
-            base_url=self.BASE_URL, 
+            source_name=self.SOURCE_NAME,
+            base_url=self.BASE_URL,
             config=config,
             enable_cache=True,
             cache_ttl=180.0,  # 3 minute cache (races change frequently)
@@ -47,20 +47,20 @@ class TwinSpiresAdapter(BaseAdapterV3):
     async def _fetch_data(self, date: str) -> Optional[dict]:
         """
         Fetches live race data from TwinSpires' dynamic JavaScript page.
-        
+
         TwinSpires renders everything via JavaScript, so we need:
         1. Full browser automation
         2. Wait for network requests to complete
         3. Wait for race elements to appear in DOM
-        
+
         Args:
             date: Date string in YYYY-MM-DD format
-            
+
         Returns:
             Dictionary containing race data and metadata
         """
         self.logger.info(f"Fetching TwinSpires races for {date}")
-        
+
         try:
             async with StealthySession(
                 headless=True,
@@ -70,13 +70,13 @@ class TwinSpiresAdapter(BaseAdapterV3):
                 disable_webgl=True,
                 humanize=True,
             ) as session:
-                
+
                 # TwinSpires shows today's races at /bet/todays-races/time
                 # The page loads races sorted by post time
                 index_url = f"{self.BASE_URL}/bet/todays-races/time"
-                
+
                 self.logger.info(f"Fetching: {index_url}")
-                
+
                 # Fetch with extended timeout for JS to render
                 index_page = await session.async_fetch(
                     index_url,
@@ -87,11 +87,11 @@ class TwinSpiresAdapter(BaseAdapterV3):
                     # Give extra time for dynamic content
                     page_action=lambda page: page.wait_for_timeout(3000)
                 )
-                
+
                 if index_page.status != 200:
                     self.logger.error(f"Failed to fetch index: status {index_page.status}")
                     return None
-                
+
                 # Save debug HTML to inspect structure
                 try:
                     with open("twinspires_debug.html", "w", encoding="utf-8") as f:
@@ -99,7 +99,7 @@ class TwinSpiresAdapter(BaseAdapterV3):
                     self.logger.info("Saved debug HTML - inspect to find correct selectors")
                 except Exception as e:
                     self.logger.warning(f"Failed to save debug HTML: {e}")
-                
+
                 # Check if page actually loaded content
                 if len(index_page.text) < 5000:  # Too short = probably failed
                     self.logger.error(
@@ -107,23 +107,23 @@ class TwinSpiresAdapter(BaseAdapterV3):
                         "JS may not have rendered."
                     )
                     return None
-                
+
                 # Parse races from the single page
                 # TwinSpires shows all races on one page, we don't need to fetch individual pages
                 races_data = self._extract_races_from_page(index_page, date)
-                
+
                 if not races_data:
                     self.logger.error("No races extracted from page")
                     return None
-                
+
                 self.logger.info(f"Extracted {len(races_data)} races from TwinSpires")
-                
+
                 return {
                     "races": races_data,
                     "date": date,
                     "source": "twinspires_live"
                 }
-                
+
         except Exception as e:
             self.logger.error(
                 "Critical error during TwinSpires fetch",
@@ -135,15 +135,15 @@ class TwinSpiresAdapter(BaseAdapterV3):
     def _extract_races_from_page(self, page, date: str) -> List[dict]:
         """
         Extract race information from the main TwinSpires page.
-        
+
         TwinSpires shows all races on one page, organized by track and time.
         We need to parse the structure and extract race details.
-        
+
         Returns:
             List of dictionaries containing race HTML and metadata
         """
         races_data = []
-        
+
         # Try multiple selector patterns to find race containers
         # These are guesses - adjust after inspecting twinspires_debug.html
         potential_selectors = [
@@ -154,6 +154,7 @@ class TwinSpiresAdapter(BaseAdapterV3):
             'section[class*="race"]',
             '[data-testid*="race"]',
         ]
+
         
         race_elements = []
         for selector in potential_selectors:
@@ -161,6 +162,7 @@ class TwinSpiresAdapter(BaseAdapterV3):
             if race_elements:
                 self.logger.info(f"Found {len(race_elements)} races using selector: {selector}")
                 break
+
         
         if not race_elements:
             self.logger.warning("Could not find race elements with any known selector")
@@ -178,7 +180,7 @@ class TwinSpiresAdapter(BaseAdapterV3):
                 # Extract track name
                 track_elem = race_elem.css_first('[class*="track"], [data-track], h2, h3')
                 track_name = track_elem.text.strip() if track_elem else f"Track {i}"
-                
+
                 # Extract race number
                 race_num_elem = race_elem.css_first('[class*="race-number"], [class*="raceNum"]')
                 race_number = i  # Default
@@ -187,41 +189,41 @@ class TwinSpiresAdapter(BaseAdapterV3):
                         race_number = int(''.join(filter(str.isdigit, race_num_elem.text)))
                     except ValueError:
                         pass
-                
+
                 races_data.append({
                     "html": str(race_elem),  # Convert element to HTML string
                     "track": track_name,
                     "race_number": race_number,
                     "date": date
                 })
-                
+
             except Exception as e:
                 self.logger.warning(f"Failed to extract race {i}: {e}")
                 continue
-        
+
         return races_data
 
     def _parse_races(self, raw_data: Any) -> List[Race]:
         """
         Parse extracted race data into Race objects.
-        
+
         Args:
             raw_data: Dictionary with 'races' list and 'date'
-            
+
         Returns:
             List of Race objects
         """
         if not raw_data or "races" not in raw_data:
             self.logger.warning("No races data to parse")
             return []
-        
+
         races_list = raw_data["races"]
         date_str = raw_data.get("date", datetime.now().strftime("%Y-%m-%d"))
-        
+
         self.logger.info(f"Parsing {len(races_list)} races")
-        
+
         parsed_races = []
-        
+
         for race_data in races_list:
             try:
                 race = self._parse_single_race(race_data, date_str)
@@ -235,54 +237,54 @@ class TwinSpiresAdapter(BaseAdapterV3):
                     exc_info=True
                 )
                 continue
-        
+
         self.logger.info(f"Successfully parsed {len(parsed_races)} races")
         return parsed_races
 
     def _parse_single_race(self, race_data: dict, date_str: str) -> Optional[Race]:
         """
         Parse a single race from HTML.
-        
+
         Args:
             race_data: Dict with 'html', 'track', 'race_number', 'date'
             date_str: Date string YYYY-MM-DD
-            
+
         Returns:
             Race object or None
         """
         from scrapling import Adaptor
-        
+
         html = race_data.get("html", "")
         if not html:
             return None
-        
+
         # Parse HTML with Scrapling
         page = Adaptor(html)
-        
+
         # Extract track name
         track_name = race_data.get("track", "Unknown")
-        
+
         # Extract race number
         race_number = race_data.get("race_number", 1)
-        
+
         # Extract post time
         start_time = self._extract_post_time(page, date_str)
-        
+
         # Extract discipline/race type
         discipline_elem = page.css_first('[class*="breed"], [class*="type"]')
         discipline = discipline_elem.text.strip() if discipline_elem else "Thoroughbred"
-        
+
         # Parse runners
         runners = self._parse_runners(page)
-        
+
         if not runners:
             self.logger.debug(f"No runners found for {track_name} R{race_number}")
             return None
-        
+
         # Generate race ID
         track_id = re.sub(r'[^a-z0-9]', '', track_name.lower())
         race_id = f"ts_{track_id}_{date_str.replace('-', '')}_R{race_number}"
-        
+
         return Race(
             id=race_id,
             venue=track_name,
@@ -296,11 +298,11 @@ class TwinSpiresAdapter(BaseAdapterV3):
     def _extract_post_time(self, page, date_str: str) -> datetime:
         """
         Extract post time from race HTML.
-        
+
         Args:
             page: Scrapling Adaptor object
             date_str: Date string YYYY-MM-DD
-            
+
         Returns:
             datetime object
         """
@@ -311,7 +313,7 @@ class TwinSpiresAdapter(BaseAdapterV3):
             '[class*="postTime"]',
             '[data-time]',
         ]
-        
+
         for selector in time_selectors:
             time_elem = page.css_first(selector)
             if time_elem:
@@ -322,14 +324,14 @@ class TwinSpiresAdapter(BaseAdapterV3):
                         return datetime.fromisoformat(dt_attr.replace('Z', '+00:00'))
                     except ValueError:
                         pass
-                
+
                 # Try parsing text like "3:45 PM EST"
                 time_text = time_elem.text.strip()
                 if time_text:
                     try:
                         # Remove timezone abbreviations
                         time_clean = re.sub(r'\s+(EST|EDT|CST|CDT|MST|MDT|PST|PDT)$', '', time_text)
-                        
+
                         # Try parsing 12-hour format
                         for fmt in ['%I:%M %p', '%I:%M%p', '%H:%M']:
                             try:
@@ -340,22 +342,22 @@ class TwinSpiresAdapter(BaseAdapterV3):
                                 continue
                     except Exception:
                         pass
-        
+
         # Fallback to current time
         return datetime.now()
 
     def _parse_runners(self, page) -> List[Runner]:
         """
         Parse runner information from race HTML.
-        
+
         Args:
             page: Scrapling Adaptor object
-            
+
         Returns:
             List of Runner objects
         """
         runners = []
-        
+
         # Try multiple selector patterns for runner rows
         runner_selectors = [
             'tr[class*="runner"]',
@@ -364,14 +366,14 @@ class TwinSpiresAdapter(BaseAdapterV3):
             '[data-runner]',
             '.horse-entry',
         ]
-        
+
         runner_elements = []
         for selector in runner_selectors:
             runner_elements = page.css(selector)
             if runner_elements:
                 self.logger.debug(f"Found {len(runner_elements)} runners with: {selector}")
                 break
-        
+
         for elem in runner_elements:
             try:
                 runner = self._parse_single_runner(elem)
@@ -380,7 +382,7 @@ class TwinSpiresAdapter(BaseAdapterV3):
             except Exception as e:
                 self.logger.debug(f"Failed to parse runner: {e}")
                 continue
-        
+
         return runners
 
     def _parse_single_runner(self, elem) -> Optional[Runner]:
@@ -392,7 +394,7 @@ class TwinSpiresAdapter(BaseAdapterV3):
                 'scr' in str(elem.attrib.get('class', '')).lower() or
                 bool(elem.css_first('[class*="scratch"]'))
             )
-            
+
             # Extract program number
             number_selectors = [
                 '[class*="program-number"]',
@@ -401,7 +403,7 @@ class TwinSpiresAdapter(BaseAdapterV3):
                 '[data-number]',
                 'span.number',
             ]
-            
+
             number = None
             for selector in number_selectors:
                 num_elem = elem.css_first(selector)
@@ -411,10 +413,10 @@ class TwinSpiresAdapter(BaseAdapterV3):
                         break
                     except ValueError:
                         continue
-            
+
             if not number:
                 return None
-            
+
             # Extract horse name
             name_selectors = [
                 '[class*="horse-name"]',
@@ -422,7 +424,7 @@ class TwinSpiresAdapter(BaseAdapterV3):
                 'a[class*="name"]',
                 '[data-horse-name]',
             ]
-            
+
             name = None
             for selector in name_selectors:
                 name_elem = elem.css_first(selector)
@@ -430,17 +432,17 @@ class TwinSpiresAdapter(BaseAdapterV3):
                     name = name_elem.text.strip()
                     if name:
                         break
-            
+
             if not name:
                 return None
-            
+
             # Extract odds
             odds_selectors = [
                 '[class*="odds"]',
                 '[class*="morning-line"]',
                 '[data-odds]',
             ]
-            
+
             odds = {}
             if not scratched:
                 for selector in odds_selectors:
@@ -456,14 +458,14 @@ class TwinSpiresAdapter(BaseAdapterV3):
                                     last_updated=datetime.now(),
                                 )
                             break
-            
+
             return Runner(
                 number=number,
                 name=name,
                 scratched=scratched,
                 odds=odds,
             )
-            
+
         except Exception as e:
             self.logger.debug(f"Runner parse error: {e}")
             return None

@@ -78,11 +78,11 @@ async def test():
         )
         print(f"Status: {page.status}")
         print(f"Content length: {len(page.text)}")
-        
+
         # Save to inspect
         with open("test_twinspires.html", "w") as f:
             f.write(page.text)
-        
+
         print("✅ Saved to test_twinspires.html")
 
 asyncio.run(test())
@@ -96,18 +96,18 @@ from web_service.backend.adapters.twinspires_adapter import TwinSpiresAdapter
 
 async def test_adapter():
     adapter = TwinSpiresAdapter()
-    
+
     # Test fetch
     date = "2026-01-25"  # Tomorrow
     raw_data = await adapter._fetch_data(date)
-    
+
     if raw_data:
         print(f"✅ Fetched {len(raw_data.get('races', []))} races")
-        
+
         # Test parse
         races = adapter._parse_races(raw_data)
         print(f"✅ Parsed {len(races)} races")
-        
+
         for race in races[:3]:
             print(f"  - {race.venue} R{race.race_number}: {len(race.runners)} runners")
     else:

@@ -8,7 +8,7 @@ Scrapling is an undetectable, powerful, flexible, high-performance Python librar
 
 Your current issues:
 - ❌ RacingPost: 406 (Not Acceptable)
-- ❌ Oddschecker: 403 (Forbidden)  
+- ❌ Oddschecker: 403 (Forbidden)
 - ❌ Timeform: 500 (Server Error)
 - ❌ Brisnet: Timeout/503
 
@@ -103,7 +103,7 @@ class RacingPostAdapter(BaseAdapterV3):
     async def _fetch_data(self, date: str) -> Optional[dict]:
         """Fetch using Scrapling's StealthyFetcher for anti-bot bypass."""
         full_url = f"{self.base_url}/racecards/{date}"
-        
+
         try:
             # Use StealthyFetcher to bypass bot detection
             page = await StealthyFetcher.async_fetch(
@@ -114,22 +114,22 @@ class RacingPostAdapter(BaseAdapterV3):
                 block_webrtc=True,   # Block WebRTC leaks
                 humanize=True        # Human-like timing
             )
-            
+
             if page.status != 200:
                 self.logger.warning(f"Non-200 status: {page.status}")
                 return None
-            
+
             # Save debug HTML
             try:
                 with open("racingpost_debug.html", "w", encoding="utf-8") as f:
                     f.write(page.text)
             except Exception as e:
                 self.logger.warning("Failed to save debug HTML", error=str(e))
-            
+
             # Parse links - Scrapling has built-in CSS selectors
             links = page.css('a[href*="/racecards/"]')
             race_urls = [link.attrib['href'] for link in links]
-            
+
             # Fetch individual race pages
             html_pages = []
             for race_url in race_urls:
@@ -138,9 +138,9 @@ class RacingPostAdapter(BaseAdapterV3):
                     headless=True
                 )
                 html_pages.append((race_url, race_page.text))
-            
+
             return {"pages": html_pages, "date": date}
-            
+
         except Exception as e:
             self.logger.error(f"StealthyFetcher failed: {e}")
             return None
@@ -161,7 +161,7 @@ class RacingPostAdapter(BaseAdapterV3):
     async def _fetch_data(self, date: str) -> Optional[dict]:
         """Fetch using persistent session - MUCH faster."""
         full_url = f"{self.base_url}/racecards/{date}"
-        
+
         # Session stays open, browser reused
         async with StealthySession(
             headless=True,
@@ -173,11 +173,11 @@ class RacingPostAdapter(BaseAdapterV3):
                 full_url,
                 network_idle=True
             )
-            
+
             # Extract race URLs
             race_links = index_page.css('a[href*="/racecards/"]')
             race_urls = [link.attrib['href'] for link in race_links]
-            
+
             # Fetch all race pages using SAME browser instance
             html_pages = []
             for race_url in race_urls:
@@ -185,7 +185,7 @@ class RacingPostAdapter(BaseAdapterV3):
                     f"{self.base_url}{race_url}"
                 )
                 html_pages.append((race_url, race_page.text))
-            
+
             return {"pages": html_pages, "date": date}
 ```
 
@@ -227,17 +227,17 @@ class RacingPostAdapterV4(BaseAdapterV3):
     RacingPost adapter using Scrapling's StealthyFetcher
     for anti-bot bypass.
     """
-    
+
     SOURCE_NAME = "RacingPost"
     BASE_URL = "https://www.racingpost.com"
-    
+
     def __init__(self, config=None):
         super().__init__(
             source_name=self.SOURCE_NAME,
             base_url=self.BASE_URL,
             config=config
         )
-    
+
     async def _fetch_data(self, date: str) -> Optional[dict]:
         """Fetch with Scrapling StealthySession for maximum success."""
         try:
@@ -250,38 +250,38 @@ class RacingPostAdapterV4(BaseAdapterV3):
                 # Fetch index
                 index_url = f"{self.BASE_URL}/racecards/{date}"
                 self.logger.info(f"Fetching index: {index_url}")
-                
+
                 index_page = await session.async_fetch(
                     index_url,
                     network_idle=True,
                     wait_selector='a[href*="/racecards/"]'  # Wait for links
                 )
-                
+
                 if index_page.status != 200:
                     self.logger.error(f"Index failed: {index_page.status}")
                     return None
-                
+
                 # Debug output
                 try:
                     with open("racingpost_debug.html", "w", encoding="utf-8") as f:
                         f.write(index_page.text)
                 except Exception as e:
                     self.logger.warning(f"Debug save failed: {e}")
-                
+
                 # Extract race URLs using Scrapling's CSS selector
                 race_links = index_page.css('a[href*="/racecards/"]')
                 race_urls = list(set([
-                    link.attrib.get('href', '') 
-                    for link in race_links 
+                    link.attrib.get('href', '')
+                    for link in race_links
                     if '/racecards/' in link.attrib.get('href', '')
                 ]))
-                
+
                 self.logger.info(f"Found {len(race_urls)} race URLs")
-                
+
                 if not race_urls:
                     self.logger.warning("No race URLs found")
                     return None
-                
+
                 # Fetch individual races
                 html_pages = []
                 for race_url in race_urls[:20]:  # Limit to avoid timeout
@@ -293,13 +293,13 @@ class RacingPostAdapterV4(BaseAdapterV3):
                     except Exception as e:
                         self.logger.warning(f"Race {race_url} failed: {e}")
                         continue
-                
+
                 return {"pages": html_pages, "date": date}
-                
+
         except Exception as e:
             self.logger.error(f"Fetch failed: {e}", exc_info=True)
             return None
-    
+
     def _parse_races(self, raw_data: dict) -> List[Race]:
         """Parse races from HTML - same as before."""
         # Your existing parsing logic here

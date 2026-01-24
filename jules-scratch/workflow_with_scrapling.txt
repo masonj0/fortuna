@@ -76,10 +76,10 @@ jobs:
           # Install Scrapling's browser dependencies
           # This downloads Chromium and modified Firefox (Camoufox)
           scrapling install
-          
+
           # Verify installation
           echo "Scrapling browsers installed successfully"
-          
+
         continue-on-error: false  # Fail if browser installation fails
 
       - name: '📂 Create Runtime Directories'
@@ -111,7 +111,7 @@ jobs:
           # Start virtual display for headless browser
           sudo Xvfb :99 -screen 0 1920x1080x24 > /dev/null 2>&1 &
           sleep 2
-          
+
           set -o pipefail
           python scripts/fortuna_reporter.py 2>&1 | tee reporter_output.log
 
