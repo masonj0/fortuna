@@ -54,7 +54,7 @@ soupsieve==2.5
 selectolax==0.3.20
 
 # Cli Configuration
-click==8.1.7
+click>=8.3.0
 python-dotenv==1.0.0
 pyyaml==6.0.1
 
@@ -125,3 +125,4 @@ pygments==2.17.2
 # - pandas 2.1+: Has compatibility issues with Python 3.10
 # - pywebview 6x: Has Windows compatibility issues
 # - cefpython3: Incompatible with Python 3.10.11
+scrapling[fetchers]>=0.3.7

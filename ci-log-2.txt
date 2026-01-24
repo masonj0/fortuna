@@ -1,0 +1,619 @@
+﻿2026-01-24T18:12:24.9088785Z Current runner version: '2.331.0'
+2026-01-24T18:12:24.9113013Z ##[group]Runner Image Provisioner
+2026-01-24T18:12:24.9113887Z Hosted Compute Agent
+2026-01-24T18:12:24.9114455Z Version: 20260115.477
+2026-01-24T18:12:24.9115059Z Commit: 4b342d620503cbe250a3154040964899ea7c9b00
+2026-01-24T18:12:24.9115744Z Build Date: 2026-01-15T22:32:41Z
+2026-01-24T18:12:24.9116349Z Worker ID: {0adffe13-da92-4f1a-8d93-5de38aef4af0}
+2026-01-24T18:12:24.9117086Z Azure Region: eastus2
+2026-01-24T18:12:24.9117590Z ##[endgroup]
+2026-01-24T18:12:24.9119409Z ##[group]Operating System
+2026-01-24T18:12:24.9119975Z Ubuntu
+2026-01-24T18:12:24.9120528Z 24.04.3
+2026-01-24T18:12:24.9120941Z LTS
+2026-01-24T18:12:24.9121459Z ##[endgroup]
+2026-01-24T18:12:24.9121957Z ##[group]Runner Image
+2026-01-24T18:12:24.9122466Z Image: ubuntu-24.04
+2026-01-24T18:12:24.9123000Z Version: 20260119.4.1
+2026-01-24T18:12:24.9124135Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260119.4/images/ubuntu/Ubuntu2404-Readme.md
+2026-01-24T18:12:24.9125634Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260119.4
+2026-01-24T18:12:24.9126523Z ##[endgroup]
+2026-01-24T18:12:24.9127566Z ##[group]GITHUB_TOKEN Permissions
+2026-01-24T18:12:24.9130021Z Actions: write
+2026-01-24T18:12:24.9130572Z Contents: read
+2026-01-24T18:12:24.9131157Z Metadata: read
+2026-01-24T18:12:24.9131639Z ##[endgroup]
+2026-01-24T18:12:24.9133625Z Secret source: Actions
+2026-01-24T18:12:24.9134454Z Prepare workflow directory
+2026-01-24T18:12:24.9508940Z Prepare all required actions
+2026-01-24T18:12:24.9545448Z Getting action download info
+2026-01-24T18:12:25.2499919Z Download action repository 'actions/checkout@v4' (SHA:34e114876b0b11c390a56381ad16ebd13914f8d5)
+2026-01-24T18:12:25.3649369Z Download action repository 'actions/setup-python@v5' (SHA:a26af69be951a213d495a4c3e4e4022e16d87065)
+2026-01-24T18:12:25.4480759Z Download action repository 'actions/cache@v4' (SHA:0057852bfaa89a56745cba8c7296529d2fc39830)
+2026-01-24T18:12:25.5493040Z Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+2026-01-24T18:12:25.7675736Z Complete job name: generate-unified-report
+2026-01-24T18:12:25.8364914Z ##[group]Run actions/checkout@v4
+2026-01-24T18:12:25.8365728Z with:
+2026-01-24T18:12:25.8366084Z   fetch-depth: 1
+2026-01-24T18:12:25.8366483Z   repository: masonj0/fortuna
+2026-01-24T18:12:25.8367166Z   token: ***
+2026-01-24T18:12:25.8367546Z   ssh-strict: true
+2026-01-24T18:12:25.8368226Z   ssh-user: git
+2026-01-24T18:12:25.8368615Z   persist-credentials: true
+2026-01-24T18:12:25.8369042Z   clean: true
+2026-01-24T18:12:25.8369418Z   sparse-checkout-cone-mode: true
+2026-01-24T18:12:25.8369879Z   fetch-tags: false
+2026-01-24T18:12:25.8370248Z   show-progress: true
+2026-01-24T18:12:25.8370631Z   lfs: false
+2026-01-24T18:12:25.8370976Z   submodules: false
+2026-01-24T18:12:25.8371354Z   set-safe-directory: true
+2026-01-24T18:12:25.8372027Z env:
+2026-01-24T18:12:25.8372434Z   PYTHON_VERSION: 3.11
+2026-01-24T18:12:25.8372868Z   REPORT_RETENTION_DAYS: 14
+2026-01-24T18:12:25.8373281Z   MAX_RETRIES: 3
+2026-01-24T18:12:25.8373649Z   REQUEST_TIMEOUT: 30
+2026-01-24T18:12:25.8374058Z ##[endgroup]
+2026-01-24T18:12:25.9485243Z Syncing repository: masonj0/fortuna
+2026-01-24T18:12:25.9487756Z ##[group]Getting Git version info
+2026-01-24T18:12:25.9489103Z Working directory is '/home/runner/work/fortuna/fortuna'
+2026-01-24T18:12:25.9490800Z [command]/usr/bin/git version
+2026-01-24T18:12:25.9555979Z git version 2.52.0
+2026-01-24T18:12:25.9598640Z ##[endgroup]
+2026-01-24T18:12:25.9618219Z Temporarily overriding HOME='/home/runner/work/_temp/cbb84fbd-0087-4ede-a660-2c9a00772f67' before making global git config changes
+2026-01-24T18:12:25.9620020Z Adding repository directory to the temporary git global config as a safe directory
+2026-01-24T18:12:25.9642092Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/fortuna/fortuna
+2026-01-24T18:12:25.9680480Z Deleting the contents of '/home/runner/work/fortuna/fortuna'
+2026-01-24T18:12:25.9683867Z ##[group]Initializing the repository
+2026-01-24T18:12:25.9687722Z [command]/usr/bin/git init /home/runner/work/fortuna/fortuna
+2026-01-24T18:12:25.9811570Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-01-24T18:12:25.9813183Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-01-24T18:12:25.9814151Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-01-24T18:12:25.9814876Z hint: call:
+2026-01-24T18:12:25.9815447Z hint:
+2026-01-24T18:12:25.9816309Z hint: 	git config --global init.defaultBranch <name>
+2026-01-24T18:12:25.9817003Z hint:
+2026-01-24T18:12:25.9817802Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-01-24T18:12:25.9819624Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-01-24T18:12:25.9820932Z hint:
+2026-01-24T18:12:25.9821636Z hint: 	git branch -m <name>
+2026-01-24T18:12:25.9822433Z hint:
+2026-01-24T18:12:25.9823565Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-01-24T18:12:25.9825375Z Initialized empty Git repository in /home/runner/work/fortuna/fortuna/.git/
+2026-01-24T18:12:25.9830904Z [command]/usr/bin/git remote add origin https://github.com/masonj0/fortuna
+2026-01-24T18:12:25.9866479Z ##[endgroup]
+2026-01-24T18:12:25.9867305Z ##[group]Disabling automatic garbage collection
+2026-01-24T18:12:25.9870443Z [command]/usr/bin/git config --local gc.auto 0
+2026-01-24T18:12:25.9898461Z ##[endgroup]
+2026-01-24T18:12:25.9899249Z ##[group]Setting up auth
+2026-01-24T18:12:25.9905415Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-01-24T18:12:25.9935001Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-01-24T18:12:26.0305631Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-01-24T18:12:26.0334614Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-01-24T18:12:26.0549586Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-01-24T18:12:26.0592331Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-01-24T18:12:26.0813665Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-01-24T18:12:26.0846594Z ##[endgroup]
+2026-01-24T18:12:26.0847459Z ##[group]Fetching the repository
+2026-01-24T18:12:26.0854867Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +ad4d2246d57559dae4f16e3661171e6f049ee944:refs/remotes/origin/main
+2026-01-24T18:12:26.4330383Z From https://github.com/masonj0/fortuna
+2026-01-24T18:12:26.4332236Z  * [new ref]         ad4d2246d57559dae4f16e3661171e6f049ee944 -> origin/main
+2026-01-24T18:12:26.4365901Z ##[endgroup]
+2026-01-24T18:12:26.4367279Z ##[group]Determining the checkout info
+2026-01-24T18:12:26.4369150Z ##[endgroup]
+2026-01-24T18:12:26.4373519Z [command]/usr/bin/git sparse-checkout disable
+2026-01-24T18:12:26.4416658Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-01-24T18:12:26.4445176Z ##[group]Checking out the ref
+2026-01-24T18:12:26.4450227Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+2026-01-24T18:12:26.5000968Z Switched to a new branch 'main'
+2026-01-24T18:12:26.5003093Z branch 'main' set up to track 'origin/main'.
+2026-01-24T18:12:26.5013260Z ##[endgroup]
+2026-01-24T18:12:26.5050623Z [command]/usr/bin/git log -1 --format=%H
+2026-01-24T18:12:26.5073318Z ad4d2246d57559dae4f16e3661171e6f049ee944
+2026-01-24T18:12:26.5368581Z ##[group]Run actions/setup-python@v5
+2026-01-24T18:12:26.5369981Z with:
+2026-01-24T18:12:26.5434152Z   python-version: 3.11
+2026-01-24T18:12:26.5435262Z   cache: pip
+2026-01-24T18:12:26.5436525Z   cache-dependency-path: web_service/backend/requirements.txt
+2026-01-24T18:12:26.5438111Z   check-latest: false
+2026-01-24T18:12:26.5439413Z   token: ***
+2026-01-24T18:12:26.5440270Z   update-environment: true
+2026-01-24T18:12:26.5441261Z   allow-prereleases: false
+2026-01-24T18:12:26.5442237Z   freethreaded: false
+2026-01-24T18:12:26.5443113Z env:
+2026-01-24T18:12:26.5443895Z   PYTHON_VERSION: 3.11
+2026-01-24T18:12:26.5444818Z   REPORT_RETENTION_DAYS: 14
+2026-01-24T18:12:26.5445772Z   MAX_RETRIES: 3
+2026-01-24T18:12:26.5446620Z   REQUEST_TIMEOUT: 30
+2026-01-24T18:12:26.5447551Z ##[endgroup]
+2026-01-24T18:12:26.7171423Z ##[group]Installed versions
+2026-01-24T18:12:26.7307074Z Successfully set up CPython (3.11.14)
+2026-01-24T18:12:26.7308471Z ##[endgroup]
+2026-01-24T18:12:26.7595820Z [command]/opt/hostedtoolcache/Python/3.11.14/x64/bin/pip cache dir
+2026-01-24T18:12:27.0930447Z /home/runner/.cache/pip
+2026-01-24T18:12:27.1975550Z Cache hit for: setup-python-Linux-x64-24.04-Ubuntu-python-3.11.14-pip-db0eb0f1c23d717e497c5d55959603a5a48a65d5c152e59089aeedc4368ba07e
+2026-01-24T18:12:28.2567009Z Received 209715200 of 474921379 (44.2%), 200.0 MBs/sec
+2026-01-24T18:12:29.2627324Z Received 436207616 of 474921379 (91.8%), 207.5 MBs/sec
+2026-01-24T18:12:29.4066310Z Received 474921379 of 474921379 (100.0%), 210.7 MBs/sec
+2026-01-24T18:12:29.4074843Z Cache Size: ~453 MB (474921379 B)
+2026-01-24T18:12:29.4195975Z [command]/usr/bin/tar -xf /home/runner/work/_temp/096a4190-bfb9-4a45-b6bb-e7580fc6c584/cache.tzst -P -C /home/runner/work/fortuna/fortuna --use-compress-program unzstd
+2026-01-24T18:12:30.2005775Z Cache restored successfully
+2026-01-24T18:12:30.2894865Z Cache restored from key: setup-python-Linux-x64-24.04-Ubuntu-python-3.11.14-pip-9b33d885a72e4a79c39d67e0d38fd2891ce0392a75a496cd6973c98dee5ac231
+2026-01-24T18:12:30.3063188Z ##[group]Run python -m pip install --upgrade pip setuptools wheel
+2026-01-24T18:12:30.3063756Z [36;1mpython -m pip install --upgrade pip setuptools wheel[0m
+2026-01-24T18:12:30.3064189Z [36;1mpip install -r web_service/backend/requirements.txt[0m
+2026-01-24T18:12:30.3104308Z shell: /usr/bin/bash -e {0}
+2026-01-24T18:12:30.3104566Z env:
+2026-01-24T18:12:30.3104752Z   PYTHON_VERSION: 3.11
+2026-01-24T18:12:30.3104965Z   REPORT_RETENTION_DAYS: 14
+2026-01-24T18:12:30.3105200Z   MAX_RETRIES: 3
+2026-01-24T18:12:30.3105427Z   REQUEST_TIMEOUT: 30
+2026-01-24T18:12:30.3105694Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-01-24T18:12:30.3106136Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.14/x64/lib/pkgconfig
+2026-01-24T18:12:30.3106559Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-01-24T18:12:30.3106927Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-01-24T18:12:30.3107336Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-01-24T18:12:30.3107700Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.14/x64/lib
+2026-01-24T18:12:30.3108382Z ##[endgroup]
+2026-01-24T18:12:30.8686776Z Requirement already satisfied: pip in /opt/hostedtoolcache/Python/3.11.14/x64/lib/python3.11/site-packages (25.3)
+2026-01-24T18:12:31.0078104Z Requirement already satisfied: setuptools in /opt/hostedtoolcache/Python/3.11.14/x64/lib/python3.11/site-packages (79.0.1)
+2026-01-24T18:12:31.1324455Z Collecting setuptools
+2026-01-24T18:12:31.1340950Z   Using cached setuptools-80.10.1-py3-none-any.whl.metadata (6.7 kB)
+2026-01-24T18:12:31.1730389Z Collecting wheel
+2026-01-24T18:12:31.2468397Z   Downloading wheel-0.46.3-py3-none-any.whl.metadata (2.4 kB)
+2026-01-24T18:12:31.2737148Z Collecting packaging>=24.0 (from wheel)
+2026-01-24T18:12:31.2816532Z   Downloading packaging-26.0-py3-none-any.whl.metadata (3.3 kB)
+2026-01-24T18:12:31.2871172Z Using cached setuptools-80.10.1-py3-none-any.whl (1.1 MB)
+2026-01-24T18:12:31.2957114Z Downloading wheel-0.46.3-py3-none-any.whl (30 kB)
+2026-01-24T18:12:31.3132490Z Downloading packaging-26.0-py3-none-any.whl (74 kB)
+2026-01-24T18:12:31.3406879Z Installing collected packages: setuptools, packaging, wheel
+2026-01-24T18:12:31.3413235Z   Attempting uninstall: setuptools
+2026-01-24T18:12:31.3428597Z     Found existing installation: setuptools 79.0.1
+2026-01-24T18:12:31.5448379Z     Uninstalling setuptools-79.0.1:
+2026-01-24T18:12:31.5780205Z       Successfully uninstalled setuptools-79.0.1
+2026-01-24T18:12:32.3023273Z
+2026-01-24T18:12:32.3035019Z Successfully installed packaging-26.0 setuptools-80.10.1 wheel-0.46.3
+2026-01-24T18:12:32.8163784Z Collecting fastapi==0.104.1 (from -r web_service/backend/requirements.txt (line 11))
+2026-01-24T18:12:32.8185442Z   Using cached fastapi-0.104.1-py3-none-any.whl.metadata (24 kB)
+2026-01-24T18:12:32.8516802Z Collecting uvicorn==0.24.0 (from uvicorn[standard]==0.24.0->-r web_service/backend/requirements.txt (line 12))
+2026-01-24T18:12:32.8531092Z   Using cached uvicorn-0.24.0-py3-none-any.whl.metadata (6.4 kB)
+2026-01-24T18:12:32.8823994Z Collecting starlette==0.27.0 (from -r web_service/backend/requirements.txt (line 13))
+2026-01-24T18:12:32.8837274Z   Using cached starlette-0.27.0-py3-none-any.whl.metadata (5.8 kB)
+2026-01-24T18:12:32.9959032Z Collecting pydantic==2.5.0 (from -r web_service/backend/requirements.txt (line 14))
+2026-01-24T18:12:32.9975002Z   Using cached pydantic-2.5.0-py3-none-any.whl.metadata (174 kB)
+2026-01-24T18:12:33.6366569Z Collecting pydantic-core==2.14.1 (from -r web_service/backend/requirements.txt (line 15))
+2026-01-24T18:12:33.6383377Z   Using cached pydantic_core-2.14.1-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.5 kB)
+2026-01-24T18:12:33.6553468Z Collecting pydantic-settings==2.1.0 (from -r web_service/backend/requirements.txt (line 16))
+2026-01-24T18:12:33.6568364Z   Using cached pydantic_settings-2.1.0-py3-none-any.whl.metadata (2.9 kB)
+2026-01-24T18:12:33.6761269Z Collecting anyio==3.7.1 (from -r web_service/backend/requirements.txt (line 19))
+2026-01-24T18:12:33.6775021Z   Using cached anyio-3.7.1-py3-none-any.whl.metadata (4.7 kB)
+2026-01-24T18:12:33.6921748Z Collecting h11==0.14.0 (from -r web_service/backend/requirements.txt (line 20))
+2026-01-24T18:12:33.6935181Z   Using cached h11-0.14.0-py3-none-any.whl.metadata (8.2 kB)
+2026-01-24T18:12:33.7100263Z Collecting h2==4.1.0 (from -r web_service/backend/requirements.txt (line 21))
+2026-01-24T18:12:33.7113169Z   Using cached h2-4.1.0-py3-none-any.whl.metadata (3.6 kB)
+2026-01-24T18:12:33.7233955Z Collecting hpack==4.0.0 (from -r web_service/backend/requirements.txt (line 22))
+2026-01-24T18:12:33.7247001Z   Using cached hpack-4.0.0-py3-none-any.whl.metadata (2.5 kB)
+2026-01-24T18:12:33.7678987Z Collecting httpcore==1.0.2 (from -r web_service/backend/requirements.txt (line 23))
+2026-01-24T18:12:33.7692896Z   Using cached httpcore-1.0.2-py3-none-any.whl.metadata (20 kB)
+2026-01-24T18:12:33.8016887Z Collecting httptools==0.6.1 (from -r web_service/backend/requirements.txt (line 24))
+2026-01-24T18:12:33.8031614Z   Using cached httptools-0.6.1-cp311-cp311-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (3.6 kB)
+2026-01-24T18:12:33.8237285Z Collecting httpx==0.25.2 (from -r web_service/backend/requirements.txt (line 25))
+2026-01-24T18:12:33.8251225Z   Using cached httpx-0.25.2-py3-none-any.whl.metadata (6.9 kB)
+2026-01-24T18:12:33.8401690Z Collecting hyperframe==6.1.0 (from -r web_service/backend/requirements.txt (line 26))
+2026-01-24T18:12:33.8415135Z   Using cached hyperframe-6.1.0-py3-none-any.whl.metadata (4.3 kB)
+2026-01-24T18:12:33.9280041Z Collecting websockets==12.0 (from -r web_service/backend/requirements.txt (line 27))
+2026-01-24T18:12:33.9295830Z   Using cached websockets-12.0-cp311-cp311-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.6 kB)
+2026-01-24T18:12:33.9431927Z Collecting wsproto==1.2.0 (from -r web_service/backend/requirements.txt (line 28))
+2026-01-24T18:12:33.9445602Z   Using cached wsproto-1.2.0-py3-none-any.whl.metadata (5.6 kB)
+2026-01-24T18:12:33.9705635Z Collecting requests==2.31.0 (from -r web_service/backend/requirements.txt (line 31))
+2026-01-24T18:12:33.9719454Z   Using cached requests-2.31.0-py3-none-any.whl.metadata (4.6 kB)
+2026-01-24T18:12:33.9974417Z Collecting urllib3==2.1.0 (from -r web_service/backend/requirements.txt (line 32))
+2026-01-24T18:12:33.9988559Z   Using cached urllib3-2.1.0-py3-none-any.whl.metadata (6.4 kB)
+2026-01-24T18:12:34.0186202Z Collecting certifi==2023.7.22 (from -r web_service/backend/requirements.txt (line 33))
+2026-01-24T18:12:34.0199685Z   Using cached certifi-2023.7.22-py3-none-any.whl.metadata (2.2 kB)
+2026-01-24T18:12:34.0969182Z Collecting charset-normalizer==3.3.2 (from -r web_service/backend/requirements.txt (line 34))
+2026-01-24T18:12:34.0984072Z   Using cached charset_normalizer-3.3.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (33 kB)
+2026-01-24T18:12:34.1144244Z Collecting idna==3.6 (from -r web_service/backend/requirements.txt (line 35))
+2026-01-24T18:12:34.1157408Z   Using cached idna-3.6-py3-none-any.whl.metadata (9.9 kB)
+2026-01-24T18:12:34.4367531Z Collecting sqlalchemy==2.0.23 (from -r web_service/backend/requirements.txt (line 38))
+2026-01-24T18:12:34.4382487Z   Using cached SQLAlchemy-2.0.23-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (9.6 kB)
+2026-01-24T18:12:34.5683867Z Collecting greenlet==3.0.2 (from -r web_service/backend/requirements.txt (line 39))
+2026-01-24T18:12:34.5698809Z   Using cached greenlet-3.0.2-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl.metadata (3.7 kB)
+2026-01-24T18:12:34.5838404Z Collecting aiosqlite==0.19.0 (from -r web_service/backend/requirements.txt (line 40))
+2026-01-24T18:12:34.5851186Z   Using cached aiosqlite-0.19.0-py3-none-any.whl.metadata (4.3 kB)
+2026-01-24T18:12:34.6482534Z Collecting psycopg2-binary==2.9.9 (from -r web_service/backend/requirements.txt (line 41))
+2026-01-24T18:12:34.6497682Z   Using cached psycopg2_binary-2.9.9-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.4 kB)
+2026-01-24T18:12:34.8746029Z Collecting numpy==1.24.3 (from -r web_service/backend/requirements.txt (line 44))
+2026-01-24T18:12:34.8761102Z   Using cached numpy-1.24.3-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.6 kB)
+2026-01-24T18:12:34.9895597Z Collecting pandas==2.0.3 (from -r web_service/backend/requirements.txt (line 45))
+2026-01-24T18:12:34.9910577Z   Using cached pandas-2.0.3-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (18 kB)
+2026-01-24T18:12:35.0191323Z Collecting python-dateutil==2.8.2 (from -r web_service/backend/requirements.txt (line 46))
+2026-01-24T18:12:35.0203933Z   Using cached python_dateutil-2.8.2-py2.py3-none-any.whl.metadata (8.2 kB)
+2026-01-24T18:12:35.0554749Z Collecting pytz==2023.3.post1 (from -r web_service/backend/requirements.txt (line 47))
+2026-01-24T18:12:35.0568090Z   Using cached pytz-2023.3.post1-py2.py3-none-any.whl.metadata (22 kB)
+2026-01-24T18:12:35.0723569Z Collecting tzdata==2023.3 (from -r web_service/backend/requirements.txt (line 48))
+2026-01-24T18:12:35.0736152Z   Using cached tzdata-2023.3-py2.py3-none-any.whl.metadata (1.4 kB)
+2026-01-24T18:12:35.0869030Z Collecting six==1.16.0 (from -r web_service/backend/requirements.txt (line 49))
+2026-01-24T18:12:35.0881709Z   Using cached six-1.16.0-py2.py3-none-any.whl.metadata (1.8 kB)
+2026-01-24T18:12:35.1055021Z Collecting beautifulsoup4==4.12.2 (from -r web_service/backend/requirements.txt (line 52))
+2026-01-24T18:12:35.1067728Z   Using cached beautifulsoup4-4.12.2-py3-none-any.whl.metadata (3.6 kB)
+2026-01-24T18:12:35.1245822Z Collecting soupsieve==2.5 (from -r web_service/backend/requirements.txt (line 53))
+2026-01-24T18:12:35.1258433Z   Using cached soupsieve-2.5-py3-none-any.whl.metadata (4.7 kB)
+2026-01-24T18:12:35.2393140Z Collecting selectolax==0.3.20 (from -r web_service/backend/requirements.txt (line 54))
+2026-01-24T18:12:35.2408749Z   Using cached selectolax-0.3.20-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.6 kB)
+2026-01-24T18:12:35.2595505Z Collecting click==8.1.7 (from -r web_service/backend/requirements.txt (line 57))
+2026-01-24T18:12:35.2608783Z   Using cached click-8.1.7-py3-none-any.whl.metadata (3.0 kB)
+2026-01-24T18:12:35.2778575Z Collecting python-dotenv==1.0.0 (from -r web_service/backend/requirements.txt (line 58))
+2026-01-24T18:12:35.2791806Z   Using cached python_dotenv-1.0.0-py3-none-any.whl.metadata (21 kB)
+2026-01-24T18:12:35.3173588Z Collecting pyyaml==6.0.1 (from -r web_service/backend/requirements.txt (line 59))
+2026-01-24T18:12:35.3186826Z   Using cached PyYAML-6.0.1-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (2.1 kB)
+2026-01-24T18:12:35.5395780Z Collecting cryptography==41.0.7 (from -r web_service/backend/requirements.txt (line 62))
+2026-01-24T18:12:35.5411041Z   Using cached cryptography-41.0.7-cp37-abi3-manylinux_2_28_x86_64.whl.metadata (5.2 kB)
+2026-01-24T18:12:35.6428657Z Collecting cffi==1.16.0 (from -r web_service/backend/requirements.txt (line 63))
+2026-01-24T18:12:35.6444480Z   Using cached cffi-1.16.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (1.5 kB)
+2026-01-24T18:12:35.6581346Z Collecting pycparser==2.21 (from -r web_service/backend/requirements.txt (line 64))
+2026-01-24T18:12:35.6594256Z   Using cached pycparser-2.21-py2.py3-none-any.whl.metadata (1.1 kB)
+2026-01-24T18:12:35.6717413Z Collecting secretstorage==3.5.0 (from -r web_service/backend/requirements.txt (line 65))
+2026-01-24T18:12:35.6730914Z   Using cached secretstorage-3.5.0-py3-none-any.whl.metadata (4.0 kB)
+2026-01-24T18:12:35.7049990Z Collecting keyring==24.3.0 (from -r web_service/backend/requirements.txt (line 66))
+2026-01-24T18:12:35.7062975Z   Using cached keyring-24.3.0-py3-none-any.whl.metadata (20 kB)
+2026-01-24T18:12:35.7215596Z Collecting jeepney==0.9.0 (from -r web_service/backend/requirements.txt (line 67))
+2026-01-24T18:12:35.7228810Z   Using cached jeepney-0.9.0-py3-none-any.whl.metadata (1.2 kB)
+2026-01-24T18:12:35.7523226Z Collecting redis==5.0.1 (from -r web_service/backend/requirements.txt (line 70))
+2026-01-24T18:12:35.7536170Z   Using cached redis-5.0.1-py3-none-any.whl.metadata (8.9 kB)
+2026-01-24T18:12:35.7772953Z Collecting limits==3.7.0 (from -r web_service/backend/requirements.txt (line 71))
+2026-01-24T18:12:35.7786139Z   Using cached limits-3.7.0-py3-none-any.whl.metadata (7.3 kB)
+2026-01-24T18:12:35.7953907Z Collecting slowapi==0.1.9 (from -r web_service/backend/requirements.txt (line 72))
+2026-01-24T18:12:35.7967037Z   Using cached slowapi-0.1.9-py3-none-any.whl.metadata (3.0 kB)
+2026-01-24T18:12:35.8142576Z Collecting tenacity==8.2.3 (from -r web_service/backend/requirements.txt (line 73))
+2026-01-24T18:12:35.8155395Z   Using cached tenacity-8.2.3-py3-none-any.whl.metadata (1.0 kB)
+2026-01-24T18:12:35.8344201Z Collecting pywebview==5.4 (from -r web_service/backend/requirements.txt (line 76))
+2026-01-24T18:12:35.8357065Z   Using cached pywebview-5.4-py3-none-any.whl.metadata (4.5 kB)
+2026-01-24T18:12:35.8551288Z Collecting bottle==0.13.4 (from -r web_service/backend/requirements.txt (line 77))
+2026-01-24T18:12:35.8564021Z   Using cached bottle-0.13.4-py2.py3-none-any.whl.metadata (1.6 kB)
+2026-01-24T18:12:35.8706727Z Collecting proxy-tools==0.1.0 (from -r web_service/backend/requirements.txt (line 78))
+2026-01-24T18:12:35.8708606Z   Using cached proxy_tools-0.1.0-py3-none-any.whl
+2026-01-24T18:12:35.9413432Z Collecting psutil==5.9.6 (from -r web_service/backend/requirements.txt (line 82))
+2026-01-24T18:12:35.9429339Z   Using cached psutil-5.9.6-cp36-abi3-manylinux_2_12_x86_64.manylinux2010_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (21 kB)
+2026-01-24T18:12:35.9625339Z Collecting structlog==23.2.0 (from -r web_service/backend/requirements.txt (line 85))
+2026-01-24T18:12:35.9638621Z   Using cached structlog-23.2.0-py3-none-any.whl.metadata (7.6 kB)
+2026-01-24T18:12:36.0144841Z Collecting black==23.12.0 (from -r web_service/backend/requirements.txt (line 88))
+2026-01-24T18:12:36.0159993Z   Using cached black-23.12.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (68 kB)
+2026-01-24T18:12:36.0646792Z Collecting pyinstaller==6.1.0 (from -r web_service/backend/requirements.txt (line 89))
+2026-01-24T18:12:36.0661161Z   Using cached pyinstaller-6.1.0-py3-none-manylinux2014_x86_64.whl.metadata (8.2 kB)
+2026-01-24T18:12:36.0887729Z Collecting pyinstaller-hooks-contrib==2023.11 (from -r web_service/backend/requirements.txt (line 90))
+2026-01-24T18:12:36.0902301Z   Using cached pyinstaller_hooks_contrib-2023.11-py2.py3-none-any.whl.metadata (15 kB)
+2026-01-24T18:12:36.1031339Z Collecting altgraph==0.17.3 (from -r web_service/backend/requirements.txt (line 91))
+2026-01-24T18:12:36.1044947Z   Using cached altgraph-0.17.3-py2.py3-none-any.whl.metadata (7.4 kB)
+2026-01-24T18:12:36.1252711Z Collecting wheel==0.41.2 (from -r web_service/backend/requirements.txt (line 92))
+2026-01-24T18:12:36.1266915Z   Using cached wheel-0.41.2-py3-none-any.whl.metadata (2.2 kB)
+2026-01-24T18:12:36.1413480Z Collecting build==1.0.3 (from -r web_service/backend/requirements.txt (line 93))
+2026-01-24T18:12:36.1426536Z   Using cached build-1.0.3-py3-none-any.whl.metadata (4.2 kB)
+2026-01-24T18:12:36.1724018Z Collecting pip-tools==7.3.0 (from -r web_service/backend/requirements.txt (line 94))
+2026-01-24T18:12:36.1737551Z   Using cached pip_tools-7.3.0-py3-none-any.whl.metadata (23 kB)
+2026-01-24T18:12:36.2084739Z Collecting pytest==7.4.3 (from -r web_service/backend/requirements.txt (line 97))
+2026-01-24T18:12:36.2098716Z   Using cached pytest-7.4.3-py3-none-any.whl.metadata (7.9 kB)
+2026-01-24T18:12:36.2317327Z Collecting pytest-asyncio==0.21.1 (from -r web_service/backend/requirements.txt (line 98))
+2026-01-24T18:12:36.2331270Z   Using cached pytest_asyncio-0.21.1-py3-none-any.whl.metadata (4.0 kB)
+2026-01-24T18:12:36.2467370Z Collecting iniconfig==2.0.0 (from -r web_service/backend/requirements.txt (line 99))
+2026-01-24T18:12:36.2480875Z   Using cached iniconfig-2.0.0-py3-none-any.whl.metadata (2.6 kB)
+2026-01-24T18:12:36.2617697Z Collecting pluggy==1.3.0 (from -r web_service/backend/requirements.txt (line 100))
+2026-01-24T18:12:36.2631002Z   Using cached pluggy-1.3.0-py3-none-any.whl.metadata (4.3 kB)
+2026-01-24T18:12:36.2811792Z Collecting packaging==23.2 (from -r web_service/backend/requirements.txt (line 101))
+2026-01-24T18:12:36.2825638Z   Using cached packaging-23.2-py3-none-any.whl.metadata (3.2 kB)
+2026-01-24T18:12:36.3029535Z Collecting typing-extensions==4.8.0 (from -r web_service/backend/requirements.txt (line 104))
+2026-01-24T18:12:36.3042944Z   Using cached typing_extensions-4.8.0-py3-none-any.whl.metadata (3.0 kB)
+2026-01-24T18:12:36.3163951Z Collecting typing-inspect==0.9.0 (from -r web_service/backend/requirements.txt (line 105))
+2026-01-24T18:12:36.3177121Z   Using cached typing_inspect-0.9.0-py3-none-any.whl.metadata (1.5 kB)
+2026-01-24T18:12:36.3294627Z Collecting annotated-types==0.6.0 (from -r web_service/backend/requirements.txt (line 106))
+2026-01-24T18:12:36.3308141Z   Using cached annotated_types-0.6.0-py3-none-any.whl.metadata (12 kB)
+2026-01-24T18:12:36.3426885Z Collecting mypy-extensions==1.0.0 (from -r web_service/backend/requirements.txt (line 109))
+2026-01-24T18:12:36.3441322Z   Using cached mypy_extensions-1.0.0-py3-none-any.whl.metadata (1.1 kB)
+2026-01-24T18:12:36.3574013Z Collecting pathspec==0.11.2 (from -r web_service/backend/requirements.txt (line 110))
+2026-01-24T18:12:36.3587405Z   Using cached pathspec-0.11.2-py3-none-any.whl.metadata (19 kB)
+2026-01-24T18:12:36.3768614Z Collecting platformdirs==4.0.0 (from -r web_service/backend/requirements.txt (line 111))
+2026-01-24T18:12:36.3781900Z   Using cached platformdirs-4.0.0-py3-none-any.whl.metadata (11 kB)
+2026-01-24T18:12:36.4669967Z Collecting more-itertools==10.1.0 (from -r web_service/backend/requirements.txt (line 112))
+2026-01-24T18:12:36.4684601Z   Using cached more_itertools-10.1.0-py3-none-any.whl.metadata (33 kB)
+2026-01-24T18:12:36.4834326Z Collecting jaraco.classes==3.3.1 (from -r web_service/backend/requirements.txt (line 113))
+2026-01-24T18:12:36.4848141Z   Using cached jaraco.classes-3.3.1-py3-none-any.whl.metadata (2.7 kB)
+2026-01-24T18:12:36.4991410Z Collecting jaraco.context==5.3.0 (from -r web_service/backend/requirements.txt (line 114))
+2026-01-24T18:12:36.5004297Z   Using cached jaraco.context-5.3.0-py3-none-any.whl.metadata (4.0 kB)
+2026-01-24T18:12:36.5174204Z Collecting jaraco.functools==4.0.0 (from -r web_service/backend/requirements.txt (line 115))
+2026-01-24T18:12:36.5186973Z   Using cached jaraco.functools-4.0.0-py3-none-any.whl.metadata (3.1 kB)
+2026-01-24T18:12:36.5327519Z Collecting deprecated==1.2.14 (from -r web_service/backend/requirements.txt (line 116))
+2026-01-24T18:12:36.5340492Z   Using cached Deprecated-1.2.14-py2.py3-none-any.whl.metadata (5.4 kB)
+2026-01-24T18:12:36.5460233Z Collecting sniffio==1.3.0 (from -r web_service/backend/requirements.txt (line 117))
+2026-01-24T18:12:36.5473200Z   Using cached sniffio-1.3.0-py3-none-any.whl.metadata (3.6 kB)
+2026-01-24T18:12:36.6976126Z Collecting wrapt==1.16.0 (from -r web_service/backend/requirements.txt (line 118))
+2026-01-24T18:12:36.6992174Z   Using cached wrapt-1.16.0-cp311-cp311-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.6 kB)
+2026-01-24T18:12:36.7689999Z Collecting watchfiles==0.20.0 (from -r web_service/backend/requirements.txt (line 119))
+2026-01-24T18:12:36.7704028Z   Using cached watchfiles-0.20.0-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.9 kB)
+2026-01-24T18:12:36.7900613Z Collecting pygments==2.17.2 (from -r web_service/backend/requirements.txt (line 120))
+2026-01-24T18:12:36.7913248Z   Using cached pygments-2.17.2-py3-none-any.whl.metadata (2.6 kB)
+2026-01-24T18:12:36.8092050Z Collecting scrapling>=0.3.7 (from scrapling[fetchers]>=0.3.7->-r web_service/backend/requirements.txt (line 128))
+2026-01-24T18:12:36.8760303Z   Downloading scrapling-0.3.14-py3-none-any.whl.metadata (23 kB)
+2026-01-24T18:12:37.1079773Z Collecting importlib-metadata>=4.11.4 (from keyring==24.3.0->-r web_service/backend/requirements.txt (line 66))
+2026-01-24T18:12:37.1094003Z   Using cached importlib_metadata-8.7.1-py3-none-any.whl.metadata (4.7 kB)
+2026-01-24T18:12:37.1470739Z Collecting importlib-resources>=1.3 (from limits==3.7.0->-r web_service/backend/requirements.txt (line 71))
+2026-01-24T18:12:37.1484011Z   Using cached importlib_resources-6.5.2-py3-none-any.whl.metadata (3.9 kB)
+2026-01-24T18:12:37.7435843Z Collecting aiohttp>=3.7.4 (from black==23.12.0->-r web_service/backend/requirements.txt (line 88))
+2026-01-24T18:12:37.7450949Z   Using cached aiohttp-3.13.3-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (8.1 kB)
+2026-01-24T18:12:37.7506824Z Requirement already satisfied: setuptools>=42.0.0 in /opt/hostedtoolcache/Python/3.11.14/x64/lib/python3.11/site-packages (from pyinstaller==6.1.0->-r web_service/backend/requirements.txt (line 89)) (80.10.1)
+2026-01-24T18:12:37.7785483Z Collecting pyproject_hooks (from build==1.0.3->-r web_service/backend/requirements.txt (line 93))
+2026-01-24T18:12:37.7798775Z   Using cached pyproject_hooks-1.2.0-py3-none-any.whl.metadata (1.3 kB)
+2026-01-24T18:12:37.7840906Z Requirement already satisfied: pip>=22.2 in /opt/hostedtoolcache/Python/3.11.14/x64/lib/python3.11/site-packages (from pip-tools==7.3.0->-r web_service/backend/requirements.txt (line 94)) (25.3)
+2026-01-24T18:12:37.8371951Z Collecting backports.tarfile (from jaraco.context==5.3.0->-r web_service/backend/requirements.txt (line 114))
+2026-01-24T18:12:37.8385109Z   Using cached backports.tarfile-1.2.0-py3-none-any.whl.metadata (2.0 kB)
+2026-01-24T18:12:37.9085344Z Collecting uvloop!=0.15.0,!=0.15.1,>=0.14.0 (from uvicorn[standard]==0.24.0->-r web_service/backend/requirements.txt (line 12))
+2026-01-24T18:12:37.9107164Z   Using cached uvloop-0.22.1-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (4.9 kB)
+2026-01-24T18:12:38.0992667Z Collecting lxml>=6.0.2 (from scrapling>=0.3.7->scrapling[fetchers]>=0.3.7->-r web_service/backend/requirements.txt (line 128))
+2026-01-24T18:12:38.1074442Z   Downloading lxml-6.0.2-cp311-cp311-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl.metadata (3.6 kB)
+2026-01-24T18:12:38.1239348Z Collecting cssselect>=1.3.0 (from scrapling>=0.3.7->scrapling[fetchers]>=0.3.7->-r web_service/backend/requirements.txt (line 128))
+2026-01-24T18:12:38.1340031Z   Downloading cssselect-1.3.0-py3-none-any.whl.metadata (2.6 kB)
+2026-01-24T18:12:38.3709931Z Collecting orjson>=3.11.5 (from scrapling>=0.3.7->scrapling[fetchers]>=0.3.7->-r web_service/backend/requirements.txt (line 128))
+2026-01-24T18:12:38.3725301Z   Using cached orjson-3.11.5-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (41 kB)
+2026-01-24T18:12:38.3928980Z Collecting tldextract>=5.3.1 (from scrapling>=0.3.7->scrapling[fetchers]>=0.3.7->-r web_service/backend/requirements.txt (line 128))
+2026-01-24T18:12:38.4037399Z   Downloading tldextract-5.3.1-py3-none-any.whl.metadata (7.3 kB)
+2026-01-24T18:12:38.4278785Z Collecting aiohappyeyeballs>=2.5.0 (from aiohttp>=3.7.4->black==23.12.0->-r web_service/backend/requirements.txt (line 88))
+2026-01-24T18:12:38.4293603Z   Using cached aiohappyeyeballs-2.6.1-py3-none-any.whl.metadata (5.9 kB)
+2026-01-24T18:12:38.4416505Z Collecting aiosignal>=1.4.0 (from aiohttp>=3.7.4->black==23.12.0->-r web_service/backend/requirements.txt (line 88))
+2026-01-24T18:12:38.4429985Z   Using cached aiosignal-1.4.0-py3-none-any.whl.metadata (3.7 kB)
+2026-01-24T18:12:38.4595245Z Collecting attrs>=17.3.0 (from aiohttp>=3.7.4->black==23.12.0->-r web_service/backend/requirements.txt (line 88))
+2026-01-24T18:12:38.4608970Z   Using cached attrs-25.4.0-py3-none-any.whl.metadata (10 kB)
+2026-01-24T18:12:38.5276611Z Collecting frozenlist>=1.1.1 (from aiohttp>=3.7.4->black==23.12.0->-r web_service/backend/requirements.txt (line 88))
+2026-01-24T18:12:38.5292459Z   Using cached frozenlist-1.8.0-cp311-cp311-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl.metadata (20 kB)
+2026-01-24T18:12:38.8660311Z Collecting multidict<7.0,>=4.5 (from aiohttp>=3.7.4->black==23.12.0->-r web_service/backend/requirements.txt (line 88))
+2026-01-24T18:12:38.8676975Z   Using cached multidict-6.7.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (5.3 kB)
+2026-01-24T18:12:38.9241053Z Collecting propcache>=0.2.0 (from aiohttp>=3.7.4->black==23.12.0->-r web_service/backend/requirements.txt (line 88))
+2026-01-24T18:12:38.9256994Z   Using cached propcache-0.4.1-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (13 kB)
+2026-01-24T18:12:39.1703613Z Collecting yarl<2.0,>=1.17.0 (from aiohttp>=3.7.4->black==23.12.0->-r web_service/backend/requirements.txt (line 88))
+2026-01-24T18:12:39.1720530Z   Using cached yarl-1.22.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (75 kB)
+2026-01-24T18:12:39.2325420Z Collecting zipp>=3.20 (from importlib-metadata>=4.11.4->keyring==24.3.0->-r web_service/backend/requirements.txt (line 66))
+2026-01-24T18:12:39.2338879Z   Using cached zipp-3.23.0-py3-none-any.whl.metadata (3.6 kB)
+2026-01-24T18:12:39.2519161Z INFO: pip is looking at multiple versions of scrapling[fetchers] to determine which version is compatible with other requirements. This could take a while.
+2026-01-24T18:12:39.2523708Z Collecting scrapling[fetchers]>=0.3.7 (from -r web_service/backend/requirements.txt (line 128))
+2026-01-24T18:12:39.2623618Z   Downloading scrapling-0.3.13-py3-none-any.whl.metadata (23 kB)
+2026-01-24T18:12:39.2812902Z   Downloading scrapling-0.3.12-py3-none-any.whl.metadata (23 kB)
+2026-01-24T18:12:39.3003464Z   Downloading scrapling-0.3.11-py3-none-any.whl.metadata (23 kB)
+2026-01-24T18:12:39.3208521Z   Downloading scrapling-0.3.10-py3-none-any.whl.metadata (23 kB)
+2026-01-24T18:12:39.3806553Z   Downloading scrapling-0.3.9-py3-none-any.whl.metadata (23 kB)
+2026-01-24T18:12:39.4076411Z   Downloading scrapling-0.3.8-py3-none-any.whl.metadata (22 kB)
+2026-01-24T18:12:39.4273946Z   Downloading scrapling-0.3.7-py3-none-any.whl.metadata (22 kB)
+2026-01-24T18:12:39.4395416Z INFO: pip is still looking at multiple versions of scrapling[fetchers] to determine which version is compatible with other requirements. This could take a while.
+2026-01-24T18:12:39.4601008Z INFO: This is taking longer than usual. You might need to provide the dependency resolver with stricter constraints to reduce runtime. See https://pip.pypa.io/warnings/backtracking for guidance. If you want to abort this run, press Ctrl + C.
+2026-01-24T18:12:39.4620959Z Collecting propcache>=0.2.0 (from aiohttp>=3.7.4->black==23.12.0->-r web_service/backend/requirements.txt (line 88))
+2026-01-24T18:12:39.4695880Z   Downloading propcache-0.3.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (12 kB)
+2026-01-24T18:12:39.4784299Z Collecting importlib-resources>=1.3 (from limits==3.7.0->-r web_service/backend/requirements.txt (line 71))
+2026-01-24T18:12:39.4885213Z   Downloading importlib_resources-6.5.1-py3-none-any.whl.metadata (3.9 kB)
+2026-01-24T18:12:39.4965869Z Collecting importlib-metadata>=4.11.4 (from keyring==24.3.0->-r web_service/backend/requirements.txt (line 66))
+2026-01-24T18:12:39.4980076Z   Using cached importlib_metadata-8.7.0-py3-none-any.whl.metadata (4.8 kB)
+2026-01-24T18:12:39.5050304Z Collecting frozenlist>=1.1.1 (from aiohttp>=3.7.4->black==23.12.0->-r web_service/backend/requirements.txt (line 88))
+2026-01-24T18:12:39.5144626Z   Downloading frozenlist-1.7.0-cp311-cp311-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (18 kB)
+2026-01-24T18:12:39.5246853Z Collecting attrs>=17.3.0 (from aiohttp>=3.7.4->black==23.12.0->-r web_service/backend/requirements.txt (line 88))
+2026-01-24T18:12:39.5325169Z   Downloading attrs-25.3.0-py3-none-any.whl.metadata (10 kB)
+2026-01-24T18:12:39.5464161Z Collecting aiohappyeyeballs>=2.5.0 (from aiohttp>=3.7.4->black==23.12.0->-r web_service/backend/requirements.txt (line 88))
+2026-01-24T18:12:39.5563934Z   Downloading aiohappyeyeballs-2.6.0-py3-none-any.whl.metadata (5.9 kB)
+2026-01-24T18:12:39.5643050Z Collecting yarl<2.0,>=1.17.0 (from aiohttp>=3.7.4->black==23.12.0->-r web_service/backend/requirements.txt (line 88))
+2026-01-24T18:12:39.5726192Z   Downloading yarl-1.21.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (74 kB)
+2026-01-24T18:12:39.5932206Z Collecting multidict<7.0,>=4.5 (from aiohttp>=3.7.4->black==23.12.0->-r web_service/backend/requirements.txt (line 88))
+2026-01-24T18:12:39.6011966Z   Downloading multidict-6.6.4-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (5.3 kB)
+2026-01-24T18:12:39.6099708Z Collecting aiohttp>=3.7.4 (from black==23.12.0->-r web_service/backend/requirements.txt (line 88))
+2026-01-24T18:12:39.6185230Z   Downloading aiohttp-3.13.2-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (8.1 kB)
+2026-01-24T18:12:39.6508327Z ERROR: Cannot install -r web_service/backend/requirements.txt (line 88), -r web_service/backend/requirements.txt (line 94), click==8.1.7, scrapling>=0.3.7, scrapling[fetchers]==0.3.10, scrapling[fetchers]==0.3.11, scrapling[fetchers]==0.3.12, scrapling[fetchers]==0.3.13, scrapling[fetchers]==0.3.14, scrapling[fetchers]==0.3.7, scrapling[fetchers]==0.3.8, scrapling[fetchers]==0.3.9, uvicorn and uvicorn[standard]==0.24.0 because these package versions have conflicting dependencies.
+2026-01-24T18:12:39.6514272Z
+2026-01-24T18:12:39.6514690Z The conflict is caused by:
+2026-01-24T18:12:39.6515095Z     The user requested scrapling>=0.3.7
+2026-01-24T18:12:39.6516844Z     scrapling[fetchers] 0.3.14 depends on scrapling 0.3.14 (from https://files.pythonhosted.org/packages/7b/96/98ee8240873990b756092dc158a7f1e3e093f8b68f2814fbda754a31c395/scrapling-0.3.14-py3-none-any.whl (from https://pypi.org/simple/scrapling/) (requires-python:>=3.10))
+2026-01-24T18:12:39.6518916Z     The user requested click==8.1.7
+2026-01-24T18:12:39.6519420Z     uvicorn 0.24.0 depends on click>=7.0
+2026-01-24T18:12:39.6520027Z     black 23.12.0 depends on click>=8.0.0
+2026-01-24T18:12:39.6520939Z     pip-tools 7.3.0 depends on click>=8
+2026-01-24T18:12:39.6521655Z     uvicorn[standard] 0.24.0 depends on click>=7.0
+2026-01-24T18:12:39.6522373Z     scrapling[fetchers] 0.3.13 depends on click>=8.3.0; extra == "fetchers"
+2026-01-24T18:12:39.6523209Z     scrapling[fetchers] 0.3.12 depends on click>=8.3.0; extra == "fetchers"
+2026-01-24T18:12:39.6523751Z     scrapling[fetchers] 0.3.11 depends on click>=8.3.0; extra == "fetchers"
+2026-01-24T18:12:39.6524280Z     scrapling[fetchers] 0.3.10 depends on click>=8.3.0; extra == "fetchers"
+2026-01-24T18:12:39.6524810Z     scrapling[fetchers] 0.3.9 depends on click>=8.3.0; extra == "fetchers"
+2026-01-24T18:12:39.6525347Z     scrapling[fetchers] 0.3.8 depends on click>=8.3.0; extra == "fetchers"
+2026-01-24T18:12:39.6525877Z     scrapling[fetchers] 0.3.7 depends on click>=8.3.0; extra == "fetchers"
+2026-01-24T18:12:39.6526202Z
+2026-01-24T18:12:39.6526599Z Additionally, some packages in these conflicts have no matching distributions available for your environment:
+2026-01-24T18:12:39.6527186Z     click
+2026-01-24T18:12:39.6527377Z     scrapling
+2026-01-24T18:12:39.6527500Z
+2026-01-24T18:12:39.6527608Z To fix this you could try to:
+2026-01-24T18:12:39.6528123Z 1. loosen the range of package versions you've specified
+2026-01-24T18:12:39.6528661Z 2. remove package versions to allow pip to attempt to solve the dependency conflict
+2026-01-24T18:12:39.6529045Z
+2026-01-24T18:12:39.6538419Z ERROR: ResolutionImpossible: for help visit https://pip.pypa.io/en/latest/topics/dependency-resolution/#dealing-with-dependency-conflicts
+2026-01-24T18:12:40.6283841Z ##[error]Process completed with exit code 1.
+2026-01-24T18:12:40.6395218Z ##[group]Run actions/upload-artifact@v4
+2026-01-24T18:12:40.6395504Z with:
+2026-01-24T18:12:40.6395695Z   name: race-reports-57-1
+2026-01-24T18:12:40.6396599Z   path: race-report.html
+qualified_races.json
+raw_race_data.json
+reporter_output.log
+atr_debug.html
+sl_debug.html
+brisnet_debug.html
+equibase_debug.html
+oddschecker_debug.html
+racingpost_debug.html
+timeform_debug.html
+twinspires_debug.html
+
+2026-01-24T18:12:40.6397540Z   retention-days: 14
+2026-01-24T18:12:40.6397747Z   if-no-files-found: warn
+2026-01-24T18:12:40.6398095Z   compression-level: 9
+2026-01-24T18:12:40.6398291Z   overwrite: false
+2026-01-24T18:12:40.6398483Z   include-hidden-files: false
+2026-01-24T18:12:40.6398693Z env:
+2026-01-24T18:12:40.6398857Z   PYTHON_VERSION: 3.11
+2026-01-24T18:12:40.6399054Z   REPORT_RETENTION_DAYS: 14
+2026-01-24T18:12:40.6399251Z   MAX_RETRIES: 3
+2026-01-24T18:12:40.6399435Z   REQUEST_TIMEOUT: 30
+2026-01-24T18:12:40.6399694Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-01-24T18:12:40.6400136Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.14/x64/lib/pkgconfig
+2026-01-24T18:12:40.6400540Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-01-24T18:12:40.6400886Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-01-24T18:12:40.6401241Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-01-24T18:12:40.6401606Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.14/x64/lib
+2026-01-24T18:12:40.6401896Z ##[endgroup]
+2026-01-24T18:12:40.8591358Z Multiple search paths detected. Calculating the least common ancestor of all paths
+2026-01-24T18:12:40.8602899Z The least common ancestor is /home/runner/work/fortuna/fortuna. This will be the root directory of the artifact
+2026-01-24T18:12:40.8604427Z With the provided path, there will be 6 files uploaded
+2026-01-24T18:12:40.8605463Z Artifact name is valid!
+2026-01-24T18:12:40.8605863Z Root directory input is valid!
+2026-01-24T18:12:40.9455275Z Beginning upload of artifact content to blob storage
+2026-01-24T18:12:41.1254237Z Uploaded bytes 327662
+2026-01-24T18:12:41.1450426Z Finished uploading artifact content to blob storage!
+2026-01-24T18:12:41.1453956Z SHA256 digest of uploaded artifact zip is 31647f2704bdb47f2baf294691c3e551937506b3ce0a5ddc8160fe6ffc5e7b85
+2026-01-24T18:12:41.1456401Z Finalizing artifact upload
+2026-01-24T18:12:41.2234177Z Artifact race-reports-57-1.zip successfully finalized. Artifact ID 5244896846
+2026-01-24T18:12:41.2235770Z Artifact race-reports-57-1 has been successfully uploaded! Final size is 327662 bytes. Artifact ID is 5244896846
+2026-01-24T18:12:41.2245296Z Artifact download URL: https://github.com/masonj0/fortuna/actions/runs/21319403516/artifacts/5244896846
+2026-01-24T18:12:41.2350438Z ##[group]Run {
+2026-01-24T18:12:41.2350696Z [36;1m{[0m
+2026-01-24T18:12:41.2350930Z [36;1m  echo "## 🐴 Fortuna Race Report Summary"[0m
+2026-01-24T18:12:41.2351218Z [36;1m  echo ""[0m
+2026-01-24T18:12:41.2351451Z [36;1m  echo "**Run:** #57 | **Status:** unknown"[0m
+2026-01-24T18:12:41.2351766Z [36;1m  echo "**Analyzer:** tiny_field_trifecta"[0m
+2026-01-24T18:12:41.2372673Z [36;1m  echo ""[0m
+2026-01-24T18:12:41.2373054Z [36;1m[0m
+2026-01-24T18:12:41.2373415Z [36;1m  if [ -f "github_summary.md" ]; then[0m
+2026-01-24T18:12:41.2373737Z [36;1m    cat github_summary.md[0m
+2026-01-24T18:12:41.2373981Z [36;1m  else[0m
+2026-01-24T18:12:41.2374263Z [36;1m    echo "### ⚠️ Detailed summary not available"[0m
+2026-01-24T18:12:41.2374563Z [36;1m    echo ""[0m
+2026-01-24T18:12:41.2374828Z [36;1m    echo "Check the artifacts for the full report."[0m
+2026-01-24T18:12:41.2375120Z [36;1m  fi[0m
+2026-01-24T18:12:41.2375288Z [36;1m[0m
+2026-01-24T18:12:41.2375483Z [36;1m  echo ""[0m
+2026-01-24T18:12:41.2375670Z [36;1m  echo "---"[0m
+2026-01-24T18:12:41.2375940Z [36;1m  echo "*Generated at $(date -u '+%Y-%m-%d %H:%M:%S UTC')*"[0m
+2026-01-24T18:12:41.2376265Z [36;1m} >> $GITHUB_STEP_SUMMARY[0m
+2026-01-24T18:12:41.2410267Z shell: /usr/bin/bash -e {0}
+2026-01-24T18:12:41.2410504Z env:
+2026-01-24T18:12:41.2410683Z   PYTHON_VERSION: 3.11
+2026-01-24T18:12:41.2410894Z   REPORT_RETENTION_DAYS: 14
+2026-01-24T18:12:41.2411119Z   MAX_RETRIES: 3
+2026-01-24T18:12:41.2411310Z   REQUEST_TIMEOUT: 30
+2026-01-24T18:12:41.2411586Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-01-24T18:12:41.2412007Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.14/x64/lib/pkgconfig
+2026-01-24T18:12:41.2412433Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-01-24T18:12:41.2412818Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-01-24T18:12:41.2413206Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-01-24T18:12:41.2413597Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.14/x64/lib
+2026-01-24T18:12:41.2413906Z ##[endgroup]
+2026-01-24T18:12:41.2530450Z ##[group]Run mkdir -p debug-analysis
+2026-01-24T18:12:41.2530796Z [36;1mmkdir -p debug-analysis[0m
+2026-01-24T18:12:41.2531478Z [36;1m[ -f "sl_debug.html" ] && python scripts/debug_html_parser.py sl_debug.html debug-analysis/sl_analysis.json || echo "sl_debug.html not found, skipping analysis."[0m
+2026-01-24T18:12:41.2532647Z [36;1m[ -f "atr_debug.html" ] && python scripts/debug_html_parser.py atr_debug.html debug-analysis/atr_analysis.json "a[href^='/racecard/']" || echo "atr_debug.html not found, skipping analysis."[0m
+2026-01-24T18:12:41.2533848Z [36;1m[ -f "brisnet_debug.html" ] && python scripts/debug_html_parser.py brisnet_debug.html debug-analysis/brisnet_analysis.json || echo "brisnet_debug.html not found, skipping analysis."[0m
+2026-01-24T18:12:41.2535071Z [36;1m[ -f "equibase_debug.html" ] && python scripts/debug_html_parser.py equibase_debug.html debug-analysis/equibase_analysis.json || echo "equibase_debug.html not found, skipping analysis."[0m
+2026-01-24T18:12:41.2536393Z [36;1m[ -f "oddschecker_debug.html" ] && python scripts/debug_html_parser.py oddschecker_debug.html debug-analysis/oddschecker_analysis.json || echo "oddschecker_debug.html not found, skipping analysis."[0m
+2026-01-24T18:12:41.2537784Z [36;1m[ -f "racingpost_debug.html" ] && python scripts/debug_html_parser.py racingpost_debug.html debug-analysis/racingpost_analysis.json "a[href*='/racecards/']" || echo "racingpost_debug.html not found, skipping analysis."[0m
+2026-01-24T18:12:41.2539335Z [36;1m[ -f "timeform_debug.html" ] && python scripts/debug_html_parser.py timeform_debug.html debug-analysis/timeform_analysis.json || echo "timeform_debug.html not found, skipping analysis."[0m
+2026-01-24T18:12:41.2540889Z [36;1m[ -f "twinspires_debug.html" ] && python scripts/debug_html_parser.py twinspires_debug.html debug-analysis/twinspires_analysis.json "div[class*='race'], div[data-track]" || echo "twinspires_debug.html not found, skipping analysis."[0m
+2026-01-24T18:12:41.2573258Z shell: /usr/bin/bash -e {0}
+2026-01-24T18:12:41.2573496Z env:
+2026-01-24T18:12:41.2573676Z   PYTHON_VERSION: 3.11
+2026-01-24T18:12:41.2573893Z   REPORT_RETENTION_DAYS: 14
+2026-01-24T18:12:41.2574105Z   MAX_RETRIES: 3
+2026-01-24T18:12:41.2574288Z   REQUEST_TIMEOUT: 30
+2026-01-24T18:12:41.2574557Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-01-24T18:12:41.2574980Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.14/x64/lib/pkgconfig
+2026-01-24T18:12:41.2575398Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-01-24T18:12:41.2575766Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-01-24T18:12:41.2576135Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-01-24T18:12:41.2576499Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.14/x64/lib
+2026-01-24T18:12:41.2576808Z ##[endgroup]
+2026-01-24T18:12:41.2805672Z Traceback (most recent call last):
+2026-01-24T18:12:41.2811622Z   File "/home/runner/work/fortuna/fortuna/scripts/debug_html_parser.py", line 3, in <module>
+2026-01-24T18:12:41.2812206Z     from bs4 import BeautifulSoup
+2026-01-24T18:12:41.2812518Z ModuleNotFoundError: No module named 'bs4'
+2026-01-24T18:12:41.2836094Z sl_debug.html not found, skipping analysis.
+2026-01-24T18:12:41.2999705Z Traceback (most recent call last):
+2026-01-24T18:12:41.3000531Z   File "/home/runner/work/fortuna/fortuna/scripts/debug_html_parser.py", line 3, in <module>
+2026-01-24T18:12:41.3001157Z     from bs4 import BeautifulSoup
+2026-01-24T18:12:41.3001485Z ModuleNotFoundError: No module named 'bs4'
+2026-01-24T18:12:41.3029811Z atr_debug.html not found, skipping analysis.
+2026-01-24T18:12:41.3030452Z brisnet_debug.html not found, skipping analysis.
+2026-01-24T18:12:41.3031038Z equibase_debug.html not found, skipping analysis.
+2026-01-24T18:12:41.3031664Z oddschecker_debug.html not found, skipping analysis.
+2026-01-24T18:12:41.3191911Z Traceback (most recent call last):
+2026-01-24T18:12:41.3192987Z   File "/home/runner/work/fortuna/fortuna/scripts/debug_html_parser.py", line 3, in <module>
+2026-01-24T18:12:41.3193548Z     from bs4 import BeautifulSoup
+2026-01-24T18:12:41.3193853Z ModuleNotFoundError: No module named 'bs4'
+2026-01-24T18:12:41.3222053Z racingpost_debug.html not found, skipping analysis.
+2026-01-24T18:12:41.3223040Z timeform_debug.html not found, skipping analysis.
+2026-01-24T18:12:41.3223477Z twinspires_debug.html not found, skipping analysis.
+2026-01-24T18:12:41.3266785Z ##[group]Run actions/upload-artifact@v4
+2026-01-24T18:12:41.3267088Z with:
+2026-01-24T18:12:41.3267273Z   name: debug-analysis
+2026-01-24T18:12:41.3267487Z   path: debug-analysis/
+2026-01-24T18:12:41.3267707Z   retention-days: 14
+2026-01-24T18:12:41.3268188Z   if-no-files-found: warn
+2026-01-24T18:12:41.3268413Z   compression-level: 6
+2026-01-24T18:12:41.3268617Z   overwrite: false
+2026-01-24T18:12:41.3268821Z   include-hidden-files: false
+2026-01-24T18:12:41.3269048Z env:
+2026-01-24T18:12:41.3269221Z   PYTHON_VERSION: 3.11
+2026-01-24T18:12:41.3269428Z   REPORT_RETENTION_DAYS: 14
+2026-01-24T18:12:41.3269643Z   MAX_RETRIES: 3
+2026-01-24T18:12:41.3269829Z   REQUEST_TIMEOUT: 30
+2026-01-24T18:12:41.3270096Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-01-24T18:12:41.3270513Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.14/x64/lib/pkgconfig
+2026-01-24T18:12:41.3270922Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-01-24T18:12:41.3271306Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-01-24T18:12:41.3271670Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-01-24T18:12:41.3272029Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.14/x64/lib
+2026-01-24T18:12:41.3272510Z ##[endgroup]
+2026-01-24T18:12:41.5523697Z With the provided path, there will be 2 files uploaded
+2026-01-24T18:12:41.5529210Z Artifact name is valid!
+2026-01-24T18:12:41.5530685Z Root directory input is valid!
+2026-01-24T18:12:41.6362991Z Beginning upload of artifact content to blob storage
+2026-01-24T18:12:41.7132815Z Uploaded bytes 546
+2026-01-24T18:12:41.7322370Z Finished uploading artifact content to blob storage!
+2026-01-24T18:12:41.7325554Z SHA256 digest of uploaded artifact zip is fe1db11135062ccd052f56291951afc8d2db78127a79f5cd6778291883475ee6
+2026-01-24T18:12:41.7327651Z Finalizing artifact upload
+2026-01-24T18:12:41.8000606Z Artifact debug-analysis.zip successfully finalized. Artifact ID 5244896889
+2026-01-24T18:12:41.8001760Z Artifact debug-analysis has been successfully uploaded! Final size is 546 bytes. Artifact ID is 5244896889
+2026-01-24T18:12:41.8008154Z Artifact download URL: https://github.com/masonj0/fortuna/actions/runs/21319403516/artifacts/5244896889
+2026-01-24T18:12:41.8101854Z ##[group]Run echo "::warning::Report generation failed. Check logs for details."
+2026-01-24T18:12:41.8102448Z [36;1mecho "::warning::Report generation failed. Check logs for details."[0m
+2026-01-24T18:12:41.8102862Z [36;1m# Archive any partial data for debugging[0m
+2026-01-24T18:12:41.8103181Z [36;1mif ls *.json 1> /dev/null 2>&1; then[0m
+2026-01-24T18:12:41.8103544Z [36;1m  tar -czf debug-data.tar.gz *.json *.log 2>/dev/null || true[0m
+2026-01-24T18:12:41.8103887Z [36;1mfi[0m
+2026-01-24T18:12:41.8137731Z shell: /usr/bin/bash -e {0}
+2026-01-24T18:12:41.8138142Z env:
+2026-01-24T18:12:41.8138326Z   PYTHON_VERSION: 3.11
+2026-01-24T18:12:41.8138556Z   REPORT_RETENTION_DAYS: 14
+2026-01-24T18:12:41.8138773Z   MAX_RETRIES: 3
+2026-01-24T18:12:41.8138966Z   REQUEST_TIMEOUT: 30
+2026-01-24T18:12:41.8139254Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-01-24T18:12:41.8139683Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.14/x64/lib/pkgconfig
+2026-01-24T18:12:41.8140145Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-01-24T18:12:41.8140527Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-01-24T18:12:41.8140907Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.14/x64
+2026-01-24T18:12:41.8141296Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.14/x64/lib
+2026-01-24T18:12:41.8141625Z ##[endgroup]
+2026-01-24T18:12:41.8204570Z ##[warning]Report generation failed. Check logs for details.
+2026-01-24T18:12:41.8316630Z Post job cleanup.
+2026-01-24T18:12:41.9244593Z [command]/usr/bin/git version
+2026-01-24T18:12:41.9280664Z git version 2.52.0
+2026-01-24T18:12:41.9322190Z Temporarily overriding HOME='/home/runner/work/_temp/263b87ad-be83-44b8-8ff6-51fc1871609a' before making global git config changes
+2026-01-24T18:12:41.9323385Z Adding repository directory to the temporary git global config as a safe directory
+2026-01-24T18:12:41.9335691Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/fortuna/fortuna
+2026-01-24T18:12:41.9369200Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-01-24T18:12:41.9400461Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-01-24T18:12:41.9631080Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-01-24T18:12:41.9651544Z http.https://github.com/.extraheader
+2026-01-24T18:12:41.9663887Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-01-24T18:12:41.9694881Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-01-24T18:12:41.9917252Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-01-24T18:12:41.9948255Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-01-24T18:12:42.0303022Z Evaluate and set job outputs
+2026-01-24T18:12:42.0309725Z Cleaning up orphan processes
