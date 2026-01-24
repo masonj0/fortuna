@@ -54,7 +54,7 @@ soupsieve==2.5
 selectolax==0.3.20
 
 # Cli Configuration
-click==8.1.7
+click>=8.3.0
 python-dotenv==1.0.0
 pyyaml==6.0.1
 

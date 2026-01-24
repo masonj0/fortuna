@@ -170,6 +170,11 @@ jobs:
             echo "*Generated at $(date -u '+%Y-%m-%d %H:%M:%S UTC')*"
           } >> $GITHUB_STEP_SUMMARY
 
+      - name: 'Install bs4 for HTML Analysis'
+        if: failure()
+        run: |
+          pip install beautifulsoup4
+
       - name: 'Analyze HTML on Failure'
         if: failure()
         id: analyze-html
