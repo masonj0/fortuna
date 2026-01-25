@@ -73,7 +73,6 @@ jobs:
 
           # Install Scrapling/Playwright browsers
           playwright install chromium
-          python -m scrapling.install
 
       - name: 🧪 Verify Browser Installation (Fail Fast)
         shell: python
