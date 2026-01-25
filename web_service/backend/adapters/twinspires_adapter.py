@@ -79,7 +79,7 @@ class TwinSpiresAdapter(BaseAdapterV3):
             self.logger.info(f"Fetching: {index_url}")
 
             # Fetch with extended timeout for JS to render
-            index_page = await session.async_fetch(
+            index_page = await session.fetch(
                 index_url,
                 network_idle=True,  # Wait for all network requests
                 timeout=45000,      # 45 second timeout
