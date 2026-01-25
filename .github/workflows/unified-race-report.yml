@@ -84,16 +84,22 @@ jobs:
               session = None
               try:
                   print('Attempting to launch headless browser...')
-                  async with StealthySession(headless=True) as session:
-                      if session.context:
-                          print('✅ Browser context initialized successfully')
-                          return 0
-                      else:
-                          print('❌ Browser context is None')
-                          return 1
+                  session = StealthySession(headless=True)
+                  # The browser context is initialized lazily, so we need to
+                  # perform an action to verify it. We'll fetch a dummy page.
+                  await session.fetch('http://example.com')
+                  if session.context:
+                      print('✅ Browser context initialized successfully')
+                      return 0
+                  else:
+                      print('❌ Browser context is None')
+                      return 1
               except Exception as e:
                   print(f'❌ Browser test failed: {e}')
                   return 1
+              finally:
+                  if session:
+                      await session.close()
 
           if asyncio.run(test()) != 0:
               exit(1)
