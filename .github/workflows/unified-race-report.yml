@@ -75,8 +75,8 @@ jobs:
           playwright install chromium
 
       - name: 🧪 Verify Browser Installation (Fail Fast)
-        shell: python
         run: |
+          xvfb-run python - <<EOF
           import asyncio
           from scrapling.fetchers import StealthySession
 
@@ -103,6 +103,7 @@ jobs:
 
           if asyncio.run(test()) != 0:
               exit(1)
+          EOF
 
       - name: '📂 Create Runtime Directories'
         run: |
