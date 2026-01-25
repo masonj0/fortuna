@@ -84,28 +84,43 @@ jobs:
             if xvfb-run python - <<EOF
           import asyncio
           import sys
+          import traceback
           from scrapling.fetchers import StealthySession
 
           async def test():
               session = None
               try:
-                  print('Attempting to launch headless browser...')
+                  print("Attempting to initialize StealthySession...")
                   session = StealthySession(headless=True)
+                  if session is None:
+                      print("❌ CRITICAL: StealthySession() returned None.")
+                      return 1
+
+                  print("StealthySession object created. Attempting to fetch a page to initialize browser context...")
                   await session.fetch('http://example.com')
+
                   if session.context:
-                      print('✅ Browser context initialized successfully')
+                      print("✅ Browser context initialized successfully.")
                       return 0
                   else:
-                      print('❌ Browser context is None')
+                      print("❌ CRITICAL: Browser context is None after fetch.")
                       return 1
-              except Exception as e:
-                  print(f'❌ Browser test failed: {e}')
+              except Exception:
+                  print(f"❌ An unexpected error occurred during browser verification:")
+                  # Print the full exception traceback to stdout
+                  traceback.print_exc()
                   return 1
               finally:
                   if session:
-                      await session.close()
+                      print("Attempting to close session...")
+                      try:
+                          await session.close()
+                          print("Session closed successfully.")
+                      except Exception:
+                          print("An error occurred while closing the session:")
+                          traceback.print_exc()
 
-          # Exit with the return code of the test function
+          # Run the test and exit with its return code
           sys.exit(asyncio.run(test()))
           EOF
             then
@@ -121,7 +136,6 @@ jobs:
 
           if [ "$SUCCESS" = "true" ]; then
             echo "--- Browser Verification Succeeded ---"
-            exit 0
           else
             echo "--- Browser Verification Failed after $MAX_ATTEMPTS attempts ---"
             exit 1
