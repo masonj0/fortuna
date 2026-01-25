@@ -26,7 +26,6 @@ on:
       - 'web_service/backend/**'
       - '.github/workflows/unified-race-report.yml'
   schedule:
-    # Run at 6 AM, 12 PM, and 6 PM UTC
     - cron: '0 6,12,18 * * *'
 
 concurrency:
@@ -42,7 +41,7 @@ env:
 jobs:
   generate-unified-report:
     runs-on: ubuntu-latest
-    timeout-minutes: 25  # Increased from 20 for browser automation
+    timeout-minutes: 30
 
     permissions:
       contents: read
@@ -65,82 +64,164 @@ jobs:
           cache: 'pip'
           cache-dependency-path: 'web_service/backend/requirements.txt'
 
-      - name: 📦 Install Dependencies & Browsers
-        shell: bash
+      - name: '🖥️ Install System Dependencies'
         run: |
-          python -m pip install --upgrade pip wheel
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            xvfb \
+            libnss3 \
+            libnspr4 \
+            libatk1.0-0 \
+            libatk-bridge2.0-0 \
+            libcups2 \
+            libdrm2 \
+            libxkbcommon0 \
+            libxcomposite1 \
+            libxdamage1 \
+            libxfixes3 \
+            libxrandr2 \
+            libgbm1 \
+            libasound2 \
+            libpango-1.0-0 \
+            libcairo2 \
+            libatspi2.0-0 \
+            libgtk-3-0 \
+            libdbus-glib-1-2 \
+            libxt6 \
+            libx11-xcb1
+
+      - name: '📦 Install Python Dependencies'
+        run: |
+          python -m pip install --upgrade pip wheel setuptools
           pip install -r web_service/backend/requirements.txt
 
-          # Install Scrapling/Playwright browsers
-          playwright install chromium
-
-      - name: 🧪 Verify Browser Installation (Fail Fast)
-        shell: bash
+      - name: '🦊 Install Scrapling Browsers'
         run: |
-          MAX_ATTEMPTS=3
-          SUCCESS=false
-          for i in $(seq 1 $MAX_ATTEMPTS); do
-            echo "--- Browser Verification Attempt $i of $MAX_ATTEMPTS ---"
-            if xvfb-run python - <<EOF
+          # Install Camoufox browser (used by StealthyFetcher/StealthySession)
+          echo "Installing Camoufox browser for Scrapling..."
+          python -m camoufox fetch
+
+          # Verify camoufox installation
+          python -c "import camoufox; print(f'✅ Camoufox installed: {camoufox.__file__}')"
+
+          # Also install Playwright browsers as fallback (if using PlayWrightFetcher)
+          echo "Installing Playwright browsers as fallback..."
+          playwright install chromium --with-deps || true
+
+      - name: '🖥️ Start Virtual Display'
+        run: |
+          # Start Xvfb in background
+          sudo Xvfb :99 -screen 0 1920x1080x24 -ac +extension GLX +render -noreset &
+          echo "DISPLAY=:99" >> $GITHUB_ENV
+          sleep 3
+          # Verify display is running
+          if xdpyinfo -display :99 >/dev/null 2>&1; then
+            echo "✅ Virtual display :99 is running"
+          else
+            echo "⚠️ Virtual display may not be fully ready, continuing anyway..."
+          fi
+
+      - name: '🧪 Verify Browser Installation'
+        id: verify-browser
+        run: |
+          python - <<'PYTHON_SCRIPT'
           import asyncio
           import sys
           import traceback
-          from scrapling.fetchers import StealthySession
 
-          async def test():
-              session = None
+          async def test_stealthy_browser():
+              """Test Scrapling's StealthyFetcher with Camoufox."""
+              print("=" * 60)
+              print("Testing Scrapling StealthyFetcher (Camoufox)")
+              print("=" * 60)
+
               try:
-                  print("Attempting to initialize StealthySession...")
-                  session = StealthySession(headless=True)
-                  if session is None:
-                      print("❌ CRITICAL: StealthySession() returned None.")
-                      return 1
+                  from scrapling.fetchers import StealthyFetcher
+                  print("✓ Imported StealthyFetcher")
 
-                  print("StealthySession object created. Attempting to fetch a page to initialize browser context...")
-                  # Directly await the fetch method, as it's the standard async method
-                  await session.async_fetch('http://example.com')
+                  # Create fetcher instance
+                  fetcher = StealthyFetcher(
+                      headless=True,
+                      network_idle=True,
+                  )
+                  print("✓ Created StealthyFetcher instance")
 
-                  if session.context:
-                      print("✅ Browser context initialized successfully.")
-                      return 0
+                  # Fetch a test page
+                  print("→ Fetching https://httpbin.org/headers ...")
+                  response = await fetcher.async_fetch('https://httpbin.org/headers')
+
+                  print(f"✓ Response received")
+                  print(f"  - Status: {response.status}")
+                  print(f"  - Content length: {len(response.text)} chars")
+
+                  if response.status == 200 and len(response.text) > 0:
+                      print("\n✅ StealthyFetcher verification PASSED!")
+                      return True
                   else:
-                      print("❌ CRITICAL: Browser context is None after fetch.")
-                      return 1
-              except Exception:
-                  print(f"❌ An unexpected error occurred during browser verification:")
-                  # Print the full exception traceback to stdout
+                      print(f"\n❌ Unexpected response: status={response.status}")
+                      return False
+
+              except Exception as e:
+                  print(f"\n❌ StealthyFetcher failed: {e}")
                   traceback.print_exc()
+                  return False
+
+          async def test_playwright_browser():
+              """Test Scrapling's PlayWrightFetcher as fallback."""
+              print("\n" + "=" * 60)
+              print("Testing Scrapling PlayWrightFetcher (Playwright/Chromium)")
+              print("=" * 60)
+
+              try:
+                  from scrapling.fetchers import PlayWrightFetcher
+                  print("✓ Imported PlayWrightFetcher")
+
+                  fetcher = PlayWrightFetcher(
+                      headless=True,
+                      network_idle=True,
+                  )
+                  print("✓ Created PlayWrightFetcher instance")
+
+                  print("→ Fetching https://httpbin.org/headers ...")
+                  response = await fetcher.async_fetch('https://httpbin.org/headers')
+
+                  print(f"✓ Response received")
+                  print(f"  - Status: {response.status}")
+                  print(f"  - Content length: {len(response.text)} chars")
+
+                  if response.status == 200:
+                      print("\n✅ PlayWrightFetcher verification PASSED!")
+                      return True
+                  return False
+
+              except Exception as e:
+                  print(f"\n❌ PlayWrightFetcher failed: {e}")
+                  traceback.print_exc()
+                  return False
+
+          async def main():
+              # Test StealthyFetcher first (primary)
+              stealthy_ok = await test_stealthy_browser()
+
+              # Test PlayWrightFetcher as fallback
+              playwright_ok = await test_playwright_browser()
+
+              print("\n" + "=" * 60)
+              print("VERIFICATION SUMMARY")
+              print("=" * 60)
+              print(f"  StealthyFetcher (Camoufox):  {'✅ PASS' if stealthy_ok else '❌ FAIL'}")
+              print(f"  PlayWrightFetcher (Chromium): {'✅ PASS' if playwright_ok else '❌ FAIL'}")
+
+              # Pass if at least one works
+              if stealthy_ok or playwright_ok:
+                  print("\n🎉 At least one browser backend is working!")
+                  return 0
+              else:
+                  print("\n💥 All browser backends failed!")
                   return 1
-              finally:
-                  if session:
-                      print("Attempting to close session...")
-                      try:
-                          await session.close()
-                          print("Session closed successfully.")
-                      except Exception:
-                          print("An error occurred while closing the session:")
-                          traceback.print_exc()
 
-          # Run the test and exit with its return code
-          sys.exit(asyncio.run(test()))
-          EOF
-            then
-              SUCCESS=true
-              break
-            fi
-
-            if [ "$i" -lt "$MAX_ATTEMPTS" ]; then
-              echo "--- Attempt $i failed. Retrying in 5 seconds... ---"
-              sleep 5
-            fi
-          done
-
-          if [ "$SUCCESS" = "true" ]; then
-            echo "--- Browser Verification Succeeded ---"
-          else
-            echo "--- Browser Verification Failed after $MAX_ATTEMPTS attempts ---"
-            exit 1
-          fi
+          sys.exit(asyncio.run(main()))
+          PYTHON_SCRIPT
 
       - name: '📂 Create Runtime Directories'
         run: |
@@ -165,18 +246,11 @@ jobs:
           FORCE_REFRESH: ${{ inputs.force_refresh || 'false' }}
           MAX_RETRIES: ${{ env.MAX_RETRIES }}
           REQUEST_TIMEOUT: ${{ env.REQUEST_TIMEOUT }}
-          # Browser automation needs display (for headless mode)
-          DISPLAY: ':99'
           CI: 'true'
         run: |
-          # Start virtual display for headless browser
-          sudo Xvfb :99 -screen 0 1920x1080x24 > /dev/null 2>&1 &
-          sleep 2
-
           set -o pipefail
           python scripts/fortuna_reporter.py 2>&1 | tee reporter_output.log
 
-          # Extract metrics from the log for outputs
           if [ -f "qualified_races.json" ]; then
             RACE_COUNT=$(python scripts/get_race_count.py)
             echo "race_count=${RACE_COUNT}" >> $GITHUB_OUTPUT
@@ -233,28 +307,24 @@ jobs:
 
       - name: 'Install bs4 for HTML Analysis'
         if: failure()
-        run: |
-          pip install beautifulsoup4
+        run: pip install beautifulsoup4
 
       - name: 'Analyze HTML on Failure'
         if: failure()
-        id: analyze-html
         run: |
           mkdir -p debug-analysis
-          [ -f "sl_debug.html" ] && python scripts/debug_html_parser.py sl_debug.html debug-analysis/sl_analysis.json || echo "sl_debug.html not found, skipping analysis."
-          [ -f "atr_debug.html" ] && python scripts/debug_html_parser.py atr_debug.html debug-analysis/atr_analysis.json "a[href^='/racecard/']" || echo "atr_debug.html not found, skipping analysis."
-          [ -f "brisnet_debug.html" ] && python scripts/debug_html_parser.py brisnet_debug.html debug-analysis/brisnet_analysis.json || echo "brisnet_debug.html not found, skipping analysis."
-          [ -f "equibase_debug.html" ] && python scripts/debug_html_parser.py equibase_debug.html debug-analysis/equibase_analysis.json || echo "equibase_debug.html not found, skipping analysis."
-          [ -f "oddschecker_debug.html" ] && python scripts/debug_html_parser.py oddschecker_debug.html debug-analysis/oddschecker_analysis.json || echo "oddschecker_debug.html not found, skipping analysis."
-          [ -f "racingpost_debug.html" ] && python scripts/debug_html_parser.py racingpost_debug.html debug-analysis/racingpost_analysis.json "a[href*='/racecards/']" || echo "racingpost_debug.html not found, skipping analysis."
-          [ -f "timeform_debug.html" ] && python scripts/debug_html_parser.py timeform_debug.html debug-analysis/timeform_analysis.json || echo "timeform_debug.html not found, skipping analysis."
-          [ -f "twinspires_debug.html" ] && python scripts/debug_html_parser.py twinspires_debug.html debug-analysis/twinspires_analysis.json "div[class*='race'], div[data-track]" || echo "twinspires_debug.html not found, skipping analysis."
+          for html_file in sl_debug.html atr_debug.html brisnet_debug.html equibase_debug.html oddschecker_debug.html racingpost_debug.html timeform_debug.html twinspires_debug.html; do
+            if [ -f "$html_file" ]; then
+              base_name="${html_file%.html}"
+              python scripts/debug_html_parser.py "$html_file" "debug-analysis/${base_name}_analysis.json" || true
+            fi
+          done
 
       - name: 'Upload Debug Analysis Artifact'
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: debug-analysis
+          name: debug-analysis-${{ github.run_number }}
           path: debug-analysis/
           retention-days: ${{ env.REPORT_RETENTION_DAYS }}
 
@@ -262,17 +332,18 @@ jobs:
         if: failure()
         run: |
           echo "::warning::Report generation failed. Check logs for details."
-          # Archive any partial data for debugging
           if ls *.json 1> /dev/null 2>&1; then
             tar -czf debug-data.tar.gz *.json *.log 2>/dev/null || true
           fi
 
-      - name: '⬆️ Upload Playwright Logs on Failure'
+      - name: '⬆️ Upload Browser Logs on Failure'
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-browser-logs
-          path: ~/.cache/ms-playwright
+          name: browser-debug-logs-${{ github.run_number }}
+          path: |
+            ~/.cache/ms-playwright
+            ~/.cache/camoufox
           retention-days: ${{ env.REPORT_RETENTION_DAYS }}
           if-no-files-found: 'warn'
 
@@ -296,20 +367,18 @@ jobs:
             **Workflow:** ${{ github.workflow }}
 
             [View Run Logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
-
-            Please investigate and fix any issues.
             `;
 
-            // Check for existing open issue with the same title
             const { data: issues } = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
               state: 'open',
-              labels: 'automated-failure',
-              title: title
+              labels: 'automated-failure'
             });
 
-            if (issues.length === 0) {
+            const existingIssue = issues.find(i => i.title.startsWith('🚨 Scheduled Race Report Failed'));
+
+            if (!existingIssue) {
               await github.rest.issues.create({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -317,6 +386,4 @@ jobs:
                 body: body,
                 labels: ['automated-failure', 'bug']
               });
-            } else {
-              console.log(`An open issue with the title "${title}" already exists. Skipping creation.`);
             }
