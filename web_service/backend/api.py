@@ -46,7 +46,12 @@ async def lifespan(app: FastAPI):
     yield
     log.info("Lifespan: Shutdown sequence initiated.")
     if hasattr(app.state, "engine") and app.state.engine:
-        await app.state.engine.close()
+        try:
+            # CRITICAL: Close all browser sessions
+            await app.state.engine.shutdown()
+            log.info("Engine shutdown complete")
+        except Exception as e:
+            log.error(f"Error during shutdown: {e}", exc_info=True)
     log.info("Lifespan: Shutdown sequence complete.")
 
 # --- FastAPI App Initialization ---
