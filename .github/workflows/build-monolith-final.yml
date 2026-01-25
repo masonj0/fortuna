@@ -260,12 +260,50 @@ jobs:
             }
           }
 
-          # 3. Cleanup
+          # 3. Wait for Frontend Rendering & Take Screenshot
+          if ($success) {
+            Write-Host "⏳ Waiting for frontend to render dashboard..."
+            $logPath = "$env:TEMP\fortuna-desktop.log"
+            $timeout = 60
+            $logUpdated = $false
+            for ($j=0; $j -lt $timeout; $j++) {
+              if (Test-Path $logPath) {
+                $logContent = Get-Content $logPath -Raw
+                if ($logContent -match "Extracted \d+ races") {
+                  Write-Host "✅ Frontend has rendered races."
+                  $logUpdated = $true
+                  break
+                }
+              }
+              Start-Sleep -Seconds 1
+            }
+
+            if (-not $logUpdated) {
+              Write-Warning "Timed out waiting for frontend to render. Proceeding with screenshot anyway."
+            }
+
+            try {
+              Add-Type -AssemblyName System.Windows.Forms
+              Add-Type -AssemblyName System.Drawing
+              $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+              $bmp = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
+              $graphics = [System.Drawing.Graphics]::FromImage($bmp)
+              $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+              $bmp.Save("smoke-test-screenshot.png", [System.Drawing.Imaging.ImageFormat]::Png)
+              $graphics.Dispose()
+              $bmp.Dispose()
+              Write-Host "📸 Screenshot saved to smoke-test-screenshot.png"
+            } catch {
+              Write-Warning "Failed to capture screenshot: $_"
+            }
+          }
+
+          # 4. Cleanup
           if (-not $process.HasExited) {
             Stop-Process -Id $processId -Force
           }
 
-          # 4. Diagnostics (If Failed)
+          # 5. Diagnostics (If Failed)
           if (-not $success) {
             Write-Host "❌ SMOKE TEST FAILED" -ForegroundColor Red
 
