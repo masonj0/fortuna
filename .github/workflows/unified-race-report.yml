@@ -65,22 +65,43 @@ jobs:
           cache: 'pip'
           cache-dependency-path: 'web_service/backend/requirements.txt'
 
-      - name: '📦 Install Dependencies'
+      - name: 📦 Install Dependencies & Browsers
+        shell: pwsh
         run: |
-          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install --upgrade pip wheel
           pip install -r web_service/backend/requirements.txt
+          pip install requests
 
-      # NEW: Install Scrapling browsers
-      - name: '🌐 Install Scrapling Browsers'
+          # Install Scrapling/Playwright browsers
+          playwright install chromium
+          python -m scrapling.install
+
+      - name: 🧪 Verify Browser Installation (Fail Fast)
+        shell: pwsh
         run: |
-          # Install Scrapling's browser dependencies
-          # This downloads Chromium and modified Firefox (Camoufox)
-          scrapling install
+          # Claude's suggestion: Verify the browser actually launches before starting the heavy backend
+          python -c "
+import asyncio
+from scrapling import StealthySession
 
-          # Verify installation
-          echo "Scrapling browsers installed successfully"
+async def test():
+    try:
+        print('Attempting to launch headless browser...')
+        session = StealthySession(headless=True)
+        await session.__aenter__()
+        if session.context:
+            print('✅ Browser context initialized successfully')
+            await session.close()
+            exit(0)
+        else:
+            print('❌ Browser context is None')
+            exit(1)
+    except Exception as e:
+        print(f'❌ Browser test failed: {e}')
+        exit(1)
 
-        continue-on-error: false  # Fail if browser installation fails
+asyncio.run(test())
+"
 
       - name: '📂 Create Runtime Directories'
         run: |
