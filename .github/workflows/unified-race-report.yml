@@ -81,6 +81,7 @@ jobs:
           from scrapling.fetchers import StealthySession
 
           async def test():
+              session = None
               try:
                   print('Attempting to launch headless browser...')
                   async with StealthySession(headless=True) as session:
