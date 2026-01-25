@@ -16,7 +16,7 @@ import re
 import os
 
 from scrapling.fetchers import StealthySession
-from scrapling import Adaptor
+from scrapling.parser import Selector
 
 from ..models import OddsData, Race, Runner
 from ..utils.odds import parse_odds_to_decimal
@@ -247,7 +247,7 @@ class TwinSpiresAdapter(BaseAdapterV3):
             return None
 
         # Parse HTML with Scrapling
-        page = Adaptor(html)
+        page = Selector(html)
 
         # Extract track name
         track_name = race_data.get("track", "Unknown")
@@ -288,7 +288,7 @@ class TwinSpiresAdapter(BaseAdapterV3):
         Extract post time from race HTML.
 
         Args:
-            page: Scrapling Adaptor object
+            page: Scrapling Selector object
             date_str: Date string YYYY-MM-DD
 
         Returns:
@@ -339,7 +339,7 @@ class TwinSpiresAdapter(BaseAdapterV3):
         Parse runner information from race HTML.
 
         Args:
-            page: Scrapling Adaptor object
+            page: Scrapling Selector object
 
         Returns:
             List of Runner objects
