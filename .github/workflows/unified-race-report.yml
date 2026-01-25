@@ -97,7 +97,8 @@ jobs:
                       return 1
 
                   print("StealthySession object created. Attempting to fetch a page to initialize browser context...")
-                  await session.fetch('http://example.com')
+                  # Directly await the fetch method, as it's the standard async method
+                  await session.async_fetch('http://example.com')
 
                   if session.context:
                       print("✅ Browser context initialized successfully.")
