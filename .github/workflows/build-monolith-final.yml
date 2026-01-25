@@ -234,6 +234,23 @@ jobs:
               $resp = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 2
               if ($resp.StatusCode -eq 200) {
                 Write-Host "✅ Backend is HEALTHY!" -ForegroundColor Green
+
+                # Take screenshot on success
+                try {
+                  Add-Type -AssemblyName System.Windows.Forms
+                  Add-Type -AssemblyName System.Drawing
+                  $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+                  $bmp = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
+                  $graphics = [System.Drawing.Graphics]::FromImage($bmp)
+                  $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+                  $bmp.Save("smoke-test-screenshot.png", [System.Drawing.Imaging.ImageFormat]::Png)
+                  $graphics.Dispose()
+                  $bmp.Dispose()
+                  Write-Host "📸 Screenshot saved to smoke-test-screenshot.png"
+                } catch {
+                  Write-Warning "Failed to capture screenshot: $_"
+                }
+
                 $success = $true
                 break
               }

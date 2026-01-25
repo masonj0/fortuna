@@ -2,17 +2,89 @@
   "races": [],
   "errors": [
     {
-      "adapterName": "AtTheRaces",
-      "errorMessage": "HTTP Error 403 for https://www.attheraces.com/racecard/Tampa-Bay-Downs/24-January-2026/2135",
-      "attemptedUrl": "https://www.attheraces.com/racecard/Tampa-Bay-Downs/24-January-2026/2135"
+      "adapterName": "Brisnet",
+      "errorMessage": "HTTP Error 503 for https://www.brisnet.com/cgi-bin/intoday.cgi",
+      "attemptedUrl": "https://www.brisnet.com/cgi-bin/intoday.cgi"
     }
   ],
   "sourceInfo": [
     {
+      "name": "Brisnet",
+      "status": "FAILED",
+      "racesFetched": 1,
+      "fetchDuration": 24.506454,
+      "errorMessage": "HTTP Error 503 for https://www.brisnet.com/cgi-bin/intoday.cgi",
+      "attemptedUrl": "https://www.brisnet.com/cgi-bin/intoday.cgi"
+    },
+    {
+      "name": "HorseRacingNation",
+      "status": "SUCCESS",
+      "racesFetched": 0,
+      "fetchDuration": 0.000141,
+      "errorMessage": null,
+      "attemptedUrl": null
+    },
+    {
+      "name": "NYRABets",
+      "status": "SUCCESS",
+      "racesFetched": 0,
+      "fetchDuration": 0.000113,
+      "errorMessage": null,
+      "attemptedUrl": null
+    },
+    {
+      "name": "Oddschecker",
+      "status": "SUCCESS",
+      "racesFetched": 0,
+      "fetchDuration": 0.002327,
+      "errorMessage": null,
+      "attemptedUrl": null
+    },
+    {
+      "name": "Punters",
+      "status": "SUCCESS",
+      "racesFetched": 0,
+      "fetchDuration": 9.8e-05,
+      "errorMessage": null,
+      "attemptedUrl": null
+    },
+    {
       "name": "RacingPost",
       "status": "SUCCESS",
       "racesFetched": 0,
-      "fetchDuration": 0.277127,
+      "fetchDuration": 0.014226,
+      "errorMessage": null,
+      "attemptedUrl": null
+    },
+    {
+      "name": "RacingTV",
+      "status": "SUCCESS",
+      "racesFetched": 0,
+      "fetchDuration": 0.000187,
+      "errorMessage": null,
+      "attemptedUrl": null
+    },
+    {
+      "name": "SportingLife",
+      "status": "SUCCESS",
+      "racesFetched": 0,
+      "fetchDuration": 0.619431,
+      "errorMessage": null,
+      "attemptedUrl": null
+    },
+    {
+      "name": "TAB",
+      "status": "SUCCESS",
+      "racesFetched": 0,
+      "fetchDuration": 0.000176,
+      "errorMessage": null,
+      "attemptedUrl": null
+    },
+    {
+      "name": "Xpressbet",
+      "status": "SUCCESS",
+      "racesFetched": 0,
+      "fetchDuration": 6.8e-05,
       "errorMessage": null,
       "attemptedUrl": null
     }
