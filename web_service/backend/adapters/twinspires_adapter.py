@@ -77,6 +77,7 @@ class TwinSpiresAdapter(BaseAdapterV3):
             # TwinSpires shows today's races at /bet/todays-races/time
             index_url = f"{self.BASE_URL}/bet/todays-races/time"
             self.logger.info(f"Fetching: {index_url}")
+            self.attempted_url = index_url
 
             # Fetch with extended timeout for JS to render
             index_page = await session.fetch(

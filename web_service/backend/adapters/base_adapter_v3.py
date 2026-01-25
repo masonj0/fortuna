@@ -293,6 +293,7 @@ class BaseAdapterV3(ABC):
         self.http_client: httpx.AsyncClient | None = None
         self.manual_override_manager: ManualOverrideManager | None = None
         self.supports_manual_override = True
+        self.attempted_url: Optional[str] = None
         # ✅ THESE 4 LINES MUST BE HERE (not in close()):
         self.circuit_breaker = CircuitBreaker()
         self.rate_limiter = RateLimiter(requests_per_second=rate_limit)
@@ -369,6 +370,7 @@ class BaseAdapterV3(ABC):
         return []
 
     def _validate_and_parse_races(self, raw_data: Any) -> list[Race]:
+        self.attempted_url = None  # Reset for each new get_races call
         is_valid, reason = DataValidationPipeline.validate_raw_response(self.source_name, raw_data)
         if not is_valid:
             raise AdapterParsingError(self.source_name, f"Raw response validation failed: {reason}")
@@ -398,6 +400,8 @@ class BaseAdapterV3(ABC):
         Makes a resilient HTTP request with circuit breaker, rate limiting, caching, and retries.
         """
         full_url = url if url.startswith("http") else f"{self.base_url}/{url.lstrip('/')}"
+        if self.attempted_url is None:
+            self.attempted_url = full_url
 
         # Check cache first for GET requests
         if use_cache and self.cache and method.upper() == "GET":
