@@ -94,6 +94,8 @@ def get_engine(request: Request) -> OddsEngine:
 
 # --- API Endpoints (Restored and Adapted) ---
 
+from fastapi.responses import JSONResponse
+
 @router.get("/races", response_model=AggregatedResponse)
 @limiter.limit("30/minute")
 async def get_races(
@@ -104,9 +106,32 @@ async def get_races(
     _=Depends(verify_api_key),
 ):
     """Fetches all race data for a given date from all or a specific source."""
-    if race_date is None:
-        race_date = date.today().strftime("%Y-%m-%d")
-    return await engine.fetch_all_odds(race_date, source)
+    try:
+        if race_date is None:
+            race_date = date.today().strftime("%Y-%m-%d")
+        return await engine.fetch_all_odds(race_date, source)
+    except Exception as e:
+        log.error("Unhandled exception in get_races endpoint", exc_info=True, error=str(e))
+        return JSONResponse(
+            status_code=500,
+            content={
+                "races": [],
+                "errors": [{
+                    "adapter_name": "FortunaEngine",
+                    "error_message": f"An unexpected server error occurred: {str(e)}",
+                    "attempted_url": None
+                }],
+                "source_info": [],
+                "metadata": {
+                    "fetch_time": datetime.now().isoformat(),
+                    "sources_queried": 0,
+                    "sources_successful": 0,
+                    "total_races": 0,
+                    "total_errors": 1,
+                    "data_freshness": "error"
+                }
+            }
+        )
 
 @router.get("/races/qualified/tiny_field_trifecta", response_model=QualifiedRacesResponse)
 @limiter.limit("120/minute")

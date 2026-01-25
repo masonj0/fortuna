@@ -51,15 +51,30 @@ class TwinSpiresAdapter(BaseAdapterV3):
         )
 
     async def _get_session(self, retries=3):
-        """Attempt to create a browser session with retries."""
+        """
+        Create and initialize a browser session with retries.
+        This includes launching the browser and verifying the context.
+        """
         for i in range(retries):
+            session = None
             try:
-                # Claude/Gemini Consensus: Explicitly initialize and check context
+                logger.info(f"Attempting to launch browser (attempt {i+1}/{retries})...")
                 session = StealthySession(headless=True)
-                return session
+                await session.__aenter__()  # Explicitly launch the browser
+                if session.context:
+                    logger.info("✅ Browser context initialized successfully")
+                    return session  # Success, return the active session
+                else:
+                    logger.warning("Browser context is None after launch.")
+                    await session.close() # Clean up the failed session
             except Exception as e:
-                logger.warning(f"[TwinSpires] Browser init failed (attempt {i+1}/{retries}): {e}")
-                await asyncio.sleep(2 * (i + 1)) # Exponential backoff
+                logger.warning(f"Browser launch failed (attempt {i+1}/{retries}): {e}")
+                if session:
+                    await session.close() # Ensure cleanup on failure
+                if i < retries - 1:
+                    await asyncio.sleep(2 * (i + 1)) # Exponential backoff
+
+        logger.error("Failed to initialize browser after all retries.")
         return None
 
     async def _fetch_data(self, date: str) -> Optional[dict]:
@@ -81,7 +96,7 @@ class TwinSpiresAdapter(BaseAdapterV3):
 
         session = await self._get_session()
         if not session:
-            self.logger.error("[TwinSpires] Failed to initialize browser after retries. Skipping.")
+            self.logger.error("Skipping TwinSpires fetch.")
             return None
 
         try:
