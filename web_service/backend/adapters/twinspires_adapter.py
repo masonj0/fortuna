@@ -110,6 +110,7 @@ class TwinSpiresAdapter(BaseAdapterV3):
                 self.logger.error(f"Failed to fetch index page. Status: {index_page.status}, URL: {index_url}")
                 return None
 
+            # ... rest of implementation (see full artifact)
             races_data = self._extract_races_from_page(index_page, date)
             return {
                 "races": races_data,
