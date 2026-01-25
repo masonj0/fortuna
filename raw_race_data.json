@@ -2,19 +2,266 @@
   "races": [],
   "errors": [
     {
+      "adapterName": "Brisnet",
+      "errorMessage": "HTTP Error 503 for https://www.brisnet.com/cgi-bin/intoday.cgi",
+      "attemptedUrl": "https://www.brisnet.com/cgi-bin/intoday.cgi"
+    },
+    {
       "adapterName": "AtTheRaces",
-      "errorMessage": "HTTP Error 403 for https://www.attheraces.com/racecard/Tampa-Bay-Downs/24-January-2026/2135",
-      "attemptedUrl": "https://www.attheraces.com/racecard/Tampa-Bay-Downs/24-January-2026/2135"
+      "errorMessage": "HTTP Error 503 for https://www.attheraces.com/racecard/Sunland-Park/25-January-2026/2300",
+      "attemptedUrl": "https://www.attheraces.com/racecards/2026-01-25"
+    },
+    {
+      "adapterName": "BetfairExchange",
+      "errorMessage": "Betfair credentials not fully configured in credential manager.",
+      "attemptedUrl": null
+    },
+    {
+      "adapterName": "BetfairGreyhounds",
+      "errorMessage": "Betfair credentials not fully configured in credential manager.",
+      "attemptedUrl": null
+    },
+    {
+      "adapterName": "Equibase",
+      "errorMessage": "Adapter ran successfully but fetched zero races.",
+      "attemptedUrl": null
+    },
+    {
+      "adapterName": "FanDuel",
+      "errorMessage": "HTTP Error 503 for https://sb-api.nj.sportsbook.fanduel.com/api/markets?_ak=Fh2e68s832c41d4b&eventId=38183.3",
+      "attemptedUrl": "https://sb-api.nj.sportsbook.fanduel.com/api/markets?_ak=Fh2e68s832c41d4b&eventId=38183.3"
+    },
+    {
+      "adapterName": "GBGB",
+      "errorMessage": "HTTP Error 503 for https://api.gbgb.org.uk/api/results/meeting/2026-01-25",
+      "attemptedUrl": "https://api.gbgb.org.uk/api/results/meeting/2026-01-25"
+    },
+    {
+      "adapterName": "USTrotting",
+      "errorMessage": "HTTP Error 503 for https://data.ustrotting.com/api/racenet/racing/card/2026-01-25",
+      "attemptedUrl": "https://data.ustrotting.com/api/racenet/racing/card/2026-01-25"
+    },
+    {
+      "adapterName": "HorseRacingNation",
+      "errorMessage": "Adapter ran successfully but fetched zero races.",
+      "attemptedUrl": null
+    },
+    {
+      "adapterName": "NYRABets",
+      "errorMessage": "Adapter ran successfully but fetched zero races.",
+      "attemptedUrl": null
+    },
+    {
+      "adapterName": "Oddschecker",
+      "errorMessage": "Adapter ran successfully but fetched zero races.",
+      "attemptedUrl": null
+    },
+    {
+      "adapterName": "Punters",
+      "errorMessage": "Adapter ran successfully but fetched zero races.",
+      "attemptedUrl": null
+    },
+    {
+      "adapterName": "RacingPost",
+      "errorMessage": "Adapter ran successfully but fetched zero races.",
+      "attemptedUrl": null
+    },
+    {
+      "adapterName": "RacingTV",
+      "errorMessage": "Adapter ran successfully but fetched zero races.",
+      "attemptedUrl": null
+    },
+    {
+      "adapterName": "SportingLife",
+      "errorMessage": "Adapter ran successfully but fetched zero races.",
+      "attemptedUrl": null
+    },
+    {
+      "adapterName": "TAB",
+      "errorMessage": "Adapter ran successfully but fetched zero races.",
+      "attemptedUrl": null
+    },
+    {
+      "adapterName": "Timeform",
+      "errorMessage": "HTTP Error 503 for https://www.timeform.com/horse-racing/racecards/2026-01-25",
+      "attemptedUrl": "https://www.timeform.com/horse-racing/racecards/2026-01-25"
+    },
+    {
+      "adapterName": "TwinSpires",
+      "errorMessage": "object NoneType can't be used in 'await' expression",
+      "attemptedUrl": "https://www.twinspires.com/bet/todays-races/time"
+    },
+    {
+      "adapterName": "Xpressbet",
+      "errorMessage": "Adapter ran successfully but fetched zero races.",
+      "attemptedUrl": null
+    },
+    {
+      "adapterName": "PointsBetGreyhound",
+      "errorMessage": "HTTP Error 503 for https://api.pointsbet.com/api/v2/sports/greyhound-racing/events/by-date/2026-01-25",
+      "attemptedUrl": "https://api.pointsbet.com/api/v2/sports/greyhound-racing/events/by-date/2026-01-25"
     }
   ],
   "sourceInfo": [
     {
-      "name": "RacingPost",
-      "status": "SUCCESS",
-      "racesFetched": 0,
-      "fetchDuration": 0.277127,
-      "errorMessage": null,
+      "name": "Brisnet",
+      "status": "FAILED",
+      "racesFetched": 1,
+      "fetchDuration": 24.216893,
+      "errorMessage": "HTTP Error 503 for https://www.brisnet.com/cgi-bin/intoday.cgi",
+      "attemptedUrl": "https://www.brisnet.com/cgi-bin/intoday.cgi"
+    },
+    {
+      "name": "AtTheRaces",
+      "status": "FAILED",
+      "racesFetched": 1,
+      "fetchDuration": 3.91938,
+      "errorMessage": "HTTP Error 503 for https://www.attheraces.com/racecard/Sunland-Park/25-January-2026/2300",
+      "attemptedUrl": "https://www.attheraces.com/racecards/2026-01-25"
+    },
+    {
+      "name": "BetfairExchange",
+      "status": "FAILED",
+      "racesFetched": 1,
+      "fetchDuration": 0.000498,
+      "errorMessage": "Betfair credentials not fully configured in credential manager.",
       "attemptedUrl": null
+    },
+    {
+      "name": "BetfairGreyhounds",
+      "status": "FAILED",
+      "racesFetched": 1,
+      "fetchDuration": 0.000251,
+      "errorMessage": "Betfair credentials not fully configured in credential manager.",
+      "attemptedUrl": null
+    },
+    {
+      "name": "Equibase",
+      "status": "FAILED",
+      "racesFetched": 0,
+      "fetchDuration": 0.001111,
+      "errorMessage": "Adapter ran successfully but fetched zero races.",
+      "attemptedUrl": null
+    },
+    {
+      "name": "FanDuel",
+      "status": "FAILED",
+      "racesFetched": 1,
+      "fetchDuration": 3.23456,
+      "errorMessage": "HTTP Error 503 for https://sb-api.nj.sportsbook.fanduel.com/api/markets?_ak=Fh2e68s832c41d4b&eventId=38183.3",
+      "attemptedUrl": "https://sb-api.nj.sportsbook.fanduel.com/api/markets?_ak=Fh2e68s832c41d4b&eventId=38183.3"
+    },
+    {
+      "name": "GBGB",
+      "status": "FAILED",
+      "racesFetched": 1,
+      "fetchDuration": 3.820649,
+      "errorMessage": "HTTP Error 503 for https://api.gbgb.org.uk/api/results/meeting/2026-01-25",
+      "attemptedUrl": "https://api.gbgb.org.uk/api/results/meeting/2026-01-25"
+    },
+    {
+      "name": "USTrotting",
+      "status": "FAILED",
+      "racesFetched": 1,
+      "fetchDuration": 3.807482,
+      "errorMessage": "HTTP Error 503 for https://data.ustrotting.com/api/racenet/racing/card/2026-01-25",
+      "attemptedUrl": "https://data.ustrotting.com/api/racenet/racing/card/2026-01-25"
+    },
+    {
+      "name": "HorseRacingNation",
+      "status": "FAILED",
+      "racesFetched": 0,
+      "fetchDuration": 7.4e-05,
+      "errorMessage": "Adapter ran successfully but fetched zero races.",
+      "attemptedUrl": null
+    },
+    {
+      "name": "NYRABets",
+      "status": "FAILED",
+      "racesFetched": 0,
+      "fetchDuration": 0.000175,
+      "errorMessage": "Adapter ran successfully but fetched zero races.",
+      "attemptedUrl": null
+    },
+    {
+      "name": "Oddschecker",
+      "status": "FAILED",
+      "racesFetched": 0,
+      "fetchDuration": 0.001986,
+      "errorMessage": "Adapter ran successfully but fetched zero races.",
+      "attemptedUrl": null
+    },
+    {
+      "name": "Punters",
+      "status": "FAILED",
+      "racesFetched": 0,
+      "fetchDuration": 0.000128,
+      "errorMessage": "Adapter ran successfully but fetched zero races.",
+      "attemptedUrl": null
+    },
+    {
+      "name": "RacingPost",
+      "status": "FAILED",
+      "racesFetched": 0,
+      "fetchDuration": 0.014232,
+      "errorMessage": "Adapter ran successfully but fetched zero races.",
+      "attemptedUrl": null
+    },
+    {
+      "name": "RacingTV",
+      "status": "FAILED",
+      "racesFetched": 0,
+      "fetchDuration": 0.000212,
+      "errorMessage": "Adapter ran successfully but fetched zero races.",
+      "attemptedUrl": null
+    },
+    {
+      "name": "SportingLife",
+      "status": "FAILED",
+      "racesFetched": 0,
+      "fetchDuration": 0.512366,
+      "errorMessage": "Adapter ran successfully but fetched zero races.",
+      "attemptedUrl": null
+    },
+    {
+      "name": "TAB",
+      "status": "FAILED",
+      "racesFetched": 0,
+      "fetchDuration": 0.000217,
+      "errorMessage": "Adapter ran successfully but fetched zero races.",
+      "attemptedUrl": null
+    },
+    {
+      "name": "Timeform",
+      "status": "FAILED",
+      "racesFetched": 1,
+      "fetchDuration": 4.136114,
+      "errorMessage": "HTTP Error 503 for https://www.timeform.com/horse-racing/racecards/2026-01-25",
+      "attemptedUrl": "https://www.timeform.com/horse-racing/racecards/2026-01-25"
+    },
+    {
+      "name": "TwinSpires",
+      "status": "FAILED",
+      "racesFetched": 1,
+      "fetchDuration": 0.000939,
+      "errorMessage": "object NoneType can't be used in 'await' expression",
+      "attemptedUrl": "https://www.twinspires.com/bet/todays-races/time"
+    },
+    {
+      "name": "Xpressbet",
+      "status": "FAILED",
+      "racesFetched": 0,
+      "fetchDuration": 7.2e-05,
+      "errorMessage": "Adapter ran successfully but fetched zero races.",
+      "attemptedUrl": null
+    },
+    {
+      "name": "PointsBetGreyhound",
+      "status": "FAILED",
+      "racesFetched": 1,
+      "fetchDuration": 4.082736,
+      "errorMessage": "HTTP Error 503 for https://api.pointsbet.com/api/v2/sports/greyhound-racing/events/by-date/2026-01-25",
+      "attemptedUrl": "https://api.pointsbet.com/api/v2/sports/greyhound-racing/events/by-date/2026-01-25"
     }
   ]
 }

@@ -33,9 +33,7 @@ class TimeformAdapter(BaseAdapterV3):
         Fetches the raw HTML for all race pages for a given date.
         """
         index_url = f"/racecards/{date}"
-        index_response = await self.make_request(
-            self.http_client, "GET", index_url, headers=self._get_headers()
-        )
+        index_response = await self.make_request("GET", index_url, headers=self._get_headers())
         if not index_response or not index_response.text:
             self.logger.warning("Failed to fetch Timeform index page", url=index_url)
             return None
@@ -51,9 +49,7 @@ class TimeformAdapter(BaseAdapterV3):
         links = {a["href"] for a in index_soup.select("a.rp-racecard-off-link[href]")}
 
         async def fetch_single_html(url_path: str):
-            response = await self.make_request(
-                self.http_client, "GET", url_path, headers=self._get_headers()
-            )
+            response = await self.make_request("GET", url_path, headers=self._get_headers())
             return response.text if response else ""
 
         tasks = [fetch_single_html(link) for link in links]
