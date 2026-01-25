@@ -37,25 +37,38 @@ class TwinSpiresAdapter(BaseAdapterV3):
         self._session = None
 
     async def _initialize_session(self):
-        """Initialize StealthySession with optimal browser pooling."""
-        if self._session:
+        """
+        Initialize StealthySession with enhanced diagnostics.
+        If initialization fails, it logs the error and raises an exception.
+        """
+        if self._session and self._session.context:
+            logger.info("Reusing existing StealthySession.")
             return self._session
 
+        logger.info("No active session found. Initializing a new StealthySession.")
         try:
             self._session = StealthySession(
                 headless=True,
-                max_pages=3,              # Tab pooling
-                solve_cloudflare=True,    # Turnstile bypass
-                block_webrtc=True,        # IP leak prevention
-                google_search=True,       # Appear legitimate
-                hide_canvas=True,         # Canvas fingerprinting
+                max_pages=3,
+                solve_cloudflare=True,
+                block_webrtc=True,
+                google_search=True,
+                hide_canvas=True,
             )
+            # The __aenter__ method is what actually starts the browser.
+            # This needs to be awaited.
             await self._session.__aenter__()
-            logger.info("✅ StealthySession initialized successfully")
+            if not self._session.context:
+                 # This case should ideally not be hit if __aenter__ succeeds
+                 raise RuntimeError("Session context is null after __aenter__")
+
+            logger.info("✅ StealthySession initialized successfully with a valid browser context.")
             return self._session
         except Exception as e:
-            logger.error(f"Failed to initialize StealthySession: {e}")
+            logger.error(f"CRITICAL: Failed to initialize StealthySession: {e}", exc_info=True)
+            # Ensure session is None on failure so we don't try to reuse a bad session
             self._session = None
+            # Re-raise to ensure the calling method knows initialization failed
             raise
 
     async def _close_session(self):
@@ -70,14 +83,22 @@ class TwinSpiresAdapter(BaseAdapterV3):
                 self._session = None
 
     async def _fetch_data(self, date: str) -> Optional[dict]:
-        """Fetch race data using persistent session."""
+        """Fetch race data using persistent session with enhanced diagnostics."""
         self.logger.info(f"Fetching TwinSpires races for {date}")
+        session = None
         try:
             session = await self._initialize_session()
+            if not session or not session.context:
+                # This check is critical. If the session fails to initialize,
+                # we must not proceed. _initialize_session should raise, but
+                # this is a defensive check.
+                self.logger.critical("Session or session.context is null after initialization. Cannot proceed.")
+                raise RuntimeError("Failed to initialize a valid browser session.")
+
             index_url = f"{self.BASE_URL}/bet/todays-races/time"
             self.attempted_url = index_url
+            self.logger.info(f"Attempting to fetch URL: {index_url}")
 
-            # Use async_fetch for proper async handling
             index_page = await session.async_fetch(
                 index_url,
                 network_idle=True,
@@ -86,7 +107,7 @@ class TwinSpiresAdapter(BaseAdapterV3):
             )
 
             if index_page.status != 200:
-                self.logger.error(f"Failed to fetch: {index_page.status}")
+                self.logger.error(f"Failed to fetch index page. Status: {index_page.status}, URL: {index_url}")
                 return None
 
             # ... rest of implementation (see full artifact)
@@ -97,10 +118,9 @@ class TwinSpiresAdapter(BaseAdapterV3):
                 "source": "twinspires_live"
             }
         except Exception as e:
-            self.logger.error(f"Error: {e}", exc_info=True)
+            self.logger.error(f"An exception occurred during data fetching for TwinSpires: {e}", exc_info=True)
+            # Re-raise or handle as per desired resilience policy
             return None
-
-    # ... (see full artifact for complete implementation)
 
     async def cleanup(self):
         """Cleanup on shutdown."""
@@ -114,18 +134,10 @@ class TwinSpiresAdapter(BaseAdapterV3):
 
     def _extract_races_from_page(self, page, date: str) -> List[dict]:
         """
-        Extract race information from the main TwinSpires page.
-
-        TwinSpires shows all races on one page, organized by track and time.
-        We need to parse the structure and extract race details.
-
-        Returns:
-            List of dictionaries containing race HTML and metadata
+        Extract race information from the main TwinSpires page with enhanced diagnostics.
         """
         races_data = []
 
-        # Try multiple selector patterns to find race containers
-        # These are guesses - adjust after inspecting twinspires_debug.html
         potential_selectors = [
             'div[class*="RaceCard"]',
             'div[data-race]',
@@ -136,15 +148,21 @@ class TwinSpiresAdapter(BaseAdapterV3):
         ]
 
         race_elements = []
+        selector_used = None
         for selector in potential_selectors:
+            self.logger.info(f"Attempting to find race containers with selector: '{selector}'")
             race_elements = page.css(selector)
             if race_elements:
-                self.logger.info(f"Found {len(race_elements)} races using selector: {selector}")
+                selector_used = selector
                 break
 
-        if not race_elements:
-            self.logger.warning("Could not find race elements with any known selector")
-            # Return the full page as a single "race" for parsing
+        if race_elements:
+            self.logger.info(f"SUCCESS: Found {len(race_elements)} race containers using selector: '{selector_used}'")
+        else:
+            self.logger.warning("CRITICAL: Could not find any race containers with any of the potential selectors.")
+            # To aid debugging, we'll return the full page content as a single "race".
+            # This allows the parsing logic to run and potentially find runners,
+            # while also ensuring that a debug file is generated if parsing fails.
             return [{
                 "html": page.text,
                 "track": "Unknown",

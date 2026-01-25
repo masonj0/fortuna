@@ -75,9 +75,15 @@ jobs:
           playwright install chromium
 
       - name: 🧪 Verify Browser Installation (Fail Fast)
+        shell: bash
         run: |
-          xvfb-run python - <<EOF
+          MAX_ATTEMPTS=3
+          SUCCESS=false
+          for i in $(seq 1 $MAX_ATTEMPTS); do
+            echo "--- Browser Verification Attempt $i of $MAX_ATTEMPTS ---"
+            if xvfb-run python - <<EOF
           import asyncio
+          import sys
           from scrapling.fetchers import StealthySession
 
           async def test():
@@ -85,8 +91,6 @@ jobs:
               try:
                   print('Attempting to launch headless browser...')
                   session = StealthySession(headless=True)
-                  # The browser context is initialized lazily, so we need to
-                  # perform an action to verify it. We'll fetch a dummy page.
                   await session.fetch('http://example.com')
                   if session.context:
                       print('✅ Browser context initialized successfully')
@@ -101,9 +105,27 @@ jobs:
                   if session:
                       await session.close()
 
-          if asyncio.run(test()) != 0:
-              exit(1)
+          # Exit with the return code of the test function
+          sys.exit(asyncio.run(test()))
           EOF
+            then
+              SUCCESS=true
+              break
+            fi
+
+            if [ "$i" -lt "$MAX_ATTEMPTS" ]; then
+              echo "--- Attempt $i failed. Retrying in 5 seconds... ---"
+              sleep 5
+            fi
+          done
+
+          if [ "$SUCCESS" = "true" ]; then
+            echo "--- Browser Verification Succeeded ---"
+            exit 0
+          else
+            echo "--- Browser Verification Failed after $MAX_ATTEMPTS attempts ---"
+            exit 1
+          fi
 
       - name: '📂 Create Runtime Directories'
         run: |
@@ -229,6 +251,15 @@ jobs:
           if ls *.json 1> /dev/null 2>&1; then
             tar -czf debug-data.tar.gz *.json *.log 2>/dev/null || true
           fi
+
+      - name: '⬆️ Upload Playwright Logs on Failure'
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-browser-logs
+          path: ~/.cache/ms-playwright
+          retention-days: ${{ env.REPORT_RETENTION_DAYS }}
+          if-no-files-found: 'warn'
 
   notify-on-failure:
     needs: generate-unified-report
