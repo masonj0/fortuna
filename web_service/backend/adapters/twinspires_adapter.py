@@ -16,7 +16,7 @@ import re
 import os
 
 from scrapling.fetchers import StealthySession
-from scrapling import Adaptor
+from scrapling.parser import Selector
 
 from ..models import OddsData, Race, Runner
 from ..utils.odds import parse_odds_to_decimal
@@ -77,9 +77,10 @@ class TwinSpiresAdapter(BaseAdapterV3):
             # TwinSpires shows today's races at /bet/todays-races/time
             index_url = f"{self.BASE_URL}/bet/todays-races/time"
             self.logger.info(f"Fetching: {index_url}")
+            self.attempted_url = index_url
 
             # Fetch with extended timeout for JS to render
-            index_page = await session.async_fetch(
+            index_page = await session.fetch(
                 index_url,
                 network_idle=True,  # Wait for all network requests
                 timeout=45000,      # 45 second timeout
@@ -247,7 +248,7 @@ class TwinSpiresAdapter(BaseAdapterV3):
             return None
 
         # Parse HTML with Scrapling
-        page = Adaptor(html)
+        page = Selector(html)
 
         # Extract track name
         track_name = race_data.get("track", "Unknown")
@@ -288,7 +289,7 @@ class TwinSpiresAdapter(BaseAdapterV3):
         Extract post time from race HTML.
 
         Args:
-            page: Scrapling Adaptor object
+            page: Scrapling Selector object
             date_str: Date string YYYY-MM-DD
 
         Returns:
@@ -339,7 +340,7 @@ class TwinSpiresAdapter(BaseAdapterV3):
         Parse runner information from race HTML.
 
         Args:
-            page: Scrapling Adaptor object
+            page: Scrapling Selector object
 
         Returns:
             List of Runner objects

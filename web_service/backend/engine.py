@@ -237,7 +237,11 @@ class OddsEngine:
                 else:
                     processed_races.append(Race(**race_data))
             races = processed_races
-            is_success = True
+            if races:
+                is_success = True
+            else:
+                is_success = False
+                error_message = "Adapter ran successfully but fetched zero races."
         except AdapterHttpError as e:
             self.logger.error(
                 "HTTP failure during fetch from adapter.",
@@ -299,7 +303,7 @@ class OddsEngine:
                 "races_fetched": len(races),
                 "error_message": error_message,
                 "fetch_duration": duration,
-                "attempted_url": attempted_url,
+                "attempted_url": adapter.attempted_url or attempted_url,
             },
         }
         return (adapter.source_name, payload, duration)
