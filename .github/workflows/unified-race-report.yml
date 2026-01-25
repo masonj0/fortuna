@@ -42,7 +42,7 @@ env:
 jobs:
   generate-unified-report:
     runs-on: ubuntu-latest
-    timeout-minutes: 20  # Increased from 15 for browser automation
+    timeout-minutes: 25  # Increased from 20 for browser automation
 
     permissions:
       contents: read
@@ -70,40 +70,76 @@ jobs:
         run: |
           python -m pip install --upgrade pip wheel
           pip install -r web_service/backend/requirements.txt
-          pip install requests
 
           # Install Scrapling/Playwright browsers
           playwright install chromium
-          python -m scrapling.install
 
       - name: 🧪 Verify Browser Installation (Fail Fast)
-        shell: pwsh
+        shell: bash
         run: |
-          # Create a python script to verify browser installation
-          @"
+          MAX_ATTEMPTS=3
+          SUCCESS=false
+          for i in $(seq 1 $MAX_ATTEMPTS); do
+            echo "--- Browser Verification Attempt $i of $MAX_ATTEMPTS ---"
+            if xvfb-run python - <<EOF
           import asyncio
-          from scrapling import StealthySession
+          import sys
+          import traceback
+          from scrapling.fetchers import StealthySession
 
           async def test():
+              session = None
               try:
-                  print('Attempting to launch headless browser...')
+                  print("Attempting to initialize StealthySession...")
                   session = StealthySession(headless=True)
-                  await session.__aenter__()
+                  if session is None:
+                      print("❌ CRITICAL: StealthySession() returned None.")
+                      return 1
+
+                  print("StealthySession object created. Attempting to fetch a page to initialize browser context...")
+                  await session.fetch('http://example.com')
+
                   if session.context:
-                      print('✅ Browser context initialized successfully')
-                      await session.close()
-                      exit(0)
+                      print("✅ Browser context initialized successfully.")
+                      return 0
                   else:
-                      print('❌ Browser context is None')
-                      exit(1)
-              except Exception as e:
-                  print(f'❌ Browser test failed: {e}')
-                  exit(1)
+                      print("❌ CRITICAL: Browser context is None after fetch.")
+                      return 1
+              except Exception:
+                  print(f"❌ An unexpected error occurred during browser verification:")
+                  # Print the full exception traceback to stdout
+                  traceback.print_exc()
+                  return 1
+              finally:
+                  if session:
+                      print("Attempting to close session...")
+                      try:
+                          await session.close()
+                          print("Session closed successfully.")
+                      except Exception:
+                          print("An error occurred while closing the session:")
+                          traceback.print_exc()
 
-          asyncio.run(test())
-          "@ | Out-File -FilePath "verify_browser.py" -Encoding utf8
+          # Run the test and exit with its return code
+          sys.exit(asyncio.run(test()))
+          EOF
+            then
+              SUCCESS=true
+              break
+            fi
 
-          python verify_browser.py
+            if [ "$i" -lt "$MAX_ATTEMPTS" ]; then
+              echo "--- Attempt $i failed. Retrying in 5 seconds... ---"
+              sleep 5
+            fi
+          done
+
+          if [ "$SUCCESS" = "true" ]; then
+            echo "--- Browser Verification Succeeded ---"
+          else
+            echo "--- Browser Verification Failed after $MAX_ATTEMPTS attempts ---"
+            exit 1
+          fi
 
       - name: '📂 Create Runtime Directories'
         run: |
@@ -130,6 +166,7 @@ jobs:
           REQUEST_TIMEOUT: ${{ env.REQUEST_TIMEOUT }}
           # Browser automation needs display (for headless mode)
           DISPLAY: ':99'
+          CI: 'true'
         run: |
           # Start virtual display for headless browser
           sudo Xvfb :99 -screen 0 1920x1080x24 > /dev/null 2>&1 &
@@ -228,6 +265,15 @@ jobs:
           if ls *.json 1> /dev/null 2>&1; then
             tar -czf debug-data.tar.gz *.json *.log 2>/dev/null || true
           fi
+
+      - name: '⬆️ Upload Playwright Logs on Failure'
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-browser-logs
+          path: ~/.cache/ms-playwright
+          retention-days: ${{ env.REPORT_RETENTION_DAYS }}
+          if-no-files-found: 'warn'
 
   notify-on-failure:
     needs: generate-unified-report
