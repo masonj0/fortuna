@@ -79,29 +79,31 @@ jobs:
       - name: 🧪 Verify Browser Installation (Fail Fast)
         shell: pwsh
         run: |
-          # Claude's suggestion: Verify the browser actually launches before starting the heavy backend
-          python -c "
-import asyncio
-from scrapling import StealthySession
+          # Create a python script to verify browser installation
+          @"
+          import asyncio
+          from scrapling import StealthySession
 
-async def test():
-    try:
-        print('Attempting to launch headless browser...')
-        session = StealthySession(headless=True)
-        await session.__aenter__()
-        if session.context:
-            print('✅ Browser context initialized successfully')
-            await session.close()
-            exit(0)
-        else:
-            print('❌ Browser context is None')
-            exit(1)
-    except Exception as e:
-        print(f'❌ Browser test failed: {e}')
-        exit(1)
+          async def test():
+              try:
+                  print('Attempting to launch headless browser...')
+                  session = StealthySession(headless=True)
+                  await session.__aenter__()
+                  if session.context:
+                      print('✅ Browser context initialized successfully')
+                      await session.close()
+                      exit(0)
+                  else:
+                      print('❌ Browser context is None')
+                      exit(1)
+              except Exception as e:
+                  print(f'❌ Browser test failed: {e}')
+                  exit(1)
 
-asyncio.run(test())
-"
+          asyncio.run(test())
+          "@ | Out-File -FilePath "verify_browser.py" -Encoding utf8
+
+          python verify_browser.py
 
       - name: '📂 Create Runtime Directories'
         run: |
