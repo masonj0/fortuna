@@ -67,28 +67,7 @@ jobs:
       - name: '🖥️ Install System Dependencies'
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            xvfb \
-            libnss3 \
-            libnspr4 \
-            libatk1.0-0 \
-            libatk-bridge2.0-0 \
-            libcups2 \
-            libdrm2 \
-            libxkbcommon0 \
-            libxcomposite1 \
-            libxdamage1 \
-            libxfixes3 \
-            libxrandr2 \
-            libgbm1 \
-            libasound2 \
-            libpango-1.0-0 \
-            libcairo2 \
-            libatspi2.0-0 \
-            libgtk-3-0 \
-            libdbus-glib-1-2 \
-            libxt6 \
-            libx11-xcb1
+          sudo apt-get install -y --no-install-recommends xvfb xauth
 
       - name: '📦 Install Python Dependencies'
         run: |
@@ -97,16 +76,13 @@ jobs:
 
       - name: '🦊 Install Scrapling Browsers'
         run: |
-          # Install Camoufox browser (used by StealthyFetcher/StealthySession)
-          echo "Installing Camoufox browser for Scrapling..."
-          python -m camoufox fetch
+          # Install Camoufox browser (for StealthyFetcher)
+          echo "Installing Camoufox..."
+          python -m camoufox fetch || echo "⚠️ Camoufox install failed, will try Playwright"
 
-          # Verify camoufox installation
-          python -c "import camoufox; print(f'✅ Camoufox installed: {camoufox.__file__}')"
-
-          # Also install Playwright browsers as fallback (if using PlayWrightFetcher)
-          echo "Installing Playwright browsers as fallback..."
-          playwright install chromium --with-deps || true
+          # Install Playwright with all system dependencies
+          echo "Installing Playwright browsers with dependencies..."
+          playwright install --with-deps chromium
 
       - name: '🖥️ Start Virtual Display'
         run: |
