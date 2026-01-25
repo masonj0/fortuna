@@ -202,6 +202,18 @@ class OddsEngine:
     async def close(self):
         await self.http_client.aclose()
 
+    async def shutdown(self):
+        """Gracefully shuts down all adapters that require cleanup."""
+        self.logger.info("Shutting down adapters with cleanup methods...")
+        for adapter_name, adapter in self.adapters.items():
+            if hasattr(adapter, 'cleanup'):
+                try:
+                    self.logger.info(f"Cleaning up {adapter_name}...")
+                    await adapter.cleanup()
+                except Exception as e:
+                    self.logger.error(f"Error cleaning up {adapter_name}", error=str(e), exc_info=True)
+        await self.close()
+
     def get_all_adapter_statuses(self) -> List[Dict[str, Any]]:
         return [adapter.get_status() for adapter in self.adapters.values()]
 
