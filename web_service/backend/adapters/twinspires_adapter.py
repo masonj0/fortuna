@@ -9,7 +9,7 @@ import os
 import asyncio
 import logging
 
-from scrapling.fetchers import StealthySession
+from scrapling.fetchers import AsyncStealthySession
 from scrapling.parser import Selector
 
 from ..models import OddsData, Race, Runner
@@ -45,9 +45,9 @@ class TwinSpiresAdapter(BaseAdapterV3):
             logger.info("Reusing existing StealthySession.")
             return self._session
 
-        logger.info("No active session found. Initializing a new StealthySession.")
+        logger.info("No active session found. Initializing a new AsyncStealthySession.")
         try:
-            self._session = StealthySession(
+            self._session = AsyncStealthySession(
                 headless=True,
                 max_pages=3,
                 solve_cloudflare=True,
@@ -55,17 +55,17 @@ class TwinSpiresAdapter(BaseAdapterV3):
                 google_search=True,
                 hide_canvas=True,
             )
-            # The __aenter__ method is what actually starts the browser.
+            # The start() method is what actually starts the browser.
             # This needs to be awaited.
-            await self._session.__aenter__()
+            await self._session.start()
             if not self._session.context:
-                 # This case should ideally not be hit if __aenter__ succeeds
-                 raise RuntimeError("Session context is null after __aenter__")
+                 # This case should ideally not be hit if start() succeeds
+                 raise RuntimeError("Session context is null after start()")
 
-            logger.info("✅ StealthySession initialized successfully with a valid browser context.")
+            logger.info("✅ AsyncStealthySession initialized successfully with a valid browser context.")
             return self._session
         except Exception as e:
-            logger.error(f"CRITICAL: Failed to initialize StealthySession: {e}", exc_info=True)
+            logger.error(f"CRITICAL: Failed to initialize AsyncStealthySession: {e}", exc_info=True)
             # Ensure session is None on failure so we don't try to reuse a bad session
             self._session = None
             # Re-raise to ensure the calling method knows initialization failed
@@ -99,7 +99,7 @@ class TwinSpiresAdapter(BaseAdapterV3):
             self.attempted_url = index_url
             self.logger.info(f"Attempting to fetch URL: {index_url}")
 
-            index_page = await session.async_fetch(
+            index_page = await session.fetch(
                 index_url,
                 network_idle=True,
                 timeout=45000,
