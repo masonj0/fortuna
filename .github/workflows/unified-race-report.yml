@@ -467,7 +467,6 @@ jobs:
             *_debug.html
             debug-output/
           retention-days: ${{ env.REPORT_RETENTION_DAYS }}
-          if-no-files-found: warn
           compression-level: 9
 
       - name: '📝 Generate Summary'
