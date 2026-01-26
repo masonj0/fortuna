@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
-# scripts/verify_browsers.py
-"""
-Verify browser installations are working correctly.
-"""
+"""Verify browser installations are working correctly."""
 
 import asyncio
 import sys
@@ -10,58 +7,18 @@ import os
 import json
 from datetime import datetime
 
-# Results storage
 results = {
     "timestamp": datetime.utcnow().isoformat(),
     "display": os.environ.get("DISPLAY", "not set"),
+    "python_version": sys.version.split()[0],
     "tests": {}
 }
 
 
-async def test_stealthy_session():
-    """Test Scrapling's StealthySession (Camoufox)."""
+async def test_playwright_chromium():
+    """Test Playwright Chromium."""
     print("\n" + "=" * 60)
-    print("TEST: StealthySession (Camoufox)")
-    print("=" * 60)
-
-    try:
-        from scrapling.fetchers import StealthyFetcher
-
-        fetcher = StealthyFetcher(
-            headless=True,
-            block_images=True,
-        )
-
-        print("→ Fetching test page...")
-        response = await asyncio.wait_for(
-            asyncio.to_thread(fetcher.fetch, 'https://httpbin.org/headers'),
-            timeout=30
-        )
-
-        print(f"✓ Status: {response.status}")
-        print(f"✓ Content length: {len(response.text)} chars")
-
-        if response.status == 200 and len(response.text) > 100:
-            print("✅ StealthySession PASSED")
-            return True, "OK"
-        else:
-            return False, f"Unexpected response: status={response.status}"
-
-    except ImportError as e:
-        print(f"⚠️ Import error: {e}")
-        return False, f"Import error: {e}"
-    except asyncio.TimeoutError:
-        print("⚠️ Timeout")
-        return False, "Timeout after 30s"
-    except Exception as e:
-        print(f"❌ Error: {e}")
-        return False, str(e)
-
-
-async def test_playwright_session():
-    """Test Scrapling's PlaywrightFetcher."""
-    print("\n" + "=" * 60)
-    print("TEST: PlaywrightFetcher (Chromium)")
+    print("TEST: Playwright Chromium")
     print("=" * 60)
 
     try:
@@ -73,35 +30,25 @@ async def test_playwright_session():
         )
 
         print("→ Fetching test page...")
-        response = await asyncio.wait_for(
-            asyncio.to_thread(fetcher.fetch, 'https://httpbin.org/get'),
-            timeout=30
-        )
+        response = fetcher.fetch('https://httpbin.org/get')
 
         print(f"✓ Status: {response.status}")
-        print(f"✓ Content length: {len(response.text)} chars")
+        print(f"✓ Content: {len(response.text)} chars")
 
         if response.status == 200:
-            print("✅ PlaywrightFetcher PASSED")
+            print("✅ Playwright Chromium PASSED")
             return True, "OK"
-        else:
-            return False, f"Status: {response.status}"
+        return False, f"Status: {response.status}"
 
-    except ImportError as e:
-        print(f"⚠️ Import error: {e}")
-        return False, f"Import error: {e}"
-    except asyncio.TimeoutError:
-        print("⚠️ Timeout")
-        return False, "Timeout after 30s"
     except Exception as e:
         print(f"❌ Error: {e}")
         return False, str(e)
 
 
 async def test_async_stealthy():
-    """Test async StealthySession."""
+    """Test AsyncStealthySession."""
     print("\n" + "=" * 60)
-    print("TEST: AsyncStealthySession")
+    print("TEST: AsyncStealthySession (Camoufox)")
     print("=" * 60)
 
     session = None
@@ -128,12 +75,14 @@ async def test_async_stealthy():
         if response.status == 200:
             print("✅ AsyncStealthySession PASSED")
             return True, "OK"
-        else:
-            return False, f"Status: {response.status}"
+        return False, f"Status: {response.status}"
 
     except ImportError as e:
-        print(f"⚠️ Import error: {e}")
+        print(f"⚠️ Not available: {e}")
         return False, f"Import error: {e}"
+    except asyncio.TimeoutError:
+        print("⚠️ Timeout")
+        return False, "Timeout"
     except Exception as e:
         print(f"❌ Error: {e}")
         return False, str(e)
@@ -154,22 +103,20 @@ async def main():
     print(f"Display: {os.environ.get('DISPLAY', 'not set')}")
     print(f"Python: {sys.version.split()[0]}")
 
-    # Check scrapling version
     try:
         import scrapling
         print(f"Scrapling: {scrapling.__version__}")
+        results["scrapling_version"] = scrapling.__version__
     except:
-        print("Scrapling: not installed")
-        sys.exit(1)
+        print("Scrapling: not found")
+        results["scrapling_version"] = "not found"
 
-    # Run tests
     tests = [
+        ("playwright_chromium", test_playwright_chromium),
         ("async_stealthy", test_async_stealthy),
-        ("playwright", test_playwright_session),
     ]
 
     passed = 0
-    failed = 0
 
     for name, test_func in tests:
         try:
@@ -177,36 +124,31 @@ async def main():
             results["tests"][name] = {"passed": success, "message": message}
             if success:
                 passed += 1
-            else:
-                failed += 1
         except Exception as e:
             results["tests"][name] = {"passed": False, "message": str(e)}
-            failed += 1
 
     # Summary
     print("\n" + "=" * 60)
     print("SUMMARY")
     print("=" * 60)
-    print(f"Passed: {passed}")
-    print(f"Failed: {failed}")
 
     for name, result in results["tests"].items():
         status = "✅" if result["passed"] else "❌"
         print(f"  {status} {name}: {result['message']}")
 
+    print(f"\nPassed: {passed}/{len(tests)}")
+
     # Save results
     with open("browser_verification.json", "w") as f:
         json.dump(results, f, indent=2)
 
-    # Exit code
     if passed > 0:
-        print("\n✅ At least one browser backend is working")
+        print("\n✅ At least one browser is working")
         return 0
     else:
-        print("\n❌ No browser backends available!")
+        print("\n❌ No browsers available!")
         return 1
 
 
 if __name__ == "__main__":
-    exit_code = asyncio.run(main())
-    sys.exit(exit_code)
+    sys.exit(asyncio.run(main()))
