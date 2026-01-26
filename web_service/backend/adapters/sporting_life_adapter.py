@@ -15,6 +15,7 @@ from ..models import Runner
 from ..utils.odds import parse_odds_to_decimal
 from ..utils.text import clean_text
 from .base_adapter_v3 import BaseAdapterV3
+from web_service.backend.core.smart_fetcher import BrowserEngine, FetchStrategy, StealthMode
 
 
 class SportingLifeAdapter(BaseAdapterV3):
@@ -27,6 +28,18 @@ class SportingLifeAdapter(BaseAdapterV3):
 
     def __init__(self, config=None):
         super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
+
+    def _configure_fetch_strategy(self) -> FetchStrategy:
+        """
+        SportingLife requires JavaScript rendering to get the race links,
+        so we must use a full browser engine like Playwright.
+        """
+        return FetchStrategy(
+            primary_engine=BrowserEngine.PLAYWRIGHT,
+            enable_js=True,
+            stealth_mode=StealthMode.FAST,
+            block_resources=True
+        )
 
     async def _fetch_data(self, date: str) -> Optional[dict]:
         """
@@ -43,13 +56,6 @@ class SportingLifeAdapter(BaseAdapterV3):
         if not index_response:
             self.logger.warning("Failed to fetch SportingLife index page", url=index_url)
             return None
-
-        # Save the raw HTML for debugging in CI
-        try:
-            with open("sl_debug.html", "w", encoding="utf-8") as f:
-                f.write(index_response.text)
-        except Exception as e:
-            self.logger.warning("Failed to save debug HTML for SportingLife", error=str(e))
 
         index_soup = BeautifulSoup(index_response.text, "html.parser")
         links = {

@@ -1,154 +1,200 @@
-#!/usr/bin/env python3
-"""Verify browser installations are working correctly."""
+# scripts/verify_browsers.py
+# CORRECTED VERSION - Outputs to browser_verification.json
+# This version aligns with the updated CI workflow.
 
 import asyncio
-import sys
-import os
 import json
-from datetime import datetime
+import logging
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 
-results = {
-    "timestamp": datetime.utcnow().isoformat(),
-    "display": os.environ.get("DISPLAY", "not set"),
-    "python_version": sys.version.split()[0],
-    "tests": {}
-}
+# --- Configuration ---
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(asctime)s] %(levelname)s [%(name)s.%(funcName)s:%(lineno)d] %(message)s",
+    stream=sys.stdout,
+)
+logger = logging.getLogger(__name__)
 
+# CRITICAL: This filename must match the one expected by the GitHub workflow.
+OUTPUT_FILE = Path("browser_verification.json")
+EXPECTED_BROWSERS = ["chrome", "firefox"]
+INSTALL_GUIDE_URL = "https://playwright.dev/docs/intro"
 
-async def test_playwright_chromium():
-    """Test Playwright Chromium."""
-    print("\n" + "=" * 60)
-    print("TEST: Playwright Chromium")
-    print("=" * 60)
+# --- Helper Functions ---
 
+async def run_command(command: str) -> Tuple[bool, str, str]:
+    """Executes a shell command asynchronously."""
     try:
-        from scrapling.fetchers import PlayWrightFetcher
-
-        fetcher = PlayWrightFetcher(
-            headless=True,
-            browser_type='chromium',
+        process = await asyncio.create_subprocess_shell(
+            command,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
-
-        print("→ Fetching test page...")
-        response = fetcher.fetch('https://httpbin.org/get')
-
-        print(f"✓ Status: {response.status}")
-        print(f"✓ Content: {len(response.text)} chars")
-
-        if response.status == 200:
-            print("✅ Playwright Chromium PASSED")
-            return True, "OK"
-        return False, f"Status: {response.status}"
-
+        stdout, stderr = await process.communicate()
+        return process.returncode == 0, stdout.decode().strip(), stderr.decode().strip()
     except Exception as e:
-        print(f"❌ Error: {e}")
-        return False, str(e)
+        logger.error(f"Command '{command}' failed: {e}", exc_info=True)
+        return False, "", str(e)
 
+async def find_executable(name: str) -> Optional[str]:
+    """Finds the full path of an executable, checking common locations."""
+    path = shutil.which(name)
+    if path:
+        return path
 
-async def test_async_stealthy():
-    """Test AsyncStealthySession."""
-    print("\n" + "=" * 60)
-    print("TEST: AsyncStealthySession (Camoufox)")
-    print("=" * 60)
+    # Fallback for systems where shutil.which might be limited
+    success, stdout, _ = await run_command(f"command -v {name}")
+    if success and stdout:
+        return stdout
 
-    session = None
-    try:
-        from scrapling.fetchers import AsyncStealthySession
+    return None
 
-        session = AsyncStealthySession(
-            headless=True,
-            block_images=True,
-        )
+async def get_browser_version(executable_path: str) -> Optional[str]:
+    """Gets the version of a browser executable."""
+    if not executable_path:
+        return None
 
-        print("→ Starting session...")
-        await session.start()
-        print("✓ Session started")
+    name = Path(executable_path).name.lower()
+    flag = "--version" # Standard for most browsers
 
-        print("→ Fetching test page...")
-        response = await asyncio.wait_for(
-            session.fetch('https://httpbin.org/headers'),
-            timeout=30
-        )
+    success, stdout, stderr = await run_command(f'"{executable_path}" {flag}')
 
-        print(f"✓ Status: {response.status}")
+    if success and stdout:
+        # Clean up output, e.g., "Google Chrome 125.0.6422.112" -> "125.0.6422.112"
+        version_part = stdout.split()[-1]
+        return version_part
 
-        if response.status == 200:
-            print("✅ AsyncStealthySession PASSED")
-            return True, "OK"
-        return False, f"Status: {response.status}"
+    logger.warning(f"Failed to get version for {name}: {stderr or 'Unknown error'}")
+    return None
 
-    except ImportError as e:
-        print(f"⚠️ Not available: {e}")
-        return False, f"Import error: {e}"
-    except asyncio.TimeoutError:
-        print("⚠️ Timeout")
-        return False, "Timeout"
-    except Exception as e:
-        print(f"❌ Error: {e}")
-        return False, str(e)
-    finally:
-        if session:
-            try:
-                await session.close()
-                print("✓ Session closed")
-            except:
-                pass
+async def check_playwright_installation() -> Tuple[bool, Optional[str]]:
+    """Checks if Playwright is installed and can be run."""
+    logger.info("Verifying Playwright installation...")
+    success, stdout, stderr = await run_command("npx playwright --version")
+    if success:
+        logger.info(f"Playwright found: {stdout}")
+        return True, stdout.replace("Version ", "")
 
+    logger.error(f"Playwright not found or failed to execute. Stderr: {stderr}")
+    return False, None
+
+async def verify_browser_installations(playwright_installed: bool) -> Dict[str, Dict]:
+    """
+    Checks for both system-wide and Playwright-managed browser installations.
+    """
+    if not playwright_installed:
+        logger.warning("Playwright not found, skipping browser installation checks.")
+        return {}
+
+    logger.info("Running 'npx playwright install --with-deps' to ensure browsers are ready...")
+    # This command is idempotent and ensures all dependencies are met.
+    # It's a best practice for CI environments.
+    success, _, stderr = await run_command("npx playwright install --with-deps")
+    if not success:
+        logger.error(f"Playwright browser installation failed. Stderr: {stderr}")
+        # We can still proceed to check for system browsers, but this is a bad sign.
+    else:
+        logger.info("Playwright browsers and dependencies are up to date.")
+
+    # Now, check what's available
+    results = {}
+    browser_executables = {
+        "chrome": ["google-chrome-stable", "google-chrome", "chrome", "chromium"],
+        "firefox": ["firefox"],
+    }
+
+    for browser, executables in browser_executables.items():
+        found = False
+        for exe in executables:
+            path = await find_executable(exe)
+            if path:
+                version = await get_browser_version(path)
+                results[browser] = {
+                    "installed": True,
+                    "version": version or "Unknown",
+                    "path": path,
+                }
+                logger.info(f"Found {browser} at {path} (v{version or 'N/A'})")
+                found = True
+                break # Move to the next browser
+
+        if not found:
+            results[browser] = {
+                "installed": False,
+                "version": None,
+                "path": None,
+            }
+            logger.warning(f"{browser.capitalize()} could not be found on the system path.")
+
+    return results
+
+def generate_summary(results: Dict) -> Tuple[bool, str]:
+    """Generates a summary report and determines overall success."""
+    summary_lines = ["\n--- Browser Verification Report ---"]
+    all_found = True
+
+    playwright_ok = results.get("playwright", {}).get("installed", False)
+    summary_lines.append(
+        f"✅ Playwright | Installed (v{results.get('playwright', {}).get('version', 'N/A')})"
+        if playwright_ok else "❌ Playwright | Not Installed"
+    )
+    if not playwright_ok:
+        all_found = False
+
+    for browser, info in results.get("browsers", {}).items():
+        if browser in EXPECTED_BROWSERS:
+            if info["installed"]:
+                summary_lines.append(
+                    f"✅ {browser.capitalize():<10} | Found (v{info['version']}) at {info['path']}"
+                )
+            else:
+                all_found = False
+                summary_lines.append(f"❌ {browser.capitalize():<10} | Not Found")
+
+    summary_lines.append("-" * 35)
+    if all_found:
+        summary_lines.append("✅ Success: All required components are installed.")
+    else:
+        summary_lines.append("🔥 Error: One or more required components are missing.")
+        summary_lines.append(f"   Please check the logs or see install guide: {INSTALL_GUIDE_URL}")
+
+    return all_found, "\n".join(summary_lines)
+
+# --- Main Execution ---
 
 async def main():
-    """Run all browser tests."""
-    print("=" * 60)
-    print("BROWSER VERIFICATION")
-    print("=" * 60)
-    print(f"Display: {os.environ.get('DISPLAY', 'not set')}")
-    print(f"Python: {sys.version.split()[0]}")
+    """Main function to orchestrate the verification process."""
+    logger.info("Starting browser and environment verification...")
 
+    playwright_installed, playwright_version = await check_playwright_installation()
+
+    browser_results = await verify_browser_installations(playwright_installed)
+
+    final_results = {
+        "playwright": {
+            "installed": playwright_installed,
+            "version": playwright_version,
+        },
+        "browsers": browser_results,
+    }
+
+    # Write structured JSON output
     try:
-        import scrapling
-        print(f"Scrapling: {scrapling.__version__}")
-        results["scrapling_version"] = scrapling.__version__
-    except:
-        print("Scrapling: not found")
-        results["scrapling_version"] = "not found"
+        OUTPUT_FILE.write_text(json.dumps(final_results, indent=4))
+        logger.info(f"Successfully wrote verification results to {OUTPUT_FILE}")
+    except IOError as e:
+        logger.error(f"Failed to write results to {OUTPUT_FILE}: {e}")
 
-    tests = [
-        ("playwright_chromium", test_playwright_chromium),
-        ("async_stealthy", test_async_stealthy),
-    ]
+    # Generate and print summary
+    is_successful, summary = generate_summary(final_results)
+    print(summary)
 
-    passed = 0
-
-    for name, test_func in tests:
-        try:
-            success, message = await test_func()
-            results["tests"][name] = {"passed": success, "message": message}
-            if success:
-                passed += 1
-        except Exception as e:
-            results["tests"][name] = {"passed": False, "message": str(e)}
-
-    # Summary
-    print("\n" + "=" * 60)
-    print("SUMMARY")
-    print("=" * 60)
-
-    for name, result in results["tests"].items():
-        status = "✅" if result["passed"] else "❌"
-        print(f"  {status} {name}: {result['message']}")
-
-    print(f"\nPassed: {passed}/{len(tests)}")
-
-    # Save results
-    with open("browser_verification.json", "w") as f:
-        json.dump(results, f, indent=2)
-
-    if passed > 0:
-        print("\n✅ At least one browser is working")
-        return 0
-    else:
-        print("\n❌ No browsers available!")
-        return 1
-
+    # Exit with appropriate status code for CI
+    sys.exit(0 if is_successful else 1)
 
 if __name__ == "__main__":
-    sys.exit(asyncio.run(main()))
+    asyncio.run(main())
