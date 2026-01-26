@@ -112,17 +112,17 @@ jobs:
               print("=" * 60)
               session = None  # Ensure session is defined for the finally block
               try:
-                  from scrapling.fetchers import StealthySession
-                  print("✓ Imported StealthySession")
+                  from scrapling.fetchers import AsyncStealthySession
+                  print("✓ Imported AsyncStealthySession")
 
                   # Create session instance
-                  session = StealthySession()
-                  print("✓ Created StealthySession instance")
+                  session = AsyncStealthySession()
+                  print("✓ Created AsyncStealthySession instance")
 
                   # Fetch a test page
                   url = 'https://httpbin.org/headers'
                   print(f"→ Fetching {url} ...")
-                  response = await session.async_fetch(url)
+                  response = await session.fetch(url)
 
                   print("✓ Response received")
                   print(f"  - Status: {response.status}")
