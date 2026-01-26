@@ -263,8 +263,15 @@ jobs:
 
       - name: '🖥️ Install System Dependencies'
         run: |
+          # Add Google Chrome's repository for Camoufox
+          wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo gpg --dearmor -o /usr/share/keyrings/google-chrome-keyring.gpg
+          sudo sh -c 'echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome-keyring.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list'
+
           sudo apt-get update
+
+          # Install dependencies including Google Chrome
           sudo apt-get install -y --no-install-recommends \
+            google-chrome-stable \
             xvfb \
             xauth \
             libx11-xcb1 \
@@ -290,7 +297,7 @@ jobs:
             libxkbcommon0 \
             libatspi2.0-0 \
             libgbm1 \
-            libasound2 \
+            libasound2t64
             fonts-liberation
 
       - name: '📦 Install Python Dependencies'
