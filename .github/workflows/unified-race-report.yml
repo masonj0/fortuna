@@ -292,7 +292,7 @@ jobs:
             libxkbcommon0 \
             libatspi2.0-0 \
             libgbm1 \
-            libasound2 \
+            libasound2t64 \
             fonts-liberation \
             fonts-noto-color-emoji
 
