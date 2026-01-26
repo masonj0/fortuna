@@ -115,6 +115,7 @@ jobs:
           echo "run_full_report=$RUN_FULL" >> $GITHUB_OUTPUT
           echo "run_security=$RUN_SECURITY" >> $GITHUB_OUTPUT
 
+          echo "=== Execution Plan ==="
           echo "Will run canary: $RUN_CANARY"
           echo "Will run full report: $RUN_FULL"
           echo "Will run security scan: $RUN_SECURITY"
@@ -139,7 +140,6 @@ jobs:
           echo "=== pip-audit ==="
           pip-audit -r web_service/backend/requirements.txt \
             --ignore-vuln PYSEC-2022-43012 \
-            --ignore-vuln GHSA-1234-5678-9abc \
             || echo "pip-audit found issues (non-blocking)"
 
           echo ""
@@ -191,7 +191,6 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           python scripts/canary_check.py 2>&1 | tee canary_output.log
-          EXIT_CODE=${PIPESTATUS[0]}
 
           if [ -f canary_result.json ]; then
             HEALTH=$(python -c "import json; print(json.load(open('canary_result.json')).get('status', 'unknown'))")
@@ -264,6 +263,9 @@ jobs:
       - name: '🖥️ Install System Dependencies'
         run: |
           sudo apt-get update
+
+          # Install all required dependencies for headless browsers
+          # Note: libasound2 (not libasound2t64) for Ubuntu 22.04
           sudo apt-get install -y --no-install-recommends \
             xvfb \
             xauth \
@@ -290,8 +292,9 @@ jobs:
             libxkbcommon0 \
             libatspi2.0-0 \
             libgbm1 \
-            libasound2t64
-            fonts-liberation
+            libasound2 \
+            fonts-liberation \
+            fonts-noto-color-emoji
 
       - name: '📦 Install Python Dependencies'
         run: |
@@ -304,13 +307,13 @@ jobs:
         run: |
           set +e  # Don't exit on individual failures
 
-          echo "=== Installing Camoufox ==="
+          echo "=== Installing Camoufox (Firefox-based) ==="
           if python -m camoufox fetch 2>&1; then
             echo "camoufox_available=true" >> $GITHUB_OUTPUT
             echo "✅ Camoufox installed"
           else
             echo "camoufox_available=false" >> $GITHUB_OUTPUT
-            echo "⚠️ Camoufox not available"
+            echo "⚠️ Camoufox not available, will use Playwright fallback"
           fi
 
           echo ""
@@ -333,6 +336,8 @@ jobs:
             echo "⚠️ Firefox not available"
           fi
 
+          echo ""
+          echo "=== Browser Summary ==="
           echo "browsers_ready=true" >> $GITHUB_OUTPUT
 
       - name: '🖥️ Start Virtual Display'
@@ -362,9 +367,11 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           python scripts/verify_browsers.py 2>&1 | tee browser_verify.log
+          RESULT=$?
 
-          if [ $? -eq 0 ]; then
+          if [ $RESULT -eq 0 ]; then
             echo "browser_verified=true" >> $GITHUB_OUTPUT
+            echo "✅ Browser verification passed"
           else
             echo "browser_verified=false" >> $GITHUB_OUTPUT
             echo "::warning::Browser verification had issues, continuing anyway..."
@@ -407,8 +414,9 @@ jobs:
           echo "Analyzer: $ANALYZER_TYPE"
           echo "Force Refresh: $FORCE_REFRESH"
           echo "Debug Mode: $DEBUG_MODE"
-          echo "Camoufox: $CAMOUFOX_AVAILABLE"
-          echo "Chromium: $CHROMIUM_AVAILABLE"
+          echo "Camoufox Available: $CAMOUFOX_AVAILABLE"
+          echo "Chromium Available: $CHROMIUM_AVAILABLE"
+          echo "Firefox Available: $FIREFOX_AVAILABLE"
           echo ""
 
           python scripts/fortuna_reporter.py 2>&1 | tee reporter_output.log
@@ -419,7 +427,7 @@ jobs:
             RACE_COUNT=$(python -c "import json; d=json.load(open('qualified_races.json')); print(len(d.get('races', [])))" 2>/dev/null || echo "0")
             echo "race_count=${RACE_COUNT}" >> $GITHUB_OUTPUT
             echo "status=success" >> $GITHUB_OUTPUT
-            echo "✅ Generated report with ${RACE_COUNT} races"
+            echo "✅ Generated report with ${RACE_COUNT} qualified races"
           elif [ -f "raw_race_data.json" ]; then
             RACE_COUNT=$(python -c "import json; d=json.load(open('raw_race_data.json')); print(len(d.get('races', [])))" 2>/dev/null || echo "0")
             echo "race_count=${RACE_COUNT}" >> $GITHUB_OUTPUT
@@ -459,14 +467,17 @@ jobs:
             raw_race_data.json
             reporter_output.log
             browser_verify.log
+            browser_verification.json
             metrics.json
             errors.json
             adapter_stats.json
             browser_selector_state.json
             anomaly_history.json
+            canary_result.json
             *_debug.html
             debug-output/
           retention-days: ${{ env.REPORT_RETENTION_DAYS }}
+          if-no-files-found: warn
           compression-level: 9
 
       - name: '📝 Generate Summary'
@@ -508,14 +519,18 @@ jobs:
 
             const reportResult = '${{ needs.generate-unified-report.result }}';
             const reportStatus = '${{ needs.generate-unified-report.outputs.status }}';
+            const raceCount = '${{ needs.generate-unified-report.outputs.race_count }}';
             const canaryHealth = '${{ needs.canary-check.outputs.health_status }}';
             const canaryRate = '${{ needs.canary-check.outputs.success_rate }}';
 
             if (reportResult === 'failure' || reportStatus === 'failed') {
               body += `### ❌ Report Generation Failed\n\n`;
               body += `The main report generation job failed.\n\n`;
-              body += `**Adapters Succeeded:** ${{ needs.generate-unified-report.outputs.adapters_succeeded || 'N/A' }}\n`;
-              body += `**Adapters Failed:** ${{ needs.generate-unified-report.outputs.adapters_failed || 'N/A' }}\n\n`;
+              body += `| Metric | Value |\n`;
+              body += `|--------|-------|\n`;
+              body += `| Races Found | ${raceCount || '0'} |\n`;
+              body += `| Adapters Succeeded | ${{ needs.generate-unified-report.outputs.adapters_succeeded || 'N/A' }} |\n`;
+              body += `| Adapters Failed | ${{ needs.generate-unified-report.outputs.adapters_failed || 'N/A' }} |\n\n`;
             }
 
             if (canaryHealth === 'unhealthy') {
