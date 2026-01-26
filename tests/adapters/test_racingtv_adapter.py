@@ -13,7 +13,7 @@ async def test_racingtv_adapter_is_stub():
     adapter = RacingTVAdapter()
 
     # ACT
-    races = [race async for race in adapter.get_races("2025-10-27")]
+    races = await adapter.get_races("2025-10-27")
 
     # ASSERT
     assert races == []
