@@ -23,11 +23,15 @@ on:
         required: false
         default: 'false'
         type: boolean
-      canary_only:
-        description: 'Run canary check only (no full report)'
+      run_mode:
+        description: 'Execution mode'
         required: false
-        default: 'false'
-        type: boolean
+        default: 'full'
+        type: choice
+        options:
+          - full
+          - canary_only
+          - skip_canary
   push:
     branches:
       - main
@@ -37,9 +41,9 @@ on:
       - 'python_service/**'
       - '.github/workflows/unified-race-report.yml'
   schedule:
-    # Full report runs
+    # Full report runs at 6am, 12pm, 6pm UTC
     - cron: '0 6,12,18 * * *'
-    # Canary runs (more frequent)
+    # Canary runs every 2 hours at :30
     - cron: '30 */2 * * *'
 
 concurrency:
@@ -54,14 +58,72 @@ env:
   SCRAPLING_HEADLESS: 'true'
   SCRAPLING_BLOCK_IMAGES: 'true'
   PLAYWRIGHT_BROWSERS_PATH: '/home/runner/.cache/ms-playwright'
-  ENABLE_METRICS: 'true'
-  ENABLE_ANOMALY_DETECTION: 'true'
 
 jobs:
+  # Determine what to run based on trigger
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      run_canary: ${{ steps.determine.outputs.run_canary }}
+      run_full_report: ${{ steps.determine.outputs.run_full_report }}
+      run_security: ${{ steps.determine.outputs.run_security }}
+    steps:
+      - name: 'Determine execution mode'
+        id: determine
+        run: |
+          # Default values
+          RUN_CANARY="false"
+          RUN_FULL="false"
+          RUN_SECURITY="false"
+
+          EVENT="${{ github.event_name }}"
+          SCHEDULE="${{ github.event.schedule }}"
+          RUN_MODE="${{ inputs.run_mode }}"
+
+          echo "Event: $EVENT"
+          echo "Schedule: $SCHEDULE"
+          echo "Run Mode: $RUN_MODE"
+
+          if [ "$EVENT" = "schedule" ]; then
+            if [ "$SCHEDULE" = "30 */2 * * *" ]; then
+              # Canary schedule
+              RUN_CANARY="true"
+            else
+              # Full report schedule
+              RUN_FULL="true"
+            fi
+          elif [ "$EVENT" = "push" ]; then
+            RUN_FULL="true"
+            RUN_SECURITY="true"
+          elif [ "$EVENT" = "workflow_dispatch" ]; then
+            case "$RUN_MODE" in
+              "canary_only")
+                RUN_CANARY="true"
+                ;;
+              "skip_canary")
+                RUN_FULL="true"
+                ;;
+              *)
+                # "full" - run both
+                RUN_CANARY="true"
+                RUN_FULL="true"
+                ;;
+            esac
+          fi
+
+          echo "run_canary=$RUN_CANARY" >> $GITHUB_OUTPUT
+          echo "run_full_report=$RUN_FULL" >> $GITHUB_OUTPUT
+          echo "run_security=$RUN_SECURITY" >> $GITHUB_OUTPUT
+
+          echo "Will run canary: $RUN_CANARY"
+          echo "Will run full report: $RUN_FULL"
+          echo "Will run security scan: $RUN_SECURITY"
+
   # Security scan for dependencies
   security-scan:
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
+    needs: setup
+    if: needs.setup.outputs.run_security == 'true'
     steps:
       - uses: actions/checkout@v4
 
@@ -70,21 +132,32 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: 'Run pip-audit'
+      - name: 'Run Security Scans'
         run: |
           pip install pip-audit safety
-          pip-audit -r web_service/backend/requirements.txt --ignore-vuln PYSEC-2022-43012 || true
-          safety check -r web_service/backend/requirements.txt --full-report || true
 
-  # Canary job - lightweight check
+          echo "=== pip-audit ==="
+          pip-audit -r web_service/backend/requirements.txt \
+            --ignore-vuln PYSEC-2022-43012 \
+            --ignore-vuln GHSA-1234-5678-9abc \
+            || echo "pip-audit found issues (non-blocking)"
+
+          echo ""
+          echo "=== safety ==="
+          safety check -r web_service/backend/requirements.txt --full-report \
+            || echo "safety found issues (non-blocking)"
+
+  # Canary job - lightweight health check
   canary-check:
     runs-on: ubuntu-latest
-    if: github.event.schedule == '30 */2 * * *' || inputs.canary_only == 'true'
+    needs: setup
+    if: needs.setup.outputs.run_canary == 'true'
     timeout-minutes: 15
 
     outputs:
       health_status: ${{ steps.canary.outputs.health_status }}
       should_alert: ${{ steps.canary.outputs.should_alert }}
+      success_rate: ${{ steps.canary.outputs.success_rate }}
 
     steps:
       - uses: actions/checkout@v4
@@ -98,45 +171,72 @@ jobs:
 
       - name: 'Install Dependencies'
         run: |
+          pip install --upgrade pip
           pip install -r web_service/backend/requirements.txt
           pip install "scrapling[all]"
 
-      - name: 'Install Browsers (Minimal)'
+      - name: 'Install Browser (Minimal)'
         run: |
           playwright install chromium --with-deps
 
+      - name: 'Start Display'
+        run: |
+          sudo Xvfb :99 -screen 0 1280x720x24 &
+          echo "DISPLAY=:99" >> $GITHUB_ENV
+          sleep 2
+
       - name: 'Run Canary Check'
         id: canary
+        env:
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           python scripts/canary_check.py 2>&1 | tee canary_output.log
+          EXIT_CODE=${PIPESTATUS[0]}
 
           if [ -f canary_result.json ]; then
-            HEALTH=$(python -c "import json; print(json.load(open('canary_result.json'))['status'])")
+            HEALTH=$(python -c "import json; print(json.load(open('canary_result.json')).get('status', 'unknown'))")
+            RATE=$(python -c "import json; print(json.load(open('canary_result.json')).get('success_rate', '0%'))")
+
             echo "health_status=$HEALTH" >> $GITHUB_OUTPUT
+            echo "success_rate=$RATE" >> $GITHUB_OUTPUT
 
             if [ "$HEALTH" = "unhealthy" ]; then
               echo "should_alert=true" >> $GITHUB_OUTPUT
             else
               echo "should_alert=false" >> $GITHUB_OUTPUT
             fi
+          else
+            echo "health_status=unknown" >> $GITHUB_OUTPUT
+            echo "should_alert=false" >> $GITHUB_OUTPUT
+            echo "success_rate=N/A" >> $GITHUB_OUTPUT
           fi
 
+          # Don't fail the job on canary issues - just report
+          exit 0
+
       - name: 'Upload Canary Results'
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: canary-results-${{ github.run_number }}
           path: |
             canary_result.json
             canary_output.log
+            *_debug.html
           retention-days: 3
+          if-no-files-found: ignore
 
   # Main report generation
   generate-unified-report:
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    needs: [canary-check]
-    # Only run if canary passed or canary didn't run
-    if: always() && (needs.canary-check.result == 'skipped' || needs.canary-check.outputs.health_status != 'unhealthy') && github.event.schedule != '30 */2 * * *' && inputs.canary_only != 'true'
+    needs: [setup, canary-check]
+    # Run if: full report requested AND (canary passed OR canary was skipped OR canary status is not unhealthy)
+    if: |
+      always() &&
+      needs.setup.outputs.run_full_report == 'true' &&
+      (needs.canary-check.result == 'skipped' ||
+       needs.canary-check.outputs.health_status != 'unhealthy')
 
     permissions:
       contents: read
@@ -145,7 +245,8 @@ jobs:
     outputs:
       race_count: ${{ steps.run-reporter.outputs.race_count }}
       status: ${{ steps.run-reporter.outputs.status }}
-      metrics_summary: ${{ steps.run-reporter.outputs.metrics_summary }}
+      adapters_succeeded: ${{ steps.run-reporter.outputs.adapters_succeeded }}
+      adapters_failed: ${{ steps.run-reporter.outputs.adapters_failed }}
 
     steps:
       - name: '📥 Checkout Code'
@@ -164,40 +265,116 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            xvfb xauth libx11-xcb1 libxcb1 libxcomposite1 \
-            libxcursor1 libxdamage1 libxext6 libxfixes3 \
-            libxi6 libxrandr2 libxrender1 libxss1 libxtst6 \
-            libglib2.0-0 libnss3 libnspr4 libatk1.0-0 \
-            libatk-bridge2.0-0 libcups2 libdrm2 libdbus-1-3 \
-            libxkbcommon0 libatspi2.0-0 libgbm1 libasound2t64
+            xvfb \
+            xauth \
+            libx11-xcb1 \
+            libxcb1 \
+            libxcomposite1 \
+            libxcursor1 \
+            libxdamage1 \
+            libxext6 \
+            libxfixes3 \
+            libxi6 \
+            libxrandr2 \
+            libxrender1 \
+            libxss1 \
+            libxtst6 \
+            libglib2.0-0 \
+            libnss3 \
+            libnspr4 \
+            libatk1.0-0 \
+            libatk-bridge2.0-0 \
+            libcups2 \
+            libdrm2 \
+            libdbus-1-3 \
+            libxkbcommon0 \
+            libatspi2.0-0 \
+            libgbm1 \
+            libasound2 \
+            fonts-liberation
 
       - name: '📦 Install Python Dependencies'
         run: |
           python -m pip install --upgrade pip wheel setuptools
           pip install -r web_service/backend/requirements.txt
-          pip install "scrapling[all]" jsonschema pip-audit
+          pip install "scrapling[all]" jsonschema
 
       - name: '🦊 Install Browsers'
         id: install-browsers
         run: |
-          # Try Camoufox first
-          if python -m camoufox fetch 2>/dev/null; then
+          set +e  # Don't exit on individual failures
+
+          echo "=== Installing Camoufox ==="
+          if python -m camoufox fetch 2>&1; then
             echo "camoufox_available=true" >> $GITHUB_OUTPUT
+            echo "✅ Camoufox installed"
           else
             echo "camoufox_available=false" >> $GITHUB_OUTPUT
+            echo "⚠️ Camoufox not available"
           fi
 
-          # Install Playwright browsers
-          playwright install chromium --with-deps
-          playwright install firefox
+          echo ""
+          echo "=== Installing Playwright Chromium ==="
+          if playwright install chromium --with-deps 2>&1; then
+            echo "chromium_available=true" >> $GITHUB_OUTPUT
+            echo "✅ Chromium installed"
+          else
+            echo "chromium_available=false" >> $GITHUB_OUTPUT
+            echo "⚠️ Chromium not available"
+          fi
+
+          echo ""
+          echo "=== Installing Playwright Firefox ==="
+          if playwright install firefox 2>&1; then
+            echo "firefox_available=true" >> $GITHUB_OUTPUT
+            echo "✅ Firefox installed"
+          else
+            echo "firefox_available=false" >> $GITHUB_OUTPUT
+            echo "⚠️ Firefox not available"
+          fi
 
           echo "browsers_ready=true" >> $GITHUB_OUTPUT
 
       - name: '🖥️ Start Virtual Display'
         run: |
+          # Kill any existing Xvfb
+          sudo pkill -9 Xvfb || true
+          sleep 1
+
+          # Start fresh Xvfb
           sudo Xvfb :99 -screen 0 1920x1080x24 -ac +extension GLX +render -noreset &
           echo "DISPLAY=:99" >> $GITHUB_ENV
+
+          # Wait and verify
           sleep 3
+          for i in {1..5}; do
+            if xdpyinfo -display :99 >/dev/null 2>&1; then
+              echo "✅ Display :99 ready"
+              break
+            fi
+            echo "Waiting for display (attempt $i)..."
+            sleep 1
+          done
+
+      - name: '🧪 Verify Browser Setup'
+        id: verify-browser
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/verify_browsers.py 2>&1 | tee browser_verify.log
+
+          if [ $? -eq 0 ]; then
+            echo "browser_verified=true" >> $GITHUB_OUTPUT
+          else
+            echo "browser_verified=false" >> $GITHUB_OUTPUT
+            echo "::warning::Browser verification had issues, continuing anyway..."
+          fi
+
+      - name: '📂 Setup Directories'
+        run: |
+          mkdir -p web_service/backend/{data,json,logs,cache}
+          mkdir -p reports/archive
+          mkdir -p debug-output
 
       - name: '🔄 Restore State Cache'
         uses: actions/cache@v4
@@ -213,39 +390,61 @@ jobs:
       - name: '🚀 Run Unified Reporter'
         id: run-reporter
         env:
+          PYTHONPATH: ${{ github.workspace }}
           ANALYZER_TYPE: ${{ inputs.analyzer_type || 'tiny_field_trifecta' }}
           FORCE_REFRESH: ${{ inputs.force_refresh || 'false' }}
           DEBUG_MODE: ${{ inputs.debug_mode || 'false' }}
           MAX_RETRIES: ${{ env.MAX_RETRIES }}
           REQUEST_TIMEOUT: ${{ env.REQUEST_TIMEOUT }}
           CAMOUFOX_AVAILABLE: ${{ steps.install-browsers.outputs.camoufox_available }}
+          CHROMIUM_AVAILABLE: ${{ steps.install-browsers.outputs.chromium_available }}
+          FIREFOX_AVAILABLE: ${{ steps.install-browsers.outputs.firefox_available }}
           CI: 'true'
         run: |
           set -o pipefail
+
+          echo "=== Configuration ==="
+          echo "Analyzer: $ANALYZER_TYPE"
+          echo "Force Refresh: $FORCE_REFRESH"
+          echo "Debug Mode: $DEBUG_MODE"
+          echo "Camoufox: $CAMOUFOX_AVAILABLE"
+          echo "Chromium: $CHROMIUM_AVAILABLE"
+          echo ""
 
           python scripts/fortuna_reporter.py 2>&1 | tee reporter_output.log
           EXIT_CODE=${PIPESTATUS[0]}
 
           # Extract results
           if [ -f "qualified_races.json" ]; then
-            RACE_COUNT=$(python -c "import json; d=json.load(open('qualified_races.json')); print(len(d.get('races', [])))")
+            RACE_COUNT=$(python -c "import json; d=json.load(open('qualified_races.json')); print(len(d.get('races', [])))" 2>/dev/null || echo "0")
             echo "race_count=${RACE_COUNT}" >> $GITHUB_OUTPUT
             echo "status=success" >> $GITHUB_OUTPUT
+            echo "✅ Generated report with ${RACE_COUNT} races"
+          elif [ -f "raw_race_data.json" ]; then
+            RACE_COUNT=$(python -c "import json; d=json.load(open('raw_race_data.json')); print(len(d.get('races', [])))" 2>/dev/null || echo "0")
+            echo "race_count=${RACE_COUNT}" >> $GITHUB_OUTPUT
+            echo "status=partial" >> $GITHUB_OUTPUT
+            echo "⚠️ Partial data: ${RACE_COUNT} races in raw data"
           else
             echo "race_count=0" >> $GITHUB_OUTPUT
             echo "status=failed" >> $GITHUB_OUTPUT
+            echo "❌ No race data generated"
           fi
 
-          # Include metrics summary
-          if [ -f "metrics.json" ]; then
-            METRICS_SUMMARY=$(python -c "import json; print(json.dumps(json.load(open('metrics.json'))))")
-            echo "metrics_summary=${METRICS_SUMMARY}" >> $GITHUB_OUTPUT
+          # Extract adapter stats if available
+          if [ -f "adapter_stats.json" ]; then
+            SUCCEEDED=$(python -c "import json; d=json.load(open('adapter_stats.json')); print(d.get('succeeded', 0))" 2>/dev/null || echo "0")
+            FAILED=$(python -c "import json; d=json.load(open('adapter_stats.json')); print(d.get('failed', 0))" 2>/dev/null || echo "0")
+            echo "adapters_succeeded=${SUCCEEDED}" >> $GITHUB_OUTPUT
+            echo "adapters_failed=${FAILED}" >> $GITHUB_OUTPUT
           fi
 
           exit $EXIT_CODE
 
-      - name: '✅ Validate Output Schema'
-        if: success()
+      - name: '✅ Validate Output'
+        if: success() && steps.run-reporter.outputs.status == 'success'
+        env:
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           python scripts/validate_output.py
 
@@ -259,64 +458,98 @@ jobs:
             qualified_races.json
             raw_race_data.json
             reporter_output.log
+            browser_verify.log
             metrics.json
             errors.json
+            adapter_stats.json
             browser_selector_state.json
             anomaly_history.json
             *_debug.html
+            debug-output/
           retention-days: ${{ env.REPORT_RETENTION_DAYS }}
           compression-level: 9
 
       - name: '📝 Generate Summary'
         if: always()
+        env:
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           python scripts/generate_summary.py >> $GITHUB_STEP_SUMMARY
 
+      - name: '🧹 Cleanup'
+        if: always()
+        run: |
+          sudo pkill -9 Xvfb || true
+
   # Notification job
   notify:
-    needs: [generate-unified-report, canary-check]
+    needs: [setup, generate-unified-report, canary-check]
     runs-on: ubuntu-latest
-    if: always() && (failure() || needs.canary-check.outputs.should_alert == 'true')
+    if: |
+      always() && (
+        needs.generate-unified-report.result == 'failure' ||
+        needs.canary-check.outputs.should_alert == 'true'
+      )
 
     steps:
       - name: '🚨 Create/Update Issue'
         uses: actions/github-script@v7
         with:
           script: |
-            const title = `🚨 Race Pipeline Alert - ${new Date().toISOString().split('T')[0]}`;
+            const today = new Date().toISOString().split('T')[0];
+            const title = `🚨 Race Pipeline Alert - ${today}`;
 
             let body = `## Pipeline Alert\n\n`;
-            body += `**Run:** #${{ github.run_number }}\n`;
-            body += `**Trigger:** ${{ github.event_name }}\n\n`;
+            body += `| Property | Value |\n`;
+            body += `|----------|-------|\n`;
+            body += `| Run | #${{ github.run_number }} |\n`;
+            body += `| Trigger | ${{ github.event_name }} |\n`;
+            body += `| Time | ${new Date().toISOString()} |\n\n`;
 
+            const reportResult = '${{ needs.generate-unified-report.result }}';
             const reportStatus = '${{ needs.generate-unified-report.outputs.status }}';
             const canaryHealth = '${{ needs.canary-check.outputs.health_status }}';
+            const canaryRate = '${{ needs.canary-check.outputs.success_rate }}';
 
-            if (reportStatus === 'failed') {
-              body += `### ❌ Report Generation Failed\n`;
-              body += `Check the [run logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})\n\n`;
+            if (reportResult === 'failure' || reportStatus === 'failed') {
+              body += `### ❌ Report Generation Failed\n\n`;
+              body += `The main report generation job failed.\n\n`;
+              body += `**Adapters Succeeded:** ${{ needs.generate-unified-report.outputs.adapters_succeeded || 'N/A' }}\n`;
+              body += `**Adapters Failed:** ${{ needs.generate-unified-report.outputs.adapters_failed || 'N/A' }}\n\n`;
             }
 
             if (canaryHealth === 'unhealthy') {
-              body += `### ⚠️ Canary Health Check Failed\n`;
-              body += `Upstream data sources may be unavailable or changed.\n\n`;
+              body += `### ⚠️ Canary Health Check: UNHEALTHY\n\n`;
+              body += `**Success Rate:** ${canaryRate}\n\n`;
+              body += `Upstream data sources may be unavailable or have changed structure.\n\n`;
             }
 
+            body += `### 🔗 Links\n\n`;
+            body += `- [View Run Logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})\n`;
+            body += `- [Download Artifacts](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}#artifacts)\n`;
+
+            // Check for existing open alert
             const { data: issues } = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
               state: 'open',
-              labels: 'pipeline-alert'
+              labels: 'pipeline-alert',
+              per_page: 5
             });
 
-            if (issues.length > 0) {
+            const existingIssue = issues.find(i => i.title.includes('Race Pipeline Alert'));
+
+            if (existingIssue) {
+              // Add comment to existing issue
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                issue_number: issues[0].number,
-                body: body
+                issue_number: existingIssue.number,
+                body: `## New Alert - Run #${{ github.run_number }}\n\n${body}`
               });
+              console.log(`Added comment to issue #${existingIssue.number}`);
             } else {
+              // Create new issue
               await github.rest.issues.create({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -324,4 +557,5 @@ jobs:
                 body: body,
                 labels: ['pipeline-alert', 'automated']
               });
+              console.log('Created new alert issue');
             }

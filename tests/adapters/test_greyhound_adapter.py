@@ -57,7 +57,7 @@ async def test_get_races_parses_correctly(test_settings):
     adapter._fetch_data = AsyncMock(return_value=mock_api_response)
 
     # ACT
-    races = [race async for race in adapter.get_races(today)]
+    races = await adapter.get_races(today)
 
     # ASSERT
     assert len(races) == 1
@@ -83,7 +83,7 @@ async def test_get_races_handles_empty_response(test_settings):
     adapter._fetch_data = AsyncMock(return_value={"cards": []})
 
     # ACT
-    races = [race async for race in adapter.get_races(today)]
+    races = await adapter.get_races(today)
 
     # ASSERT
     assert races == []
@@ -100,7 +100,7 @@ async def test_get_races_handles_fetch_failure(test_settings):
     adapter._fetch_data = AsyncMock(return_value=None)
 
     # ACT
-    races = [race async for race in adapter.get_races(today)]
+    races = await adapter.get_races(today)
 
     # ASSERT
     assert races == []

@@ -1,6 +1,11 @@
 # tests/adapters/test_twinspires_adapter.py
 import pytest
 from python_service.adapters.twinspires_adapter import TwinSpiresAdapter
+from unittest.mock import MagicMock, AsyncMock
+from pathlib import Path
+import pytest
+
+from python_service.adapters.twinspires_adapter import TwinSpiresAdapter
 from python_service.models import Race
 
 # A mock settings object to satisfy the adapter's config dependency
@@ -12,14 +17,21 @@ def adapter():
     return TwinSpiresAdapter(config=MockSettings())
 
 @pytest.mark.asyncio
-async def test_get_races_from_fixture(adapter):
+async def test_get_races_from_fixture(adapter, mocker):
     """
     Test that the adapter can correctly parse a local HTML fixture.
     This test validates the end-to-end parsing logic, including runner data,
     using the offline implementation.
     """
-    # Call the method under test, which is now wired to read from the fixture
-    races = await adapter._get_races_async(date="2025-11-12")
+    # Mock the async fetch method to return a controlled response
+    mock_response = mocker.MagicMock()
+    mock_response.status = 200
+    mock_response.text = Path("tests/fixtures/twinspires_racecard.html").read_text()
+
+    adapter._fetch_with_retry = AsyncMock(return_value=mock_response)
+
+    # Call the method under test
+    races = await adapter.get_races(date="2025-11-12")
 
     # Assertions
     assert isinstance(races, list)

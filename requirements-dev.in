@@ -27,3 +27,6 @@ GitPython
 
 # --- Security & Auditing ---
 pip-audit
+pytest-mock
+anyio<4.0.0
+packaging<24
