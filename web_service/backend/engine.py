@@ -94,6 +94,11 @@ class OddsEngine:
 
             self.logger.info("Initializing adapters...")
             self.adapters: Dict[str, BaseAdapterV3] = {}
+
+            # NOTE: Many adapters require API keys (e.g., TVG, Betfair, TheRacingAPI).
+            # If the required API key is not found in the environment configuration,
+            # the adapter will fail to initialize and be skipped. This is expected
+            # behavior in environments where secrets are not configured.
             adapter_classes = [
                 AtTheRacesAdapter,
                 BetfairAdapter,

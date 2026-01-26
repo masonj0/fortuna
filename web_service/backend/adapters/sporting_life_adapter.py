@@ -106,7 +106,7 @@ class SportingLifeAdapter(BaseAdapterV3):
             try:
                 soup = BeautifulSoup(html, "html.parser")
 
-                header = soup.select_one('h1[class*="RaceHeader__Title"]')
+                header = soup.select_one('h1[class*="RacingRacecardHeader__Title"]')
                 if not header:
                     self.logger.warning("Could not find race header.")
                     continue

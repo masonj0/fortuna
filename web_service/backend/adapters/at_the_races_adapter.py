@@ -115,7 +115,8 @@ class AtTheRacesAdapter(BaseAdapterV3):
                     race_date, datetime.strptime(race_time_str, "%H:%M").time()
                 )
 
-                race_number = 1  # Defaulting to 1 as the race number is not in the URL
+                race_number_match = re.search(r'/racecard/[A-Z]{2}/[A-Za-z-]+/\\d{4}-\\d{2}-\\d{2}/\\d{4}/(\\d+)', url_path)
+                race_number = int(race_number_match.group(1)) if race_number_match else 1
 
                 runners = [self._parse_runner(row) for row in soup.select("atr-horse-in-racecard")]
 
