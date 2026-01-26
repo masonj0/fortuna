@@ -1,4 +1,4 @@
-# unified-race-report.yml
+# .github/workflows/unified-race-report.yml
 name: 'Unified Race Report'
 
 on:
@@ -18,15 +18,29 @@ on:
           - tiny_field_trifecta
           - value_bet
           - longshot_finder
+      debug_mode:
+        description: 'Enable verbose debugging'
+        required: false
+        default: 'false'
+        type: boolean
+      canary_only:
+        description: 'Run canary check only (no full report)'
+        required: false
+        default: 'false'
+        type: boolean
   push:
     branches:
       - main
     paths:
       - 'scripts/**'
       - 'web_service/backend/**'
+      - 'python_service/**'
       - '.github/workflows/unified-race-report.yml'
   schedule:
+    # Full report runs
     - cron: '0 6,12,18 * * *'
+    # Canary runs (more frequent)
+    - cron: '30 */2 * * *'
 
 concurrency:
   group: race-report-${{ github.ref }}
@@ -36,12 +50,94 @@ env:
   PYTHON_VERSION: '3.11'
   REPORT_RETENTION_DAYS: 14
   MAX_RETRIES: 3
-  REQUEST_TIMEOUT: 30
+  REQUEST_TIMEOUT: 45
+  SCRAPLING_HEADLESS: 'true'
+  SCRAPLING_BLOCK_IMAGES: 'true'
+  PLAYWRIGHT_BROWSERS_PATH: '/home/runner/.cache/ms-playwright'
+  ENABLE_METRICS: 'true'
+  ENABLE_ANOMALY_DETECTION: 'true'
 
 jobs:
+  # Security scan for dependencies
+  security-scan:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 'Setup Python'
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 'Run pip-audit'
+        run: |
+          pip install pip-audit safety
+          pip-audit -r web_service/backend/requirements.txt --ignore-vuln PYSEC-2022-43012 || true
+          safety check -r web_service/backend/requirements.txt --full-report || true
+
+  # Canary job - lightweight check
+  canary-check:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '30 */2 * * *' || inputs.canary_only == 'true'
+    timeout-minutes: 15
+
+    outputs:
+      health_status: ${{ steps.canary.outputs.health_status }}
+      should_alert: ${{ steps.canary.outputs.should_alert }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 'Setup Python'
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: 'web_service/backend/requirements.txt'
+
+      - name: 'Install Dependencies'
+        run: |
+          pip install -r web_service/backend/requirements.txt
+          pip install "scrapling[all]"
+
+      - name: 'Install Browsers (Minimal)'
+        run: |
+          playwright install chromium --with-deps
+
+      - name: 'Run Canary Check'
+        id: canary
+        run: |
+          python scripts/canary_check.py 2>&1 | tee canary_output.log
+
+          if [ -f canary_result.json ]; then
+            HEALTH=$(python -c "import json; print(json.load(open('canary_result.json'))['status'])")
+            echo "health_status=$HEALTH" >> $GITHUB_OUTPUT
+
+            if [ "$HEALTH" = "unhealthy" ]; then
+              echo "should_alert=true" >> $GITHUB_OUTPUT
+            else
+              echo "should_alert=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: 'Upload Canary Results'
+        uses: actions/upload-artifact@v4
+        with:
+          name: canary-results-${{ github.run_number }}
+          path: |
+            canary_result.json
+            canary_output.log
+          retention-days: 3
+
+  # Main report generation
   generate-unified-report:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    if: github.event.schedule != '30 */2 * * *' && inputs.canary_only != 'true'
+    timeout-minutes: 45
+    needs: [canary-check]
+    # Only run if canary passed or canary didn't run
+    if: always() && (needs.canary-check.result == 'skipped' || needs.canary-check.outputs.health_status != 'unhealthy') && github.event.schedule != '30 */2 * * *' && inputs.canary_only != 'true'
 
     permissions:
       contents: read
@@ -50,6 +146,7 @@ jobs:
     outputs:
       race_count: ${{ steps.run-reporter.outputs.race_count }}
       status: ${{ steps.run-reporter.outputs.status }}
+      metrics_summary: ${{ steps.run-reporter.outputs.metrics_summary }}
 
     steps:
       - name: '📥 Checkout Code'
@@ -67,168 +164,72 @@ jobs:
       - name: '🖥️ Install System Dependencies'
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends xvfb xauth
+          sudo apt-get install -y --no-install-recommends \
+            xvfb xauth libx11-xcb1 libxcb1 libxcomposite1 \
+            libxcursor1 libxdamage1 libxext6 libxfixes3 \
+            libxi6 libxrandr2 libxrender1 libxss1 libxtst6 \
+            libglib2.0-0 libnss3 libnspr4 libatk1.0-0 \
+            libatk-bridge2.0-0 libcups2 libdrm2 libdbus-1-3 \
+            libxkbcommon0 libatspi2.0-0 libgbm1 libasound2
 
       - name: '📦 Install Python Dependencies'
         run: |
           python -m pip install --upgrade pip wheel setuptools
           pip install -r web_service/backend/requirements.txt
+          pip install "scrapling[all]" jsonschema pip-audit
 
-      - name: '🦊 Install Scrapling Browsers'
+      - name: '🦊 Install Browsers'
+        id: install-browsers
         run: |
-          # Install Camoufox browser (for StealthyFetcher)
-          echo "Installing Camoufox..."
-          python -m camoufox fetch || echo "⚠️ Camoufox install failed, will try Playwright"
+          # Try Camoufox first
+          if python -m camoufox fetch 2>/dev/null; then
+            echo "camoufox_available=true" >> $GITHUB_OUTPUT
+          else
+            echo "camoufox_available=false" >> $GITHUB_OUTPUT
+          fi
 
-          # Install Playwright with all system dependencies
-          echo "Installing Playwright browsers with dependencies..."
-          playwright install --with-deps chromium
+          # Install Playwright browsers
+          playwright install chromium --with-deps
+          playwright install firefox
+
+          echo "browsers_ready=true" >> $GITHUB_OUTPUT
 
       - name: '🖥️ Start Virtual Display'
         run: |
-          # Start Xvfb in background
           sudo Xvfb :99 -screen 0 1920x1080x24 -ac +extension GLX +render -noreset &
           echo "DISPLAY=:99" >> $GITHUB_ENV
           sleep 3
-          # Verify display is running
-          if xdpyinfo -display :99 >/dev/null 2>&1; then
-            echo "✅ Virtual display :99 is running"
-          else
-            echo "⚠️ Virtual display may not be fully ready, continuing anyway..."
-          fi
 
-      - name: '🧪 Verify Browser Installation'
-        id: verify-browser
-        run: |
-          python - <<'PYTHON_SCRIPT'
-          import asyncio
-          import sys
-          import traceback
-
-          async def test_stealthy_browser():
-              """Test Scrapling's StealthyFetcher with Camoufox."""
-              print("=" * 60)
-              print("Testing Scrapling StealthyFetcher (Camoufox)")
-              print("=" * 60)
-
-              try:
-                  from scrapling.fetchers import StealthyFetcher
-                  print("✓ Imported StealthyFetcher")
-
-                  # Create fetcher instance
-                  fetcher = StealthyFetcher(
-                      headless=True,
-                      network_idle=True,
-                  )
-                  print("✓ Created StealthyFetcher instance")
-
-                  # Fetch a test page
-                  print("→ Fetching https://httpbin.org/headers ...")
-                  response = await fetcher.async_fetch('https://httpbin.org/headers')
-
-                  print(f"✓ Response received")
-                  print(f"  - Status: {response.status}")
-                  print(f"  - Content length: {len(response.text)} chars")
-
-                  if response.status == 200 and len(response.text) > 0:
-                      print("\n✅ StealthyFetcher verification PASSED!")
-                      return True
-                  else:
-                      print(f"\n❌ Unexpected response: status={response.status}")
-                      return False
-
-              except Exception as e:
-                  print(f"\n❌ StealthyFetcher failed: {e}")
-                  traceback.print_exc()
-                  return False
-
-          async def test_playwright_browser():
-              """Test Scrapling's PlayWrightFetcher as fallback."""
-              print("\n" + "=" * 60)
-              print("Testing Scrapling PlayWrightFetcher (Playwright/Chromium)")
-              print("=" * 60)
-
-              try:
-                  from scrapling.fetchers import PlayWrightFetcher
-                  print("✓ Imported PlayWrightFetcher")
-
-                  fetcher = PlayWrightFetcher(
-                      headless=True,
-                      network_idle=True,
-                  )
-                  print("✓ Created PlayWrightFetcher instance")
-
-                  print("→ Fetching https://httpbin.org/headers ...")
-                  response = await fetcher.async_fetch('https://httpbin.org/headers')
-
-                  print(f"✓ Response received")
-                  print(f"  - Status: {response.status}")
-                  print(f"  - Content length: {len(response.text)} chars")
-
-                  if response.status == 200:
-                      print("\n✅ PlayWrightFetcher verification PASSED!")
-                      return True
-                  return False
-
-              except Exception as e:
-                  print(f"\n❌ PlayWrightFetcher failed: {e}")
-                  traceback.print_exc()
-                  return False
-
-          async def main():
-              # Test StealthyFetcher first (primary)
-              stealthy_ok = await test_stealthy_browser()
-
-              # Test PlayWrightFetcher as fallback
-              playwright_ok = await test_playwright_browser()
-
-              print("\n" + "=" * 60)
-              print("VERIFICATION SUMMARY")
-              print("=" * 60)
-              print(f"  StealthyFetcher (Camoufox):  {'✅ PASS' if stealthy_ok else '❌ FAIL'}")
-              print(f"  PlayWrightFetcher (Chromium): {'✅ PASS' if playwright_ok else '❌ FAIL'}")
-
-              # Pass if at least one works
-              if stealthy_ok or playwright_ok:
-                  print("\n🎉 At least one browser backend is working!")
-                  return 0
-              else:
-                  print("\n💥 All browser backends failed!")
-                  return 1
-
-          sys.exit(asyncio.run(main()))
-          PYTHON_SCRIPT
-
-      - name: '📂 Create Runtime Directories'
-        run: |
-          mkdir -p web_service/backend/{data,json,logs}
-          mkdir -p reports/archive
-
-      - name: '🔄 Restore Data Cache'
-        if: inputs.force_refresh != 'true'
+      - name: '🔄 Restore State Cache'
         uses: actions/cache@v4
         with:
           path: |
-            web_service/backend/data/*.cache
-            web_service/backend/json/*.cache
-          key: race-data-${{ runner.os }}-${{ github.run_number }}
+            browser_selector_state.json
+            anomaly_history.json
+            web_service/backend/cache/
+          key: state-${{ runner.os }}-${{ github.run_number }}
           restore-keys: |
-            race-data-${{ runner.os }}-
+            state-${{ runner.os }}-
 
       - name: '🚀 Run Unified Reporter'
         id: run-reporter
         env:
           ANALYZER_TYPE: ${{ inputs.analyzer_type || 'tiny_field_trifecta' }}
           FORCE_REFRESH: ${{ inputs.force_refresh || 'false' }}
+          DEBUG_MODE: ${{ inputs.debug_mode || 'false' }}
           MAX_RETRIES: ${{ env.MAX_RETRIES }}
           REQUEST_TIMEOUT: ${{ env.REQUEST_TIMEOUT }}
+          CAMOUFOX_AVAILABLE: ${{ steps.install-browsers.outputs.camoufox_available }}
           CI: 'true'
         run: |
           set -o pipefail
-          python scripts/fortuna_reporter.py 2>&1 | tee reporter_output.log
 
+          python scripts/fortuna_reporter.py 2>&1 | tee reporter_output.log
+          EXIT_CODE=${PIPESTATUS[0]}
+
+          # Extract results
           if [ -f "qualified_races.json" ]; then
-            RACE_COUNT=$(python scripts/get_race_count.py)
+            RACE_COUNT=$(python -c "import json; d=json.load(open('qualified_races.json')); print(len(d.get('races', [])))")
             echo "race_count=${RACE_COUNT}" >> $GITHUB_OUTPUT
             echo "status=success" >> $GITHUB_OUTPUT
           else
@@ -236,130 +237,134 @@ jobs:
             echo "status=failed" >> $GITHUB_OUTPUT
           fi
 
-      - name: '📊 Upload Report Artifacts'
+          # Include metrics summary
+          if [ -f "metrics.json" ]; then
+            METRICS_SUMMARY=$(python -c "import json; print(json.dumps(json.load(open('metrics.json'))))")
+            echo "metrics_summary=${METRICS_SUMMARY}" >> $GITHUB_OUTPUT
+          fi
+
+          exit $EXIT_CODE
+
+      - name: '✅ Validate Output Schema'
+        if: success()
+        run: |
+          python - <<'PYTHON_SCRIPT'
+          import json
+          import sys
+          from python_service.validation.validator import SchemaValidator
+
+          validator = SchemaValidator()
+
+          files_to_validate = [
+              ("qualified_races.json", "qualified_races"),
+              ("raw_race_data.json", "raw_race_data"),
+          ]
+
+          all_valid = True
+          for file_path, schema_name in files_to_validate:
+              try:
+                  with open(file_path) as f:
+                      data = json.load(f)
+                  result = validator.validate(data, schema_name)
+
+                  print(f"\n{'='*60}")
+                  print(f"Validation: {file_path}")
+                  print(f"{'='*60}")
+                  print(f"Valid: {result.valid}")
+                  print(f"Errors: {len(result.errors)}")
+                  print(f"Warnings: {len(result.warnings)}")
+
+                  for error in result.errors[:5]:
+                      print(f"  ❌ {error}")
+                  for warning in result.warnings[:3]:
+                      print(f"  ⚠️ {warning}")
+
+                  if not result.valid:
+                      all_valid = False
+
+              except FileNotFoundError:
+                  print(f"⚠️ {file_path} not found, skipping validation")
+
+          if not all_valid:
+              print("\n❌ Validation failed!")
+              sys.exit(1)
+          else:
+              print("\n✅ All validations passed!")
+          PYTHON_SCRIPT
+
+      - name: '📊 Upload Artifacts'
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: race-reports-${{ github.run_number }}-${{ github.run_attempt }}
+          name: race-reports-${{ github.run_number }}
           path: |
             race-report.html
             qualified_races.json
             raw_race_data.json
             reporter_output.log
-            atr_debug.html
-            sl_debug.html
-            brisnet_debug.html
-            equibase_debug.html
-            oddschecker_debug.html
-            racingpost_debug.html
-            timeform_debug.html
-            twinspires_debug.html
+            metrics.json
+            errors.json
+            browser_selector_state.json
+            anomaly_history.json
+            *_debug.html
           retention-days: ${{ env.REPORT_RETENTION_DAYS }}
-          if-no-files-found: warn
           compression-level: 9
 
-      - name: '📝 Post Summary to GitHub Actions'
+      - name: '📝 Generate Summary'
         if: always()
         run: |
-          {
-            echo "## 🐴 Fortuna Race Report Summary"
-            echo ""
-            echo "**Run:** #${{ github.run_number }} | **Status:** ${{ steps.run-reporter.outputs.status || 'unknown' }}"
-            echo "**Analyzer:** ${{ inputs.analyzer_type || 'tiny_field_trifecta' }}"
-            echo ""
+          python scripts/generate_summary.py >> $GITHUB_STEP_SUMMARY
 
-            if [ -f "github_summary.md" ]; then
-              cat github_summary.md
-            else
-              echo "### ⚠️ Detailed summary not available"
-              echo ""
-              echo "Check the artifacts for the full report."
-            fi
-
-            echo ""
-            echo "---"
-            echo "*Generated at $(date -u '+%Y-%m-%d %H:%M:%S UTC')*"
-          } >> $GITHUB_STEP_SUMMARY
-
-      - name: 'Install bs4 for HTML Analysis'
-        if: failure()
-        run: pip install beautifulsoup4
-
-      - name: 'Analyze HTML on Failure'
-        if: failure()
-        run: |
-          mkdir -p debug-analysis
-          for html_file in sl_debug.html atr_debug.html brisnet_debug.html equibase_debug.html oddschecker_debug.html racingpost_debug.html timeform_debug.html twinspires_debug.html; do
-            if [ -f "$html_file" ]; then
-              base_name="${html_file%.html}"
-              python scripts/debug_html_parser.py "$html_file" "debug-analysis/${base_name}_analysis.json" || true
-            fi
-          done
-
-      - name: 'Upload Debug Analysis Artifact'
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: debug-analysis-${{ github.run_number }}
-          path: debug-analysis/
-          retention-days: ${{ env.REPORT_RETENTION_DAYS }}
-
-      - name: '🧹 Cleanup on Failure'
-        if: failure()
-        run: |
-          echo "::warning::Report generation failed. Check logs for details."
-          if ls *.json 1> /dev/null 2>&1; then
-            tar -czf debug-data.tar.gz *.json *.log 2>/dev/null || true
-          fi
-
-      - name: '⬆️ Upload Browser Logs on Failure'
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: browser-debug-logs-${{ github.run_number }}
-          path: |
-            ~/.cache/ms-playwright
-            ~/.cache/camoufox
-          retention-days: ${{ env.REPORT_RETENTION_DAYS }}
-          if-no-files-found: 'warn'
-
-  notify-on-failure:
-    needs: generate-unified-report
+  # Notification job
+  notify:
+    needs: [generate-unified-report, canary-check]
     runs-on: ubuntu-latest
-    if: failure() && github.event_name == 'schedule'
+    if: always() && (failure() || needs.canary-check.outputs.should_alert == 'true')
+
     steps:
-      - name: '🚨 Create Failure Issue'
+      - name: '🚨 Create/Update Issue'
         uses: actions/github-script@v7
         with:
           script: |
-            const title = `🚨 Scheduled Race Report Failed - ${new Date().toISOString().split('T')[0]}`;
-            const body = `
-            ## Automated Report Failure
+            const title = `🚨 Race Pipeline Alert - ${new Date().toISOString().split('T')[0]}`;
 
-            The scheduled race report generation failed.
+            let body = `## Pipeline Alert\n\n`;
+            body += `**Run:** #${{ github.run_number }}\n`;
+            body += `**Trigger:** ${{ github.event_name }}\n\n`;
 
-            **Run ID:** ${{ github.run_id }}
-            **Run Number:** ${{ github.run_number }}
-            **Workflow:** ${{ github.workflow }}
+            const reportStatus = '${{ needs.generate-unified-report.outputs.status }}';
+            const canaryHealth = '${{ needs.canary-check.outputs.health_status }}';
 
-            [View Run Logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
-            `;
+            if (reportStatus === 'failed') {
+              body += `### ❌ Report Generation Failed\n`;
+              body += `Check the [run logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})\n\n`;
+            }
+
+            if (canaryHealth === 'unhealthy') {
+              body += `### ⚠️ Canary Health Check Failed\n`;
+              body += `Upstream data sources may be unavailable or changed.\n\n`;
+            }
 
             const { data: issues } = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
               state: 'open',
-              labels: 'automated-failure'
+              labels: 'pipeline-alert'
             });
 
-            const existingIssue = issues.find(i => i.title.startsWith('🚨 Scheduled Race Report Failed'));
-
-            if (!existingIssue) {
+            if (issues.length > 0) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issues[0].number,
+                body: body
+              });
+            } else {
               await github.rest.issues.create({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 title: title,
                 body: body,
-                labels: ['automated-failure', 'bug']
+                labels: ['pipeline-alert', 'automated']
               });
             }
