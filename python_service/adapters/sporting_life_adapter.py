@@ -77,6 +77,26 @@ class SportingLifeAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
         html_pages = await asyncio.gather(*tasks)
         return {"pages": html_pages, "date": date}
 
+    def _get_headers(self) -> dict:
+        return {
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Host": "www.sportinglife.com",
+            "Pragma": "no-cache",
+            "sec-ch-ua": '"Not/A)Brand";v="99", "Google Chrome";v="115", "Chromium";v="115"',
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": '"Windows"',
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "none",
+            "Sec-Fetch-User": "?1",
+            "Upgrade-Insecure-Requests": "1",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36",
+            "Referer": "https://www.sportinglife.com/racing/racecards",
+        }
+
     def _parse_races(self, raw_data: Any) -> List[Race]:
         """Parses a list of raw HTML strings into Race objects."""
         if not raw_data or not raw_data.get("pages"):

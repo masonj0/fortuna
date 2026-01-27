@@ -140,6 +140,7 @@ class AtTheRacesAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
         for url_path, html in raw_data["pages"]:
             if not html:
                 continue
+
             try:
                 if race := self._parse_single_race(html, url_path, race_date):
                     races.append(race)

@@ -55,6 +55,25 @@ class TimeformAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
         html_pages = await asyncio.gather(*tasks)
         return {"pages": html_pages, "date": date}
 
+    def _get_headers(self) -> dict:
+        return {
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Host": "www.timeform.com",
+            "Pragma": "no-cache",
+            "sec-ch-ua": '"Google Chrome";v="125", "Chromium";v="125", "Not.A/Brand";v="24"',
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": '"Windows"',
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "none",
+            "Sec-Fetch-User": "?1",
+            "Upgrade-Insecure-Requests": "1",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        }
+
     def _parse_races(self, raw_data: Any) -> List[Race]:
         """Parses a list of raw HTML strings into Race objects."""
         if not raw_data or not raw_data.get("pages"):
