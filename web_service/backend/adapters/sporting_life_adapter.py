@@ -6,8 +6,7 @@ from typing import Any
 from typing import List
 from typing import Optional
 
-from bs4 import BeautifulSoup
-from bs4 import Tag
+from selectolax.parser import HTMLParser, Node
 
 from ..models import OddsData
 from ..models import Race
@@ -57,10 +56,11 @@ class SportingLifeAdapter(BaseAdapterV3):
             self.logger.warning("Failed to fetch SportingLife index page", url=index_url)
             return None
 
-        index_soup = BeautifulSoup(index_response.text, "html.parser")
+        parser = HTMLParser(index_response.text)
         links = {
-            a["href"]
-            for a in index_soup.select('li[class^="MeetingSummary__LineWrapper"] a[href*="/racecard/"]')
+            a.attributes["href"]
+            for a in parser.css('li[class^="MeetingSummary__LineWrapper"] a[href*="/racecard/"]')
+            if a.attributes.get("href")
         }
 
         async def fetch_single_html(url_path: str):
@@ -110,14 +110,14 @@ class SportingLifeAdapter(BaseAdapterV3):
             if not html:
                 continue
             try:
-                soup = BeautifulSoup(html, "html.parser")
+                parser = HTMLParser(html)
 
-                header = soup.select_one('h1[class*="RacingRacecardHeader__Title"]')
+                header = parser.css_first('h1[class*="RacingRacecardHeader__Title"]')
                 if not header:
                     self.logger.warning("Could not find race header.")
                     continue
 
-                header_text = clean_text(header.get_text())
+                header_text = clean_text(header.text())
                 parts = header_text.split()
                 race_time_str = parts[0]
                 track_name = " ".join(parts[1:])
@@ -125,15 +125,20 @@ class SportingLifeAdapter(BaseAdapterV3):
                 start_time = datetime.combine(race_date, datetime.strptime(race_time_str, "%H:%M").time())
 
                 race_number = 1
-                nav_links = soup.select('a[class*="SubNavigation__Link"]')
-                active_link = soup.select_one('a[class*="SubNavigation__Link--active"]')
+                nav_links = parser.css('a[class*="SubNavigation__Link"]')
+                active_link = parser.css_first('a[class*="SubNavigation__Link--active"]')
                 if active_link and nav_links:
                     try:
-                        race_number = nav_links.index(active_link) + 1
-                    except ValueError:
-                        self.logger.warning("Active race link not found in navigation links.")
+                        # Find the index of active_link in nav_links
+                        # Selectolax nodes don't support equality easily, so we compare HTML or attributes
+                        for idx, link in enumerate(nav_links):
+                            if link.html == active_link.html:
+                                race_number = idx + 1
+                                break
+                    except Exception:
+                        self.logger.warning("Error finding active race link index.")
 
-                runners = [self._parse_runner(row) for row in soup.select('div[class*="RunnerCard"]')]
+                runners = [self._parse_runner(row) for row in parser.css('div[class*="RunnerCard"]')]
 
                 race = Race(
                     id=f"sl_{track_name.replace(' ', '')}_{start_time.strftime('%Y%m%d')}_R{race_number}",
@@ -152,21 +157,21 @@ class SportingLifeAdapter(BaseAdapterV3):
                 continue
         return all_races
 
-    def _parse_runner(self, row: Tag) -> Optional[Runner]:
+    def _parse_runner(self, row: Node) -> Optional[Runner]:
         try:
-            name_node = row.select_one('a[href*="/racing/profiles/horse/"]')
+            name_node = row.css_first('a[href*="/racing/profiles/horse/"]')
             if not name_node:
                 return None
-            name = clean_text(name_node.get_text()).splitlines()[0].strip()
+            name = clean_text(name_node.text()).splitlines()[0].strip()
 
-            num_node = row.select_one('span[class*="SaddleCloth__Number"]')
+            num_node = row.css_first('span[class*="SaddleCloth__Number"]')
             if not num_node:
                 return None
-            num_str = clean_text(num_node.get_text())
+            num_str = clean_text(num_node.text())
             number = int("".join(filter(str.isdigit, num_str)))
 
-            odds_node = row.select_one('span[class*="Odds__Price"]')
-            odds_str = clean_text(odds_node.get_text()) if odds_node else ""
+            odds_node = row.css_first('span[class*="Odds__Price"]')
+            odds_str = clean_text(odds_node.text()) if odds_node else ""
 
             win_odds = parse_odds_to_decimal(odds_str)
             odds_data = (

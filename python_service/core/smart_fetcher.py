@@ -10,15 +10,23 @@ from enum import Enum
 from typing import Optional, Dict, Any
 import structlog
 
-from scrapling import Fetcher, PlayWrightFetcher
-from scrapling.core.custom_types import StealthMode
-
-# Try importing AsyncStealthySession (may not be available)
+from scrapling import Fetcher, AsyncFetcher
 try:
-    from scrapling.fetchers import AsyncStealthySession
-    CAMOUFOX_AVAILABLE = True
+    from scrapling.core.custom_types import StealthMode
 except ImportError:
-    CAMOUFOX_AVAILABLE = False
+    # Shim for missing StealthMode in newer scrapling versions
+    class StealthMode:
+        FAST = "fast"
+        CAMOUFLAGE = "camouflage"
+
+# Try importing Async sessions (may not be available in older scrapling)
+try:
+    from scrapling.fetchers import AsyncStealthySession, AsyncDynamicSession
+    ASYNC_SESSIONS_AVAILABLE = True
+except ImportError:
+    ASYNC_SESSIONS_AVAILABLE = False
+
+CAMOUFOX_AVAILABLE = ASYNC_SESSIONS_AVAILABLE
 
 
 class BrowserEngine(Enum):
@@ -41,6 +49,13 @@ class FetchStrategy:
     # Performance tuning
     page_load_strategy: str = "domcontentloaded"  # 'load' | 'domcontentloaded' | 'networkidle'
     wait_for_selector: Optional[str] = None  # Wait for specific element before returning
+
+
+class FetchError(Exception):
+    """Custom exception that can hold a response object"""
+    def __init__(self, message, response=None):
+        super().__init__(message)
+        self.response = response
 
 
 class SmartFetcher:
@@ -88,10 +103,11 @@ class SmartFetcher:
                 self._engine_health[BrowserEngine.PLAYWRIGHT] = 0.0
                 self.logger.warning("Playwright/Chromium unavailable!")
 
-        # Check if Camoufox is actually importable
-        if not CAMOUFOX_AVAILABLE:
+        # Check if Async sessions are actually importable
+        if not ASYNC_SESSIONS_AVAILABLE:
             self._engine_health[BrowserEngine.CAMOUFOX] = 0.0
-            self.logger.debug("AsyncStealthySession not available (import failed)")
+            self._engine_health[BrowserEngine.PLAYWRIGHT] = 0.5  # Degrade but keep as fallback if it might work
+            self.logger.debug("Async sessions not available (import failed)")
 
     async def fetch(self, url: str, **kwargs) -> Any:
         """
@@ -111,6 +127,10 @@ class SmartFetcher:
         # Get engines ordered by health score (best first)
         engines = self._get_ordered_engines()
 
+        # Capture and strip method/url to avoid collision in scrapling
+        method = kwargs.pop('method', 'GET').upper()
+        kwargs.pop('url', None)
+
         last_error = None
         for engine in engines:
             # Skip completely dead engines
@@ -122,14 +142,16 @@ class SmartFetcher:
                     "Attempting fetch",
                     engine=engine.value,
                     health=f"{self._engine_health[engine]:.2f}",
-                    url=url[:100]
+                    url=url[:100],
+                    method=method
                 )
 
                 fetcher = await self._get_fetcher(engine)
-                response = await self._fetch_with_engine(fetcher, engine, url, **kwargs)
+                response = await self._fetch_with_engine(fetcher, engine, url, method=method, **kwargs)
 
                 # Success! Boost this engine's health
                 self._engine_health[engine] = min(1.0, self._engine_health[engine] + 0.1)
+                self.last_engine = engine.value
 
                 self.logger.info(
                     "Fetch successful",
@@ -166,6 +188,11 @@ class SmartFetcher:
             last_error=str(last_error),
             health_scores={k.value: v for k, v in self._engine_health.items()}
         )
+
+        # If the last error was a FetchError with a response, propagate it
+        if isinstance(last_error, FetchError):
+            raise last_error
+
         raise Exception(f"All fetch engines failed. Last error: {last_error}")
 
     def _get_ordered_engines(self) -> list[BrowserEngine]:
@@ -185,51 +212,62 @@ class SmartFetcher:
         self.logger.debug(f"Initializing {engine.value} fetcher")
 
         if engine == BrowserEngine.CAMOUFOX:
-            if not CAMOUFOX_AVAILABLE:
+            if not ASYNC_SESSIONS_AVAILABLE:
                 raise ImportError("AsyncStealthySession not available")
 
             fetcher = AsyncStealthySession(
                 headless=True,
-                block_images=self.strategy.block_resources,
-                block_media=self.strategy.block_resources,
+                disable_resources=self.strategy.block_resources,
             )
             await fetcher.start()
             self._fetchers[engine] = fetcher
 
         elif engine == BrowserEngine.PLAYWRIGHT:
-            fetcher = PlayWrightFetcher(
+            if not ASYNC_SESSIONS_AVAILABLE:
+                # Fallback to sync but it will likely fail in asyncio loop
+                from scrapling import StealthyFetcher
+                self._fetchers[engine] = StealthyFetcher
+                return self._fetchers[engine]
+
+            fetcher = AsyncDynamicSession(
                 headless=True,
-                browser_type='chromium',
-                stealth_mode=self.strategy.stealth_mode,
+                disable_resources=self.strategy.block_resources,
             )
+            await fetcher.start()
             self._fetchers[engine] = fetcher
 
         else:  # HTTPX
-            fetcher = Fetcher(
-                auto_match=True,  # Auto-detect encoding
-            )
-            self._fetchers[engine] = fetcher
+            # Use AsyncFetcher for async context
+            self._fetchers[engine] = AsyncFetcher()
 
         return self._fetchers[engine]
 
-    async def _fetch_with_engine(self, fetcher, engine: BrowserEngine, url: str, **kwargs):
+    async def _fetch_with_engine(self, fetcher, engine: BrowserEngine, url: str, method: str = "GET", **kwargs):
         """Execute fetch with timeout and retry logic"""
 
         for attempt in range(self.strategy.max_retries):
             try:
-                # Handle AsyncStealthySession specially (needs await)
-                if engine == BrowserEngine.CAMOUFOX:
+                # Handle Async engines specially
+                if engine == BrowserEngine.CAMOUFOX or (engine == BrowserEngine.PLAYWRIGHT and ASYNC_SESSIONS_AVAILABLE):
+                    # Browser engines (fetch)
                     response = await asyncio.wait_for(
                         fetcher.fetch(url, **kwargs),
                         timeout=self.strategy.timeout
                     )
-                else:
-                    # Playwright and HTTPX are synchronous
+                elif engine == BrowserEngine.PLAYWRIGHT:
+                    # Sync fallback (likely to fail in asyncio loop)
                     response = fetcher.fetch(url, **kwargs)
+                else:
+                    # AsyncFetcher for HTTPX (supports GET, POST, etc.)
+                    fetch_method = getattr(fetcher, method.lower(), fetcher.get)
+                    response = await asyncio.wait_for(
+                        fetch_method(url, **kwargs),
+                        timeout=self.strategy.timeout
+                    )
 
                 # Check for HTTP errors
                 if hasattr(response, 'status') and response.status >= 400:
-                    raise Exception(f"HTTP {response.status}")
+                    raise FetchError(f"HTTP {response.status}", response=response)
 
                 return response
 
