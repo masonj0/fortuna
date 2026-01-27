@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Any
 from typing import Dict
 from typing import List
+from typing import Optional
 from typing import Tuple
 
 import httpx
@@ -40,12 +41,16 @@ from .adapters import (
     TimeformAdapter,
     TVGAdapter,
     TwinSpiresAdapter,
+    UniversalAdapter,
     XpressbetAdapter,
 )
 from .adapters.base_adapter_v3 import BaseAdapterV3
 from .config import get_settings
 from .core.exceptions import AdapterConfigError
 from .core.exceptions import AdapterHttpError
+from .core.exceptions import AuthenticationError
+from .adapter_manager import AdapterHealthMonitor, AdapterHealth, AdapterStatus
+from .cache_manager import StaleDataCache
 from .manual_override_manager import ManualOverrideManager
 from .models import AggregatedResponse
 from .models import Race
@@ -59,6 +64,7 @@ class OddsEngine:
         config=None,
         manual_override_manager: ManualOverrideManager = None,
         connection_manager=None,
+        exclude_adapters: Optional[List[str]] = None,
     ):
         # THE FIX: Import the cache_manager singleton here to ensure tests can
         # patch and reload it *before* the engine is initialized.
@@ -68,6 +74,9 @@ class OddsEngine:
         self.logger.info("Initializing FortunaEngine...")
         self.connection_manager = connection_manager
         self.cache_manager = cache_manager
+        self.health_monitor = AdapterHealthMonitor()
+        self.stale_data_cache = StaleDataCache(max_age_hours=24)
+        self.exclude_adapters = set(exclude_adapters) if exclude_adapters else set()
 
         try:
             try:
@@ -86,7 +95,12 @@ class OddsEngine:
             # Redis is now handled entirely by the CacheManager.
 
             self.logger.info("Initializing adapters...")
-            self.adapters: List[BaseAdapterV3] = []
+            self.adapters: Dict[str, BaseAdapterV3] = {}
+
+            # NOTE: Many adapters require API keys (e.g., TVG, Betfair, TheRacingAPI).
+            # If the required API key is not found in the environment configuration,
+            # the adapter will fail to initialize and be skipped. This is expected
+            # behavior in environments where secrets are not configured.
             adapter_classes = [
                 AtTheRacesAdapter,
                 BetfairAdapter,
@@ -111,45 +125,45 @@ class OddsEngine:
                 TimeformAdapter,
                 TwinSpiresAdapter,
                 TVGAdapter,
+                UniversalAdapter,
                 XpressbetAdapter,
                 PointsBetGreyhoundAdapter,
             ]
 
             for adapter_cls in adapter_classes:
+                adapter_name = adapter_cls.__name__
+                if adapter_name in self.exclude_adapters:
+                    self.logger.info(f"Intentionally skipping adapter: {adapter_name}")
+                    continue
                 try:
-                    self.logger.info(f"Attempting to initialize adapter: {adapter_cls.__name__}")
+                    self.logger.info(f"Attempting to initialize adapter: {adapter_name}")
                     adapter_instance = adapter_cls(config=self.config)
-                    self.logger.info(f"Successfully initialized adapter: {adapter_cls.__name__}")
+                    self.logger.info(f"Successfully initialized adapter: {adapter_name}")
                     if manual_override_manager and getattr(adapter_instance, "supports_manual_override", False):
                         adapter_instance.enable_manual_override(manual_override_manager)
-                    self.adapters.append(adapter_instance)
+                    self.adapters[adapter_instance.source_name] = adapter_instance
                 except AdapterConfigError as e:
                     self.logger.warning(
                         "Skipping adapter due to configuration error",
-                        adapter=adapter_cls.__name__,
+                        adapter=adapter_name,
                         error=str(e),
                     )
                 except Exception:
                     self.logger.error(
-                        f"An unexpected error occurred while initializing {adapter_cls.__name__}",
+                        f"An unexpected error occurred while initializing {adapter_name}",
                         exc_info=True,
                     )
 
-            # Special case for BetfairDataScientistAdapter with extra args - DISABLED
-            # try:
-            #     bds_adapter = BetfairDataScientistAdapter(
-            #         model_name="ThoroughbredModel",
-            #         url="https://betfair-data-supplier-prod.herokuapp.com/api/widgets/kvs-ratings/datasets",
-            #         config=self.config,
-            #     )
-            #     if manual_override_manager and getattr(bds_adapter, "supports_manual_override", False):
-            #         bds_adapter.enable_manual_override(manual_override_manager)
-            #     self.adapters.append(bds_adapter)
-            # except Exception:
-            #     self.logger.warning(
-            #         "Failed to initialize adapter: BetfairDataScientistAdapter",
-            #         exc_info=True,
-            #     )
+            for adapter_instance in self.adapters.values():
+                self.health_monitor.statuses[adapter_instance.source_name] = AdapterStatus(
+                    name=adapter_instance.source_name,
+                    health=AdapterHealth.HEALTHY,
+                    success_rate_24h=1.0,
+                    last_success=None,
+                    consecutive_failures=0,
+                    avg_response_time_ms=0,
+                    last_error=None,
+                )
 
             self.logger.info(f"{len(self.adapters)} adapters initialized successfully.")
 
@@ -162,7 +176,7 @@ class OddsEngine:
             self.logger.info("HTTP client initialized.")
 
             # Assign the shared client to each adapter
-            for adapter in self.adapters:
+            for adapter in self.adapters.values():
                 adapter.http_client = self.http_client
 
             # Initialize semaphore for concurrency limiting
@@ -181,8 +195,20 @@ class OddsEngine:
     async def close(self):
         await self.http_client.aclose()
 
+    async def shutdown(self):
+        """Gracefully shuts down all adapters that require cleanup."""
+        self.logger.info("Shutting down adapters with cleanup methods...")
+        for adapter_name, adapter in self.adapters.items():
+            if hasattr(adapter, 'cleanup'):
+                try:
+                    self.logger.info(f"Cleaning up {adapter_name}...")
+                    await adapter.cleanup()
+                except Exception as e:
+                    self.logger.error(f"Error cleaning up {adapter_name}", error=str(e), exc_info=True)
+        await self.close()
+
     def get_all_adapter_statuses(self) -> List[Dict[str, Any]]:
-        return [adapter.get_status() for adapter in self.adapters]
+        return [adapter.get_status() for adapter in self.adapters.values()]
 
     async def get_from_cache(self, key):
         return await self.cache_manager.get(key)
@@ -209,8 +235,18 @@ class OddsEngine:
 
         try:
             race_data_list = await adapter.get_races(date)
-            races = [Race(**race_data) for race_data in race_data_list]
-            is_success = True
+            processed_races = []
+            for race_data in race_data_list:
+                if isinstance(race_data, Race):
+                    processed_races.append(race_data)
+                else:
+                    processed_races.append(Race(**race_data))
+            races = processed_races
+            if races:
+                is_success = True
+            else:
+                is_success = False
+                error_message = "Adapter ran successfully but fetched zero races."
         except AdapterHttpError as e:
             self.logger.error(
                 "HTTP failure during fetch from adapter.",
@@ -233,6 +269,14 @@ class OddsEngine:
                     error_message=error_message,
                 )
             ]
+        except AuthenticationError as e:
+            self.logger.warning(
+                "Authentication failed for adapter, skipping.",
+                adapter=adapter.source_name,
+                error=str(e),
+            )
+            error_message = str(e)
+            is_success = False
         except Exception as e:
             self.logger.error(
                 "Critical failure during fetch from adapter.",
@@ -256,6 +300,14 @@ class OddsEngine:
 
         duration = (datetime.now() - start_time).total_seconds()
 
+        # Update health monitor
+        await self.health_monitor.update_adapter_status(
+            adapter_name=adapter.source_name,
+            success=is_success,
+            latency_ms=duration * 1000,
+            error=error_message,
+        )
+
         payload = {
             "races": races,
             "source_info": {
@@ -264,7 +316,7 @@ class OddsEngine:
                 "races_fetched": len(races),
                 "error_message": error_message,
                 "fetch_duration": duration,
-                "attempted_url": attempted_url,
+                "attempted_url": adapter.attempted_url or attempted_url,
             },
         }
         return (adapter.source_name, payload, duration)
@@ -274,8 +326,9 @@ class OddsEngine:
 
     def _dedupe_races(self, races: List[Race]) -> List[Race]:
         """Deduplicates races and reconciles odds from different sources."""
+        races_copy = deepcopy(races)
         race_map: Dict[str, Race] = {}
-        for race in races:
+        for race in races_copy:
             key = self._race_key(race)
             if key not in race_map:
                 race_map[key] = race
@@ -289,101 +342,136 @@ class OddsEngine:
                     else:
                         existing_race.runners.append(new_runner)
 
-                # Ensure the source is a list and append new source if not present
-                if not isinstance(existing_race.source, list):
-                    existing_race.source = [existing_race.source]
-                if race.source not in existing_race.source:
-                    existing_race.source.append(race.source)
+                # Maintain source as string
+                sources = set(existing_race.source.split(", "))
+                sources.add(race.source)
+                existing_race.source = ", ".join(sorted(list(sources)))
 
-        for race in race_map.values():
-            runner_map = {}
-            for runner in race.runners:
-                if runner.number not in runner_map:
-                    runner_map[runner.number] = runner
-                else:
-                    existing_runner = runner_map[runner.number]
-                    existing_runner.odds.update(runner.odds)
-            race.runners = list(runner_map.values())
         return list(race_map.values())
+
+    def _calculate_coverage(self, results: List[Dict[str, Any]]) -> float:
+        # Stub implementation
+        return 0.0
+
+    def _merge_adapter_results(self, results: List[Dict[str, Any]]) -> Dict[str, Any]:
+        source_infos = []
+        all_races = []
+        errors = []
+
+        for adapter_result in results:
+            source_info = adapter_result.get("source_info", {})
+            source_infos.append(source_info)
+            if source_info.get("status") == "SUCCESS":
+                all_races.extend(adapter_result.get("races", []))
+            else:
+                errors.append({
+                    "adapter_name": source_info.get("name"),
+                    "error_message": source_info.get("error_message", "Unknown error"),
+                    "attempted_url": source_info.get("attempted_url")
+                })
+
+        deduped_races = self._dedupe_races(all_races)
+
+        return {
+            "races": deduped_races,
+            "errors": errors,
+            "source_info": source_infos
+        }
 
     async def _broadcast_update(self, data: Dict[str, Any]):
         """Helper to broadcast data if the connection manager is available."""
         if self.connection_manager:
             await self.connection_manager.broadcast(data)
 
-    async def fetch_all_odds(self, date: str, source_filter: str = None) -> Dict[str, Any]:
-        """
-        Fetches and aggregates race data from all configured adapters.
-        The result of this method is cached and broadcasted via WebSocket.
-        """
-        # Construct a cache key
+    async def fetch_all_odds(self, date: str, source_filter: str = None, min_required_adapters: int = 2) -> Dict[str, Any]:
+        if date is None:
+            date = datetime.now().strftime("%Y-%m-%d")
+
+        # Re-introduce live caching
         cache_key = f"fortuna_engine_races:{date}:{source_filter or 'all'}"
         cached_data = await self.get_from_cache(cache_key)
         if cached_data:
             log.info("Cache hit for fetch_all_odds", key=cache_key)
             return json.loads(cached_data)
 
-        log.info("Cache miss for fetch_all_odds", key=cache_key)
-        target_adapters = self.adapters
+        all_payloads = []
+        attempted_adapters = []
+        all_adapter_names = list(self.adapters.keys())
         if source_filter:
-            log.info("Applying source filter", source=source_filter)
-            target_adapters = [a for a in self.adapters if a.source_name.lower() == source_filter.lower()]
+            all_adapter_names = [name for name in all_adapter_names if name.lower() == source_filter.lower()]
 
-        tasks = [self._fetch_with_semaphore(adapter, date) for adapter in target_adapters]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        ordered_adapter_names = self.health_monitor.get_ordered_adapters(all_adapter_names)
 
-        source_infos = []
-        all_races = []
-        errors = []
+        # Tier 1: Healthy
+        healthy_names = [name for name in ordered_adapter_names if self.health_monitor.statuses[name].health == AdapterHealth.HEALTHY]
+        if healthy_names:
+            tasks = [self._fetch_with_semaphore(self.adapters[name], date) for name in healthy_names]
+            attempted_adapters.extend(healthy_names)
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for res in results:
+                if not isinstance(res, Exception):
+                    _adapter_name, payload, _duration = res
+                    all_payloads.append(payload)
 
-        for i, result in enumerate(results):
-            adapter = target_adapters[i]
-            if isinstance(result, Exception):
-                log.error("Adapter fetch task failed with an unhandled exception", adapter=adapter.source_name, error=result)
-                errors.append({
-                    "adapter_name": adapter.source_name,
-                    "error_message": f"Unhandled exception: {str(result)}",
-                    "attempted_url": "Unknown"
-                })
-                source_infos.append({
-                    "name": adapter.source_name,
-                    "status": "FAILED",
-                    "error_message": f"Unhandled exception: {str(result)}",
-                })
-            else:
-                _adapter_name, adapter_result, _duration = result
-                source_info = adapter_result.get("source_info", {})
-                source_infos.append(source_info)
-                if source_info.get("status") == "SUCCESS":
-                    # Convert dicts to Race objects before extending all_races
-                    races_as_models = [Race(**race_data) for race_data in adapter_result.get("races", [])]
-                    all_races.extend(races_as_models)
-                else:
-                    errors.append({
-                        "adapter_name": adapter.source_name,
-                        "error_message": source_info.get("error_message", "Unknown error"),
-                        "attempted_url": source_info.get("attempted_url")
-                    })
+        successful_count = len([p for p in all_payloads if p['source_info']['status'] == 'SUCCESS'])
 
-        deduped_races = self._dedupe_races(all_races)
+        # Tier 2: Degraded
+        if successful_count < min_required_adapters:
+            degraded_names = [name for name in ordered_adapter_names if self.health_monitor.statuses[name].health == AdapterHealth.DEGRADED]
+            if degraded_names:
+                tasks = [self._fetch_with_semaphore(self.adapters[name], date) for name in degraded_names]
+                attempted_adapters.extend(degraded_names)
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                for res in results:
+                    if not isinstance(res, Exception):
+                        _adapter_name, payload, _duration = res
+                        all_payloads.append(payload)
+
+        # Tier 3: Stale cache fallback
+        if not any(p['source_info']['status'] == 'SUCCESS' for p in all_payloads):
+            log.warning("All live adapters failed, attempting to use stale cache.")
+            stale_data = await self.stale_data_cache.get(date)
+            if stale_data:
+                log.info("Using stale data from cache.", cache_age_hours=stale_data['age_hours'])
+                stale_results = stale_data['data']
+                if 'metadata' in stale_results:
+                    stale_results['metadata']['data_freshness'] = 'stale'
+                stale_results['warnings'] = ["Using cached data from a previous run as all live sources failed."]
+                return stale_results
+
+        if not all_payloads:
+            log.error("All adapter fetches failed and no stale data available.")
+            return {"races": [], "errors": [{"adapter_name": "all", "error_message": "All adapters failed and no stale data available."}], "source_info": [], "metadata": {}}
+
+        merged_results = self._merge_adapter_results(all_payloads)
+        successful_count = len([s for s in merged_results["source_info"] if s["status"] == "SUCCESS"])
+
+        try:
+            parsed_date = datetime.strptime(date, "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            parsed_date = datetime.now().date()
 
         response_obj = AggregatedResponse(
-            date=datetime.strptime(date, "%Y-%m-%d").date(),
-            races=deduped_races,
-            errors=errors,
-            source_info=source_infos,
+            date=parsed_date,
+            races=merged_results["races"],
+            errors=merged_results["errors"],
+            source_info=merged_results["source_info"],
             metadata={
                 "fetch_time": datetime.now(),
-                "sources_queried": [a.source_name for a in target_adapters],
-                "sources_successful": len([s for s in source_infos if s["status"] == "SUCCESS"]),
-                "total_races": len(deduped_races),
-                "total_errors": len(errors),
+                "sources_queried": attempted_adapters,
+                "sources_successful": successful_count,
+                "total_races": len(merged_results["races"]),
+                "total_errors": len(merged_results["errors"]),
+                'coverage': self._calculate_coverage(all_payloads),
+                'data_freshness': 'live'
             },
         )
-
         response_data = response_obj.model_dump(by_alias=True)
 
-        # Set the result in the cache
-        await self.set_in_cache(cache_key, json.dumps(response_data, default=str), ttl=300)
+        # Cache successful live results
+        if successful_count > 0:
+            await self.stale_data_cache.set(date, response_data)
+            await self.set_in_cache(cache_key, json.dumps(response_data, default=str), ttl=300)
+
         await self._broadcast_update(response_data)
         return response_data

@@ -5,6 +5,7 @@ from typing import List
 from typing import Optional
 
 from selectolax.parser import HTMLParser
+from dateutil.parser import parse as parse_time
 
 from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy
 from ..models import Race
@@ -115,9 +116,8 @@ class BrisnetAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
                     post_time_str = post_time_node.text().replace("Post Time: ", "").strip()
 
                     try:
-                        from dateutil.parser import parse as parse_time
                         start_time = parse_time(f"{race_date} {post_time_str}")
-                    except (ImportError, ValueError):
+                    except (ValueError, TypeError):
                         start_time = datetime.now()
 
                     runners = []
