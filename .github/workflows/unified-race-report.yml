@@ -18,6 +18,7 @@ on:
           - tiny_field_trifecta
           - value_bet
           - longshot_finder
+          - all_analyzers
       debug_mode:
         description: 'Enable verbose debugging'
         required: false
@@ -32,6 +33,7 @@ on:
           - full
           - canary_only
           - skip_canary
+          - dry_run
   push:
     branches:
       - main
@@ -67,6 +69,7 @@ jobs:
       run_canary: ${{ steps.determine.outputs.run_canary }}
       run_full_report: ${{ steps.determine.outputs.run_full_report }}
       run_security: ${{ steps.determine.outputs.run_security }}
+      matrix: ${{ steps.determine.outputs.matrix }}
     steps:
       - name: 'Determine execution mode'
         id: determine
@@ -103,6 +106,11 @@ jobs:
               "skip_canary")
                 RUN_FULL="true"
                 ;;
+              "dry_run")
+                RUN_CANARY="true"
+                # For dry_run, we might still run the full report but with a flag
+                RUN_FULL="true"
+                ;;
               *)
                 # "full" - run both
                 RUN_CANARY="true"
@@ -111,14 +119,24 @@ jobs:
             esac
           fi
 
+          # Determine Analyzer Matrix
+          ANALYZER="${{ inputs.analyzer_type || 'tiny_field_trifecta' }}"
+          if [ "$ANALYZER" = "all_analyzers" ]; then
+            MATRIX='["tiny_field_trifecta", "value_bet", "longshot_finder"]'
+          else
+            MATRIX="[\"$ANALYZER\"]"
+          fi
+
           echo "run_canary=$RUN_CANARY" >> $GITHUB_OUTPUT
           echo "run_full_report=$RUN_FULL" >> $GITHUB_OUTPUT
           echo "run_security=$RUN_SECURITY" >> $GITHUB_OUTPUT
+          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
 
           echo "=== Execution Plan ==="
           echo "Will run canary: $RUN_CANARY"
           echo "Will run full report: $RUN_FULL"
           echo "Will run security scan: $RUN_SECURITY"
+          echo "Analyzer matrix: $MATRIX"
 
   # Security scan for dependencies
   security-scan:
@@ -245,6 +263,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     needs: [setup, canary-check]
+
+    strategy:
+      fail-fast: false
+      matrix:
+        analyzer: ${{ fromJson(needs.setup.outputs.matrix) }}
+
     # Resource hints for GitHub runners
     # Note: 'resources' is not a standard top-level job key in standard GHA,
     # but some enterprise/self-hosted runners use it. For standard runners
@@ -435,7 +459,7 @@ jobs:
         timeout-minutes: 35
         env:
           PYTHONPATH: ${{ github.workspace }}
-          ANALYZER_TYPE: ${{ inputs.analyzer_type || 'tiny_field_trifecta' }}
+          ANALYZER_TYPE: ${{ matrix.analyzer }}
           FORCE_REFRESH: ${{ inputs.force_refresh || 'false' }}
           DEBUG_MODE: ${{ inputs.debug_mode || 'false' }}
           RUN_MODE: ${{ inputs.run_mode || 'full' }}
@@ -493,7 +517,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: race-reports-${{ github.run_number }}
+          name: race-reports-${{ matrix.analyzer }}-${{ github.run_number }}
           path: |
             race-report.html
             qualified_races.json
@@ -523,9 +547,15 @@ jobs:
 
   # Dedicated validation stage
   validate-results:
-    needs: generate-unified-report
+    needs: [setup, generate-unified-report]
     runs-on: ubuntu-latest
     if: always() && needs.generate-unified-report.result != 'skipped'
+
+    strategy:
+      fail-fast: false
+      matrix:
+        analyzer: ${{ fromJson(needs.setup.outputs.matrix) }}
+
     steps:
       - uses: actions/checkout@v4
       - name: 'Setup Python'
@@ -535,7 +565,7 @@ jobs:
       - name: 'Download Results'
         uses: actions/download-artifact@v4
         with:
-          name: race-reports-${{ github.run_number }}
+          name: race-reports-${{ matrix.analyzer }}-${{ github.run_number }}
       - name: '✅ Schema & Quality Validation'
         timeout-minutes: 5
         env:
