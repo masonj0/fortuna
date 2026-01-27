@@ -601,6 +601,9 @@ jobs:
   notify:
     needs: [setup, generate-unified-report, canary-check, validate-results]
     runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
     if: |
       always() && (
         needs.generate-unified-report.result == 'failure' ||
