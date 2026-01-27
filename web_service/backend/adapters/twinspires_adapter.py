@@ -8,26 +8,28 @@ Uses Scrapling's AsyncStealthySession for anti-bot bypass with:
 - Detailed diagnostics for debugging
 """
 
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Tuple
-import re
-import os
 import asyncio
 import logging
-import random
+import os
+import re
+from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 from scrapling.parser import Selector
 
-from web_service.backend.models import OddsData, Race, Runner
-from web_service.backend.utils.odds import parse_odds_to_decimal
+from ..models import OddsData, Race, Runner
+from ..utils.odds import parse_odds_to_decimal
 from .base_adapter_v3 import BaseAdapterV3
+from .constants import MAX_VALID_ODDS
+from .mixins import DebugMixin
+from .utils.odds_validator import create_odds_data
 from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy, StealthMode
 
 logger = logging.getLogger(__name__)
 
 
-class TwinSpiresAdapter(BaseAdapterV3):
+class TwinSpiresAdapter(DebugMixin, BaseAdapterV3):
     """
     Production adapter for TwinSpires racing data.
 
@@ -104,7 +106,6 @@ class TwinSpiresAdapter(BaseAdapterV3):
             cache_ttl=180.0,
             rate_limit=1.5  # Slightly more conservative
         )
-        self._debug_dir = Path(os.environ.get('DEBUG_OUTPUT_DIR', '.'))
         self.attempted_url: Optional[str] = None
 
     def _configure_fetch_strategy(self) -> FetchStrategy:
@@ -120,20 +121,6 @@ class TwinSpiresAdapter(BaseAdapterV3):
             max_retries=3,
             timeout=45,
         )
-
-    def _is_blocked_response(self, html: str) -> bool:
-        """Check if response indicates we're blocked."""
-        blocked_indicators = [
-            'captcha',
-            'challenge-running',
-            'cf-browser-verification',
-            'access denied',
-            'please verify you are a human',
-            'ray id',  # CloudFlare
-            'checking your browser',
-        ]
-        html_lower = html.lower()
-        return any(indicator in html_lower for indicator in blocked_indicators)
 
     async def _fetch_data(self, date: str) -> Optional[dict]:
         """
@@ -171,7 +158,7 @@ class TwinSpiresAdapter(BaseAdapterV3):
 
             if response and response.status == 200:
                 # Save debug HTML
-                await self._save_debug_html(response.text, 'twinspires')
+                self._save_debug_html(response.text, f'twinspires_{date}')
 
                 # Extract races
                 races_data = self._extract_races_from_page(response, date)
@@ -197,7 +184,7 @@ class TwinSpiresAdapter(BaseAdapterV3):
         Uses multiple selector strategies with fallback.
         """
         races_data = []
-        page = response  # Response object has Selector methods
+        page = Selector(response.text)
 
         # Try each selector pattern
         race_elements = []
@@ -365,7 +352,7 @@ class TwinSpiresAdapter(BaseAdapterV3):
             start_time=start_time,
             discipline=discipline,
             runners=runners,
-            source=self.SOURCE_NAME,
+            source=self.source_name,
         )
 
     def _parse_post_time(
@@ -548,12 +535,8 @@ class TwinSpiresAdapter(BaseAdapterV3):
                         odds_text = odds_elem.text.strip() if hasattr(odds_elem, 'text') else None
                         if odds_text and odds_text.upper() not in ['SCR', 'SCRATCHED', '--', 'N/A']:
                             win_odds = parse_odds_to_decimal(odds_text)
-                            if win_odds and 1.0 < win_odds < 999:
-                                odds[self.SOURCE_NAME] = OddsData(
-                                    win=win_odds,
-                                    source=self.SOURCE_NAME,
-                                    last_updated=datetime.now(),
-                                )
+                            if odds_data := create_odds_data(self.source_name, win_odds):
+                                odds[self.source_name] = odds_data
                                 break
                 except Exception:
                     continue
@@ -591,15 +574,6 @@ class TwinSpiresAdapter(BaseAdapterV3):
                 continue
 
         return "Thoroughbred"
-
-    async def _save_debug_html(self, html: str, prefix: str):
-        """Save HTML for debugging purposes."""
-        try:
-            debug_file = self._debug_dir / f"{prefix}_debug.html"
-            debug_file.write_text(html, encoding='utf-8')
-            self.logger.debug(f"Saved debug HTML to {debug_file}")
-        except Exception as e:
-            self.logger.warning(f"Failed to save debug HTML: {e}")
 
     async def cleanup(self):
         """Cleanup resources."""

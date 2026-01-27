@@ -1,24 +1,20 @@
 # python_service/adapters/racingpost_adapter.py
 import asyncio
 from datetime import datetime
-from typing import Any
-from typing import List
-from typing import Optional
+from typing import Any, List, Optional
 
-from selectolax.parser import HTMLParser
-from selectolax.parser import Node
+from selectolax.parser import HTMLParser, Node
 
-from ..models import OddsData
-from ..models import Race
-from ..models import Runner
+from ..models import Race, Runner
 from ..utils.odds import parse_odds_to_decimal
-from ..utils.text import clean_text
-from ..utils.text import normalize_venue_name
+from ..utils.text import clean_text, normalize_venue_name
 from .base_adapter_v3 import BaseAdapterV3
+from .mixins import BrowserHeadersMixin, DebugMixin
+from .utils.odds_validator import create_odds_data
 from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy, StealthMode
 
 
-class RacingPostAdapter(BaseAdapterV3):
+class RacingPostAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
     """
     Adapter for scraping Racing Post racecards, migrated to BaseAdapterV3.
     """
@@ -41,6 +37,9 @@ class RacingPostAdapter(BaseAdapterV3):
             block_resources=False,  # Load all resources to appear more human
         )
 
+    def _get_headers(self) -> dict:
+        return self._get_browser_headers(host="www.racingpost.com")
+
     async def _fetch_data(self, date: str) -> Any:
         """
         Fetches the raw HTML content for all races on a given date.
@@ -51,12 +50,14 @@ class RacingPostAdapter(BaseAdapterV3):
             self.logger.warning("Failed to fetch RacingPost index page", url=index_url)
             return None
 
+        self._save_debug_html(index_response.text, f"racingpost_index_{date}")
+
         index_parser = HTMLParser(index_response.text)
         links = index_parser.css('a[data-test-selector^="RC-meetingItem__link_race"]')
         race_card_urls = [link.attributes["href"] for link in links]
 
         async def fetch_single_html(url: str):
-            response = await self.make_request(self.http_client, "GET", url, headers=self._get_headers())
+            response = await self.make_request("GET", url, headers=self._get_headers())
             return response.text if response else ""
 
         tasks = [fetch_single_html(url) for url in race_card_urls]
@@ -146,35 +147,10 @@ class RacingPostAdapter(BaseAdapterV3):
             odds = {}
             if not scratched:
                 win_odds = parse_odds_to_decimal(odds_str)
-                if win_odds and win_odds < 999:
-                    odds = {
-                        self.source_name: OddsData(
-                            win=win_odds,
-                            source=self.source_name,
-                            last_updated=datetime.now(),
-                        )
-                    }
+                if odds_data := create_odds_data(self.source_name, win_odds):
+                    odds[self.source_name] = odds_data
 
             return Runner(number=number, name=name, odds=odds, scratched=scratched)
         except (ValueError, AttributeError):
             self.logger.warning("Could not parse RacingPost runner, skipping.", exc_info=True)
             return None
-
-    def _get_headers(self) -> dict:
-        return {
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "Host": "www.racingpost.com",
-            "Pragma": "no-cache",
-            "sec-ch-ua": '"Google Chrome";v="125", "Chromium";v="125", "Not.A/Brand";v="24"',
-            "sec-ch-ua-mobile": "?0",
-            "sec-ch-ua-platform": '"Windows"',
-            "Sec-Fetch-Dest": "document",
-            "Sec-Fetch-Mode": "navigate",
-            "Sec-Fetch-Site": "none",
-            "Sec-Fetch-User": "?1",
-            "Upgrade-Insecure-Requests": "1",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-        }

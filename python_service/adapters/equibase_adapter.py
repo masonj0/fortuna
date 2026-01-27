@@ -8,15 +8,17 @@ from typing import Optional
 from selectolax.parser import HTMLParser
 from selectolax.parser import Node
 
-from ..models import OddsData
 from ..models import Race
 from ..models import Runner
 from ..utils.odds import parse_odds_to_decimal
 from ..utils.text import clean_text
+from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy
 from .base_adapter_v3 import BaseAdapterV3
+from .mixins import BrowserHeadersMixin, DebugMixin
+from .utils.odds_validator import create_odds_data
 
 
-class EquibaseAdapter(BaseAdapterV3):
+class EquibaseAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
     """
     Adapter for scraping Equibase race entries, migrated to BaseAdapterV3.
     """
@@ -27,42 +29,45 @@ class EquibaseAdapter(BaseAdapterV3):
     def __init__(self, config=None):
         super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
 
+    def _configure_fetch_strategy(self) -> FetchStrategy:
+        return FetchStrategy(
+            primary_engine=BrowserEngine.PLAYWRIGHT,
+            enable_js=True,
+            block_resources=True,
+        )
+
+    def _get_headers(self) -> dict:
+        return self._get_browser_headers(host="www.equibase.com")
+
     async def _fetch_data(self, date: str) -> Optional[dict]:
         """
         Fetches the raw HTML for all race pages for a given date.
         """
-        d = datetime.strptime(date, "%Y-%m-%d").date()
-        index_url = f"/entries/Entries.cfm?ELEC_DATE={d.month}/{d.day}/{d.year}&STYLE=EQB"
-        index_response = await self.make_request(self.http_client, "GET", index_url, headers=self._get_headers())
-        if not index_response:
+        index_url = f"/entries/{date}"
+        index_response = await self.make_request("GET", index_url, headers=self._get_headers())
+        if not index_response or not index_response.text:
             self.logger.warning("Failed to fetch Equibase index page", url=index_url)
             return None
 
+        self._save_debug_html(index_response.text, f"equibase_index_{date}")
+
         parser = HTMLParser(index_response.text)
-        track_links = [
-            link.attributes["href"]
-            for link in parser.css("div.track-information a")
-            if "race=" not in link.attributes.get("href", "")
-        ]
+        race_links = [link.attributes["href"] for link in parser.css("a.entry-race-level")]
 
-        async def get_race_links_from_track(track_url: str):
-            response = await self.make_request(self.http_client, "GET", track_url, headers=self._get_headers())
-            if not response:
-                return []
-            parser = HTMLParser(response.text)
-            return [link.attributes["href"] for link in parser.css("a.program-race-link")]
-
-        tasks = [get_race_links_from_track(link) for link in track_links]
-        results = await asyncio.gather(*tasks)
-        race_links = [f"{self.base_url}{link}" for sublist in results for link in sublist]
+        semaphore = asyncio.Semaphore(5)
 
         async def fetch_single_html(race_url: str):
-            response = await self.make_request(self.http_client, "GET", race_url, headers=self._get_headers())
-            return response.text if response else ""
+            async with semaphore:
+                try:
+                    response = await self.make_request("GET", race_url, headers=self._get_headers())
+                    return response.text if response else ""
+                except Exception as e:
+                    self.logger.warning("Failed to fetch race page", url=race_url, error=str(e))
+                    return ""
 
         tasks = [fetch_single_html(link) for link in race_links]
         html_pages = await asyncio.gather(*tasks)
-        return {"pages": html_pages, "date": date}
+        return {"pages": [p for p in html_pages if p], "date": date}
 
     def _parse_races(self, raw_data: Any) -> List[Race]:
         """Parses a list of raw HTML strings into Race objects."""
@@ -139,14 +144,8 @@ class EquibaseAdapter(BaseAdapterV3):
             odds = {}
             if not scratched:
                 win_odds = parse_odds_to_decimal(odds_str)
-                if win_odds and win_odds < 999:
-                    odds = {
-                        self.source_name: OddsData(
-                            win=win_odds,
-                            source=self.source_name,
-                            last_updated=datetime.now(),
-                        )
-                    }
+                if odds_data := create_odds_data(self.source_name, win_odds):
+                    odds[self.source_name] = odds_data
             return Runner(number=number, name=name, odds=odds, scratched=scratched)
         except (ValueError, AttributeError, IndexError):
             self.logger.warning("Could not parse Equibase runner, skipping.", exc_info=True)
@@ -157,11 +156,3 @@ class EquibaseAdapter(BaseAdapterV3):
         time_part = time_str.split(" ")[-2] + " " + time_str.split(" ")[-1]
         dt_str = f"{date_str} {time_part}"
         return datetime.strptime(dt_str, "%Y-%m-%d %I:%M %p")
-
-    def _get_headers(self) -> dict:
-        return {
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/107.0.0.0 Safari/537.36"
-            )
-        }

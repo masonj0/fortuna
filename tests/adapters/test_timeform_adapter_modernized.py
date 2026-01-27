@@ -24,10 +24,10 @@ async def test_timeform_adapter_parses_html_correctly(timeform_adapter):
     mock_html = read_fixture("tests/fixtures/timeform_modern_sample.html")
 
     # Directly test the parsing of runners from the correct HTML structure
-    from bs4 import BeautifulSoup
+    from selectolax.parser import HTMLParser
 
-    soup = BeautifulSoup(mock_html, "html.parser")
-    runners = [timeform_adapter._parse_runner(row) for row in soup.select("div.rp-horseTable_mainRow")]
+    parser = HTMLParser(mock_html)
+    runners = [timeform_adapter._parse_runner(row) for row in parser.css("div.rp-horseTable_mainRow")]
 
     assert len(runners) == 3, "Should parse three runners"
 

@@ -1,17 +1,15 @@
 # python_service/adapters/greyhound_adapter.py
 from datetime import datetime
 from decimal import Decimal
-from typing import Any
-from typing import Dict
-from typing import List
+from typing import Any, Dict, List
 
 from pydantic import ValidationError
 
 from ..core.exceptions import AdapterConfigError
-from ..models import OddsData
-from ..models import Race
-from ..models import Runner
+from ..models import Race, Runner
 from .base_adapter_v3 import BaseAdapterV3
+from .utils.odds_validator import create_odds_data
+from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy
 
 
 class GreyhoundAdapter(BaseAdapterV3):
@@ -23,13 +21,16 @@ class GreyhoundAdapter(BaseAdapterV3):
     SOURCE_NAME = "Greyhound Racing"
 
     def __init__(self, config=None):
-        if not hasattr(config, "GREYHOUND_API_URL") or not config.GREYHOUND_API_URL:
+        if not getattr(config, "GREYHOUND_API_URL", None):
             raise AdapterConfigError(self.SOURCE_NAME, "GREYHOUND_API_URL is not configured.")
         super().__init__(
             source_name=self.SOURCE_NAME,
             base_url=config.GREYHOUND_API_URL,
             config=config,
         )
+
+    def _configure_fetch_strategy(self) -> FetchStrategy:
+        return FetchStrategy(primary_engine=BrowserEngine.HTTPX)
 
     async def _fetch_data(self, date: str) -> Any:
         """Fetches the raw card data from the greyhound API."""
@@ -92,12 +93,8 @@ class GreyhoundAdapter(BaseAdapterV3):
                 win_odds_val = runner_data.get("odds", {}).get("win")
                 if win_odds_val is not None:
                     win_odds = Decimal(str(win_odds_val))
-                    if win_odds > 1:
-                        odds_data[self.source_name] = OddsData(
-                            win=win_odds,
-                            source=self.source_name,
-                            last_updated=datetime.now(),
-                        )
+                    if odds_data_val := create_odds_data(self.source_name, win_odds):
+                        odds_data[self.source_name] = odds_data_val
 
                 runners.append(
                     Runner(

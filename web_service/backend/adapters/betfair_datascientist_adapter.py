@@ -2,16 +2,15 @@
 
 from datetime import datetime
 from io import StringIO
-from typing import List
-from typing import Optional
+from typing import List, Optional
 
 import pandas as pd
 
-from ..models import OddsData
-from ..models import Race
-from ..models import Runner
+from ..models import Race, Runner
 from ..utils.text import normalize_venue_name
 from .base_adapter_v3 import BaseAdapterV3
+from .utils.odds_validator import create_odds_data
+from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy
 
 
 class BetfairDataScientistAdapter(BaseAdapterV3):
@@ -25,6 +24,9 @@ class BetfairDataScientistAdapter(BaseAdapterV3):
         source_name = f"{self.ADAPTER_NAME}_{model_name}"
         super().__init__(source_name=source_name, base_url=url, config=config)
         self.model_name = model_name
+
+    def _configure_fetch_strategy(self) -> FetchStrategy:
+        return FetchStrategy(primary_engine=BrowserEngine.HTTPX)
 
     async def _fetch_data(self, date: str) -> Optional[StringIO]:
         """Fetches the raw CSV data from the Betfair Data Scientist model endpoint."""
@@ -63,11 +65,8 @@ class BetfairDataScientistAdapter(BaseAdapterV3):
                     rated_price = row.get("rated_price")
                     odds_data = {}
                     if pd.notna(rated_price):
-                        odds_data[self.source_name] = OddsData(
-                            win=float(rated_price),
-                            source=self.source_name,
-                            last_updated=datetime.now(),
-                        )
+                        if odds_val := create_odds_data(self.source_name, float(rated_price)):
+                            odds_data[self.source_name] = odds_val
 
                     runners.append(
                         Runner(

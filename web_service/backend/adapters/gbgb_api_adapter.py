@@ -1,16 +1,13 @@
 # python_service/adapters/gbgb_api_adapter.py
 
 from datetime import datetime
-from typing import Any
-from typing import Dict
-from typing import List
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
-from ..models import OddsData
-from ..models import Race
-from ..models import Runner
+from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy
+from ..models import Race, Runner
 from ..utils.odds import parse_odds_to_decimal
 from .base_adapter_v3 import BaseAdapterV3
+from .utils.odds_validator import create_odds_data
 
 
 class GbgbApiAdapter(BaseAdapterV3):
@@ -23,6 +20,9 @@ class GbgbApiAdapter(BaseAdapterV3):
 
     def __init__(self, config=None, session=None):
         super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
+
+    def _configure_fetch_strategy(self) -> FetchStrategy:
+        return FetchStrategy(primary_engine=BrowserEngine.HTTPX)
 
     async def _fetch_data(self, date: str) -> Optional[List[Dict[str, Any]]]:
         """Fetches the raw meeting data from the GBGB API."""
@@ -85,12 +85,8 @@ class GbgbApiAdapter(BaseAdapterV3):
                 sp = runner_data.get("sp")
                 if sp:
                     win_odds = parse_odds_to_decimal(sp)
-                    if win_odds and win_odds < 999:
-                        odds_data[self.source_name] = OddsData(
-                            win=win_odds,
-                            source=self.source_name,
-                            last_updated=datetime.now(),
-                        )
+                    if odds_data_val := create_odds_data(self.source_name, win_odds):
+                        odds_data[self.source_name] = odds_data_val
 
                 runners.append(
                     Runner(

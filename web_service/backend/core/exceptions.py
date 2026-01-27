@@ -32,22 +32,11 @@ class AdapterRequestError(AdapterError):
 class AdapterHttpError(AdapterRequestError):
     """Raised for unsuccessful HTTP responses (e.g., 4xx or 5xx status codes)."""
 
-    def __init__(
-        self,
-        adapter_name: str,
-        status_code: int,
-        url: str,
-        message: str | None = None,
-        response_body: str | None = None,
-        request_method: str | None = None,
-    ):
+    def __init__(self, adapter_name: str, status_code: int, url: str):
         self.status_code = status_code
         self.url = url
-        self.response_body = response_body
-        self.request_method = request_method
-
-        final_message = message or f"Received HTTP {status_code} from {url}"
-        super().__init__(adapter_name, final_message)
+        message = f"Received HTTP {status_code} from {url}"
+        super().__init__(adapter_name, message)
 
 
 class AdapterAuthError(AdapterHttpError):
@@ -78,6 +67,14 @@ class AdapterConfigError(AdapterError):
     """Raised when an adapter is missing necessary configuration (e.g., an API key)."""
 
     pass
+
+
+class AuthenticationError(FortunaException):
+    """Raised when authentication fails."""
+
+    def __init__(self, source: str, message: str):
+        self.source = source
+        super().__init__(f"[{source}] Authentication failed: {message}")
 
 
 class AdapterParsingError(AdapterError):
