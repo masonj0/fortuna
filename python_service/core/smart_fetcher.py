@@ -10,8 +10,14 @@ from enum import Enum
 from typing import Optional, Dict, Any
 import structlog
 
-from scrapling import Fetcher, PlayWrightFetcher
-from scrapling.core.custom_types import StealthMode
+from scrapling import Fetcher, StealthyFetcher as PlayWrightFetcher
+try:
+    from scrapling.core.custom_types import StealthMode
+except ImportError:
+    # Shim for missing StealthMode in newer scrapling versions
+    class StealthMode:
+        FAST = "fast"
+        CAMOUFLAGE = "camouflage"
 
 # Try importing AsyncStealthySession (may not be available)
 try:
@@ -197,17 +203,12 @@ class SmartFetcher:
             self._fetchers[engine] = fetcher
 
         elif engine == BrowserEngine.PLAYWRIGHT:
-            fetcher = PlayWrightFetcher(
-                headless=True,
-                browser_type='chromium',
-                stealth_mode=self.strategy.stealth_mode,
-            )
+            # In scrapling 0.3.x, StealthyFetcher is the replacement for PlayWrightFetcher
+            fetcher = PlayWrightFetcher()
             self._fetchers[engine] = fetcher
 
         else:  # HTTPX
-            fetcher = Fetcher(
-                auto_match=True,  # Auto-detect encoding
-            )
+            fetcher = Fetcher()
             self._fetchers[engine] = fetcher
 
         return self._fetchers[engine]
@@ -224,8 +225,11 @@ class SmartFetcher:
                         timeout=self.strategy.timeout
                     )
                 else:
-                    # Playwright and HTTPX are synchronous
-                    response = fetcher.fetch(url, **kwargs)
+                    # Playwright (StealthyFetcher) has fetch(), but HTTPX (Fetcher) uses get()
+                    if engine == BrowserEngine.PLAYWRIGHT:
+                        response = fetcher.fetch(url, **kwargs)
+                    else:
+                        response = fetcher.get(url, **kwargs)
 
                 # Check for HTTP errors
                 if hasattr(response, 'status') and response.status >= 400:
