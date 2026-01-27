@@ -1,4 +1,4 @@
-# web_service/backend/adapters/brisnet_adapter.py
+# python_service/adapters/brisnet_adapter.py
 import asyncio
 from datetime import datetime
 from typing import List
@@ -7,15 +7,16 @@ from typing import Optional
 from selectolax.parser import HTMLParser
 
 from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy
-from ..models import OddsData
 from ..models import Race
 from ..models import Runner
 from ..utils.odds import parse_odds_to_decimal
 from ..utils.text import normalize_venue_name
 from .base_adapter_v3 import BaseAdapterV3
+from .mixins import BrowserHeadersMixin, DebugMixin
+from .utils.odds_validator import create_odds_data
 
 
-class BrisnetAdapter(BaseAdapterV3):
+class BrisnetAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
     """
     Adapter for brisnet.com, migrated to BaseAdapterV3 with enhanced track detection.
     """
@@ -32,6 +33,9 @@ class BrisnetAdapter(BaseAdapterV3):
             enable_js=False,
             timeout=20,
         )
+
+    def _get_headers(self) -> dict:
+        return self._get_browser_headers(host="www.brisnet.com")
 
     async def _fetch_track_links(self) -> List[str]:
         """Fetches the list of active track links from the Brisnet index page."""
@@ -66,6 +70,8 @@ class BrisnetAdapter(BaseAdapterV3):
             async with semaphore:
                 try:
                     response = await self.make_request("GET", url, headers=self._get_headers())
+                    if response:
+                        self._save_debug_html(response.text, f"brisnet_{url.split('/')[-1]}_{date}")
                     return response.text if response else ""
                 except Exception as e:
                     self.logger.warning("Failed to fetch track page", url=url, error=str(e))
@@ -77,25 +83,6 @@ class BrisnetAdapter(BaseAdapterV3):
         return {
             "pages": [p for p in pages if p],
             "date": date
-        }
-
-    def _get_headers(self) -> dict:
-        return {
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "Host": "www.brisnet.com",
-            "Pragma": "no-cache",
-            "sec-ch-ua": '"Google Chrome";v="125", "Chromium";v="125", "Not.A/Brand";v="24"',
-            "sec-ch-ua-mobile": "?0",
-            "sec-ch-ua-platform": '"Windows"',
-            "Sec-Fetch-Dest": "document",
-            "Sec-Fetch-Mode": "navigate",
-            "Sec-Fetch-Site": "none",
-            "Sec-Fetch-User": "?1",
-            "Upgrade-Insecure-Requests": "1",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
         }
 
     def _parse_races(self, raw_data: Optional[dict]) -> List[Race]:
@@ -152,12 +139,8 @@ class BrisnetAdapter(BaseAdapterV3):
 
                         win_odds = parse_odds_to_decimal(odds_str)
                         odds = {}
-                        if win_odds:
-                            odds[self.source_name] = OddsData(
-                                win=win_odds,
-                                source=self.source_name,
-                                last_updated=datetime.now(),
-                            )
+                        if odds_data := create_odds_data(self.source_name, win_odds):
+                            odds[self.source_name] = odds_data
 
                         runners.append(Runner(number=number, name=name, odds=odds))
 

@@ -1,4 +1,4 @@
-# web_service/backend/adapters/equibase_adapter.py
+# python_service/adapters/equibase_adapter.py
 import asyncio
 from datetime import datetime
 from typing import Any
@@ -8,16 +8,17 @@ from typing import Optional
 from selectolax.parser import HTMLParser
 from selectolax.parser import Node
 
-from ..models import OddsData
 from ..models import Race
 from ..models import Runner
 from ..utils.odds import parse_odds_to_decimal
 from ..utils.text import clean_text
 from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy
 from .base_adapter_v3 import BaseAdapterV3
+from .mixins import BrowserHeadersMixin, DebugMixin
+from .utils.odds_validator import create_odds_data
 
 
-class EquibaseAdapter(BaseAdapterV3):
+class EquibaseAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
     """
     Adapter for scraping Equibase race entries, migrated to BaseAdapterV3.
     """
@@ -35,6 +36,9 @@ class EquibaseAdapter(BaseAdapterV3):
             block_resources=True,
         )
 
+    def _get_headers(self) -> dict:
+        return self._get_browser_headers(host="www.equibase.com")
+
     async def _fetch_data(self, date: str) -> Optional[dict]:
         """
         Fetches the raw HTML for all race pages for a given date.
@@ -44,6 +48,8 @@ class EquibaseAdapter(BaseAdapterV3):
         if not index_response or not index_response.text:
             self.logger.warning("Failed to fetch Equibase index page", url=index_url)
             return None
+
+        self._save_debug_html(index_response.text, f"equibase_index_{date}")
 
         parser = HTMLParser(index_response.text)
         race_links = [link.attributes["href"] for link in parser.css("a.entry-race-level")]
@@ -138,14 +144,8 @@ class EquibaseAdapter(BaseAdapterV3):
             odds = {}
             if not scratched:
                 win_odds = parse_odds_to_decimal(odds_str)
-                if win_odds and win_odds < 999:
-                    odds = {
-                        self.source_name: OddsData(
-                            win=win_odds,
-                            source=self.source_name,
-                            last_updated=datetime.now(),
-                        )
-                    }
+                if odds_data := create_odds_data(self.source_name, win_odds):
+                    odds[self.source_name] = odds_data
             return Runner(number=number, name=name, odds=odds, scratched=scratched)
         except (ValueError, AttributeError, IndexError):
             self.logger.warning("Could not parse Equibase runner, skipping.", exc_info=True)
@@ -156,11 +156,3 @@ class EquibaseAdapter(BaseAdapterV3):
         time_part = time_str.split(" ")[-2] + " " + time_str.split(" ")[-1]
         dt_str = f"{date_str} {time_part}"
         return datetime.strptime(dt_str, "%Y-%m-%d %I:%M %p")
-
-    def _get_headers(self) -> dict:
-        return {
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/107.0.0.0 Safari/537.36"
-            )
-        }

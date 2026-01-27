@@ -6,14 +6,16 @@ from typing import Any, List, Optional
 
 from selectolax.parser import HTMLParser, Node
 
-from ..models import OddsData, Race, Runner
+from ..models import Race, Runner
 from ..utils.odds import parse_odds_to_decimal
 from ..utils.text import clean_text
 from .base_adapter_v3 import BaseAdapterV3
+from .mixins import BrowserHeadersMixin, DebugMixin
+from .utils.odds_validator import create_odds_data
 from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy
 
 
-class TimeformAdapter(BaseAdapterV3):
+class TimeformAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
     """
     Adapter for timeform.com, migrated to BaseAdapterV3 and standardized on selectolax.
     """
@@ -27,6 +29,9 @@ class TimeformAdapter(BaseAdapterV3):
     def _configure_fetch_strategy(self) -> FetchStrategy:
         return FetchStrategy(primary_engine=BrowserEngine.HTTPX)
 
+    def _get_headers(self) -> dict:
+        return self._get_browser_headers(host="www.timeform.com")
+
     async def _fetch_data(self, date: str) -> Optional[dict]:
         """
         Fetches the raw HTML for all race pages for a given date.
@@ -37,12 +42,7 @@ class TimeformAdapter(BaseAdapterV3):
             self.logger.warning("Failed to fetch Timeform index page", url=index_url)
             return None
 
-        # Save the raw HTML for debugging in CI
-        try:
-            with open("timeform_debug.html", "w", encoding="utf-8") as f:
-                f.write(index_response.text)
-        except Exception as e:
-            self.logger.warning("Failed to save debug HTML for Timeform", error=str(e))
+        self._save_debug_html(index_response.text, f"timeform_index_{date}")
 
         parser = HTMLParser(index_response.text)
         links = {a.attributes["href"] for a in parser.css("a.rp-racecard-off-link[href]") if a.attributes.get("href")}
@@ -54,25 +54,6 @@ class TimeformAdapter(BaseAdapterV3):
         tasks = [fetch_single_html(link) for link in links]
         html_pages = await asyncio.gather(*tasks)
         return {"pages": html_pages, "date": date}
-
-    def _get_headers(self) -> dict:
-        return {
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "Host": "www.timeform.com",
-            "Pragma": "no-cache",
-            "sec-ch-ua": '"Google Chrome";v="125", "Chromium";v="125", "Not.A/Brand";v="24"',
-            "sec-ch-ua-mobile": "?0",
-            "sec-ch-ua-platform": '"Windows"',
-            "Sec-Fetch-Dest": "document",
-            "Sec-Fetch-Mode": "navigate",
-            "Sec-Fetch-Site": "none",
-            "Sec-Fetch-User": "?1",
-            "Upgrade-Insecure-Requests": "1",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-        }
 
     def _parse_races(self, raw_data: Any) -> List[Race]:
         """Parses a list of raw HTML strings into Race objects."""
@@ -148,12 +129,8 @@ class TimeformAdapter(BaseAdapterV3):
             if odds_tag:
                 odds_str = clean_text(odds_tag.text())
                 if win_odds := parse_odds_to_decimal(odds_str):
-                    if win_odds < 999:
-                        odds_data[self.source_name] = OddsData(
-                            win=win_odds,
-                            source=self.source_name,
-                            last_updated=datetime.now(),
-                        )
+                    if odds_data_val := create_odds_data(self.source_name, win_odds):
+                        odds_data[self.source_name] = odds_data_val
 
             return Runner(number=number, name=name, odds=odds_data)
         except (AttributeError, ValueError, TypeError):
