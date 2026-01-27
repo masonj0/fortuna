@@ -31,7 +31,7 @@ async def test_get_gbgb_races_successfully(gbgb_adapter):
                 {
                     "raceId": 12345,
                     "raceNumber": 1,
-                    "raceTime": "2025-10-09T18:00:00Z",
+                    "raceTime": f"{date.today().isoformat()}T18:00:00Z",
                     "raceTitle": "The October Sprint",
                     "raceDistance": 500,
                     "traps": [

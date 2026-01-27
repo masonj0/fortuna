@@ -19,8 +19,8 @@ from pathlib import Path
 
 from scrapling.parser import Selector
 
-from web_service.backend.models import OddsData, Race, Runner
-from web_service.backend.utils.odds import parse_odds_to_decimal
+from ..models import OddsData, Race, Runner
+from ..utils.odds import parse_odds_to_decimal
 from .base_adapter_v3 import BaseAdapterV3
 from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy, StealthMode
 
@@ -197,7 +197,7 @@ class TwinSpiresAdapter(BaseAdapterV3):
         Uses multiple selector strategies with fallback.
         """
         races_data = []
-        page = response  # Response object has Selector methods
+        page = Selector(response.text)
 
         # Try each selector pattern
         race_elements = []

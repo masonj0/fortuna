@@ -30,7 +30,7 @@ class BetfairDataScientistAdapter(BaseAdapterV3):
         """Fetches the raw CSV data from the Betfair Data Scientist model endpoint."""
         endpoint = f"?date={date}&presenter=RatingsPresenter&csv=true"
         self.logger.info(f"Fetching data from {self.base_url}{endpoint}")
-        response = await self.make_request(self.http_client, "GET", endpoint)
+        response = await self.make_request("GET", endpoint)
         return StringIO(response.text) if response and response.text else None
 
     def _parse_races(self, raw_data: Optional[StringIO]) -> List[Race]:

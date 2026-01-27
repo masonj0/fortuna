@@ -28,7 +28,7 @@ class UniversalAdapter(BaseAdapterV3):
     async def _fetch_data(self, date: str) -> Any:
         """Executes the fetch steps defined in the JSON definition."""
         self.logger.info(f"Executing Universal Adapter PoC for {self.source_name}")
-        response = await self.make_request(self.http_client, "GET", self.definition["start_url"])
+        response = await self.make_request("GET", self.definition["start_url"])
         if not response:
             return None
 
