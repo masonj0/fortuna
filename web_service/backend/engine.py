@@ -137,6 +137,11 @@ class OddsEngine:
                     continue
                 try:
                     self.logger.info(f"Attempting to initialize adapter: {adapter_name}")
+                    if adapter_name == "UniversalAdapter":
+                        # UniversalAdapter requires a definition_path, which we don't have here.
+                        # For now, we'll skip it unless it's explicitly configured.
+                        self.logger.info("UniversalAdapter PoC requires a definition_path. Skipping.")
+                        continue
                     adapter_instance = adapter_cls(config=self.config)
                     self.logger.info(f"Successfully initialized adapter: {adapter_name}")
                     if manual_override_manager and getattr(adapter_instance, "supports_manual_override", False):
