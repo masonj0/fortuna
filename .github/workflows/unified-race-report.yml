@@ -32,6 +32,7 @@ on:
         options:
           - full
           - canary_only
+          - canary_quick
           - skip_canary
           - dry_run
   push:
@@ -101,6 +102,9 @@ jobs:
           elif [ "$EVENT" = "workflow_dispatch" ]; then
             case "$RUN_MODE" in
               "canary_only")
+                RUN_CANARY="true"
+                ;;
+              "canary_quick")
                 RUN_CANARY="true"
                 ;;
               "skip_canary")
@@ -175,6 +179,8 @@ jobs:
     needs: setup
     if: needs.setup.outputs.run_canary == 'true'
     timeout-minutes: 15
+    env:
+      IS_QUICK: ${{ github.event.inputs.run_mode == 'canary_quick' }}
 
     outputs:
       health_status: ${{ steps.canary.outputs.health_status }}
@@ -208,10 +214,12 @@ jobs:
           pip install -r web_service/backend/requirements.txt
 
       - name: 'Install Browser (Minimal)'
+        if: env.IS_QUICK != 'true'
         run: |
           playwright install chromium --with-deps
 
       - name: 'Start Display'
+        if: env.IS_QUICK != 'true'
         run: |
           sudo Xvfb :99 -screen 0 1280x720x24 &
           echo "DISPLAY=:99" >> $GITHUB_ENV
@@ -223,7 +231,11 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          python scripts/canary_check.py 2>&1 | tee canary_output.log
+          if [ "${{ env.IS_QUICK }}" = "true" ]; then
+            python scripts/canary_check.py --mode quick 2>&1 | tee canary_output.log
+          else
+            python scripts/canary_check.py --mode full 2>&1 | tee canary_output.log
+          fi
 
           if [ -f canary_result.json ]; then
             HEALTH=$(jq -r '.status // "unknown"' canary_result.json)

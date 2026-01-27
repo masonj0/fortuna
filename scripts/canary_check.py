@@ -129,17 +129,26 @@ async def check_http_source(name: str, url: str, expected_keywords: list[str]) -
 
 
 async def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Canary health check")
+    parser.add_argument("--mode", choices=["full", "quick"], default="full", help="Check mode")
+    args = parser.parse_args()
+
     print("=" * 60)
     print("CANARY HEALTH CHECK")
     print(f"Time: {datetime.utcnow().isoformat()}")
+    print(f"Mode: {args.mode.upper()}")
     print("=" * 60)
 
     results = []
 
     # Run checks
-    print("\n→ Running Browser-based checks...")
-    results.append(await check_browser_basic())
-    results.append(await check_twinspires())
+    if args.mode == "full":
+        print("\n→ Running Browser-based checks...")
+        results.append(await check_browser_basic())
+        results.append(await check_twinspires())
+    else:
+        print("\n→ Skipping Browser-based checks (Quick Mode)")
 
     print("\n→ Running HTTP-based checks...")
     http_checks = [

@@ -98,12 +98,19 @@ def main():
             with open("adapter_stats.json") as f:
                 stats = json.load(f)
 
-            chronically_failing = [s.get('name') for s in stats if s.get('consecutive_failures', 0) > 3]
-            if chronically_failing:
-                lines.append("### 🔥 Adapter Health Warnings\n")
-                lines.append("The following adapters are chronically failing and may be firewalled in the next run:\n")
-                for name in chronically_failing:
-                    lines.append(f"- `{name}`")
+            firewalled = [s.get('name') for s in stats if s.get('consecutive_failures', 0) > 5]
+            at_risk = [s.get('name') for s in stats if 3 < s.get('consecutive_failures', 0) <= 5]
+
+            if firewalled or at_risk:
+                lines.append("### 🔥 Adapter Firewall & Health\n")
+                if firewalled:
+                    lines.append("**Firewalled (Disabled):**\n")
+                    for name in firewalled:
+                        lines.append(f"- 🚫 `{name}`")
+                if at_risk:
+                    lines.append("\n**At Risk (Close to firewall):**\n")
+                    for name in at_risk:
+                        lines.append(f"- ⚠️ `{name}`")
                 lines.append("")
         except:
             pass
