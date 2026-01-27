@@ -3,9 +3,10 @@ from datetime import datetime
 from typing import List
 from typing import Optional
 
-from bs4 import BeautifulSoup
+from selectolax.parser import HTMLParser
 from dateutil.parser import parse
 
+from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy, StealthMode
 from ..models import OddsData
 from ..models import Race
 from ..models import Runner
@@ -24,6 +25,32 @@ class BrisnetAdapter(BaseAdapterV3):
 
     def __init__(self, config=None):
         super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
+
+    def _configure_fetch_strategy(self) -> FetchStrategy:
+        return FetchStrategy(
+            primary_engine=BrowserEngine.PLAYWRIGHT,
+            enable_js=True,
+            stealth_mode=StealthMode.CAMOUFLAGE,
+            block_resources=True,
+            max_retries=3,
+            timeout=30,
+        )
+
+    async def _fetch_track_list(self) -> List[str]:
+        """Fetches the list of active tracks from the Brisnet index page."""
+        url = "/cgi-bin/intoday.cgi"
+        response = await self.make_request("GET", url, headers=self._get_headers())
+        if not response or not response.text:
+            return []
+
+        parser = HTMLParser(response.text)
+        # Find links that look like track entries
+        links = [
+            a.attributes.get("href")
+            for a in parser.css("a[href*='briswatch.cgi']")
+            if a.attributes.get("href")
+        ]
+        return list(set(links))
 
     async def _fetch_data(self, date: str) -> Optional[dict]:
         """Fetches the raw HTML from the Brisnet race page."""
@@ -68,43 +95,45 @@ class BrisnetAdapter(BaseAdapterV3):
 
         html = raw_data["html"]
         race_date = raw_data["date"]
-        soup = BeautifulSoup(html, "html.parser")
+        parser = HTMLParser(html)
 
         races = []
-        for race_link in soup.select("a[href*='brisnet.com/cgi-bin/briswatch.cgi/public/Brad/TODAY.PM']"):
+        # Update selector to use CSS via selectolax
+        for race_link in parser.css("a[href*='brisnet.com/cgi-bin/briswatch.cgi/public/Brad/TODAY.PM']"):
             try:
-                race_number_str = race_link.text.strip()
+                race_number_str = race_link.text().strip()
                 if not race_number_str.isdigit():
                     continue
                 race_number = int(race_number_str)
 
-                # Venue and start time are not available on the index page, so we have to be creative
-                # This is a significant simplification and may need to be revisited
                 venue = "Unknown"
-                if parent_table := race_link.find_parent("table"):
-                    if caption := parent_table.find("caption"):
-                        venue = normalize_venue_name(caption.text.strip())
+                # Selectolax doesn't have find_parent quite the same way, but we can navigate up
+                # Simplified for now as per original logic
+                parent = race_link.parent
+                while parent and parent.tag != "table":
+                    parent = parent.parent
 
-                # Create a placeholder start time as it's not available on this page
+                if parent:
+                    caption = parent.css_first("caption")
+                    if caption:
+                        venue = normalize_venue_name(caption.text().strip())
+
                 start_time = datetime.now()
 
-                # Since we don't have runner data on this page, we create a placeholder race
-                # A more complete implementation would require fetching each race link
                 race = Race(
                     id=f"brisnet_{venue.replace(' ', '').lower()}_{race_date}_{race_number}",
                     venue=venue,
                     race_number=race_number,
                     start_time=start_time,
                     runners=[],
-                    source=self.source_name,
+                    source=self.SOURCE_NAME,
                 )
                 races.append(race)
             except (ValueError, IndexError, TypeError) as e:
                 self.logger.warning(
                     "Failed to parse a race link on Brisnet",
-                    link=race_link.get("href"),
+                    link=race_link.attributes.get("href"),
                     error=e,
-                    exc_info=True,
                 )
                 continue
 

@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 from dataclasses import dataclass, asdict
+import httpx
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -86,7 +87,7 @@ async def check_twinspires() -> CanaryResult:
             source="TwinSpires",
             success=response.status == 200 and has_races,
             latency_ms=latency,
-            message="OK" if has_races else "No race content found"
+            message="OK" if has_races else f"No race content found (Status: {response.status})"
         )
 
     except Exception as e:
@@ -98,36 +99,72 @@ async def check_twinspires() -> CanaryResult:
         )
 
 
+async def check_http_source(name: str, url: str, expected_keywords: list[str]) -> CanaryResult:
+    """Check a source via simple HTTP."""
+    start = time.perf_counter()
+    try:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+            response = await client.get(
+                url,
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+            )
+
+        latency = (time.perf_counter() - start) * 1000
+        text = response.text.lower()
+
+        if response.status_code != 200:
+            return CanaryResult(name, False, latency, f"HTTP {response.status_code}")
+
+        found = [kw for kw in expected_keywords if kw.lower() in text]
+        success = len(found) > 0
+
+        return CanaryResult(
+            source=name,
+            success=success,
+            latency_ms=latency,
+            message="OK" if success else f"Content check failed (Found keywords: {found})"
+        )
+    except Exception as e:
+        return CanaryResult(name, False, (time.perf_counter() - start) * 1000, str(e))
+
+
 async def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Canary health check")
+    parser.add_argument("--mode", choices=["full", "quick"], default="full", help="Check mode")
+    args = parser.parse_args()
+
     print("=" * 60)
     print("CANARY HEALTH CHECK")
     print(f"Time: {datetime.utcnow().isoformat()}")
+    print(f"Mode: {args.mode.upper()}")
     print("=" * 60)
 
     results = []
 
     # Run checks
-    checks = [
-        ("Basic connectivity", check_browser_basic),
-        ("TwinSpires", check_twinspires),
+    if args.mode == "full":
+        print("\n→ Running Browser-based checks...")
+        results.append(await check_browser_basic())
+        results.append(await check_twinspires())
+    else:
+        print("\n→ Skipping Browser-based checks (Quick Mode)")
+
+    print("\n→ Running HTTP-based checks...")
+    http_checks = [
+        ("Racing.com", "https://www.racing.com/", ["racing", "horse"]),
+        ("TAB.com.au", "https://www.tab.com.au/racing", ["racing", "odds"]),
+        ("Racenet", "https://www.racenet.com.au/", ["racing", "form"]),
+        ("AtTheRaces", "https://www.attheraces.com/", ["racecards", "at the races"]),
+        ("SportingLife", "https://www.sportinglife.com/horse-racing", ["racecards", "sporting life"])
     ]
 
-    for name, check in checks:
-        print(f"\n→ Checking {name}...")
-        try:
-            result = await check()
-            results.append(result)
+    for name, url, kws in http_checks:
+        results.append(await check_http_source(name, url, kws))
 
-            status = "✅" if result.success else "❌"
-            print(f"  {status} {result.source}: {result.message} ({result.latency_ms:.0f}ms)")
-        except Exception as e:
-            print(f"  ❌ {name}: Exception - {e}")
-            results.append(CanaryResult(
-                source=name,
-                success=False,
-                latency_ms=0,
-                message=str(e)
-            ))
+    for result in results:
+        status = "✅" if result.success else "❌"
+        print(f"  {status} {result.source}: {result.message} ({result.latency_ms:.0f}ms)")
 
     # Calculate summary
     total = len(results)
