@@ -1,0 +1,190 @@
+﻿2026-01-27T13:26:23.0215115Z Current runner version: '2.331.0'
+2026-01-27T13:26:23.0240248Z ##[group]Runner Image Provisioner
+2026-01-27T13:26:23.0241156Z Hosted Compute Agent
+2026-01-27T13:26:23.0241673Z Version: 20260115.477
+2026-01-27T13:26:23.0242267Z Commit: 4b342d620503cbe250a3154040964899ea7c9b00
+2026-01-27T13:26:23.0242951Z Build Date: 2026-01-15T22:32:41Z
+2026-01-27T13:26:23.0243816Z Worker ID: {ce98b10e-2cc2-49e9-bfbd-b3e2801ef833}
+2026-01-27T13:26:23.0244542Z Azure Region: westus
+2026-01-27T13:26:23.0245091Z ##[endgroup]
+2026-01-27T13:26:23.0246505Z ##[group]Operating System
+2026-01-27T13:26:23.0247052Z Ubuntu
+2026-01-27T13:26:23.0247589Z 24.04.3
+2026-01-27T13:26:23.0248011Z LTS
+2026-01-27T13:26:23.0248484Z ##[endgroup]
+2026-01-27T13:26:23.0248994Z ##[group]Runner Image
+2026-01-27T13:26:23.0249605Z Image: ubuntu-24.04
+2026-01-27T13:26:23.0250058Z Version: 20260119.4.1
+2026-01-27T13:26:23.0251266Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260119.4/images/ubuntu/Ubuntu2404-Readme.md
+2026-01-27T13:26:23.0252704Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260119.4
+2026-01-27T13:26:23.0253826Z ##[endgroup]
+2026-01-27T13:26:23.0254902Z ##[group]GITHUB_TOKEN Permissions
+2026-01-27T13:26:23.0256914Z Contents: read
+2026-01-27T13:26:23.0257533Z Metadata: read
+2026-01-27T13:26:23.0258023Z Packages: read
+2026-01-27T13:26:23.0258473Z ##[endgroup]
+2026-01-27T13:26:23.0260666Z Secret source: Actions
+2026-01-27T13:26:23.0261296Z Prepare workflow directory
+2026-01-27T13:26:23.0649592Z Prepare all required actions
+2026-01-27T13:26:23.0688046Z Getting action download info
+2026-01-27T13:26:23.5123334Z Download action repository 'actions/github-script@v7' (SHA:f28e40c7f34bde8b3046d885e986cb6290c5673b)
+2026-01-27T13:26:24.1831199Z Complete job name: notify
+2026-01-27T13:26:24.2625501Z ##[group]Run actions/github-script@v7
+2026-01-27T13:26:24.2626391Z with:
+2026-01-27T13:26:24.2639200Z   script: const today = new Date().toISOString().split('T')[0];
+
+const isCritical = 'skipped' === 'failure' ||
+                   'skipped' === 'failure';
+
+const title = `${isCritical ? '🚨 CRITICAL' : '⚠️ WARNING'}: Race Pipeline Alert - ${today}`;
+const label = isCritical ? 'pipeline-alert:high' : 'pipeline-alert:low';
+
+let body = `## Pipeline Alert (${isCritical ? 'CRITICAL' : 'WARNING'})\n\n`;
+body += `| Property | Value |\n`;
+body += `|----------|-------|\n`;
+body += `| Run | #112 |\n`;
+body += `| Trigger | schedule |\n`;
+body += `| Time | ${new Date().toISOString()} |\n\n`;
+
+const reportResult = 'skipped';
+const reportStatus = '';
+const raceCount = '';
+const canaryHealth = 'unhealthy';
+const canaryRate = '43%';
+
+if (reportResult === 'failure' || reportStatus === 'failed') {
+  body += `### ❌ Report Generation Failed\n\n`;
+  body += `The main report generation job failed.\n\n`;
+  body += `| Metric | Value |\n`;
+  body += `|--------|-------|\n`;
+  body += `| Races Found | ${raceCount || '0'} |\n`;
+  body += `| Adapters Succeeded | N/A |\n`;
+  body += `| Adapters Failed | N/A |\n\n`;
+}
+
+if (canaryHealth === 'unhealthy') {
+  body += `### ⚠️ Canary Health Check: UNHEALTHY\n\n`;
+  body += `**Success Rate:** ${canaryRate}\n\n`;
+  body += `Upstream data sources may be unavailable or have changed structure.\n\n`;
+}
+
+body += `### 🔗 Links\n\n`;
+body += `- [View Run Logs](https://github.com/masonj0/fortuna/actions/runs/21398914711)\n`;
+body += `- [Download Artifacts](https://github.com/masonj0/fortuna/actions/runs/21398914711#artifacts)\n`;
+
+// Check for existing open alert
+const { data: issues } = await github.rest.issues.listForRepo({
+  owner: context.repo.owner,
+  repo: context.repo.repo,
+  state: 'open',
+  labels: 'pipeline-alert',
+  per_page: 5
+});
+
+const existingIssue = issues.find(i => i.title.includes('Race Pipeline Alert'));
+
+if (existingIssue) {
+  // Add comment to existing issue
+  await github.rest.issues.createComment({
+    owner: context.repo.owner,
+    repo: context.repo.repo,
+    issue_number: existingIssue.number,
+    body: `## New Alert - Run #112\n\n${body}`
+  });
+
+  // Update labels if needed
+  if (isCritical) {
+      await github.rest.issues.addLabels({
+        owner: context.repo.owner,
+        repo: context.repo.repo,
+        issue_number: existingIssue.number,
+        labels: [label]
+      });
+  }
+  console.log(`Added comment to issue #${existingIssue.number}`);
+} else {
+  // Create new issue
+  await github.rest.issues.create({
+    owner: context.repo.owner,
+    repo: context.repo.repo,
+    title: title,
+    body: body,
+    labels: ['automated', label]
+  });
+  console.log('Created new alert issue');
+}
+
+2026-01-27T13:26:24.2652820Z   github-token: ***
+2026-01-27T13:26:24.2653261Z   debug: false
+2026-01-27T13:26:24.2653853Z   user-agent: actions/github-script
+2026-01-27T13:26:24.2654369Z   result-encoding: json
+2026-01-27T13:26:24.2654823Z   retries: 0
+2026-01-27T13:26:24.2655261Z   retry-exempt-status-codes: 400,401,403,404,422
+2026-01-27T13:26:24.2656148Z env:
+2026-01-27T13:26:24.2656529Z   PYTHON_VERSION: 3.10.12
+2026-01-27T13:26:24.2657019Z   REPORT_RETENTION_DAYS: 14
+2026-01-27T13:26:24.2657487Z   MAX_RETRIES: 3
+2026-01-27T13:26:24.2657874Z   REQUEST_TIMEOUT: 45
+2026-01-27T13:26:24.2658295Z   SCRAPLING_HEADLESS: true
+2026-01-27T13:26:24.2658738Z   SCRAPLING_BLOCK_IMAGES: true
+2026-01-27T13:26:24.2659327Z   PLAYWRIGHT_BROWSERS_PATH: /home/runner/.cache/ms-playwright
+2026-01-27T13:26:24.2659950Z ##[endgroup]
+2026-01-27T13:26:24.9496364Z RequestError [HttpError]: Resource not accessible by integration
+2026-01-27T13:26:24.9498186Z     at /home/runner/work/_actions/actions/github-script/v7/dist/index.js:9537:21
+2026-01-27T13:26:24.9499687Z     at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+2026-01-27T13:26:24.9502160Z     at async eval (eval at callAsyncFunction (/home/runner/work/_actions/actions/github-script/v7/dist/index.js:36187:16), <anonymous>:76:3)
+2026-01-27T13:26:24.9505202Z     at async main (/home/runner/work/_actions/actions/github-script/v7/dist/index.js:36285:20) {
+2026-01-27T13:26:24.9506907Z   status: 403,
+2026-01-27T13:26:24.9507558Z   response: {
+2026-01-27T13:26:24.9508533Z     url: 'https://api.github.com/repos/masonj0/fortuna/issues',
+2026-01-27T13:26:24.9509641Z     status: 403,
+2026-01-27T13:26:24.9510269Z     headers: {
+2026-01-27T13:26:24.9510979Z       'access-control-allow-origin': '*',
+2026-01-27T13:26:24.9516619Z       'access-control-expose-headers': 'ETag, Link, Location, Retry-After, X-GitHub-OTP, X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Used, X-RateLimit-Resource, X-RateLimit-Reset, X-OAuth-Scopes, X-Accepted-OAuth-Scopes, X-Poll-Interval, X-GitHub-Media-Type, X-GitHub-SSO, X-GitHub-Request-Id, Deprecation, Sunset',
+2026-01-27T13:26:24.9524718Z       'content-encoding': 'gzip',
+2026-01-27T13:26:24.9526395Z       'content-security-policy': "default-src 'none'",
+2026-01-27T13:26:24.9528492Z       'content-type': 'application/json; charset=utf-8',
+2026-01-27T13:26:24.9530530Z       date: 'Tue, 27 Jan 2026 13:26:24 GMT',
+2026-01-27T13:26:24.9533168Z       'referrer-policy': 'origin-when-cross-origin, strict-origin-when-cross-origin',
+2026-01-27T13:26:24.9536129Z       server: 'github.com',
+2026-01-27T13:26:24.9538410Z       'strict-transport-security': 'max-age=31536000; includeSubdomains; preload',
+2026-01-27T13:26:24.9541148Z       'transfer-encoding': 'chunked',
+2026-01-27T13:26:24.9543115Z       vary: 'Accept-Encoding, Accept, X-Requested-With',
+2026-01-27T13:26:24.9545245Z       'x-accepted-github-permissions': 'issues=write',
+2026-01-27T13:26:24.9546590Z       'x-content-type-options': 'nosniff',
+2026-01-27T13:26:24.9547706Z       'x-frame-options': 'deny',
+2026-01-27T13:26:24.9548825Z       'x-github-api-version-selected': '2022-11-28',
+2026-01-27T13:26:24.9550330Z       'x-github-media-type': 'github.v3; format=json',
+2026-01-27T13:26:24.9552176Z       'x-github-request-id': '381A:24361F:122CD4B:12833EC:6978BD00',
+2026-01-27T13:26:24.9554068Z       'x-ratelimit-limit': '5000',
+2026-01-27T13:26:24.9555443Z       'x-ratelimit-remaining': '4952',
+2026-01-27T13:26:24.9556812Z       'x-ratelimit-reset': '1769520432',
+2026-01-27T13:26:24.9558399Z       'x-ratelimit-resource': 'core',
+2026-01-27T13:26:24.9559717Z       'x-ratelimit-used': '48',
+2026-01-27T13:26:24.9560936Z       'x-xss-protection': '0'
+2026-01-27T13:26:24.9562152Z     },
+2026-01-27T13:26:24.9563041Z     data: {
+2026-01-27T13:26:24.9564463Z       message: 'Resource not accessible by integration',
+2026-01-27T13:26:24.9566665Z       documentation_url: 'https://docs.github.com/rest/issues/issues#create-an-issue',
+2026-01-27T13:26:24.9568680Z       status: '403'
+2026-01-27T13:26:24.9569671Z     }
+2026-01-27T13:26:24.9570547Z   },
+2026-01-27T13:26:24.9571437Z   request: {
+2026-01-27T13:26:24.9572400Z     method: 'POST',
+2026-01-27T13:26:24.9573949Z     url: 'https://api.github.com/repos/masonj0/fortuna/issues',
+2026-01-27T13:26:24.9575567Z     headers: {
+2026-01-27T13:26:24.9576682Z       accept: 'application/vnd.github.v3+json',
+2026-01-27T13:26:24.9578839Z       'user-agent': 'actions/github-script octokit-core.js/5.0.1 Node.js/20.19.6 (linux; x64)',
+2026-01-27T13:26:24.9581016Z       authorization: 'token [REDACTED]',
+2026-01-27T13:26:24.9582521Z       'content-type': 'application/json; charset=utf-8'
+2026-01-27T13:26:24.9584307Z     },
+2026-01-27T13:26:24.9594266Z     body: '{"title":"⚠️ WARNING: Race Pipeline Alert - 2026-01-27","body":"## Pipeline Alert (WARNING)\\n\\n| Property | Value |\\n|----------|-------|\\n| Run | #112 |\\n| Trigger | schedule |\\n| Time | 2026-01-27T13:26:24.358Z |\\n\\n### ⚠️ Canary Health Check: UNHEALTHY\\n\\n**Success Rate:** 43%\\n\\nUpstream data sources may be unavailable or have changed structure.\\n\\n### 🔗 Links\\n\\n- [View Run Logs](https://github.com/masonj0/fortuna/actions/runs/21398914711)\\n- [Download Artifacts](https://github.com/masonj0/fortuna/actions/runs/21398914711#artifacts)\\n","labels":["automated","pipeline-alert:low"]}',
+2026-01-27T13:26:24.9603367Z     request: {
+2026-01-27T13:26:24.9604488Z       agent: [Agent],
+2026-01-27T13:26:24.9605515Z       fetch: [Function: proxyFetch],
+2026-01-27T13:26:24.9606766Z       hook: [Function: bound bound register]
+2026-01-27T13:26:24.9608026Z     }
+2026-01-27T13:26:24.9608824Z   }
+2026-01-27T13:26:24.9609602Z }
+2026-01-27T13:26:24.9640798Z ##[error]Unhandled error: HttpError: Resource not accessible by integration
+2026-01-27T13:26:24.9773064Z Cleaning up orphan processes
