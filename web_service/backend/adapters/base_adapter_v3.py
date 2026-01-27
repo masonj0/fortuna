@@ -504,7 +504,9 @@ class BaseAdapterV3(ABC):
             if url:
                 # Remove protocol and query params for filename
                 clean_url = re.sub(r'https?://(www\.)?', '', url).split('?')[0]
-                sanitized_url = f"_{re.sub(r'[\\/*?:\x22<>|]', '_', clean_url)[:60]}"
+                # Avoid backslashes in f-string for Python < 3.12 compatibility
+                url_part = re.sub(r'[\\/*?:\x22<>|]', '_', clean_url)[:60]
+                sanitized_url = f"_{url_part}"
 
             base_filename = f"{timestamp}_{sanitized_context}{sanitized_url}"
 

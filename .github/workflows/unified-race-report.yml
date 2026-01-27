@@ -43,15 +43,10 @@ on:
       - 'web_service/backend/**'
       - 'python_service/**'
       - '.github/workflows/unified-race-report.yml'
-  schedule:
-    # Full report runs at 6am, 12pm, 6pm UTC
-    - cron: '0 6,12,18 * * *'
-    # Canary runs every 2 hours at :30
-    - cron: '30 */2 * * *'
 
 concurrency:
   group: race-report-${{ github.ref }}-${{ github.event_name }}
-  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+  cancel-in-progress: true
 
 env:
   PYTHON_VERSION: '3.10.12'
@@ -81,22 +76,12 @@ jobs:
           RUN_SECURITY="false"
 
           EVENT="${{ github.event_name }}"
-          SCHEDULE="${{ github.event.schedule }}"
           RUN_MODE="${{ inputs.run_mode }}"
 
           echo "Event: $EVENT"
-          echo "Schedule: $SCHEDULE"
           echo "Run Mode: $RUN_MODE"
 
-          if [ "$EVENT" = "schedule" ]; then
-            if [ "$SCHEDULE" = "30 */2 * * *" ]; then
-              # Canary schedule
-              RUN_CANARY="true"
-            else
-              # Full report schedule
-              RUN_FULL="true"
-            fi
-          elif [ "$EVENT" = "push" ]; then
+          if [ "$EVENT" = "push" ]; then
             RUN_FULL="true"
             RUN_SECURITY="true"
           elif [ "$EVENT" = "workflow_dispatch" ]; then
