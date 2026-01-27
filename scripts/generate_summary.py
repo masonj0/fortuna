@@ -10,9 +10,37 @@ from pathlib import Path
 def main():
     lines = ["## 🐴 Race Report Summary\n"]
 
+    # Metadata & Thresholds
+    metadata = {}
+    if Path("report-metadata.json").exists():
+        try:
+            with open("report-metadata.json") as f:
+                metadata = json.load(f)
+        except:
+            pass
+
+    # High-level metrics
+    metrics = {}
+    if Path("metrics.json").exists():
+        try:
+            with open("metrics.json") as f:
+                metrics = json.load(f)
+        except:
+            pass
+
+    # Warning Banner
+    race_count = metadata.get("race_count", 0)
+    if race_count < 2:
+        lines.append("> [!WARNING]\n")
+        lines.append("> **Low race count detected!** Only {} qualified races found. Upstream sources may be degraded.\n".format(race_count))
+    elif metrics.get("errors"):
+        lines.append("> [!IMPORTANT]\n")
+        lines.append("> Pipeline completed with {} non-fatal warnings.\n".format(len(metrics["errors"])))
+
     # Run info
     lines.append(f"**Generated:** {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
-    lines.append(f"**Run:** #{os.environ.get('GITHUB_RUN_NUMBER', 'N/A')}")
+    lines.append(f"**Run Mode:** `{metadata.get('run_mode', 'N/A')}` | **Canary:** `{metadata.get('canary_health', 'N/A')}`")
+    lines.append(f"**Duration:** {metrics.get('duration_seconds', 0):.1f}s")
     lines.append("")
 
     # Results
@@ -51,9 +79,32 @@ def main():
             with open("browser_verification.json") as f:
                 data = json.load(f)
             lines.append("### 🌐 Browser Status\n")
-            for name, result in data.get("tests", {}).items():
-                status = "✅" if result.get("passed") else "❌"
-                lines.append(f"- {status} {name}")
+
+            # Playwright
+            pw = data.get("playwright", {})
+            status = "✅" if pw.get("installed") else "❌"
+            lines.append(f"- {status} **Playwright** (v{pw.get('version', 'N/A')})")
+
+            # Browsers
+            for name, info in data.get("browsers", {}).items():
+                status = "✅" if info.get("installed") else "❌"
+                lines.append(f"  - {status} {name.capitalize()} (v{info.get('version', 'N/A')})")
+        except:
+            pass
+
+    # Adapter Firewall
+    if Path("adapter_stats.json").exists():
+        try:
+            with open("adapter_stats.json") as f:
+                stats = json.load(f)
+
+            chronically_failing = [s.get('name') for s in stats if s.get('consecutive_failures', 0) > 3]
+            if chronically_failing:
+                lines.append("### 🔥 Adapter Health Warnings\n")
+                lines.append("The following adapters are chronically failing and may be firewalled in the next run:\n")
+                for name in chronically_failing:
+                    lines.append(f"- `{name}`")
+                lines.append("")
         except:
             pass
 
