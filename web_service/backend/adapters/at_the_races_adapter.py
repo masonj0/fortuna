@@ -207,9 +207,16 @@ class AtTheRacesAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
 
     def _extract_race_number(self, url_path: str) -> int:
         """Extract race number from URL path."""
-        pattern = r"/racecard/[A-Z]{2}/[A-Za-z-]+/\d{4}-\d{2}-\d{2}/\d{4}/(\d+)"
+        # Standard: /racecard/GP/Attheraces-Sky-Sports-Racing-Hd-Virgin-535/2026-01-27/1520/1
+        # Alternative: /racecard/Vaal/27-January-2026/1010
+        # The last group is usually the race number if it's there, or we look for a sequence.
+
+        # Try to match the very last digit(s) in the path
+        pattern = r"/(\d+)$"
         if match := re.search(pattern, url_path):
             return int(match.group(1))
+
+        # Fallback to older patterns if needed
         return 1
 
     def _parse_runners(self, parser: HTMLParser) -> List[Runner]:

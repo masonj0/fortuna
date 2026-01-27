@@ -402,18 +402,20 @@ jobs:
 
           # Start fresh Xvfb
           sudo Xvfb :99 -screen 0 1920x1080x24 -ac +extension GLX +render -noreset &
-          echo "DISPLAY=:99" >> $GITHUB_ENV
 
           # Wait and verify
-          sleep 3
-          for i in {1..5}; do
+          echo "Waiting for Xvfb display :99..."
+          MAX_WAIT=10
+          for i in $(seq 1 $MAX_WAIT); do
             if xdpyinfo -display :99 >/dev/null 2>&1; then
-              echo "✅ Display :99 ready"
-              break
+              echo "✅ Display :99 ready after $i seconds"
+              echo "DISPLAY=:99" >> $GITHUB_ENV
+              exit 0
             fi
-            echo "Waiting for display (attempt $i)..."
             sleep 1
           done
+          echo "❌ Xvfb failed to start after $MAX_WAIT seconds"
+          exit 1
 
       - name: '🧪 Verify Browser Setup'
         id: verify-browser

@@ -7,6 +7,7 @@ from tests.conftest import create_mock_race, get_test_settings
 # Import your actual classes
 from python_service.engine import OddsEngine
 from python_service.adapters.base_adapter_v3 import BaseAdapterV3
+from python_service.models import Race
 
 @pytest.mark.asyncio
 async def test_engine_initialization():
@@ -24,10 +25,10 @@ async def test_fetch_all_odds_success(mock_fetch, clear_cache):
     engine = OddsEngine(config=settings)
 
     today = datetime.now()
-    mock_race = create_mock_race(
+    mock_race = Race(**create_mock_race(
         "MockSource", "Churchill Downs", 1, today,
         [{"number": 1, "name": "Secretariat", "odds": "1.5"}]
-    )
+    ))
 
     # This is the new way to mock the data
     mock_fetch.return_value = ("MockSource", {"races": [mock_race], "source_info": {"name": "MockSource", "status": "SUCCESS", "races_fetched": 1, "fetch_duration": 0.1}}, 0.1)
@@ -35,7 +36,18 @@ async def test_fetch_all_odds_success(mock_fetch, clear_cache):
     # We still need to give the engine an adapter to iterate over
     mock_adapter = MagicMock(spec=BaseAdapterV3)
     mock_adapter.source_name = "MockSource"
-    engine.adapters = [mock_adapter]
+    engine.adapters = {"MockSource": mock_adapter}
+    # Update health monitor status for this mock adapter
+    from python_service.adapter_manager import AdapterStatus, AdapterHealth
+    engine.health_monitor.statuses["MockSource"] = AdapterStatus(
+        name="MockSource",
+        health=AdapterHealth.HEALTHY,
+        success_rate_24h=1.0,
+        last_success=None,
+        consecutive_failures=0,
+        avg_response_time_ms=0,
+        last_error=None
+    )
 
     # ACT
     result = await engine.fetch_all_odds(date.today().strftime("%Y-%m-%d"))
@@ -55,7 +67,7 @@ async def test_fetch_all_odds_resilience(mock_fetch, clear_cache):
     engine = OddsEngine(config=settings)
 
     # Mock successful adapter data
-    good_race = create_mock_race("GoodSource", "Track A", 1, datetime.now(), [])
+    good_race = Race(**create_mock_race("GoodSource", "Track A", 1, datetime.now(), []))
     good_payload = ("GoodSource", {"races": [good_race], "source_info": {"name": "GoodSource", "status": "SUCCESS", "races_fetched": 1, "fetch_duration": 0.1}}, 0.1)
 
     # Mock failed adapter data
@@ -66,7 +78,17 @@ async def test_fetch_all_odds_resilience(mock_fetch, clear_cache):
     # We still need to give the engine adapters to iterate over
     good_adapter = MagicMock(spec=BaseAdapterV3); good_adapter.source_name = "GoodSource"
     bad_adapter = MagicMock(spec=BaseAdapterV3); bad_adapter.source_name = "BadSource"
-    engine.adapters = [good_adapter, bad_adapter]
+    engine.adapters = {"GoodSource": good_adapter, "BadSource": bad_adapter}
+    # Update health monitor status
+    from python_service.adapter_manager import AdapterStatus, AdapterHealth
+    engine.health_monitor.statuses["GoodSource"] = AdapterStatus(
+        name="GoodSource", health=AdapterHealth.HEALTHY,
+        success_rate_24h=1.0, last_success=None, consecutive_failures=0, avg_response_time_ms=0, last_error=None
+    )
+    engine.health_monitor.statuses["BadSource"] = AdapterStatus(
+        name="BadSource", health=AdapterHealth.HEALTHY,
+        success_rate_24h=1.0, last_success=None, consecutive_failures=0, avg_response_time_ms=0, last_error=None
+    )
 
     # ACT
     result = await engine.fetch_all_odds("2025-12-08")
@@ -90,8 +112,8 @@ async def test_race_aggregation_and_deduplication(mock_fetch, clear_cache):
     now = datetime.now()
 
     # Same race, different sources, slightly different odds
-    race_a = create_mock_race("SourceA", "Ascot", 1, now, [{"number": 1, "name": "Horse X", "odds": "2.0"}])
-    race_b = create_mock_race("SourceB", "Ascot", 1, now, [{"number": 1, "name": "Horse X", "odds": "2.2"}])
+    race_a = Race(**create_mock_race("SourceA", "Ascot", 1, now, [{"number": 1, "name": "Horse X", "odds": "2.0"}]))
+    race_b = Race(**create_mock_race("SourceB", "Ascot", 1, now, [{"number": 1, "name": "Horse X", "odds": "2.2"}]))
 
     payload_a = ("SourceA", {"races": [race_a], "source_info": {"name": "SourceA", "status": "SUCCESS", "races_fetched": 1, "fetch_duration": 0.1}}, 0.1)
     payload_b = ("SourceB", {"races": [race_b], "source_info": {"name": "SourceB", "status": "SUCCESS", "races_fetched": 1, "fetch_duration": 0.1}}, 0.1)
@@ -99,7 +121,17 @@ async def test_race_aggregation_and_deduplication(mock_fetch, clear_cache):
 
     adapter_a = MagicMock(spec=BaseAdapterV3); adapter_a.source_name = "SourceA"
     adapter_b = MagicMock(spec=BaseAdapterV3); adapter_b.source_name = "SourceB"
-    engine.adapters = [adapter_a, adapter_b]
+    engine.adapters = {"SourceA": adapter_a, "SourceB": adapter_b}
+    # Update health monitor status
+    from python_service.adapter_manager import AdapterStatus, AdapterHealth
+    engine.health_monitor.statuses["SourceA"] = AdapterStatus(
+        name="SourceA", health=AdapterHealth.HEALTHY,
+        success_rate_24h=1.0, last_success=None, consecutive_failures=0, avg_response_time_ms=0, last_error=None
+    )
+    engine.health_monitor.statuses["SourceB"] = AdapterStatus(
+        name="SourceB", health=AdapterHealth.HEALTHY,
+        success_rate_24h=1.0, last_success=None, consecutive_failures=0, avg_response_time_ms=0, last_error=None
+    )
 
 
     # ACT
