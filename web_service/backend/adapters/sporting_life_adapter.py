@@ -15,7 +15,7 @@ from ..models import Runner
 from ..utils.odds import parse_odds_to_decimal
 from ..utils.text import clean_text
 from .base_adapter_v3 import BaseAdapterV3
-from web_service.backend.core.smart_fetcher import BrowserEngine, FetchStrategy, StealthMode
+from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy, StealthMode
 
 
 class SportingLifeAdapter(BaseAdapterV3):

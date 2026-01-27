@@ -21,7 +21,7 @@ from tenacity import (
     wait_exponential,
 )
 
-from web_service.backend.core.smart_fetcher import (
+from python_service.core.smart_fetcher import (
     BrowserEngine,
     FetchStrategy,
     SmartFetcher,
