@@ -15,6 +15,7 @@ from ..utils.odds import parse_odds_to_decimal
 from ..utils.text import clean_text
 from ..utils.text import normalize_venue_name
 from .base_adapter_v3 import BaseAdapterV3
+from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy, StealthMode
 
 
 class RacingPostAdapter(BaseAdapterV3):
@@ -28,6 +29,18 @@ class RacingPostAdapter(BaseAdapterV3):
     def __init__(self, config=None):
         super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
 
+    def _configure_fetch_strategy(self) -> FetchStrategy:
+        """
+        RacingPost has strong anti-bot measures. We need to use a full
+        browser with the highest stealth settings to avoid being blocked.
+        """
+        return FetchStrategy(
+            primary_engine=BrowserEngine.PLAYWRIGHT,
+            enable_js=True,
+            stealth_mode=StealthMode.CAMOUFLAGE,  # Strongest stealth
+            block_resources=False,  # Load all resources to appear more human
+        )
+
     async def _fetch_data(self, date: str) -> Any:
         """
         Fetches the raw HTML content for all races on a given date.
@@ -37,13 +50,6 @@ class RacingPostAdapter(BaseAdapterV3):
         if not index_response or not index_response.text:
             self.logger.warning("Failed to fetch RacingPost index page", url=index_url)
             return None
-
-        # Save the raw HTML for debugging in CI
-        try:
-            with open("racingpost_debug.html", "w", encoding="utf-8") as f:
-                f.write(index_response.text)
-        except Exception as e:
-            self.logger.warning("Failed to save debug HTML for RacingPost", error=str(e))
 
         index_parser = HTMLParser(index_response.text)
         links = index_parser.css('a[data-test-selector^="RC-meetingItem__link_race"]')
