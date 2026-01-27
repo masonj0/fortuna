@@ -5,10 +5,11 @@ Location: python_service/core/smart_fetcher.py
 
 import asyncio
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import structlog
+import httpx
 
 from scrapling import Fetcher, AsyncFetcher
 try:
@@ -76,6 +77,7 @@ class SmartFetcher:
 
         # Track fetcher instances (lazy-loaded)
         self._fetchers: Dict[BrowserEngine, Any] = {}
+        self._httpx_client: Optional[httpx.AsyncClient] = None
 
         # Health tracking: 0.0 (dead) to 1.0 (perfect)
         self._engine_health = {
@@ -83,6 +85,9 @@ class SmartFetcher:
             BrowserEngine.PLAYWRIGHT: 1.0,    # Most reliable, start at max
             BrowserEngine.HTTPX: 0.6,         # Limited, start lower
         }
+
+        # Last engine used for tracking
+        self.last_engine = "unknown"
 
         # Respect environment configuration
         self._check_environment()
@@ -153,8 +158,7 @@ class SmartFetcher:
                     method=method
                 )
 
-                fetcher = await self._get_fetcher(engine)
-                response = await self._fetch_with_engine(fetcher, engine, url, method=method, **kwargs)
+                response = await self._fetch_with_engine(engine, url, method=method, **kwargs)
 
                 # Success! Boost this engine's health
                 self._engine_health[engine] = min(1.0, self._engine_health[engine] + 0.1)
@@ -163,12 +167,18 @@ class SmartFetcher:
                 self.logger.info(
                     "Fetch successful",
                     engine=engine.value,
-                    status=getattr(response, 'status', 'N/A'),
+                    status=getattr(response, 'status', getattr(response, 'status_code', 'N/A')),
                     size_bytes=len(getattr(response, 'text', '')),
                     health=f"{self._engine_health[engine]:.2f}"
                 )
 
                 # Add metadata to response for tracking
+                if not hasattr(response, 'metadata'):
+                    try:
+                        response.metadata = {}
+                    except AttributeError:
+                        pass
+
                 if hasattr(response, 'metadata'):
                     response.metadata['engine_used'] = engine.value
 
@@ -202,7 +212,7 @@ class SmartFetcher:
 
         raise Exception(f"All fetch engines failed. Last error: {last_error}")
 
-    def _get_ordered_engines(self) -> list[BrowserEngine]:
+    def _get_ordered_engines(self) -> List[BrowserEngine]:
         """Get engines sorted by health score (best first)"""
         return sorted(
             BrowserEngine,
@@ -231,10 +241,7 @@ class SmartFetcher:
 
         elif engine == BrowserEngine.PLAYWRIGHT:
             if not ASYNC_SESSIONS_AVAILABLE:
-                # Fallback to sync but it will likely fail in asyncio loop
-                from scrapling import StealthyFetcher
-                self._fetchers[engine] = StealthyFetcher
-                return self._fetchers[engine]
+                raise ImportError("AsyncDynamicSession not available")
 
             fetcher = AsyncDynamicSession(
                 headless=True,
@@ -244,37 +251,43 @@ class SmartFetcher:
             self._fetchers[engine] = fetcher
 
         else:  # HTTPX
-            # Use AsyncFetcher for async context
-            self._fetchers[engine] = AsyncFetcher()
+            if self._httpx_client is None:
+                self._httpx_client = httpx.AsyncClient(follow_redirects=True)
+            return self._httpx_client
 
         return self._fetchers[engine]
 
-    async def _fetch_with_engine(self, fetcher, engine: BrowserEngine, url: str, method: str = "GET", **kwargs):
+    async def _fetch_with_engine(self, engine: BrowserEngine, url: str, method: str = "GET", **kwargs):
         """Execute fetch with timeout and retry logic"""
 
         for attempt in range(self.strategy.max_retries):
             try:
-                # Handle Async engines specially
-                if engine == BrowserEngine.CAMOUFOX or (engine == BrowserEngine.PLAYWRIGHT and ASYNC_SESSIONS_AVAILABLE):
+                fetcher = await self._get_fetcher(engine)
+
+                if engine == BrowserEngine.HTTPX:
+                    # Use httpx directly to avoid scrapling 0.3.x empty response bug
+                    response = await self._httpx_client.request(
+                        method, url, timeout=self.strategy.timeout, **kwargs
+                    )
+                    # Add status attribute for compatibility with scrapling response
+                    response.status = response.status_code
+                else:
                     # Browser engines (fetch)
                     response = await asyncio.wait_for(
                         fetcher.fetch(url, **kwargs),
                         timeout=self.strategy.timeout
                     )
-                elif engine == BrowserEngine.PLAYWRIGHT:
-                    # Sync fallback (likely to fail in asyncio loop)
-                    response = fetcher.fetch(url, **kwargs)
-                else:
-                    # AsyncFetcher for HTTPX (supports GET, POST, etc.)
-                    fetch_method = getattr(fetcher, method.lower(), fetcher.get)
-                    response = await asyncio.wait_for(
-                        fetch_method(url, **kwargs),
-                        timeout=self.strategy.timeout
-                    )
 
                 # Check for HTTP errors
-                if hasattr(response, 'status') and response.status >= 400:
-                    raise FetchError(f"HTTP {response.status}", response=response)
+                status = getattr(response, 'status', getattr(response, 'status_code', 200))
+                if status >= 400:
+                    raise FetchError(f"HTTP {status}", response=response)
+
+                # Check for empty response which is often a failure in this context
+                if not getattr(response, 'text', ''):
+                    # For browser engines, size 0 usually means something went wrong
+                    if engine != BrowserEngine.HTTPX:
+                         self.logger.warning("Received empty response body from browser engine", url=url, engine=engine.value)
 
                 return response
 
@@ -301,8 +314,15 @@ class SmartFetcher:
                 if engine == BrowserEngine.CAMOUFOX and isinstance(fetcher, AsyncStealthySession):
                     await fetcher.close()
                     self.logger.debug("Closed Camoufox session")
+                elif engine == BrowserEngine.PLAYWRIGHT and isinstance(fetcher, AsyncDynamicSession):
+                    await fetcher.close()
+                    self.logger.debug("Closed Playwright session")
             except Exception as e:
                 self.logger.warning(f"Error closing {engine.value}: {e}")
+
+        if self._httpx_client:
+            await self._httpx_client.aclose()
+            self._httpx_client = None
 
         self._fetchers.clear()
 
@@ -319,35 +339,3 @@ class SmartFetcher:
             "best_engine": self._get_ordered_engines()[0].value,
             "camoufox_available": CAMOUFOX_AVAILABLE
         }
-
-
-# Example usage in adapters
-if __name__ == "__main__":
-    async def test_smart_fetcher():
-        """Test the SmartFetcher"""
-
-        fetcher = SmartFetcher(
-            FetchStrategy(
-                primary_engine=BrowserEngine.PLAYWRIGHT,
-                block_resources=True,
-                timeout=30
-            )
-        )
-
-        try:
-            # Test fetch
-            response = await fetcher.fetch("https://httpbin.org/html")
-            print(f"✅ Fetch successful: {response.status}")
-            print(f"Content length: {len(response.text)} bytes")
-
-            # Show health report
-            health = fetcher.get_health_report()
-            print(f"\n📊 Health Report:")
-            for engine, status in health["engines"].items():
-                print(f"  {engine}: {status['health']:.2f} ({status['status']})")
-            print(f"  Best engine: {health['best_engine']}")
-
-        finally:
-            await fetcher.close()
-
-    asyncio.run(test_smart_fetcher())
