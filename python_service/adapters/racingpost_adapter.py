@@ -15,6 +15,7 @@ from ..utils.odds import parse_odds_to_decimal
 from ..utils.text import clean_text
 from ..utils.text import normalize_venue_name
 from .base_adapter_v3 import BaseAdapterV3
+from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy, StealthMode
 
 
 class RacingPostAdapter(BaseAdapterV3):
@@ -28,13 +29,25 @@ class RacingPostAdapter(BaseAdapterV3):
     def __init__(self, config=None):
         super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
 
+    def _configure_fetch_strategy(self) -> FetchStrategy:
+        """
+        RacingPost has strong anti-bot measures. We need to use a full
+        browser with the highest stealth settings to avoid being blocked.
+        """
+        return FetchStrategy(
+            primary_engine=BrowserEngine.PLAYWRIGHT,
+            enable_js=True,
+            stealth_mode=StealthMode.CAMOUFLAGE,  # Strongest stealth
+            block_resources=False,  # Load all resources to appear more human
+        )
+
     async def _fetch_data(self, date: str) -> Any:
         """
         Fetches the raw HTML content for all races on a given date.
         """
         index_url = f"/racecards/{date}"
-        index_response = await self.make_request(self.http_client, "GET", index_url, headers=self._get_headers())
-        if not index_response:
+        index_response = await self.make_request("GET", index_url, headers=self._get_headers())
+        if not index_response or not index_response.text:
             self.logger.warning("Failed to fetch RacingPost index page", url=index_url)
             return None
 
@@ -43,7 +56,7 @@ class RacingPostAdapter(BaseAdapterV3):
         race_card_urls = [link.attributes["href"] for link in links]
 
         async def fetch_single_html(url: str):
-            response = await self.make_request(self.http_client, "GET", url, headers=self._get_headers())
+            response = await self.make_request("GET", url, headers=self._get_headers())
             return response.text if response else ""
 
         tasks = [fetch_single_html(url) for url in race_card_urls]
@@ -149,8 +162,19 @@ class RacingPostAdapter(BaseAdapterV3):
 
     def _get_headers(self) -> dict:
         return {
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/107.0.0.0 Safari/537.36"
-            )
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Host": "www.racingpost.com",
+            "Pragma": "no-cache",
+            "sec-ch-ua": '"Google Chrome";v="125", "Chromium";v="125", "Not.A/Brand";v="24"',
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": '"Windows"',
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "none",
+            "Sec-Fetch-User": "?1",
+            "Upgrade-Insecure-Requests": "1",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
         }

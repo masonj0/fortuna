@@ -230,7 +230,7 @@ class AtTheRacesAdapter(BaseAdapterV3):
         # Extract race number from URL
         # Pattern: /racecard/GB/Cheltenham/2024-01-26/1430/1
         race_number_match = re.search(
-            r'/racecard/[A-Z]{2}/[A-Za-z-]+/\\d{4}-\\d{2}-\\d{2}/\\d{4}/(\\d+)',
+            r'/racecard/[A-Z]{2}/[A-Za-z-]+/\d{4}-\d{2}-\d{2}/\d{4}/(\d+)',
             url_path
         )
         race_number = int(race_number_match.group(1)) if race_number_match else 1

@@ -21,9 +21,17 @@ from tenacity import (
     wait_exponential,
 )
 
+from python_service.core.smart_fetcher import (
+    BrowserEngine,
+    FetchStrategy,
+    SmartFetcher,
+    StealthMode,
+)
+
 from ..core.exceptions import AdapterHttpError, AdapterParsingError
 from ..manual_override_manager import ManualOverrideManager
 from ..models import Race
+from ..validators import DataValidationPipeline
 
 T = TypeVar("T")
 
@@ -299,6 +307,10 @@ class BaseAdapterV3(ABC):
         self.cache = ResponseCache(default_ttl=cache_ttl) if enable_cache else None
         self.metrics = AdapterMetrics()
 
+        # New SmartFetcher integration
+        self.fetch_strategy = self._configure_fetch_strategy()
+        self.smart_fetcher = SmartFetcher(strategy=self.fetch_strategy)
+
     async def __aenter__(self) -> "BaseAdapterV3":
         """Async context manager entry."""
         if self.http_client is None:
@@ -310,10 +322,12 @@ class BaseAdapterV3(ABC):
         await self.close()
 
     async def close(self) -> None:
-        """Clean up resources."""
+        """Clean up resources, including the SmartFetcher."""
         if self.http_client:
             await self.http_client.aclose()
             self.http_client = None
+        if hasattr(self, "smart_fetcher"):
+            await self.smart_fetcher.close()
         if self.cache:
             await self.cache.clear()
         self.logger.debug("Adapter resources cleaned up")
@@ -370,117 +384,175 @@ class BaseAdapterV3(ABC):
 
     def _validate_and_parse_races(self, raw_data: Any) -> list[Race]:
         self.attempted_url = None  # Reset for each new get_races call
+        is_valid, reason = DataValidationPipeline.validate_raw_response(self.source_name, raw_data)
+        if not is_valid:
+            raise AdapterParsingError(self.source_name, f"Raw response validation failed: {reason}")
 
         try:
             parsed_races = self._parse_races(raw_data)
         except Exception as e:
-            self.logger.error("Failed to parse race data", error=str(e))
+            self.logger.error("Failed to parse race data", error=str(e), exc_info=True)
+            # Save a snapshot of the problematic data on parsing failure
+            self._save_debug_snapshot(
+                content=str(raw_data),
+                context="parsing_error",
+                url=getattr(e, 'url', self.attempted_url)
+            )
             raise AdapterParsingError(self.source_name, "Parsing logic failed.") from e
 
-        return parsed_races
+        validated_races, warnings = DataValidationPipeline.validate_parsed_races(parsed_races)
 
-    async def make_request(
-        self,
-        method: str,
-        url: str,
-        use_cache: bool = True,
-        cache_ttl: float | None = None,
-        **kwargs,
-    ) -> httpx.Response:
+        if warnings:
+            self.logger.warning("Validation warnings during parsing", warnings=warnings)
+
+        return validated_races
+
+    def _configure_fetch_strategy(self) -> FetchStrategy:
         """
-        Makes a resilient HTTP request with circuit breaker, rate limiting, caching, and retries.
+        Defines the fetching strategy for this adapter. Subclasses should override
+        this method to customize fetching behavior based on the target website's
+        characteristics (e.g., anti-bot measures, JavaScript requirements).
+
+        Example Overrides:
+        - SportingLife: Needs JS rendering -> primary_engine=BrowserEngine.PLAYWRIGHT
+        - AtTheRaces: Simple HTML -> primary_engine=BrowserEngine.HTTPX
+        - RacingPost: Strong anti-bot -> stealth_mode=StealthMode.CAMOUFLAGE
+        """
+        return FetchStrategy(
+            primary_engine=BrowserEngine.PLAYWRIGHT,
+            enable_js=True,
+            stealth_mode=StealthMode.FAST,
+            block_resources=True,
+            max_retries=3,
+            timeout=30,
+        )
+
+    async def make_request(self, method: str, url: str, **kwargs) -> httpx.Response:
+        """
+        Performs a web request using the SmartFetcher, which intelligently
+        manages browser engines, retries, and stealth capabilities. This method
+        replaces the previous direct-httpx implementation.
         """
         full_url = url if url.startswith("http") else f"{self.base_url}/{url.lstrip('/')}"
-        if self.attempted_url is None:
-            self.attempted_url = full_url
-
-        # Check cache first for GET requests
-        if use_cache and self.cache and method.upper() == "GET":
-            cached = await self.cache.get(method, full_url, **kwargs)
-            if cached is not None:
-                self.logger.debug("Cache hit", url=full_url)
-                return cached
-
-        @retry(
-            retry=retry_if_exception_type((httpx.RequestError, httpx.HTTPStatusError)),
-            wait=wait_exponential(multiplier=1, min=2, max=10),
-            stop=stop_after_attempt(3),
-            reraise=True,
-        )
-        async def _attempt_request():
-            # Check circuit breaker before each attempt
-            if not await self.circuit_breaker.allow_request():
-                self.logger.warning("Circuit breaker open, rejecting request", url=full_url)
-                raise AdapterHttpError(
-                    adapter_name=self.source_name,
-                    status_code=503,
-                    url=full_url,
-                    message="Circuit breaker is open",
-                )
-
-            # Apply rate limiting and a small random delay
-            await self.rate_limiter.acquire()
-            await asyncio.sleep(random.uniform(0.5, 2.5))
-
-            headers = {
-                "User-Agent": self.DEFAULT_USER_AGENT,
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
-                "Accept-Language": "en-US,en;q=0.9",
-                "Referer": "https://www.google.com/",
-                "DNT": "1",
-                "Upgrade-Insecure-Requests": "1",
-                **kwargs.get("headers", {}),
-            }
-
-            start_time = time.monotonic()
-            try:
-                self.logger.info("Making request attempt", method=method.upper(), url=full_url)
-                response = await self.http_client.request(
-                    method, full_url, timeout=self.timeout, **kwargs
-                )
-                response.raise_for_status()
-
-                latency_ms = (time.monotonic() - start_time) * 1000
-                await self.metrics.record_success(latency_ms)
-                await self.circuit_breaker.record_success()
-
-                self.logger.info("Request successful", method=method.upper(), url=full_url, status_code=response.status_code)
-
-                return response
-            except httpx.HTTPStatusError as e:
-                await self.metrics.record_failure(f"HTTP {e.response.status_code}")
-                await self.circuit_breaker.record_failure()
-                raise  # Re-raise to trigger tenacity retry
-            except httpx.RequestError as e:
-                await self.metrics.record_failure(str(e))
-                await self.circuit_breaker.record_failure()
-                raise  # Re-raise to trigger tenacity retry
+        self.attempted_url = full_url
 
         try:
-            response = await _attempt_request()
+            # The SmartFetcher handles caching, retries, circuit breaking, etc.
+            response = await self.smart_fetcher.fetch(full_url, method=method, **kwargs)
 
-            # Cache successful GET responses
-            if use_cache and self.cache and method.upper() == "GET":
-                await self.cache.set(method, full_url, response, ttl=cache_ttl, **kwargs)
-
+            # Log success with rich metadata from the fetcher
+            self.logger.info(
+                "Request successful",
+                url=full_url,
+                status=getattr(response, "status", "N/A"),
+                size_bytes=len(getattr(response, "text", "")),
+                engine=getattr(response, "metadata", {}).get("engine_used", "unknown"),
+            )
             return response
-        except (RetryError, httpx.HTTPStatusError) as e:
-            final_exception = e.last_attempt.exception() if isinstance(e, RetryError) else e
-            self.logger.error("Request failed after multiple retries", error=str(final_exception))
 
-            if isinstance(final_exception, httpx.HTTPStatusError):
-                raise AdapterHttpError(
-                    adapter_name=self.source_name,
-                    status_code=final_exception.response.status_code,
-                    url=str(final_exception.request.url),
-                    message=f"HTTP {final_exception.response.status_code}: {final_exception.response.reason_phrase}",
-                    response_body=final_exception.response.text[:500] if final_exception.response.text else None,
-                    request_method=method.upper(),
-                ) from final_exception
-            else:
-                raise AdapterHttpError(
-                    adapter_name=self.source_name, status_code=503, url=full_url
-                ) from final_exception
+        except Exception as e:
+            # Log failure with detailed diagnostics from the fetcher
+            self.logger.error(
+                "Request failed after all retries and engine fallbacks",
+                url=full_url,
+                error=str(e),
+                error_type=type(e).__name__,
+                health_report=self.smart_fetcher.get_health_report(),
+            )
+
+            # Save a snapshot if we have a response body in the error
+            if hasattr(e, 'response') and hasattr(e.response, 'text'):
+                self._save_debug_snapshot(
+                    content=e.response.text,
+                    context=f"request_failed_{getattr(e.response, 'status', 'unknown')}",
+                    url=full_url
+                )
+
+            # Re-raise as a standard adapter error for consistent downstream handling
+            status_code = getattr(getattr(e, 'response', None), 'status', 503)
+            raise AdapterHttpError(
+                adapter_name=self.source_name, status_code=status_code, url=full_url
+            ) from e
+
+    def _should_save_debug_html(self) -> bool:
+        """Determines if the current environment is suitable for saving debug files."""
+        import os
+        return os.getenv("CI") == "true" or os.getenv("DEBUG_MODE") == "true"
+
+    def _save_debug_snapshot(self, content: str, context: str, url: str | None = None):
+        """
+        Saves HTML or other text content to a file for debugging purposes.
+        Enhanced to include metadata and better organization.
+        """
+        if not self._should_save_debug_html():
+            return
+
+        import os
+        import re
+        import json
+        from datetime import datetime
+
+        try:
+            debug_dir = os.path.join("debug-snapshots", self.source_name.lower())
+            os.makedirs(debug_dir, exist_ok=True)
+
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+
+            # Sanitize context and URL for a safe filename
+            sanitized_context = re.sub(r'[\\/*?:"<>|]', "_", context)
+            sanitized_url = ""
+            if url:
+                # Remove protocol and query params for filename
+                clean_url = re.sub(r'https?://(www\.)?', '', url).split('?')[0]
+                # Avoid backslashes in f-string for Python < 3.12 compatibility
+                url_part = re.sub(r'[\\/*?:\x22<>|]', '_', clean_url)[:60]
+                sanitized_url = f"_{url_part}"
+
+            base_filename = f"{timestamp}_{sanitized_context}{sanitized_url}"
+
+            # Save the main content (HTML/JSON)
+            content_ext = ".json" if content.startswith(("{", "[")) else ".html"
+            filepath = os.path.join(debug_dir, f"{base_filename}{content_ext}")
+
+            with open(filepath, "w", encoding="utf-8") as f:
+                f.write(content)
+
+            # Save metadata for better diagnostic context
+            meta_path = os.path.join(debug_dir, f"{base_filename}_meta.json")
+            meta = {
+                "timestamp": datetime.now().isoformat(),
+                "adapter": self.source_name,
+                "url": url or self.attempted_url,
+                "context": context,
+                "engine": getattr(self.smart_fetcher, 'last_engine', 'unknown'),
+                "health_report": self.smart_fetcher.get_health_report()
+            }
+            with open(meta_path, "w", encoding="utf-8") as f:
+                json.dump(meta, f, indent=2)
+
+            self.logger.info("Saved debug snapshot and metadata",
+                             filepath=filepath, meta_path=meta_path)
+
+            # Prune old snapshots (keep last 50)
+            self._prune_debug_snapshots(debug_dir, max_files=100)
+
+        except Exception as e:
+            self.logger.warning("Failed to save debug snapshot", error=str(e))
+
+    def _prune_debug_snapshots(self, debug_dir: str, max_files: int = 100):
+        """Keep the number of debug files under control."""
+        import os
+        try:
+            files = [os.path.join(debug_dir, f) for f in os.listdir(debug_dir)]
+            if len(files) <= max_files:
+                return
+
+            # Sort by modification time (oldest first)
+            files.sort(key=os.path.getmtime)
+            for f in files[:-max_files]:
+                os.remove(f)
+        except Exception:
+            pass
 
     async def health_check(self) -> dict[str, Any]:
         """

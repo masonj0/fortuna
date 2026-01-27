@@ -49,7 +49,7 @@ class OddscheckerAdapter(BaseAdapterV3):
         race_links = {a["href"] for a in index_soup.select("a.race-time-link[href]")}
 
         async def fetch_single_html(url_path: str):
-            response = await self.make_request(self.http_client, "GET", url_path, headers=self._get_headers())
+            response = await self.make_request("GET", url_path, headers=self._get_headers())
             return response.text if response else ""
 
         tasks = [fetch_single_html(link) for link in race_links]

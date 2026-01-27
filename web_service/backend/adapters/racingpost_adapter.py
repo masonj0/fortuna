@@ -56,7 +56,7 @@ class RacingPostAdapter(BaseAdapterV3):
         race_card_urls = [link.attributes["href"] for link in links]
 
         async def fetch_single_html(url: str):
-            response = await self.make_request(self.http_client, "GET", url, headers=self._get_headers())
+            response = await self.make_request("GET", url, headers=self._get_headers())
             return response.text if response else ""
 
         tasks = [fetch_single_html(url) for url in race_card_urls]

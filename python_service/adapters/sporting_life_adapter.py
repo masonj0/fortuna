@@ -6,8 +6,7 @@ from typing import Any
 from typing import List
 from typing import Optional
 
-from bs4 import BeautifulSoup
-from bs4 import Tag
+from selectolax.parser import HTMLParser, Node
 
 from ..models import OddsData
 from ..models import Race
@@ -15,6 +14,7 @@ from ..models import Runner
 from ..utils.odds import parse_odds_to_decimal
 from ..utils.text import clean_text
 from .base_adapter_v3 import BaseAdapterV3
+from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy, StealthMode
 
 
 class SportingLifeAdapter(BaseAdapterV3):
@@ -28,27 +28,68 @@ class SportingLifeAdapter(BaseAdapterV3):
     def __init__(self, config=None):
         super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
 
+    def _configure_fetch_strategy(self) -> FetchStrategy:
+        """
+        SportingLife requires JavaScript rendering to get the race links,
+        so we must use a full browser engine like Playwright.
+        """
+        return FetchStrategy(
+            primary_engine=BrowserEngine.PLAYWRIGHT,
+            enable_js=True,
+            stealth_mode=StealthMode.FAST,
+            block_resources=True
+        )
+
     async def _fetch_data(self, date: str) -> Optional[dict]:
         """
         Fetches the raw HTML for all race pages for a given date.
         Returns a dictionary containing the HTML content and the date.
         """
-        index_url = f"/horse-racing/racecards/{date}"
-        index_response = await self.make_request(self.http_client, "GET", index_url)
+        index_url = "/racing/racecards"  # The dated URL is causing a 307 redirect
+        index_response = await self.make_request(
+            "GET",
+            index_url,
+            headers=self._get_headers(),
+            follow_redirects=True,
+        )
         if not index_response:
             self.logger.warning("Failed to fetch SportingLife index page", url=index_url)
             return None
 
-        index_soup = BeautifulSoup(index_response.text, "html.parser")
-        links = {a["href"] for a in index_soup.select("a.hr-race-card-meeting__race-link[href]")}
+        parser = HTMLParser(index_response.text)
+        links = {
+            a.attributes["href"]
+            for a in parser.css('li[class^="MeetingSummary__LineWrapper"] a[href*="/racecard/"]')
+            if a.attributes.get("href")
+        }
 
         async def fetch_single_html(url_path: str):
-            response = await self.make_request(self.http_client, "GET", url_path)
+            response = await self.make_request("GET", url_path, headers=self._get_headers())
             return response.text if response else ""
 
         tasks = [fetch_single_html(link) for link in links]
         html_pages = await asyncio.gather(*tasks)
         return {"pages": html_pages, "date": date}
+
+    def _get_headers(self) -> dict:
+        return {
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Host": "www.sportinglife.com",
+            "Pragma": "no-cache",
+            "sec-ch-ua": '"Not/A)Brand";v="99", "Google Chrome";v="115", "Chromium";v="115"',
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": '"Windows"',
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "none",
+            "Sec-Fetch-User": "?1",
+            "Upgrade-Insecure-Requests": "1",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36",
+            "Referer": "https://www.sportinglife.com/racing/racecards",
+        }
 
     def _parse_races(self, raw_data: Any) -> List[Race]:
         """Parses a list of raw HTML strings into Race objects."""
@@ -69,30 +110,35 @@ class SportingLifeAdapter(BaseAdapterV3):
             if not html:
                 continue
             try:
-                soup = BeautifulSoup(html, "html.parser")
+                parser = HTMLParser(html)
 
-                track_name_node = soup.select_one("a.hr-race-header-course-name__link")
-                if not track_name_node:
+                header = parser.css_first('h1[class*="RacingRacecardHeader__Title"]')
+                if not header:
+                    self.logger.warning("Could not find race header.")
                     continue
-                track_name = clean_text(track_name_node.get_text())
 
-                race_time_node = soup.select_one("span.hr-race-header-time__time")
-                if not race_time_node:
-                    continue
-                race_time_str = clean_text(race_time_node.get_text())
+                header_text = clean_text(header.text())
+                parts = header_text.split()
+                race_time_str = parts[0]
+                track_name = " ".join(parts[1:])
 
                 start_time = datetime.combine(race_date, datetime.strptime(race_time_str, "%H:%M").time())
 
-                active_link = soup.select_one("a.hr-race-header-navigation-link--active")
                 race_number = 1
-                if active_link:
-                    all_links = soup.select("a.hr-race-header-navigation-link")
+                nav_links = parser.css('a[class*="SubNavigation__Link"]')
+                active_link = parser.css_first('a[class*="SubNavigation__Link--active"]')
+                if active_link and nav_links:
                     try:
-                        race_number = all_links.index(active_link) + 1
-                    except ValueError:
-                        pass  # Keep default race number if active link not in all links
+                        # Find the index of active_link in nav_links
+                        # Selectolax nodes don't support equality easily, so we compare HTML or attributes
+                        for idx, link in enumerate(nav_links):
+                            if link.html == active_link.html:
+                                race_number = idx + 1
+                                break
+                    except Exception:
+                        self.logger.warning("Error finding active race link index.")
 
-                runners = [self._parse_runner(row) for row in soup.select("div.hr-racing-runner-card")]
+                runners = [self._parse_runner(row) for row in parser.css('div[class*="RunnerCard"]')]
 
                 race = Race(
                     id=f"sl_{track_name.replace(' ', '')}_{start_time.strftime('%Y%m%d')}_R{race_number}",
@@ -103,7 +149,7 @@ class SportingLifeAdapter(BaseAdapterV3):
                     source=self.source_name,
                 )
                 all_races.append(race)
-            except (AttributeError, ValueError):
+            except (AttributeError, ValueError) as e:
                 self.logger.warning(
                     "Error parsing a race from SportingLife, skipping race.",
                     exc_info=True,
@@ -111,21 +157,21 @@ class SportingLifeAdapter(BaseAdapterV3):
                 continue
         return all_races
 
-    def _parse_runner(self, row: Tag) -> Optional[Runner]:
+    def _parse_runner(self, row: Node) -> Optional[Runner]:
         try:
-            name_node = row.select_one("a.hr-racing-runner-horse-name")
+            name_node = row.css_first('a[href*="/racing/profiles/horse/"]')
             if not name_node:
                 return None
-            name = clean_text(name_node.get_text())
+            name = clean_text(name_node.text()).splitlines()[0].strip()
 
-            num_node = row.select_one("span.hr-racing-runner-saddle-cloth-no")
+            num_node = row.css_first('span[class*="SaddleCloth__Number"]')
             if not num_node:
                 return None
-            num_str = clean_text(num_node.get_text())
+            num_str = clean_text(num_node.text())
             number = int("".join(filter(str.isdigit, num_str)))
 
-            odds_node = row.select_one("span.hr-racing-runner-odds")
-            odds_str = clean_text(odds_node.get_text()) if odds_node else ""
+            odds_node = row.css_first('span[class*="Odds__Price"]')
+            odds_str = clean_text(odds_node.text()) if odds_node else ""
 
             win_odds = parse_odds_to_decimal(odds_str)
             odds_data = (

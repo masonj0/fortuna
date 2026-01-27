@@ -32,7 +32,7 @@ class TheRacingApiAdapter(BaseAdapterV3):
         """Fetches the raw racecard data from The Racing API."""
         endpoint = f"racecards?date={date}&course=all&region=gb,ire"
         headers = {"Authorization": f"Bearer {self.api_key}"}
-        response = await self.make_request(self.http_client, "GET", endpoint, headers=headers)
+        response = await self.make_request("GET", endpoint, headers=headers)
         return response.json() if response else None
 
     def _parse_races(self, raw_data: Optional[Dict[str, Any]]) -> List[Race]:

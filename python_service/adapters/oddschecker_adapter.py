@@ -32,22 +32,48 @@ class OddscheckerAdapter(BaseAdapterV3):
         # Note: Oddschecker doesn't seem to support historical dates well in its main nav,
         # but we build the URL as if it does for future compatibility.
         index_url = f"/horse-racing/{date}"
-        index_response = await self.make_request(self.http_client, "GET", index_url)
-        if not index_response:
+        index_response = await self.make_request("GET", index_url, headers=self._get_headers())
+        if not index_response or not index_response.text:
             self.logger.warning("Failed to fetch Oddschecker index page", url=index_url)
             return None
+
+        # Save the raw HTML for debugging in CI
+        try:
+            with open("oddschecker_debug.html", "w", encoding="utf-8") as f:
+                f.write(index_response.text)
+        except Exception as e:
+            self.logger.warning("Failed to save debug HTML for Oddschecker", error=str(e))
 
         index_soup = BeautifulSoup(index_response.text, "html.parser")
         # Find all links to individual race pages
         race_links = {a["href"] for a in index_soup.select("a.race-time-link[href]")}
 
         async def fetch_single_html(url_path: str):
-            response = await self.make_request(self.http_client, "GET", url_path)
+            response = await self.make_request("GET", url_path, headers=self._get_headers())
             return response.text if response else ""
 
         tasks = [fetch_single_html(link) for link in race_links]
         html_pages = await asyncio.gather(*tasks)
         return {"pages": html_pages, "date": date}
+
+    def _get_headers(self) -> dict:
+        return {
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'Host': 'www.oddschecker.com',
+            'Pragma': 'no-cache',
+            'sec-ch-ua': '"Google Chrome";v="125", "Chromium";v="125", "Not.A/Brand";v="24"',
+            'sec-ch-ua-mobile': '?0',
+            'sec-ch-ua-platform': '"Windows"',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+            'Upgrade-Insecure-Requests': '1',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+        }
 
     def _parse_races(self, raw_data: Any) -> List[Race]:
         """Parses a list of raw HTML strings from different races into Race objects."""
