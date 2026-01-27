@@ -47,8 +47,8 @@ on:
     - cron: '30 */2 * * *'
 
 concurrency:
-  group: race-report-${{ github.ref }}
-  cancel-in-progress: true
+  group: race-report-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
 
 env:
   PYTHON_VERSION: '3.10.12'
@@ -169,6 +169,17 @@ jobs:
           cache: 'pip'
           cache-dependency-path: 'web_service/backend/requirements.txt'
 
+      - name: '🔄 Cache Browsers'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/ms-playwright
+            ~/.camoufox
+          key: browsers-canary-${{ runner.os }}-${{ hashFiles('web_service/backend/requirements.txt') }}
+          restore-keys: |
+            browsers-canary-${{ runner.os }}-
+            browsers-${{ runner.os }}-
+
       - name: 'Install Dependencies'
         run: |
           pip install --upgrade pip
@@ -229,6 +240,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     needs: [setup, canary-check]
+    # Resource hints for GitHub runners
+    # Note: 'resources' is not a standard top-level job key in standard GHA,
+    # but some enterprise/self-hosted runners use it. For standard runners
+    # we just use ubuntu-latest.
     # Run if: full report requested AND (canary passed OR canary was skipped OR canary status is not unhealthy)
     if: |
       always() &&
@@ -258,6 +273,16 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
           cache-dependency-path: 'web_service/backend/requirements.txt'
+
+      - name: '🔄 Cache Browsers'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/ms-playwright
+            ~/.camoufox
+          key: browsers-${{ runner.os }}-${{ hashFiles('web_service/backend/requirements.txt') }}
+          restore-keys: |
+            browsers-${{ runner.os }}-
 
       - name: '🖥️ Install System Dependencies'
         run: |
@@ -392,9 +417,12 @@ jobs:
           path: |
             browser_selector_state.json
             anomaly_history.json
+            adapter_stats.json
             web_service/backend/cache/
-          key: state-${{ runner.os }}-${{ github.run_number }}
+          # Deduplicated cache key based on force_refresh
+          key: state-${{ runner.os }}-${{ inputs.force_refresh || 'false' }}-${{ github.run_number }}
           restore-keys: |
+            state-${{ runner.os }}-${{ inputs.force_refresh || 'false' }}-
             state-${{ runner.os }}-
 
       - name: '🚀 Run Unified Reporter'
@@ -404,6 +432,8 @@ jobs:
           ANALYZER_TYPE: ${{ inputs.analyzer_type || 'tiny_field_trifecta' }}
           FORCE_REFRESH: ${{ inputs.force_refresh || 'false' }}
           DEBUG_MODE: ${{ inputs.debug_mode || 'false' }}
+          RUN_MODE: ${{ inputs.run_mode || 'full' }}
+          CANARY_HEALTH: ${{ needs.canary-check.outputs.health_status }}
           MAX_RETRIES: ${{ env.MAX_RETRIES }}
           REQUEST_TIMEOUT: ${{ env.REQUEST_TIMEOUT }}
           CAMOUFOX_AVAILABLE: ${{ steps.install-browsers.outputs.camoufox_available }}
@@ -417,12 +447,12 @@ jobs:
           echo "Analyzer: $ANALYZER_TYPE"
           echo "Force Refresh: $FORCE_REFRESH"
           echo "Debug Mode: $DEBUG_MODE"
-          echo "Camoufox Available: $CAMOUFOX_AVAILABLE"
-          echo "Chromium Available: $CHROMIUM_AVAILABLE"
-          echo "Firefox Available: $FIREFOX_AVAILABLE"
+          echo "Run Mode: $RUN_MODE"
+          echo "Canary Health: $CANARY_HEALTH"
           echo ""
 
-          python scripts/fortuna_reporter.py 2>&1 | tee reporter_output.log
+          # Use retry wrapper for job-level resilience
+          bash scripts/retry_with_backoff.sh python scripts/fortuna_reporter.py 2>&1 | tee reporter_output.log
           EXIT_CODE=${PIPESTATUS[0]}
 
           # Extract results
@@ -452,13 +482,6 @@ jobs:
 
           exit $EXIT_CODE
 
-      - name: '✅ Validate Output'
-        if: success() && steps.run-reporter.outputs.status == 'success'
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
-          python scripts/validate_output.py
-
       - name: '📊 Upload Artifacts'
         if: always()
         uses: actions/upload-artifact@v4
@@ -477,10 +500,11 @@ jobs:
             browser_selector_state.json
             anomaly_history.json
             canary_result.json
+            report-metadata.json
             *_debug.html
             debug-output/
           retention-days: ${{ env.REPORT_RETENTION_DAYS }}
-          if-no-files-found: ignore
+          if-no-files-found: warn
           compression-level: 9
 
       - name: '📝 Generate Summary'
@@ -490,18 +514,47 @@ jobs:
         run: |
           python scripts/generate_summary.py >> $GITHUB_STEP_SUMMARY
 
-      - name: '🧹 Cleanup'
-        if: always()
+  # Dedicated validation stage
+  validate-results:
+    needs: generate-unified-report
+    runs-on: ubuntu-latest
+    if: always() && needs.generate-unified-report.result != 'skipped'
+    steps:
+      - uses: actions/checkout@v4
+      - name: 'Setup Python'
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: 'Download Results'
+        uses: actions/download-artifact@v4
+        with:
+          name: race-reports-${{ github.run_number }}
+      - name: '✅ Schema & Quality Validation'
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/validate_output.py
+
+  # Workflow run cleanup
+  cleanup:
+    needs: [generate-unified-report, validate-results]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: '🧹 System Cleanup'
         run: |
           sudo pkill -9 Xvfb || true
+          df -h | grep '^/dev/'
+          echo "Cleanup complete"
 
   # Notification job
   notify:
-    needs: [setup, generate-unified-report, canary-check]
+    needs: [setup, generate-unified-report, canary-check, validate-results]
     runs-on: ubuntu-latest
     if: |
       always() && (
         needs.generate-unified-report.result == 'failure' ||
+        needs.validate-results.result == 'failure' ||
         needs.canary-check.outputs.should_alert == 'true'
       )
 
@@ -511,9 +564,14 @@ jobs:
         with:
           script: |
             const today = new Date().toISOString().split('T')[0];
-            const title = `🚨 Race Pipeline Alert - ${today}`;
 
-            let body = `## Pipeline Alert\n\n`;
+            const isCritical = '${{ needs.generate-unified-report.result }}' === 'failure' ||
+                               '${{ needs.validate-results.result }}' === 'failure';
+
+            const title = `${isCritical ? '🚨 CRITICAL' : '⚠️ WARNING'}: Race Pipeline Alert - ${today}`;
+            const label = isCritical ? 'pipeline-alert:high' : 'pipeline-alert:low';
+
+            let body = `## Pipeline Alert (${isCritical ? 'CRITICAL' : 'WARNING'})\n\n`;
             body += `| Property | Value |\n`;
             body += `|----------|-------|\n`;
             body += `| Run | #${{ github.run_number }} |\n`;
@@ -565,6 +623,16 @@ jobs:
                 issue_number: existingIssue.number,
                 body: `## New Alert - Run #${{ github.run_number }}\n\n${body}`
               });
+
+              // Update labels if needed
+              if (isCritical) {
+                  await github.rest.issues.addLabels({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: existingIssue.number,
+                    labels: [label]
+                  });
+              }
               console.log(`Added comment to issue #${existingIssue.number}`);
             } else {
               // Create new issue
@@ -573,7 +641,7 @@ jobs:
                 repo: context.repo.repo,
                 title: title,
                 body: body,
-                labels: ['pipeline-alert', 'automated']
+                labels: ['automated', label]
               });
               console.log('Created new alert issue');
             }

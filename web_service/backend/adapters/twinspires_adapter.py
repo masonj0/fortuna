@@ -120,7 +120,11 @@ class TwinSpiresAdapter(BaseAdapterV3):
             elif backend == BrowserBackend.PLAYWRIGHT_FIREFOX:
                 self._sessions[backend] = AsyncStealthySession(headless=True, browser_type='firefox')
 
-            await self._sessions[backend].start()
+            try:
+                await self._sessions[backend].start()
+            except RuntimeError as e:
+                if "already has an active browser context" not in str(e):
+                    raise
         return self._sessions[backend]
 
     async def _fetch_with_retry(

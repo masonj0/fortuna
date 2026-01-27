@@ -76,7 +76,11 @@ class TwinSpiresAdapter(BaseAdapterV3):
                     block_webrtc=True,
                     google_search=True,
                 )
-                await self._session.start()
+                try:
+                    await self._session.start()
+                except RuntimeError as e:
+                    if "already has an active browser context" not in str(e):
+                        raise
                 self._session_type = "stealthy"
                 self.logger.info("Using StealthySession (Camoufox)")
                 return self._session, self._session_type

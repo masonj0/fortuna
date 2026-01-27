@@ -32,10 +32,10 @@ async def check_browser_basic() -> CanaryResult:
     start = time.perf_counter()
 
     try:
-        from scrapling import StealthyFetcher
+        from scrapling.fetchers import AsyncStealthySession
 
-        fetcher = StealthyFetcher()
-        response = fetcher.fetch('https://httpbin.org/status/200')
+        async with AsyncStealthySession(headless=True) as session:
+            response = await session.fetch('https://httpbin.org/status/200')
 
         latency = (time.perf_counter() - start) * 1000
 
@@ -59,13 +59,13 @@ async def check_twinspires() -> CanaryResult:
     start = time.perf_counter()
 
     try:
-        from scrapling import StealthyFetcher
+        from scrapling.fetchers import AsyncStealthySession
 
-        fetcher = StealthyFetcher()
-        response = fetcher.fetch(
-            'https://www.twinspires.com/bet/todays-races/time',
-            timeout=30000
-        )
+        async with AsyncStealthySession(headless=True) as session:
+            response = await session.fetch(
+                'https://www.twinspires.com/bet/todays-races/time',
+                timeout=30000
+            )
 
         latency = (time.perf_counter() - start) * 1000
 
