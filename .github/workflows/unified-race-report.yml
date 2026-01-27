@@ -135,7 +135,7 @@ jobs:
 
       - name: 'Run Security Scans'
         run: |
-          pip install pip-audit safety
+          pip install pip-audit safety bandit
 
           echo "=== pip-audit ==="
           pip-audit -r web_service/backend/requirements.txt \
@@ -146,6 +146,10 @@ jobs:
           echo "=== safety ==="
           safety check -r web_service/backend/requirements.txt --full-report \
             || echo "safety found issues (non-blocking)"
+
+          echo ""
+          echo "=== bandit ==="
+          bandit -r scripts/ web_service/ -f screen || echo "bandit found issues (non-blocking)"
 
   # Canary job - lightweight health check
   canary-check:
@@ -197,14 +201,15 @@ jobs:
 
       - name: 'Run Canary Check'
         id: canary
+        timeout-minutes: 10
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           python scripts/canary_check.py 2>&1 | tee canary_output.log
 
           if [ -f canary_result.json ]; then
-            HEALTH=$(python -c "import json; print(json.load(open('canary_result.json')).get('status', 'unknown'))")
-            RATE=$(python -c "import json; print(json.load(open('canary_result.json')).get('success_rate', '0%'))")
+            HEALTH=$(jq -r '.status // "unknown"' canary_result.json)
+            RATE=$(jq -r '.success_rate // "0%"' canary_result.json)
 
             echo "health_status=$HEALTH" >> $GITHUB_OUTPUT
             echo "success_rate=$RATE" >> $GITHUB_OUTPUT
@@ -427,6 +432,7 @@ jobs:
 
       - name: '🚀 Run Unified Reporter'
         id: run-reporter
+        timeout-minutes: 35
         env:
           PYTHONPATH: ${{ github.workspace }}
           ANALYZER_TYPE: ${{ inputs.analyzer_type || 'tiny_field_trifecta' }}
@@ -457,12 +463,12 @@ jobs:
 
           # Extract results
           if [ -f "qualified_races.json" ]; then
-            RACE_COUNT=$(python -c "import json; d=json.load(open('qualified_races.json')); print(len(d.get('races', [])))" 2>/dev/null || echo "0")
+            RACE_COUNT=$(jq '.races | length' qualified_races.json 2>/dev/null || echo "0")
             echo "race_count=${RACE_COUNT}" >> $GITHUB_OUTPUT
             echo "status=success" >> $GITHUB_OUTPUT
             echo "✅ Generated report with ${RACE_COUNT} qualified races"
           elif [ -f "raw_race_data.json" ]; then
-            RACE_COUNT=$(python -c "import json; d=json.load(open('raw_race_data.json')); print(len(d.get('races', [])))" 2>/dev/null || echo "0")
+            RACE_COUNT=$(jq '.races | length' raw_race_data.json 2>/dev/null || echo "0")
             echo "race_count=${RACE_COUNT}" >> $GITHUB_OUTPUT
             echo "status=partial" >> $GITHUB_OUTPUT
             echo "⚠️ Partial data: ${RACE_COUNT} races in raw data"
@@ -474,8 +480,9 @@ jobs:
 
           # Extract adapter stats if available
           if [ -f "adapter_stats.json" ]; then
-            SUCCEEDED=$(python -c "import json; d=json.load(open('adapter_stats.json')); print(d.get('succeeded', 0))" 2>/dev/null || echo "0")
-            FAILED=$(python -c "import json; d=json.load(open('adapter_stats.json')); print(d.get('failed', 0))" 2>/dev/null || echo "0")
+            # adapter_stats.json is a list of statuses, we need to count them
+            SUCCEEDED=$(jq '[.[] | select(.status == "OK")] | length' adapter_stats.json 2>/dev/null || echo "0")
+            FAILED=$(jq '[.[] | select(.status != "OK")] | length' adapter_stats.json 2>/dev/null || echo "0")
             echo "adapters_succeeded=${SUCCEEDED}" >> $GITHUB_OUTPUT
             echo "adapters_failed=${FAILED}" >> $GITHUB_OUTPUT
           fi
@@ -530,6 +537,7 @@ jobs:
         with:
           name: race-reports-${{ github.run_number }}
       - name: '✅ Schema & Quality Validation'
+        timeout-minutes: 5
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
