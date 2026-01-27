@@ -1,4 +1,4 @@
-# python_service/adapters/harness_adapter.py
+# web_service/backend/adapters/harness_adapter.py
 from datetime import datetime
 from typing import Any
 from typing import Dict
@@ -6,6 +6,7 @@ from typing import List
 from typing import Optional
 from zoneinfo import ZoneInfo
 
+from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy
 from ..models import OddsData
 from ..models import Race
 from ..models import Runner
@@ -22,9 +23,12 @@ class HarnessAdapter(BaseAdapterV3):
     def __init__(self, config=None):
         super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
 
+    def _configure_fetch_strategy(self) -> FetchStrategy:
+        return FetchStrategy(primary_engine=BrowserEngine.HTTPX)
+
     async def _fetch_data(self, date: str) -> Optional[Dict[str, Any]]:
         """Fetches all harness races for a given date."""
-        response = await self.make_request(self.http_client, "GET", f"card/{date}")
+        response = await self.make_request("GET", f"card/{date}")
 
         if not response:
             return None
@@ -109,6 +113,6 @@ class HarnessAdapter(BaseAdapterV3):
         """Parses a time string like '07:00 PM' into a timezone-aware datetime object."""
         dt_str = f"{date} {post_time}"
         naive_dt = datetime.strptime(dt_str, "%Y-%m-%d %I:%M %p")
-        # Assume Eastern Time for USTA data, a common standard for US racing.
+        # Default to Eastern Time, but should ideally come from meeting metadata
         eastern = ZoneInfo("America/New_York")
         return naive_dt.replace(tzinfo=eastern)

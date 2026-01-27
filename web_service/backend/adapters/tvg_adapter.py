@@ -1,3 +1,4 @@
+from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy
 # python_service/adapters/tvg_adapter.py
 import asyncio
 from datetime import datetime
@@ -20,6 +21,9 @@ class TVGAdapter(BaseAdapterV3):
 
     SOURCE_NAME = "TVG"
     BASE_URL = "https://api.tvg.com/v2/races/"
+
+    def _configure_fetch_strategy(self) -> FetchStrategy:
+        return FetchStrategy(primary_engine=BrowserEngine.HTTPX)
 
     def __init__(self, config=None):
         super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)

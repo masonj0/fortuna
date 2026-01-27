@@ -1,3 +1,4 @@
+from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy
 # python_service/adapters/nyrabets_adapter.py
 from typing import Any
 from typing import List
@@ -14,6 +15,9 @@ class NYRABetsAdapter(BaseAdapterV3):
 
     SOURCE_NAME = "NYRABets"
     BASE_URL = "https://nyrabets.com"
+
+    def _configure_fetch_strategy(self) -> FetchStrategy:
+        return FetchStrategy(primary_engine=BrowserEngine.HTTPX)
 
     def __init__(self, config=None):
         super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)

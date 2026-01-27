@@ -1,3 +1,4 @@
+from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy
 # python_service/adapters/greyhound_adapter.py
 from datetime import datetime
 from decimal import Decimal
@@ -22,6 +23,9 @@ class GreyhoundAdapter(BaseAdapterV3):
 
     SOURCE_NAME = "Greyhound Racing"
 
+    def _configure_fetch_strategy(self) -> FetchStrategy:
+        return FetchStrategy(primary_engine=BrowserEngine.HTTPX)
+
     def __init__(self, config=None):
         if not hasattr(config, "GREYHOUND_API_URL") or not config.GREYHOUND_API_URL:
             raise AdapterConfigError(self.SOURCE_NAME, "GREYHOUND_API_URL is not configured.")
@@ -34,7 +38,7 @@ class GreyhoundAdapter(BaseAdapterV3):
     async def _fetch_data(self, date: str) -> Any:
         """Fetches the raw card data from the greyhound API."""
         endpoint = f"v1/cards/{date}"
-        response = await self.make_request(self.http_client, "GET", endpoint)
+        response = await self.make_request("GET", endpoint)
         return response.json() if response else None
 
     def _parse_races(self, raw_data: Any) -> List[Race]:

@@ -1,3 +1,4 @@
+from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy
 # python_service/adapters/racing_and_sports_adapter.py
 
 from datetime import datetime
@@ -17,6 +18,9 @@ class RacingAndSportsAdapter(BaseAdapterV3):
 
     SOURCE_NAME = "RacingAndSports"
     BASE_URL = "https://api.racingandsports.com.au/"
+
+    def _configure_fetch_strategy(self) -> FetchStrategy:
+        return FetchStrategy(primary_engine=BrowserEngine.HTTPX)
 
     def __init__(self, config=None):
         super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)

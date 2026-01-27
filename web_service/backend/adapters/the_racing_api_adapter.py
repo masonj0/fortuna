@@ -1,3 +1,4 @@
+from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy
 # python_service/adapters/the_racing_api_adapter.py
 
 from datetime import datetime
@@ -21,6 +22,9 @@ class TheRacingApiAdapter(BaseAdapterV3):
 
     SOURCE_NAME = "TheRacingAPI"
     BASE_URL = "https://api.theracingapi.com/v1/"
+
+    def _configure_fetch_strategy(self) -> FetchStrategy:
+        return FetchStrategy(primary_engine=BrowserEngine.HTTPX)
 
     def __init__(self, config=None):
         super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)

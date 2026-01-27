@@ -1,3 +1,4 @@
+from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy
 # python_service/adapters/betfair_datascientist_adapter.py
 
 from datetime import datetime
@@ -20,6 +21,9 @@ class BetfairDataScientistAdapter(BaseAdapterV3):
     """
 
     ADAPTER_NAME = "BetfairDataScientist"
+
+    def _configure_fetch_strategy(self) -> FetchStrategy:
+        return FetchStrategy(primary_engine=BrowserEngine.HTTPX)
 
     def __init__(self, model_name: str, url: str, config=None):
         source_name = f"{self.ADAPTER_NAME}_{model_name}"

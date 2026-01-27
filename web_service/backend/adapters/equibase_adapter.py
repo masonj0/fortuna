@@ -1,4 +1,4 @@
-# python_service/adapters/equibase_adapter.py
+# web_service/backend/adapters/equibase_adapter.py
 import asyncio
 from datetime import datetime
 from typing import Any
@@ -13,6 +13,7 @@ from ..models import Race
 from ..models import Runner
 from ..utils.odds import parse_odds_to_decimal
 from ..utils.text import clean_text
+from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy
 from .base_adapter_v3 import BaseAdapterV3
 
 
@@ -27,6 +28,13 @@ class EquibaseAdapter(BaseAdapterV3):
     def __init__(self, config=None):
         super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
 
+    def _configure_fetch_strategy(self) -> FetchStrategy:
+        return FetchStrategy(
+            primary_engine=BrowserEngine.PLAYWRIGHT,
+            enable_js=True,
+            block_resources=True,
+        )
+
     async def _fetch_data(self, date: str) -> Optional[dict]:
         """
         Fetches the raw HTML for all race pages for a given date.
@@ -36,13 +44,6 @@ class EquibaseAdapter(BaseAdapterV3):
         if not index_response or not index_response.text:
             self.logger.warning("Failed to fetch Equibase index page", url=index_url)
             return None
-
-        # Save the raw HTML for debugging in CI
-        try:
-            with open("equibase_debug.html", "w", encoding="utf-8") as f:
-                f.write(index_response.text)
-        except Exception as e:
-            self.logger.warning("Failed to save debug HTML for Equibase", error=str(e))
 
         parser = HTMLParser(index_response.text)
         race_links = [link.attributes["href"] for link in parser.css("a.entry-race-level")]

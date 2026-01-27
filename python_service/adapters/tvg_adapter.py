@@ -1,3 +1,4 @@
+from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy
 # python_service/adapters/tvg_adapter.py
 import asyncio
 from datetime import datetime
@@ -21,6 +22,9 @@ class TVGAdapter(BaseAdapterV3):
     SOURCE_NAME = "TVG"
     BASE_URL = "https://api.tvg.com/v2/races/"
 
+    def _configure_fetch_strategy(self) -> FetchStrategy:
+        return FetchStrategy(primary_engine=BrowserEngine.HTTPX)
+
     def __init__(self, config=None):
         super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
         if not hasattr(config, "TVG_API_KEY") or not config.TVG_API_KEY:
@@ -32,7 +36,7 @@ class TVGAdapter(BaseAdapterV3):
         headers = {"X-Api-Key": self.tvg_api_key}
         summary_url = f"summary?date={date}&country=USA"
 
-        tracks_response = await self.make_request(self.http_client, "GET", summary_url, headers=headers)
+        tracks_response = await self.make_request("GET", summary_url, headers=headers)
         if not tracks_response:
             return None
         tracks_data = tracks_response.json()
@@ -44,7 +48,7 @@ class TVGAdapter(BaseAdapterV3):
                 race_id = race.get("id")
                 if track_id and race_id:
                     details_url = f"{track_id}/{race_id}"
-                    race_detail_tasks.append(self.make_request(self.http_client, "GET", details_url, headers=headers))
+                    race_detail_tasks.append(self.make_request("GET", details_url, headers=headers))
 
         race_detail_responses = await asyncio.gather(*race_detail_tasks, return_exceptions=True)
 

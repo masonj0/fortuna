@@ -1,3 +1,4 @@
+from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy
 # python_service/adapters/betfair_datascientist_adapter.py
 
 from datetime import datetime
@@ -21,6 +22,9 @@ class BetfairDataScientistAdapter(BaseAdapterV3):
 
     ADAPTER_NAME = "BetfairDataScientist"
 
+    def _configure_fetch_strategy(self) -> FetchStrategy:
+        return FetchStrategy(primary_engine=BrowserEngine.HTTPX)
+
     def __init__(self, model_name: str, url: str, config=None):
         source_name = f"{self.ADAPTER_NAME}_{model_name}"
         super().__init__(source_name=source_name, base_url=url, config=config)
@@ -30,7 +34,7 @@ class BetfairDataScientistAdapter(BaseAdapterV3):
         """Fetches the raw CSV data from the Betfair Data Scientist model endpoint."""
         endpoint = f"?date={date}&presenter=RatingsPresenter&csv=true"
         self.logger.info(f"Fetching data from {self.base_url}{endpoint}")
-        response = await self.make_request(self.http_client, "GET", endpoint)
+        response = await self.make_request("GET", endpoint)
         return StringIO(response.text) if response and response.text else None
 
     def _parse_races(self, raw_data: Optional[StringIO]) -> List[Race]:

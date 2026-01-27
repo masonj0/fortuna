@@ -1,11 +1,11 @@
-# python_service/adapters/gbgb_api_adapter.py
-
+# web_service/backend/adapters/gbgb_api_adapter.py
 from datetime import datetime
 from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
 
+from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy
 from ..models import OddsData
 from ..models import Race
 from ..models import Runner
@@ -23,6 +23,9 @@ class GbgbApiAdapter(BaseAdapterV3):
 
     def __init__(self, config=None, session=None):
         super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
+
+    def _configure_fetch_strategy(self) -> FetchStrategy:
+        return FetchStrategy(primary_engine=BrowserEngine.HTTPX)
 
     async def _fetch_data(self, date: str) -> Optional[List[Dict[str, Any]]]:
         """Fetches the raw meeting data from the GBGB API."""
