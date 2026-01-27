@@ -1,18 +1,10 @@
 # python_service/models.py
 
-from datetime import datetime
+from datetime import datetime, date
 from decimal import Decimal
-from typing import Annotated
-from typing import Any
-from typing import Callable
-from typing import Dict
-from typing import List
-from typing import Optional
+from typing import Annotated, Any, Callable, Dict, List, Optional
 
-from pydantic import BaseModel
-from pydantic import ConfigDict
-from pydantic import Field
-from pydantic import WrapSerializer
+from pydantic import BaseModel, ConfigDict, Field, WrapSerializer
 
 
 def decimal_serializer(value: Decimal, handler: Callable[[Decimal], Any]) -> Any:
@@ -82,9 +74,11 @@ class AdapterError(FortunaBaseModel):
 
 
 class AggregatedResponse(FortunaBaseModel):
+    race_date: Optional[date] = Field(None, alias="date")
     races: List[Race]
     errors: List[AdapterError]
     source_info: List[SourceInfo] = Field(..., alias="sourceInfo")
+    metadata: Dict[str, Any] = {}
 
 
 class QualifiedRacesResponse(FortunaBaseModel):

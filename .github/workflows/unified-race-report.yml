@@ -193,6 +193,12 @@ jobs:
             browsers-canary-${{ runner.os }}-
             browsers-${{ runner.os }}-
 
+      - name: 'Install System Dependencies'
+        if: env.IS_QUICK != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y x11-utils
+
       - name: 'Install Dependencies'
         run: |
           pip install --upgrade pip
@@ -206,7 +212,24 @@ jobs:
       - name: 'Start Display'
         if: env.IS_QUICK != 'true'
         run: |
+          # Kill any existing Xvfb
+          sudo pkill -9 Xvfb || true
+          sleep 1
+
+          # Start fresh Xvfb
           sudo Xvfb :99 -screen 0 1280x720x24 &
+
+          # Wait and verify
+          echo "Waiting for Xvfb display :99..."
+          # Note: x11-utils is not explicitly installed here but usually exists or we'll just sleep if it fails
+          for i in {1..10}; do
+            if command -v xdpyinfo >/dev/null && xdpyinfo -display :99 >/dev/null 2>&1; then
+              echo "✅ Display :99 ready"
+              echo "DISPLAY=:99" >> $GITHUB_ENV
+              exit 0
+            fi
+            sleep 1
+          done
           echo "DISPLAY=:99" >> $GITHUB_ENV
           sleep 2
 
@@ -318,6 +341,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             xvfb \
             xauth \
+            x11-utils \
             libx11-xcb1 \
             libxcb1 \
             libxcomposite1 \
@@ -402,18 +426,22 @@ jobs:
 
           # Start fresh Xvfb
           sudo Xvfb :99 -screen 0 1920x1080x24 -ac +extension GLX +render -noreset &
-          echo "DISPLAY=:99" >> $GITHUB_ENV
 
           # Wait and verify
-          sleep 3
-          for i in {1..5}; do
+          echo "Waiting for Xvfb display :99..."
+          MAX_WAIT=15
+          for i in $(seq 1 $MAX_WAIT); do
             if xdpyinfo -display :99 >/dev/null 2>&1; then
-              echo "✅ Display :99 ready"
-              break
+              echo "✅ Display :99 ready after $i seconds"
+              echo "DISPLAY=:99" >> $GITHUB_ENV
+              exit 0
             fi
-            echo "Waiting for display (attempt $i)..."
+            echo "Attempt $i/$MAX_WAIT: Display not ready yet..."
             sleep 1
           done
+          echo "❌ Xvfb failed to start after $MAX_WAIT seconds"
+          # Try to show logs if possible (though Xvfb doesn't log much to stdout here)
+          exit 1
 
       - name: '🧪 Verify Browser Setup'
         id: verify-browser
