@@ -61,16 +61,6 @@ class AtTheRacesAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
             referer="https://www.attheraces.com/racecards",
         )
 
-    def _configure_fetch_strategy(self) -> FetchStrategy:
-        """
-        AtTheRaces is a simple HTML site and does not require JavaScript.
-        Using HTTPX is much faster and more efficient.
-        """
-        return FetchStrategy(
-            primary_engine=BrowserEngine.HTTPX,
-            enable_js=False,
-        )
-
     async def _fetch_data(self, date: str) -> Optional[dict]:
         """Fetch race pages for a given date."""
         index_url = f"/racecards/{date}"
