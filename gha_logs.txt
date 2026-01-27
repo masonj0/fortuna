@@ -1,0 +1,1044 @@
+﻿2026-01-27T08:57:46.1679292Z Current runner version: '2.331.0'
+2026-01-27T08:57:46.1705760Z ##[group]Runner Image Provisioner
+2026-01-27T08:57:46.1706603Z Hosted Compute Agent
+2026-01-27T08:57:46.1707138Z Version: 20260115.477
+2026-01-27T08:57:46.1707799Z Commit: 4b342d620503cbe250a3154040964899ea7c9b00
+2026-01-27T08:57:46.1708513Z Build Date: 2026-01-15T22:32:41Z
+2026-01-27T08:57:46.1709174Z Worker ID: {b0cf0e9d-69b9-4e10-b8de-3b7ca818111c}
+2026-01-27T08:57:46.1709921Z Azure Region: westus
+2026-01-27T08:57:46.1710445Z ##[endgroup]
+2026-01-27T08:57:46.1711830Z ##[group]Operating System
+2026-01-27T08:57:46.1712396Z Ubuntu
+2026-01-27T08:57:46.1713015Z 24.04.3
+2026-01-27T08:57:46.1713445Z LTS
+2026-01-27T08:57:46.1714081Z ##[endgroup]
+2026-01-27T08:57:46.1714636Z ##[group]Runner Image
+2026-01-27T08:57:46.1715205Z Image: ubuntu-24.04
+2026-01-27T08:57:46.1715706Z Version: 20260119.4.1
+2026-01-27T08:57:46.1716956Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260119.4/images/ubuntu/Ubuntu2404-Readme.md
+2026-01-27T08:57:46.1718326Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260119.4
+2026-01-27T08:57:46.1719307Z ##[endgroup]
+2026-01-27T08:57:46.1720351Z ##[group]GITHUB_TOKEN Permissions
+2026-01-27T08:57:46.1722294Z Actions: write
+2026-01-27T08:57:46.1722822Z Contents: read
+2026-01-27T08:57:46.1723332Z Metadata: read
+2026-01-27T08:57:46.1724167Z ##[endgroup]
+2026-01-27T08:57:46.1726308Z Secret source: Actions
+2026-01-27T08:57:46.1727088Z Prepare workflow directory
+2026-01-27T08:57:46.2128455Z Prepare all required actions
+2026-01-27T08:57:46.2167002Z Getting action download info
+2026-01-27T08:57:46.8286251Z Download action repository 'actions/checkout@v4' (SHA:34e114876b0b11c390a56381ad16ebd13914f8d5)
+2026-01-27T08:57:46.9697987Z Download action repository 'actions/setup-python@v5' (SHA:a26af69be951a213d495a4c3e4e4022e16d87065)
+2026-01-27T08:57:47.0888842Z Download action repository 'actions/cache@v4' (SHA:0057852bfaa89a56745cba8c7296529d2fc39830)
+2026-01-27T08:57:47.2280688Z Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+2026-01-27T08:57:47.4525225Z Complete job name: generate-unified-report
+2026-01-27T08:57:47.5297935Z ##[group]Run actions/checkout@v4
+2026-01-27T08:57:47.5298932Z with:
+2026-01-27T08:57:47.5299348Z   fetch-depth: 1
+2026-01-27T08:57:47.5299800Z   repository: masonj0/fortuna
+2026-01-27T08:57:47.5300602Z   token: ***
+2026-01-27T08:57:47.5301023Z   ssh-strict: true
+2026-01-27T08:57:47.5301431Z   ssh-user: git
+2026-01-27T08:57:47.5301861Z   persist-credentials: true
+2026-01-27T08:57:47.5302345Z   clean: true
+2026-01-27T08:57:47.5302773Z   sparse-checkout-cone-mode: true
+2026-01-27T08:57:47.5303299Z   fetch-tags: false
+2026-01-27T08:57:47.5303924Z   show-progress: true
+2026-01-27T08:57:47.5304364Z   lfs: false
+2026-01-27T08:57:47.5304770Z   submodules: false
+2026-01-27T08:57:47.5305221Z   set-safe-directory: true
+2026-01-27T08:57:47.5305967Z env:
+2026-01-27T08:57:47.5306380Z   PYTHON_VERSION: 3.10.12
+2026-01-27T08:57:47.5306888Z   REPORT_RETENTION_DAYS: 14
+2026-01-27T08:57:47.5307342Z   MAX_RETRIES: 3
+2026-01-27T08:57:47.5307739Z   REQUEST_TIMEOUT: 45
+2026-01-27T08:57:47.5308219Z   SCRAPLING_HEADLESS: true
+2026-01-27T08:57:47.5308691Z   SCRAPLING_BLOCK_IMAGES: true
+2026-01-27T08:57:47.5309343Z   PLAYWRIGHT_BROWSERS_PATH: /home/runner/.cache/ms-playwright
+2026-01-27T08:57:47.5309990Z ##[endgroup]
+2026-01-27T08:57:47.6400645Z Syncing repository: masonj0/fortuna
+2026-01-27T08:57:47.6402536Z ##[group]Getting Git version info
+2026-01-27T08:57:47.6403283Z Working directory is '/home/runner/work/fortuna/fortuna'
+2026-01-27T08:57:47.6404692Z [command]/usr/bin/git version
+2026-01-27T08:57:47.6495931Z git version 2.52.0
+2026-01-27T08:57:47.6522337Z ##[endgroup]
+2026-01-27T08:57:47.6537552Z Temporarily overriding HOME='/home/runner/work/_temp/9e3da9b1-4f8d-4b9d-9fa5-0c379da0ae62' before making global git config changes
+2026-01-27T08:57:47.6539036Z Adding repository directory to the temporary git global config as a safe directory
+2026-01-27T08:57:47.6550751Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/fortuna/fortuna
+2026-01-27T08:57:47.6592423Z Deleting the contents of '/home/runner/work/fortuna/fortuna'
+2026-01-27T08:57:47.6595910Z ##[group]Initializing the repository
+2026-01-27T08:57:47.6600040Z [command]/usr/bin/git init /home/runner/work/fortuna/fortuna
+2026-01-27T08:57:47.6750332Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-01-27T08:57:47.6752417Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-01-27T08:57:47.6754340Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-01-27T08:57:47.6755659Z hint: call:
+2026-01-27T08:57:47.6756266Z hint:
+2026-01-27T08:57:47.6756809Z hint: 	git config --global init.defaultBranch <name>
+2026-01-27T08:57:47.6757456Z hint:
+2026-01-27T08:57:47.6758051Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-01-27T08:57:47.6759084Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-01-27T08:57:47.6759915Z hint:
+2026-01-27T08:57:47.6760322Z hint: 	git branch -m <name>
+2026-01-27T08:57:47.6761094Z hint:
+2026-01-27T08:57:47.6761973Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-01-27T08:57:47.6763026Z Initialized empty Git repository in /home/runner/work/fortuna/fortuna/.git/
+2026-01-27T08:57:47.6767852Z [command]/usr/bin/git remote add origin https://github.com/masonj0/fortuna
+2026-01-27T08:57:47.6804427Z ##[endgroup]
+2026-01-27T08:57:47.6805198Z ##[group]Disabling automatic garbage collection
+2026-01-27T08:57:47.6808280Z [command]/usr/bin/git config --local gc.auto 0
+2026-01-27T08:57:47.6837687Z ##[endgroup]
+2026-01-27T08:57:47.6838413Z ##[group]Setting up auth
+2026-01-27T08:57:47.6844792Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-01-27T08:57:47.6876950Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-01-27T08:57:47.7251363Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-01-27T08:57:47.7284017Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-01-27T08:57:47.7517825Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-01-27T08:57:47.7552704Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-01-27T08:57:47.7785256Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-01-27T08:57:47.7819727Z ##[endgroup]
+2026-01-27T08:57:47.7827892Z ##[group]Fetching the repository
+2026-01-27T08:57:47.7829556Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +6ce647bc6111f3403914cf4c15a0406e3bad94e7:refs/remotes/origin/main
+2026-01-27T08:57:48.3614348Z From https://github.com/masonj0/fortuna
+2026-01-27T08:57:48.3615694Z  * [new ref]         6ce647bc6111f3403914cf4c15a0406e3bad94e7 -> origin/main
+2026-01-27T08:57:48.3649821Z ##[endgroup]
+2026-01-27T08:57:48.3651401Z ##[group]Determining the checkout info
+2026-01-27T08:57:48.3652968Z ##[endgroup]
+2026-01-27T08:57:48.3656727Z [command]/usr/bin/git sparse-checkout disable
+2026-01-27T08:57:48.3698300Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-01-27T08:57:48.3724469Z ##[group]Checking out the ref
+2026-01-27T08:57:48.3727818Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+2026-01-27T08:57:48.4160550Z Switched to a new branch 'main'
+2026-01-27T08:57:48.4162205Z branch 'main' set up to track 'origin/main'.
+2026-01-27T08:57:48.4172636Z ##[endgroup]
+2026-01-27T08:57:48.4211642Z [command]/usr/bin/git log -1 --format=%H
+2026-01-27T08:57:48.4234552Z 6ce647bc6111f3403914cf4c15a0406e3bad94e7
+2026-01-27T08:57:48.4557621Z ##[group]Run actions/setup-python@v5
+2026-01-27T08:57:48.4558820Z with:
+2026-01-27T08:57:48.4559625Z   python-version: 3.10.12
+2026-01-27T08:57:48.4560596Z   cache: pip
+2026-01-27T08:57:48.4561761Z   cache-dependency-path: web_service/backend/requirements.txt
+2026-01-27T08:57:48.4563254Z   check-latest: false
+2026-01-27T08:57:48.4564582Z   token: ***
+2026-01-27T08:57:48.4565440Z   update-environment: true
+2026-01-27T08:57:48.4566485Z   allow-prereleases: false
+2026-01-27T08:57:48.4567501Z   freethreaded: false
+2026-01-27T08:57:48.4568397Z env:
+2026-01-27T08:57:48.4569190Z   PYTHON_VERSION: 3.10.12
+2026-01-27T08:57:48.4570192Z   REPORT_RETENTION_DAYS: 14
+2026-01-27T08:57:48.4571175Z   MAX_RETRIES: 3
+2026-01-27T08:57:48.4639990Z   REQUEST_TIMEOUT: 45
+2026-01-27T08:57:48.4641288Z   SCRAPLING_HEADLESS: true
+2026-01-27T08:57:48.4642454Z   SCRAPLING_BLOCK_IMAGES: true
+2026-01-27T08:57:48.4644140Z   PLAYWRIGHT_BROWSERS_PATH: /home/runner/.cache/ms-playwright
+2026-01-27T08:57:48.4645702Z ##[endgroup]
+2026-01-27T08:57:48.6441064Z ##[group]Installed versions
+2026-01-27T08:57:48.6466551Z Version 3.10.12 was not found in the local cache
+2026-01-27T08:57:49.5099841Z Version 3.10.12 is available for downloading
+2026-01-27T08:57:49.5102697Z Download from "https://github.com/actions/python-versions/releases/download/3.10.12-11114375244/python-3.10.12-linux-24.04-x64.tar.gz"
+2026-01-27T08:57:50.2566764Z Extract downloaded archive
+2026-01-27T08:57:50.2696906Z [command]/usr/bin/tar xz --warning=no-unknown-keyword --overwrite -C /home/runner/work/_temp/6403013d-44df-410d-a77d-662ccb0533f2 -f /home/runner/work/_temp/19928046-ac6e-494c-9b43-e2527d827c4c
+2026-01-27T08:57:51.7071600Z Execute installation script
+2026-01-27T08:57:51.7161066Z Check if Python hostedtoolcache folder exist...
+2026-01-27T08:57:51.7161711Z Create Python 3.10.12 folder
+2026-01-27T08:57:51.7177555Z Copy Python binaries to hostedtoolcache folder
+2026-01-27T08:57:52.2068203Z Create additional symlinks (Required for the UsePythonVersion Azure Pipelines task and the setup-python GitHub Action)
+2026-01-27T08:57:52.2110576Z Upgrading pip...
+2026-01-27T08:57:54.7245468Z Looking in links: /tmp/tmp4yrsp_qk
+2026-01-27T08:57:54.7248609Z Requirement already satisfied: setuptools in /opt/hostedtoolcache/Python/3.10.12/x64/lib/python3.10/site-packages (65.5.0)
+2026-01-27T08:57:54.7253795Z Requirement already satisfied: pip in /opt/hostedtoolcache/Python/3.10.12/x64/lib/python3.10/site-packages (23.0.1)
+2026-01-27T08:57:56.1997647Z Collecting pip
+2026-01-27T08:57:56.2305431Z Downloading pip-25.3-py3-none-any.whl (1.8 MB)
+2026-01-27T08:57:56.2809996Z ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.8/1.8 MB 37.2 MB/s eta 0:00:00
+2026-01-27T08:57:56.2810509Z
+2026-01-27T08:57:56.3280930Z Installing collected packages: pip
+2026-01-27T08:57:56.3281693Z Attempting uninstall: pip
+2026-01-27T08:57:56.3288427Z Found existing installation: pip 23.0.1
+2026-01-27T08:57:56.5047318Z Uninstalling pip-23.0.1:
+2026-01-27T08:57:56.5120125Z Successfully uninstalled pip-23.0.1
+2026-01-27T08:57:57.3066970Z Successfully installed pip-25.3
+2026-01-27T08:57:57.3655760Z Create complete file
+2026-01-27T08:57:57.3695723Z Successfully set up CPython (3.10.12)
+2026-01-27T08:57:57.3696694Z ##[endgroup]
+2026-01-27T08:57:57.3918033Z [command]/opt/hostedtoolcache/Python/3.10.12/x64/bin/pip cache dir
+2026-01-27T08:57:57.5595204Z /home/runner/.cache/pip
+2026-01-27T08:57:57.8345938Z pip cache is not found
+2026-01-27T08:57:57.8482112Z ##[group]Run sudo apt-get update
+2026-01-27T08:57:57.8482470Z [36;1msudo apt-get update[0m
+2026-01-27T08:57:57.8482714Z [36;1m[0m
+2026-01-27T08:57:57.8482998Z [36;1m# Install all required dependencies for headless browsers[0m
+2026-01-27T08:57:57.8483433Z [36;1msudo apt-get install -y --no-install-recommends \[0m
+2026-01-27T08:57:57.8484205Z [36;1m  xvfb \[0m
+2026-01-27T08:57:57.8484484Z [36;1m  xauth \[0m
+2026-01-27T08:57:57.8485041Z [36;1m  libx11-xcb1 \[0m
+2026-01-27T08:57:57.8485252Z [36;1m  libxcb1 \[0m
+2026-01-27T08:57:57.8485447Z [36;1m  libxcomposite1 \[0m
+2026-01-27T08:57:57.8485667Z [36;1m  libxcursor1 \[0m
+2026-01-27T08:57:57.8485864Z [36;1m  libxdamage1 \[0m
+2026-01-27T08:57:57.8486062Z [36;1m  libxext6 \[0m
+2026-01-27T08:57:57.8486246Z [36;1m  libxfixes3 \[0m
+2026-01-27T08:57:57.8486442Z [36;1m  libxi6 \[0m
+2026-01-27T08:57:57.8486621Z [36;1m  libxrandr2 \[0m
+2026-01-27T08:57:57.8486814Z [36;1m  libxrender1 \[0m
+2026-01-27T08:57:57.8487064Z [36;1m  libxss1 \[0m
+2026-01-27T08:57:57.8487245Z [36;1m  libxtst6 \[0m
+2026-01-27T08:57:57.8487439Z [36;1m  libglib2.0-0 \[0m
+2026-01-27T08:57:57.8487641Z [36;1m  libnss3 \[0m
+2026-01-27T08:57:57.8487821Z [36;1m  libnspr4 \[0m
+2026-01-27T08:57:57.8488011Z [36;1m  libatk1.0-0 \[0m
+2026-01-27T08:57:57.8488213Z [36;1m  libatk-bridge2.0-0 \[0m
+2026-01-27T08:57:57.8488436Z [36;1m  libcups2 \[0m
+2026-01-27T08:57:57.8488629Z [36;1m  libdrm2 \[0m
+2026-01-27T08:57:57.8488833Z [36;1m  libdbus-1-3 \[0m
+2026-01-27T08:57:57.8489040Z [36;1m  libxkbcommon0 \[0m
+2026-01-27T08:57:57.8489254Z [36;1m  libatspi2.0-0 \[0m
+2026-01-27T08:57:57.8489453Z [36;1m  libgbm1 \[0m
+2026-01-27T08:57:57.8489648Z [36;1m  fonts-liberation \[0m
+2026-01-27T08:57:57.8489874Z [36;1m  fonts-noto-color-emoji[0m
+2026-01-27T08:57:57.8490094Z [36;1m[0m
+2026-01-27T08:57:57.8490390Z [36;1m# Handle libasound2 vs libasound2t64 (Ubuntu 22.04 vs 24.04)[0m
+2026-01-27T08:57:57.8490805Z [36;1mif apt-cache show libasound2t64 >/dev/null 2>&1; then[0m
+2026-01-27T08:57:57.8491154Z [36;1m  sudo apt-get install -y libasound2t64[0m
+2026-01-27T08:57:57.8491413Z [36;1melse[0m
+2026-01-27T08:57:57.8491610Z [36;1m  sudo apt-get install -y libasound2[0m
+2026-01-27T08:57:57.8491852Z [36;1mfi[0m
+2026-01-27T08:57:57.8530760Z shell: /usr/bin/bash -e {0}
+2026-01-27T08:57:57.8531005Z env:
+2026-01-27T08:57:57.8531187Z   PYTHON_VERSION: 3.10.12
+2026-01-27T08:57:57.8531406Z   REPORT_RETENTION_DAYS: 14
+2026-01-27T08:57:57.8531626Z   MAX_RETRIES: 3
+2026-01-27T08:57:57.8531803Z   REQUEST_TIMEOUT: 45
+2026-01-27T08:57:57.8532001Z   SCRAPLING_HEADLESS: true
+2026-01-27T08:57:57.8532213Z   SCRAPLING_BLOCK_IMAGES: true
+2026-01-27T08:57:57.8532515Z   PLAYWRIGHT_BROWSERS_PATH: /home/runner/.cache/ms-playwright
+2026-01-27T08:57:57.8532911Z   pythonLocation: /opt/hostedtoolcache/Python/3.10.12/x64
+2026-01-27T08:57:57.8533317Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.10.12/x64/lib/pkgconfig
+2026-01-27T08:57:57.8533992Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.10.12/x64
+2026-01-27T08:57:57.8534347Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.10.12/x64
+2026-01-27T08:57:57.8534705Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.10.12/x64
+2026-01-27T08:57:57.8535059Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.10.12/x64/lib
+2026-01-27T08:57:57.8535361Z ##[endgroup]
+2026-01-27T08:57:57.9333342Z Get:1 file:/etc/apt/apt-mirrors.txt Mirrorlist [144 B]
+2026-01-27T08:57:57.9619712Z Hit:2 http://azure.archive.ubuntu.com/ubuntu noble InRelease
+2026-01-27T08:57:57.9622736Z Hit:6 https://packages.microsoft.com/repos/azure-cli noble InRelease
+2026-01-27T08:57:57.9628830Z Get:7 https://packages.microsoft.com/ubuntu/24.04/prod noble InRelease [3600 B]
+2026-01-27T08:57:57.9656895Z Get:3 http://azure.archive.ubuntu.com/ubuntu noble-updates InRelease [126 kB]
+2026-01-27T08:57:57.9705931Z Get:4 http://azure.archive.ubuntu.com/ubuntu noble-backports InRelease [126 kB]
+2026-01-27T08:57:57.9724751Z Get:5 http://azure.archive.ubuntu.com/ubuntu noble-security InRelease [126 kB]
+2026-01-27T08:57:58.1395579Z Get:8 https://packages.microsoft.com/ubuntu/24.04/prod noble/main amd64 Packages [85.7 kB]
+2026-01-27T08:57:58.1522419Z Get:9 https://packages.microsoft.com/ubuntu/24.04/prod noble/main armhf Packages [12.3 kB]
+2026-01-27T08:57:58.1560930Z Get:10 https://packages.microsoft.com/ubuntu/24.04/prod noble/main all Packages [650 B]
+2026-01-27T08:57:58.1584415Z Get:11 https://packages.microsoft.com/ubuntu/24.04/prod noble/main arm64 Packages [66.5 kB]
+2026-01-27T08:57:58.1952575Z Get:12 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 Packages [1700 kB]
+2026-01-27T08:57:58.2060589Z Get:13 http://azure.archive.ubuntu.com/ubuntu noble-updates/main Translation-en [314 kB]
+2026-01-27T08:57:58.2092571Z Get:14 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 Components [175 kB]
+2026-01-27T08:57:58.2111575Z Get:15 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 c-n-f Metadata [16.0 kB]
+2026-01-27T08:57:58.2122890Z Get:16 http://azure.archive.ubuntu.com/ubuntu noble-updates/universe amd64 Packages [1519 kB]
+2026-01-27T08:57:58.2206817Z Get:17 http://azure.archive.ubuntu.com/ubuntu noble-updates/universe Translation-en [310 kB]
+2026-01-27T08:57:58.2235064Z Get:18 http://azure.archive.ubuntu.com/ubuntu noble-updates/universe amd64 Components [386 kB]
+2026-01-27T08:57:58.2270510Z Get:19 http://azure.archive.ubuntu.com/ubuntu noble-updates/universe amd64 c-n-f Metadata [31.6 kB]
+2026-01-27T08:57:58.2282832Z Get:20 http://azure.archive.ubuntu.com/ubuntu noble-updates/restricted amd64 Packages [2506 kB]
+2026-01-27T08:57:58.2410449Z Get:21 http://azure.archive.ubuntu.com/ubuntu noble-updates/restricted Translation-en [573 kB]
+2026-01-27T08:57:58.2914610Z Get:22 http://azure.archive.ubuntu.com/ubuntu noble-updates/restricted amd64 Components [212 B]
+2026-01-27T08:57:58.2925016Z Get:23 http://azure.archive.ubuntu.com/ubuntu noble-updates/restricted amd64 c-n-f Metadata [556 B]
+2026-01-27T08:57:58.2934516Z Get:24 http://azure.archive.ubuntu.com/ubuntu noble-updates/multiverse amd64 Packages [31.8 kB]
+2026-01-27T08:57:58.2947923Z Get:25 http://azure.archive.ubuntu.com/ubuntu noble-updates/multiverse Translation-en [6348 B]
+2026-01-27T08:57:58.2959228Z Get:26 http://azure.archive.ubuntu.com/ubuntu noble-updates/multiverse amd64 Components [940 B]
+2026-01-27T08:57:58.2967985Z Get:27 http://azure.archive.ubuntu.com/ubuntu noble-updates/multiverse amd64 c-n-f Metadata [496 B]
+2026-01-27T08:57:58.2980666Z Get:28 http://azure.archive.ubuntu.com/ubuntu noble-backports/main amd64 Components [7300 B]
+2026-01-27T08:57:58.2991299Z Get:29 http://azure.archive.ubuntu.com/ubuntu noble-backports/universe amd64 Components [10.5 kB]
+2026-01-27T08:57:58.3002279Z Get:30 http://azure.archive.ubuntu.com/ubuntu noble-backports/restricted amd64 Components [212 B]
+2026-01-27T08:57:58.3010242Z Get:31 http://azure.archive.ubuntu.com/ubuntu noble-backports/multiverse amd64 Components [212 B]
+2026-01-27T08:57:58.3118677Z Get:32 http://azure.archive.ubuntu.com/ubuntu noble-security/main amd64 Packages [1410 kB]
+2026-01-27T08:57:58.3205998Z Get:33 http://azure.archive.ubuntu.com/ubuntu noble-security/main Translation-en [229 kB]
+2026-01-27T08:57:58.3230552Z Get:34 http://azure.archive.ubuntu.com/ubuntu noble-security/main amd64 Components [21.5 kB]
+2026-01-27T08:57:58.3241598Z Get:35 http://azure.archive.ubuntu.com/ubuntu noble-security/main amd64 c-n-f Metadata [9820 B]
+2026-01-27T08:57:58.3714567Z Get:36 http://azure.archive.ubuntu.com/ubuntu noble-security/universe amd64 Packages [924 kB]
+2026-01-27T08:57:58.3778815Z Get:37 http://azure.archive.ubuntu.com/ubuntu noble-security/universe Translation-en [209 kB]
+2026-01-27T08:57:58.3800853Z Get:38 http://azure.archive.ubuntu.com/ubuntu noble-security/universe amd64 Components [74.2 kB]
+2026-01-27T08:57:58.3815449Z Get:39 http://azure.archive.ubuntu.com/ubuntu noble-security/universe amd64 c-n-f Metadata [19.7 kB]
+2026-01-27T08:57:58.3826880Z Get:40 http://azure.archive.ubuntu.com/ubuntu noble-security/restricted amd64 Components [208 B]
+2026-01-27T08:57:58.3837424Z Get:41 http://azure.archive.ubuntu.com/ubuntu noble-security/multiverse amd64 Packages [28.0 kB]
+2026-01-27T08:57:58.3848345Z Get:42 http://azure.archive.ubuntu.com/ubuntu noble-security/multiverse Translation-en [6472 B]
+2026-01-27T08:57:58.3857625Z Get:43 http://azure.archive.ubuntu.com/ubuntu noble-security/multiverse amd64 Components [208 B]
+2026-01-27T08:58:07.3355588Z Fetched 11.1 MB in 1s (8063 kB/s)
+2026-01-27T08:58:08.1902037Z Reading package lists...
+2026-01-27T08:58:08.2237924Z Reading package lists...
+2026-01-27T08:58:08.4558692Z Building dependency tree...
+2026-01-27T08:58:08.4566873Z Reading state information...
+2026-01-27T08:58:08.6474921Z xvfb is already the newest version (2:21.1.12-1ubuntu1.5).
+2026-01-27T08:58:08.6475689Z xauth is already the newest version (1:1.1.2-1build1).
+2026-01-27T08:58:08.6476451Z xauth set to manually installed.
+2026-01-27T08:58:08.6477115Z libx11-xcb1 is already the newest version (2:1.8.7-1build1).
+2026-01-27T08:58:08.6477819Z libx11-xcb1 set to manually installed.
+2026-01-27T08:58:08.6478408Z libxcb1 is already the newest version (1.15-1ubuntu2).
+2026-01-27T08:58:08.6478972Z libxcb1 set to manually installed.
+2026-01-27T08:58:08.6479609Z libxcomposite1 is already the newest version (1:0.4.5-1build3).
+2026-01-27T08:58:08.6480306Z libxcomposite1 set to manually installed.
+2026-01-27T08:58:08.6480957Z libxcursor1 is already the newest version (1:1.2.1-1build1).
+2026-01-27T08:58:08.6481626Z libxcursor1 set to manually installed.
+2026-01-27T08:58:08.6482189Z libxdamage1 is already the newest version (1:1.1.6-1build1).
+2026-01-27T08:58:08.6482836Z libxdamage1 set to manually installed.
+2026-01-27T08:58:08.6483437Z libxext6 is already the newest version (2:1.3.4-1build2).
+2026-01-27T08:58:08.6484234Z libxext6 set to manually installed.
+2026-01-27T08:58:08.6484835Z libxfixes3 is already the newest version (1:6.0.0-2build1).
+2026-01-27T08:58:08.6485475Z libxfixes3 set to manually installed.
+2026-01-27T08:58:08.6485935Z libxi6 is already the newest version (2:1.8.1-1build1).
+2026-01-27T08:58:08.6486321Z libxi6 set to manually installed.
+2026-01-27T08:58:08.6486692Z libxrandr2 is already the newest version (2:1.5.2-2build1).
+2026-01-27T08:58:08.6487098Z libxrandr2 set to manually installed.
+2026-01-27T08:58:08.6487490Z libxrender1 is already the newest version (1:0.9.10-1.1build1).
+2026-01-27T08:58:08.6487846Z libxrender1 set to manually installed.
+2026-01-27T08:58:08.6488301Z libxss1 is already the newest version (1:1.2.3-1build3).
+2026-01-27T08:58:08.6488922Z libxss1 set to manually installed.
+2026-01-27T08:58:08.6489419Z libxtst6 is already the newest version (2:1.2.3-1.1build1).
+2026-01-27T08:58:08.6489949Z libxtst6 set to manually installed.
+2026-01-27T08:58:08.6490424Z libnss3 is already the newest version (2:3.98-1build1).
+2026-01-27T08:58:08.6490933Z libnss3 set to manually installed.
+2026-01-27T08:58:08.6491444Z libnspr4 is already the newest version (2:4.35-1.1build1).
+2026-01-27T08:58:08.6491989Z libnspr4 set to manually installed.
+2026-01-27T08:58:08.6492528Z libatk1.0-0t64 is already the newest version (2.52.0-1build1).
+2026-01-27T08:58:08.6493079Z libatk1.0-0t64 set to manually installed.
+2026-01-27T08:58:08.6493881Z libatk-bridge2.0-0t64 is already the newest version (2.52.0-1build1).
+2026-01-27T08:58:08.6494519Z libatk-bridge2.0-0t64 set to manually installed.
+2026-01-27T08:58:08.6495141Z libcups2t64 is already the newest version (2.4.7-1.2ubuntu7.9).
+2026-01-27T08:58:08.6495702Z libcups2t64 set to manually installed.
+2026-01-27T08:58:08.6496265Z libdrm2 is already the newest version (2.4.122-1~ubuntu0.24.04.2).
+2026-01-27T08:58:08.6496852Z libdrm2 set to manually installed.
+2026-01-27T08:58:08.6497373Z libdbus-1-3 is already the newest version (1.14.10-4ubuntu4.1).
+2026-01-27T08:58:08.6497933Z libdbus-1-3 set to manually installed.
+2026-01-27T08:58:08.6498470Z libxkbcommon0 is already the newest version (1.6.0-1build1).
+2026-01-27T08:58:08.6499045Z libxkbcommon0 set to manually installed.
+2026-01-27T08:58:08.6499986Z libatspi2.0-0t64 is already the newest version (2.52.0-1build1).
+2026-01-27T08:58:08.6500597Z libatspi2.0-0t64 set to manually installed.
+2026-01-27T08:58:08.6501179Z libgbm1 is already the newest version (25.0.7-0ubuntu0.24.04.2).
+2026-01-27T08:58:08.6501788Z libgbm1 set to manually installed.
+2026-01-27T08:58:08.6502341Z fonts-liberation is already the newest version (1:2.1.5-3).
+2026-01-27T08:58:08.6502926Z fonts-liberation set to manually installed.
+2026-01-27T08:58:08.6504183Z fonts-noto-color-emoji is already the newest version (2.047-0ubuntu0.24.04.1).
+2026-01-27T08:58:08.6504951Z The following additional packages will be installed:
+2026-01-27T08:58:08.6505526Z   gir1.2-glib-2.0 libglib2.0-bin libglib2.0-data
+2026-01-27T08:58:08.6505805Z Suggested packages:
+2026-01-27T08:58:08.6506003Z   low-memory-monitor
+2026-01-27T08:58:08.6724704Z The following packages will be upgraded:
+2026-01-27T08:58:08.6734536Z   gir1.2-glib-2.0 libglib2.0-0t64 libglib2.0-bin libglib2.0-data
+2026-01-27T08:58:08.6914374Z 4 upgraded, 0 newly installed, 0 to remove and 66 not upgraded.
+2026-01-27T08:58:08.6915186Z Need to get 1875 kB of archives.
+2026-01-27T08:58:08.6915727Z After this operation, 3072 B of additional disk space will be used.
+2026-01-27T08:58:08.6916187Z Get:1 file:/etc/apt/apt-mirrors.txt Mirrorlist [144 B]
+2026-01-27T08:58:08.7740207Z Get:2 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libglib2.0-data all 2.80.0-6ubuntu3.7 [49.4 kB]
+2026-01-27T08:58:08.8404832Z Get:3 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libglib2.0-bin amd64 2.80.0-6ubuntu3.7 [97.9 kB]
+2026-01-27T08:58:08.9035990Z Get:4 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 gir1.2-glib-2.0 amd64 2.80.0-6ubuntu3.7 [183 kB]
+2026-01-27T08:58:08.9698466Z Get:5 http://azure.archive.ubuntu.com/ubuntu noble-updates/main amd64 libglib2.0-0t64 amd64 2.80.0-6ubuntu3.7 [1545 kB]
+2026-01-27T08:58:09.2991615Z Fetched 1875 kB in 0s (5570 kB/s)
+2026-01-27T08:58:09.3583783Z (Reading database ...
+2026-01-27T08:58:09.3584266Z (Reading database ... 5%
+2026-01-27T08:58:09.3584519Z (Reading database ... 10%
+2026-01-27T08:58:09.3584766Z (Reading database ... 15%
+2026-01-27T08:58:09.3584990Z (Reading database ... 20%
+2026-01-27T08:58:09.3585211Z (Reading database ... 25%
+2026-01-27T08:58:09.3585434Z (Reading database ... 30%
+2026-01-27T08:58:09.3585650Z (Reading database ... 35%
+2026-01-27T08:58:09.3585877Z (Reading database ... 40%
+2026-01-27T08:58:09.3586101Z (Reading database ... 45%
+2026-01-27T08:58:09.3586332Z (Reading database ... 50%
+2026-01-27T08:58:09.3699562Z (Reading database ... 55%
+2026-01-27T08:58:09.4934248Z (Reading database ... 60%
+2026-01-27T08:58:09.6224828Z (Reading database ... 65%
+2026-01-27T08:58:09.6857514Z (Reading database ... 70%
+2026-01-27T08:58:09.7920466Z (Reading database ... 75%
+2026-01-27T08:58:10.0320226Z (Reading database ... 80%
+2026-01-27T08:58:10.2320692Z (Reading database ... 85%
+2026-01-27T08:58:10.4623892Z (Reading database ... 90%
+2026-01-27T08:58:10.6440950Z (Reading database ... 95%
+2026-01-27T08:58:10.6441558Z (Reading database ... 100%
+2026-01-27T08:58:10.6442268Z (Reading database ... 217173 files and directories currently installed.)
+2026-01-27T08:58:10.6487895Z Preparing to unpack .../libglib2.0-data_2.80.0-6ubuntu3.7_all.deb ...
+2026-01-27T08:58:10.6529682Z Unpacking libglib2.0-data (2.80.0-6ubuntu3.7) over (2.80.0-6ubuntu3.4) ...
+2026-01-27T08:58:10.6997275Z Preparing to unpack .../libglib2.0-bin_2.80.0-6ubuntu3.7_amd64.deb ...
+2026-01-27T08:58:10.7027071Z Unpacking libglib2.0-bin (2.80.0-6ubuntu3.7) over (2.80.0-6ubuntu3.4) ...
+2026-01-27T08:58:10.8159967Z Preparing to unpack .../gir1.2-glib-2.0_2.80.0-6ubuntu3.7_amd64.deb ...
+2026-01-27T08:58:10.8185793Z Unpacking gir1.2-glib-2.0:amd64 (2.80.0-6ubuntu3.7) over (2.80.0-6ubuntu3.4) ...
+2026-01-27T08:58:10.8639322Z Preparing to unpack .../libglib2.0-0t64_2.80.0-6ubuntu3.7_amd64.deb ...
+2026-01-27T08:58:10.8718808Z Unpacking libglib2.0-0t64:amd64 (2.80.0-6ubuntu3.7) over (2.80.0-6ubuntu3.4) ...
+2026-01-27T08:58:10.9394617Z Setting up libglib2.0-0t64:amd64 (2.80.0-6ubuntu3.7) ...
+2026-01-27T08:58:10.9638634Z Setting up libglib2.0-data (2.80.0-6ubuntu3.7) ...
+2026-01-27T08:58:10.9665427Z Setting up gir1.2-glib-2.0:amd64 (2.80.0-6ubuntu3.7) ...
+2026-01-27T08:58:10.9689710Z Setting up libglib2.0-bin (2.80.0-6ubuntu3.7) ...
+2026-01-27T08:58:10.9720630Z Processing triggers for libc-bin (2.39-0ubuntu8.6) ...
+2026-01-27T08:58:11.0604448Z Processing triggers for man-db (2.12.0-4build2) ...
+2026-01-27T08:58:11.0635500Z Not building database; man-db/auto-update is not 'true'.
+2026-01-27T08:58:11.7488002Z
+2026-01-27T08:58:11.7488664Z Running kernel seems to be up-to-date.
+2026-01-27T08:58:11.7489125Z
+2026-01-27T08:58:11.7489298Z Restarting services...
+2026-01-27T08:58:11.7971612Z  systemctl restart packagekit.service php8.3-fpm.service polkit.service udisks2.service
+2026-01-27T08:58:11.9261121Z
+2026-01-27T08:58:11.9261854Z Service restarts being deferred:
+2026-01-27T08:58:11.9262531Z  systemctl restart ModemManager.service
+2026-01-27T08:58:11.9264675Z  systemctl restart networkd-dispatcher.service
+2026-01-27T08:58:11.9265043Z
+2026-01-27T08:58:11.9265204Z No containers need to be restarted.
+2026-01-27T08:58:11.9265482Z
+2026-01-27T08:58:11.9265666Z No user sessions are running outdated binaries.
+2026-01-27T08:58:11.9265992Z
+2026-01-27T08:58:11.9266291Z No VM guests are running outdated hypervisor (qemu) binaries on this host.
+2026-01-27T08:58:13.1470130Z Reading package lists...
+2026-01-27T08:58:13.3563085Z Building dependency tree...
+2026-01-27T08:58:13.3570289Z Reading state information...
+2026-01-27T08:58:13.5834769Z libasound2t64 is already the newest version (1.2.11-1ubuntu0.1).
+2026-01-27T08:58:13.5835356Z libasound2t64 set to manually installed.
+2026-01-27T08:58:13.5835804Z 0 upgraded, 0 newly installed, 0 to remove and 66 not upgraded.
+2026-01-27T08:58:13.5884245Z ##[group]Run python -m pip install --upgrade pip wheel setuptools
+2026-01-27T08:58:13.5884753Z [36;1mpython -m pip install --upgrade pip wheel setuptools[0m
+2026-01-27T08:58:13.5885261Z [36;1m# Install everything together so pip can resolve conflicts between FastAPI and Scrapling[0m
+2026-01-27T08:58:13.5885879Z [36;1mpip install -r web_service/backend/requirements.txt "scrapling[all]" jsonschema[0m
+2026-01-27T08:58:13.5918429Z shell: /usr/bin/bash -e {0}
+2026-01-27T08:58:13.5918651Z env:
+2026-01-27T08:58:13.5918830Z   PYTHON_VERSION: 3.10.12
+2026-01-27T08:58:13.5919056Z   REPORT_RETENTION_DAYS: 14
+2026-01-27T08:58:13.5919260Z   MAX_RETRIES: 3
+2026-01-27T08:58:13.5919461Z   REQUEST_TIMEOUT: 45
+2026-01-27T08:58:13.5919651Z   SCRAPLING_HEADLESS: true
+2026-01-27T08:58:13.5919863Z   SCRAPLING_BLOCK_IMAGES: true
+2026-01-27T08:58:13.5920154Z   PLAYWRIGHT_BROWSERS_PATH: /home/runner/.cache/ms-playwright
+2026-01-27T08:58:13.5920589Z   pythonLocation: /opt/hostedtoolcache/Python/3.10.12/x64
+2026-01-27T08:58:13.5920996Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.10.12/x64/lib/pkgconfig
+2026-01-27T08:58:13.5921402Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.10.12/x64
+2026-01-27T08:58:13.5921747Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.10.12/x64
+2026-01-27T08:58:13.5922099Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.10.12/x64
+2026-01-27T08:58:13.5922452Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.10.12/x64/lib
+2026-01-27T08:58:13.5922744Z ##[endgroup]
+2026-01-27T08:58:13.9594255Z Requirement already satisfied: pip in /opt/hostedtoolcache/Python/3.10.12/x64/lib/python3.10/site-packages (25.3)
+2026-01-27T08:58:14.0832746Z Collecting wheel
+2026-01-27T08:58:14.1377296Z   Downloading wheel-0.46.3-py3-none-any.whl.metadata (2.4 kB)
+2026-01-27T08:58:14.1424436Z Requirement already satisfied: setuptools in /opt/hostedtoolcache/Python/3.10.12/x64/lib/python3.10/site-packages (65.5.0)
+2026-01-27T08:58:14.3088743Z Collecting setuptools
+2026-01-27T08:58:14.3132191Z   Downloading setuptools-80.10.2-py3-none-any.whl.metadata (6.6 kB)
+2026-01-27T08:58:14.3454122Z Collecting packaging>=24.0 (from wheel)
+2026-01-27T08:58:14.3493432Z   Downloading packaging-26.0-py3-none-any.whl.metadata (3.3 kB)
+2026-01-27T08:58:14.3569819Z Downloading wheel-0.46.3-py3-none-any.whl (30 kB)
+2026-01-27T08:58:14.3675961Z Downloading setuptools-80.10.2-py3-none-any.whl (1.1 MB)
+2026-01-27T08:58:14.3927623Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.1/1.1 MB 95.6 MB/s  0:00:00
+2026-01-27T08:58:14.3963410Z Downloading packaging-26.0-py3-none-any.whl (74 kB)
+2026-01-27T08:58:14.4377107Z Installing collected packages: setuptools, packaging, wheel
+2026-01-27T08:58:14.4384391Z   Attempting uninstall: setuptools
+2026-01-27T08:58:14.4391661Z     Found existing installation: setuptools 65.5.0
+2026-01-27T08:58:14.4630910Z     Uninstalling setuptools-65.5.0:
+2026-01-27T08:58:14.4744140Z       Successfully uninstalled setuptools-65.5.0
+2026-01-27T08:58:15.1415563Z
+2026-01-27T08:58:15.1428437Z Successfully installed packaging-26.0 setuptools-80.10.2 wheel-0.46.3
+2026-01-27T08:58:15.7733942Z Collecting jsonschema
+2026-01-27T08:58:15.8315456Z   Downloading jsonschema-4.26.0-py3-none-any.whl.metadata (7.6 kB)
+2026-01-27T08:58:15.8967267Z Collecting fastapi==0.104.1 (from -r web_service/backend/requirements.txt (line 11))
+2026-01-27T08:58:15.9013125Z   Downloading fastapi-0.104.1-py3-none-any.whl.metadata (24 kB)
+2026-01-27T08:58:15.9377026Z Collecting uvicorn==0.24.0 (from uvicorn[standard]==0.24.0->-r web_service/backend/requirements.txt (line 12))
+2026-01-27T08:58:15.9427108Z   Downloading uvicorn-0.24.0-py3-none-any.whl.metadata (6.4 kB)
+2026-01-27T08:58:15.9768998Z Collecting starlette==0.27.0 (from -r web_service/backend/requirements.txt (line 13))
+2026-01-27T08:58:15.9809898Z   Downloading starlette-0.27.0-py3-none-any.whl.metadata (5.8 kB)
+2026-01-27T08:58:16.1256708Z Collecting pydantic==2.5.0 (from -r web_service/backend/requirements.txt (line 14))
+2026-01-27T08:58:16.1305280Z   Downloading pydantic-2.5.0-py3-none-any.whl.metadata (174 kB)
+2026-01-27T08:58:17.0340372Z Collecting pydantic-core==2.14.1 (from -r web_service/backend/requirements.txt (line 15))
+2026-01-27T08:58:17.0390846Z   Downloading pydantic_core-2.14.1-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.5 kB)
+2026-01-27T08:58:17.0558555Z Collecting pydantic-settings==2.1.0 (from -r web_service/backend/requirements.txt (line 16))
+2026-01-27T08:58:17.0602901Z   Downloading pydantic_settings-2.1.0-py3-none-any.whl.metadata (2.9 kB)
+2026-01-27T08:58:17.0811534Z Collecting anyio==3.7.1 (from -r web_service/backend/requirements.txt (line 19))
+2026-01-27T08:58:17.0889258Z   Downloading anyio-3.7.1-py3-none-any.whl.metadata (4.7 kB)
+2026-01-27T08:58:17.1044865Z Collecting h11==0.14.0 (from -r web_service/backend/requirements.txt (line 20))
+2026-01-27T08:58:17.1099707Z   Downloading h11-0.14.0-py3-none-any.whl.metadata (8.2 kB)
+2026-01-27T08:58:17.1271999Z Collecting h2==4.1.0 (from -r web_service/backend/requirements.txt (line 21))
+2026-01-27T08:58:17.1319266Z   Downloading h2-4.1.0-py3-none-any.whl.metadata (3.6 kB)
+2026-01-27T08:58:17.1432688Z Collecting hpack==4.0.0 (from -r web_service/backend/requirements.txt (line 22))
+2026-01-27T08:58:17.1477703Z   Downloading hpack-4.0.0-py3-none-any.whl.metadata (2.5 kB)
+2026-01-27T08:58:17.1673456Z Collecting httpcore==1.0.2 (from -r web_service/backend/requirements.txt (line 23))
+2026-01-27T08:58:17.2084956Z   Downloading httpcore-1.0.2-py3-none-any.whl.metadata (20 kB)
+2026-01-27T08:58:17.2477929Z Collecting httptools==0.6.1 (from -r web_service/backend/requirements.txt (line 24))
+2026-01-27T08:58:17.2526571Z   Downloading httptools-0.6.1-cp310-cp310-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (3.6 kB)
+2026-01-27T08:58:17.2736391Z Collecting httpx==0.25.2 (from -r web_service/backend/requirements.txt (line 25))
+2026-01-27T08:58:17.2782106Z   Downloading httpx-0.25.2-py3-none-any.whl.metadata (6.9 kB)
+2026-01-27T08:58:17.2931975Z Collecting hyperframe==6.1.0 (from -r web_service/backend/requirements.txt (line 26))
+2026-01-27T08:58:17.2968579Z   Downloading hyperframe-6.1.0-py3-none-any.whl.metadata (4.3 kB)
+2026-01-27T08:58:17.4286800Z Collecting websockets==12.0 (from -r web_service/backend/requirements.txt (line 27))
+2026-01-27T08:58:17.4341879Z   Downloading websockets-12.0-cp310-cp310-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.6 kB)
+2026-01-27T08:58:17.5446959Z Collecting wsproto==1.2.0 (from -r web_service/backend/requirements.txt (line 28))
+2026-01-27T08:58:17.5496265Z   Downloading wsproto-1.2.0-py3-none-any.whl.metadata (5.6 kB)
+2026-01-27T08:58:17.6240967Z Collecting requests==2.31.0 (from -r web_service/backend/requirements.txt (line 31))
+2026-01-27T08:58:17.6280136Z   Downloading requests-2.31.0-py3-none-any.whl.metadata (4.6 kB)
+2026-01-27T08:58:17.7577382Z Collecting urllib3==2.1.0 (from -r web_service/backend/requirements.txt (line 32))
+2026-01-27T08:58:17.7621912Z   Downloading urllib3-2.1.0-py3-none-any.whl.metadata (6.4 kB)
+2026-01-27T08:58:18.1089792Z Collecting certifi>=2024.2.2 (from -r web_service/backend/requirements.txt (line 33))
+2026-01-27T08:58:18.1126523Z   Downloading certifi-2026.1.4-py3-none-any.whl.metadata (2.5 kB)
+2026-01-27T08:58:18.2104850Z Collecting charset-normalizer==3.3.2 (from -r web_service/backend/requirements.txt (line 34))
+2026-01-27T08:58:18.2158534Z   Downloading charset_normalizer-3.3.2-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (33 kB)
+2026-01-27T08:58:18.2315004Z Collecting idna==3.6 (from -r web_service/backend/requirements.txt (line 35))
+2026-01-27T08:58:18.2356574Z   Downloading idna-3.6-py3-none-any.whl.metadata (9.9 kB)
+2026-01-27T08:58:18.6184239Z Collecting sqlalchemy==2.0.23 (from -r web_service/backend/requirements.txt (line 38))
+2026-01-27T08:58:18.6236419Z   Downloading SQLAlchemy-2.0.23-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (9.6 kB)
+2026-01-27T08:58:18.7957249Z Collecting greenlet>=3.1.1 (from -r web_service/backend/requirements.txt (line 39))
+2026-01-27T08:58:18.7999390Z   Downloading greenlet-3.3.1-cp310-cp310-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl.metadata (3.7 kB)
+2026-01-27T08:58:18.8148914Z Collecting aiosqlite==0.19.0 (from -r web_service/backend/requirements.txt (line 40))
+2026-01-27T08:58:18.8197584Z   Downloading aiosqlite-0.19.0-py3-none-any.whl.metadata (4.3 kB)
+2026-01-27T08:58:18.9528341Z Collecting psycopg2-binary==2.9.9 (from -r web_service/backend/requirements.txt (line 41))
+2026-01-27T08:58:18.9579295Z   Downloading psycopg2_binary-2.9.9-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.4 kB)
+2026-01-27T08:58:19.1924710Z Collecting numpy==1.25.0 (from -r web_service/backend/requirements.txt (line 44))
+2026-01-27T08:58:19.1972462Z   Downloading numpy-1.25.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.6 kB)
+2026-01-27T08:58:19.3350122Z Collecting pandas==2.0.3 (from -r web_service/backend/requirements.txt (line 45))
+2026-01-27T08:58:19.3403919Z   Downloading pandas-2.0.3-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (18 kB)
+2026-01-27T08:58:19.3889999Z Collecting python-dateutil==2.8.2 (from -r web_service/backend/requirements.txt (line 46))
+2026-01-27T08:58:19.3934465Z   Downloading python_dateutil-2.8.2-py2.py3-none-any.whl.metadata (8.2 kB)
+2026-01-27T08:58:19.4369051Z Collecting pytz==2023.3.post1 (from -r web_service/backend/requirements.txt (line 47))
+2026-01-27T08:58:19.4413236Z   Downloading pytz-2023.3.post1-py2.py3-none-any.whl.metadata (22 kB)
+2026-01-27T08:58:19.4568161Z Collecting tzdata==2023.3 (from -r web_service/backend/requirements.txt (line 48))
+2026-01-27T08:58:19.4612958Z   Downloading tzdata-2023.3-py2.py3-none-any.whl.metadata (1.4 kB)
+2026-01-27T08:58:19.4747382Z Collecting six==1.16.0 (from -r web_service/backend/requirements.txt (line 49))
+2026-01-27T08:58:19.4784208Z   Downloading six-1.16.0-py2.py3-none-any.whl.metadata (1.8 kB)
+2026-01-27T08:58:19.4956961Z Collecting beautifulsoup4==4.12.2 (from -r web_service/backend/requirements.txt (line 52))
+2026-01-27T08:58:19.4994829Z   Downloading beautifulsoup4-4.12.2-py3-none-any.whl.metadata (3.6 kB)
+2026-01-27T08:58:19.5187193Z Collecting soupsieve==2.5 (from -r web_service/backend/requirements.txt (line 53))
+2026-01-27T08:58:19.5224696Z   Downloading soupsieve-2.5-py3-none-any.whl.metadata (4.7 kB)
+2026-01-27T08:58:19.7354731Z Collecting selectolax==0.3.20 (from -r web_service/backend/requirements.txt (line 54))
+2026-01-27T08:58:19.8043187Z   Downloading selectolax-0.3.20-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.6 kB)
+2026-01-27T08:58:19.8939932Z Collecting scrapling>=0.3.7 (from scrapling[fetchers]>=0.3.7->-r web_service/backend/requirements.txt (line 55))
+2026-01-27T08:58:19.8985369Z   Downloading scrapling-0.3.14-py3-none-any.whl.metadata (23 kB)
+2026-01-27T08:58:19.9920388Z Collecting camoufox>=0.1.7 (from -r web_service/backend/requirements.txt (line 56))
+2026-01-27T08:58:19.9966513Z   Downloading camoufox-0.4.11-py3-none-any.whl.metadata (3.3 kB)
+2026-01-27T08:58:20.0169843Z Collecting click>=8.3.0 (from -r web_service/backend/requirements.txt (line 59))
+2026-01-27T08:58:20.0206677Z   Downloading click-8.3.1-py3-none-any.whl.metadata (2.6 kB)
+2026-01-27T08:58:20.0369278Z Collecting python-dotenv==1.0.0 (from -r web_service/backend/requirements.txt (line 60))
+2026-01-27T08:58:20.0403042Z   Downloading python_dotenv-1.0.0-py3-none-any.whl.metadata (21 kB)
+2026-01-27T08:58:20.0858358Z Collecting pyyaml==6.0.1 (from -r web_service/backend/requirements.txt (line 61))
+2026-01-27T08:58:20.0908396Z   Downloading PyYAML-6.0.1-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (2.1 kB)
+2026-01-27T08:58:20.3091863Z Collecting cryptography==41.0.7 (from -r web_service/backend/requirements.txt (line 64))
+2026-01-27T08:58:20.3142912Z   Downloading cryptography-41.0.7-cp37-abi3-manylinux_2_28_x86_64.whl.metadata (5.2 kB)
+2026-01-27T08:58:20.4464229Z Collecting cffi==1.16.0 (from -r web_service/backend/requirements.txt (line 65))
+2026-01-27T08:58:20.4515186Z   Downloading cffi-1.16.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (1.5 kB)
+2026-01-27T08:58:20.4625544Z Collecting pycparser==2.21 (from -r web_service/backend/requirements.txt (line 66))
+2026-01-27T08:58:20.4660685Z   Downloading pycparser-2.21-py2.py3-none-any.whl.metadata (1.1 kB)
+2026-01-27T08:58:20.4777968Z Collecting secretstorage==3.5.0 (from -r web_service/backend/requirements.txt (line 67))
+2026-01-27T08:58:20.4814484Z   Downloading secretstorage-3.5.0-py3-none-any.whl.metadata (4.0 kB)
+2026-01-27T08:58:20.5187720Z Collecting keyring==24.3.0 (from -r web_service/backend/requirements.txt (line 68))
+2026-01-27T08:58:20.5256393Z   Downloading keyring-24.3.0-py3-none-any.whl.metadata (20 kB)
+2026-01-27T08:58:20.5421392Z Collecting jeepney==0.9.0 (from -r web_service/backend/requirements.txt (line 69))
+2026-01-27T08:58:20.5457714Z   Downloading jeepney-0.9.0-py3-none-any.whl.metadata (1.2 kB)
+2026-01-27T08:58:20.5768055Z Collecting redis==5.0.1 (from -r web_service/backend/requirements.txt (line 72))
+2026-01-27T08:58:20.5805053Z   Downloading redis-5.0.1-py3-none-any.whl.metadata (8.9 kB)
+2026-01-27T08:58:20.6061807Z Collecting limits==3.7.0 (from -r web_service/backend/requirements.txt (line 73))
+2026-01-27T08:58:20.6126461Z   Downloading limits-3.7.0-py3-none-any.whl.metadata (7.3 kB)
+2026-01-27T08:58:20.6334799Z Collecting slowapi==0.1.9 (from -r web_service/backend/requirements.txt (line 74))
+2026-01-27T08:58:20.6376848Z   Downloading slowapi-0.1.9-py3-none-any.whl.metadata (3.0 kB)
+2026-01-27T08:58:20.6555260Z Collecting tenacity==8.2.3 (from -r web_service/backend/requirements.txt (line 75))
+2026-01-27T08:58:20.6595022Z   Downloading tenacity-8.2.3-py3-none-any.whl.metadata (1.0 kB)
+2026-01-27T08:58:20.6799914Z Collecting pywebview==5.4 (from -r web_service/backend/requirements.txt (line 78))
+2026-01-27T08:58:20.6852764Z   Downloading pywebview-5.4-py3-none-any.whl.metadata (4.5 kB)
+2026-01-27T08:58:20.7915675Z Collecting bottle==0.13.4 (from -r web_service/backend/requirements.txt (line 79))
+2026-01-27T08:58:20.7967345Z   Downloading bottle-0.13.4-py2.py3-none-any.whl.metadata (1.6 kB)
+2026-01-27T08:58:20.8064309Z Collecting proxy-tools==0.1.0 (from -r web_service/backend/requirements.txt (line 80))
+2026-01-27T08:58:20.8099847Z   Downloading proxy_tools-0.1.0.tar.gz (3.0 kB)
+2026-01-27T08:58:20.8163959Z   Installing build dependencies: started
+2026-01-27T08:58:21.5737940Z   Installing build dependencies: finished with status 'done'
+2026-01-27T08:58:21.5745484Z   Getting requirements to build wheel: started
+2026-01-27T08:58:21.8997128Z   Getting requirements to build wheel: finished with status 'done'
+2026-01-27T08:58:21.9006598Z   Preparing metadata (pyproject.toml): started
+2026-01-27T08:58:22.0761460Z   Preparing metadata (pyproject.toml): finished with status 'done'
+2026-01-27T08:58:22.1614922Z Collecting psutil==5.9.6 (from -r web_service/backend/requirements.txt (line 84))
+2026-01-27T08:58:22.1666373Z   Downloading psutil-5.9.6-cp36-abi3-manylinux_2_12_x86_64.manylinux2010_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (21 kB)
+2026-01-27T08:58:22.1847348Z Collecting structlog==23.2.0 (from -r web_service/backend/requirements.txt (line 87))
+2026-01-27T08:58:22.1889679Z   Downloading structlog-23.2.0-py3-none-any.whl.metadata (7.6 kB)
+2026-01-27T08:58:22.2518980Z Collecting black==23.12.0 (from -r web_service/backend/requirements.txt (line 90))
+2026-01-27T08:58:22.2571580Z   Downloading black-23.12.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (68 kB)
+2026-01-27T08:58:22.3167695Z Collecting pyinstaller==6.1.0 (from -r web_service/backend/requirements.txt (line 91))
+2026-01-27T08:58:22.3236561Z   Downloading pyinstaller-6.1.0-py3-none-manylinux2014_x86_64.whl.metadata (8.2 kB)
+2026-01-27T08:58:22.3472783Z Collecting pyinstaller-hooks-contrib==2023.11 (from -r web_service/backend/requirements.txt (line 92))
+2026-01-27T08:58:22.3520296Z   Downloading pyinstaller_hooks_contrib-2023.11-py2.py3-none-any.whl.metadata (15 kB)
+2026-01-27T08:58:22.3657193Z Collecting altgraph==0.17.3 (from -r web_service/backend/requirements.txt (line 93))
+2026-01-27T08:58:22.3704356Z   Downloading altgraph-0.17.3-py2.py3-none-any.whl.metadata (7.4 kB)
+2026-01-27T08:58:22.3919164Z Collecting wheel==0.41.2 (from -r web_service/backend/requirements.txt (line 94))
+2026-01-27T08:58:22.3964349Z   Downloading wheel-0.41.2-py3-none-any.whl.metadata (2.2 kB)
+2026-01-27T08:58:22.4102361Z Collecting build==1.0.3 (from -r web_service/backend/requirements.txt (line 95))
+2026-01-27T08:58:22.4149157Z   Downloading build-1.0.3-py3-none-any.whl.metadata (4.2 kB)
+2026-01-27T08:58:22.4544755Z Collecting pip-tools==7.3.0 (from -r web_service/backend/requirements.txt (line 96))
+2026-01-27T08:58:22.4590685Z   Downloading pip_tools-7.3.0-py3-none-any.whl.metadata (23 kB)
+2026-01-27T08:58:22.4991689Z Collecting pytest==7.4.3 (from -r web_service/backend/requirements.txt (line 99))
+2026-01-27T08:58:22.5033244Z   Downloading pytest-7.4.3-py3-none-any.whl.metadata (7.9 kB)
+2026-01-27T08:58:22.5262752Z Collecting pytest-asyncio==0.21.1 (from -r web_service/backend/requirements.txt (line 100))
+2026-01-27T08:58:22.5301693Z   Downloading pytest_asyncio-0.21.1-py3-none-any.whl.metadata (4.0 kB)
+2026-01-27T08:58:22.5424607Z Collecting iniconfig==2.0.0 (from -r web_service/backend/requirements.txt (line 101))
+2026-01-27T08:58:22.5537426Z   Downloading iniconfig-2.0.0-py3-none-any.whl.metadata (2.6 kB)
+2026-01-27T08:58:22.5668642Z Collecting pluggy==1.3.0 (from -r web_service/backend/requirements.txt (line 102))
+2026-01-27T08:58:22.5712786Z   Downloading pluggy-1.3.0-py3-none-any.whl.metadata (4.3 kB)
+2026-01-27T08:58:22.5881007Z Collecting packaging==23.2 (from -r web_service/backend/requirements.txt (line 103))
+2026-01-27T08:58:22.5917949Z   Downloading packaging-23.2-py3-none-any.whl.metadata (3.2 kB)
+2026-01-27T08:58:22.6090327Z Collecting typing-extensions==4.10.0 (from -r web_service/backend/requirements.txt (line 106))
+2026-01-27T08:58:22.6147923Z   Downloading typing_extensions-4.10.0-py3-none-any.whl.metadata (3.0 kB)
+2026-01-27T08:58:22.6256501Z Collecting typing-inspect==0.9.0 (from -r web_service/backend/requirements.txt (line 107))
+2026-01-27T08:58:22.6290210Z   Downloading typing_inspect-0.9.0-py3-none-any.whl.metadata (1.5 kB)
+2026-01-27T08:58:22.6394041Z Collecting annotated-types==0.6.0 (from -r web_service/backend/requirements.txt (line 108))
+2026-01-27T08:58:22.6438986Z   Downloading annotated_types-0.6.0-py3-none-any.whl.metadata (12 kB)
+2026-01-27T08:58:22.6536011Z Collecting mypy-extensions==1.0.0 (from -r web_service/backend/requirements.txt (line 111))
+2026-01-27T08:58:22.6575141Z   Downloading mypy_extensions-1.0.0-py3-none-any.whl.metadata (1.1 kB)
+2026-01-27T08:58:22.6700789Z Collecting pathspec==0.11.2 (from -r web_service/backend/requirements.txt (line 112))
+2026-01-27T08:58:22.6741633Z   Downloading pathspec-0.11.2-py3-none-any.whl.metadata (19 kB)
+2026-01-27T08:58:22.6918172Z Collecting platformdirs==4.2.0 (from -r web_service/backend/requirements.txt (line 113))
+2026-01-27T08:58:22.6961304Z   Downloading platformdirs-4.2.0-py3-none-any.whl.metadata (11 kB)
+2026-01-27T08:58:22.7161125Z Collecting more-itertools==10.1.0 (from -r web_service/backend/requirements.txt (line 114))
+2026-01-27T08:58:22.7205783Z   Downloading more_itertools-10.1.0-py3-none-any.whl.metadata (33 kB)
+2026-01-27T08:58:22.7349494Z Collecting jaraco.classes==3.3.1 (from -r web_service/backend/requirements.txt (line 115))
+2026-01-27T08:58:22.7393873Z   Downloading jaraco.classes-3.3.1-py3-none-any.whl.metadata (2.7 kB)
+2026-01-27T08:58:22.7538619Z Collecting jaraco.context==5.3.0 (from -r web_service/backend/requirements.txt (line 116))
+2026-01-27T08:58:22.7581157Z   Downloading jaraco.context-5.3.0-py3-none-any.whl.metadata (4.0 kB)
+2026-01-27T08:58:22.7828586Z Collecting jaraco.functools==4.0.0 (from -r web_service/backend/requirements.txt (line 117))
+2026-01-27T08:58:22.7872616Z   Downloading jaraco.functools-4.0.0-py3-none-any.whl.metadata (3.1 kB)
+2026-01-27T08:58:22.8023854Z Collecting deprecated==1.2.14 (from -r web_service/backend/requirements.txt (line 118))
+2026-01-27T08:58:22.8070343Z   Downloading Deprecated-1.2.14-py2.py3-none-any.whl.metadata (5.4 kB)
+2026-01-27T08:58:22.8168861Z Collecting sniffio==1.3.0 (from -r web_service/backend/requirements.txt (line 119))
+2026-01-27T08:58:22.8208376Z   Downloading sniffio-1.3.0-py3-none-any.whl.metadata (3.6 kB)
+2026-01-27T08:58:23.0025421Z Collecting wrapt==1.16.0 (from -r web_service/backend/requirements.txt (line 120))
+2026-01-27T08:58:23.0080228Z   Downloading wrapt-1.16.0-cp310-cp310-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.6 kB)
+2026-01-27T08:58:23.0993150Z Collecting watchfiles==0.20.0 (from -r web_service/backend/requirements.txt (line 121))
+2026-01-27T08:58:23.1039339Z   Downloading watchfiles-0.20.0-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.9 kB)
+2026-01-27T08:58:23.1242784Z Collecting pygments==2.17.2 (from -r web_service/backend/requirements.txt (line 122))
+2026-01-27T08:58:23.1277643Z   Downloading pygments-2.17.2-py3-none-any.whl.metadata (2.6 kB)
+2026-01-27T08:58:23.1973787Z Collecting exceptiongroup (from anyio==3.7.1->-r web_service/backend/requirements.txt (line 19))
+2026-01-27T08:58:23.2011499Z   Downloading exceptiongroup-1.3.1-py3-none-any.whl.metadata (6.7 kB)
+2026-01-27T08:58:23.4112462Z Collecting importlib-metadata>=4.11.4 (from keyring==24.3.0->-r web_service/backend/requirements.txt (line 68))
+2026-01-27T08:58:23.4148657Z   Downloading importlib_metadata-8.7.1-py3-none-any.whl.metadata (4.7 kB)
+2026-01-27T08:58:23.4388258Z Collecting async-timeout>=4.0.2 (from redis==5.0.1->-r web_service/backend/requirements.txt (line 72))
+2026-01-27T08:58:23.4423457Z   Downloading async_timeout-5.0.1-py3-none-any.whl.metadata (5.1 kB)
+2026-01-27T08:58:23.4730183Z Collecting importlib-resources>=1.3 (from limits==3.7.0->-r web_service/backend/requirements.txt (line 73))
+2026-01-27T08:58:23.4769237Z   Downloading importlib_resources-6.5.2-py3-none-any.whl.metadata (3.9 kB)
+2026-01-27T08:58:23.5475430Z Collecting tomli>=1.1.0 (from black==23.12.0->-r web_service/backend/requirements.txt (line 90))
+2026-01-27T08:58:23.5515177Z   Downloading tomli-2.4.0-py3-none-any.whl.metadata (10 kB)
+2026-01-27T08:58:24.2817596Z Collecting aiohttp>=3.7.4 (from black==23.12.0->-r web_service/backend/requirements.txt (line 90))
+2026-01-27T08:58:24.2862112Z   Downloading aiohttp-3.13.3-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (8.1 kB)
+2026-01-27T08:58:24.2949065Z Requirement already satisfied: setuptools>=42.0.0 in /opt/hostedtoolcache/Python/3.10.12/x64/lib/python3.10/site-packages (from pyinstaller==6.1.0->-r web_service/backend/requirements.txt (line 91)) (80.10.2)
+2026-01-27T08:58:24.3236102Z Collecting pyproject_hooks (from build==1.0.3->-r web_service/backend/requirements.txt (line 95))
+2026-01-27T08:58:24.3273796Z   Downloading pyproject_hooks-1.2.0-py3-none-any.whl.metadata (1.3 kB)
+2026-01-27T08:58:24.3340088Z Requirement already satisfied: pip>=22.2 in /opt/hostedtoolcache/Python/3.10.12/x64/lib/python3.10/site-packages (from pip-tools==7.3.0->-r web_service/backend/requirements.txt (line 96)) (25.3)
+2026-01-27T08:58:24.4012912Z Collecting backports.tarfile (from jaraco.context==5.3.0->-r web_service/backend/requirements.txt (line 116))
+2026-01-27T08:58:24.4052846Z   Downloading backports.tarfile-1.2.0-py3-none-any.whl.metadata (2.0 kB)
+2026-01-27T08:58:24.4944171Z Collecting uvloop!=0.15.0,!=0.15.1,>=0.14.0 (from uvicorn[standard]==0.24.0->-r web_service/backend/requirements.txt (line 12))
+2026-01-27T08:58:24.4991372Z   Downloading uvloop-0.22.1-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (4.9 kB)
+2026-01-27T08:58:24.7381634Z Collecting lxml>=6.0.2 (from scrapling[all])
+2026-01-27T08:58:24.7426364Z   Downloading lxml-6.0.2-cp310-cp310-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl.metadata (3.6 kB)
+2026-01-27T08:58:24.7559975Z Collecting cssselect>=1.3.0 (from scrapling[all])
+2026-01-27T08:58:24.7599624Z   Downloading cssselect-1.3.0-py3-none-any.whl.metadata (2.6 kB)
+2026-01-27T08:58:25.1918056Z Collecting orjson>=3.11.5 (from scrapling[all])
+2026-01-27T08:58:25.1960894Z   Downloading orjson-3.11.5-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (41 kB)
+2026-01-27T08:58:25.2158904Z Collecting tldextract>=5.3.1 (from scrapling[all])
+2026-01-27T08:58:25.2202626Z   Downloading tldextract-5.3.1-py3-none-any.whl.metadata (7.3 kB)
+2026-01-27T08:58:25.2449490Z Collecting attrs>=22.2.0 (from jsonschema)
+2026-01-27T08:58:25.2488443Z   Downloading attrs-25.4.0-py3-none-any.whl.metadata (10 kB)
+2026-01-27T08:58:25.2629653Z Collecting jsonschema-specifications>=2023.03.6 (from jsonschema)
+2026-01-27T08:58:25.2668781Z   Downloading jsonschema_specifications-2025.9.1-py3-none-any.whl.metadata (2.9 kB)
+2026-01-27T08:58:25.2959302Z Collecting referencing>=0.28.4 (from jsonschema)
+2026-01-27T08:58:25.2999492Z   Downloading referencing-0.37.0-py3-none-any.whl.metadata (2.8 kB)
+2026-01-27T08:58:25.6410923Z Collecting rpds-py>=0.25.0 (from jsonschema)
+2026-01-27T08:58:25.6452314Z   Downloading rpds_py-0.30.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.1 kB)
+2026-01-27T08:58:25.7331607Z Collecting browserforge<2.0.0,>=1.2.1 (from camoufox>=0.1.7->-r web_service/backend/requirements.txt (line 56))
+2026-01-27T08:58:25.7375070Z   Downloading browserforge-1.2.3-py3-none-any.whl.metadata (28 kB)
+2026-01-27T08:58:25.7508123Z Collecting language-tags (from camoufox>=0.1.7->-r web_service/backend/requirements.txt (line 56))
+2026-01-27T08:58:25.7553758Z   Downloading language_tags-1.2.0-py3-none-any.whl.metadata (2.1 kB)
+2026-01-27T08:58:25.8021134Z Collecting playwright (from camoufox>=0.1.7->-r web_service/backend/requirements.txt (line 56))
+2026-01-27T08:58:25.8064412Z   Downloading playwright-1.57.0-py3-none-manylinux1_x86_64.whl.metadata (3.5 kB)
+2026-01-27T08:58:25.8183345Z Collecting pysocks (from camoufox>=0.1.7->-r web_service/backend/requirements.txt (line 56))
+2026-01-27T08:58:25.8220989Z   Downloading PySocks-1.7.1-py3-none-any.whl.metadata (13 kB)
+2026-01-27T08:58:25.8336674Z Collecting screeninfo (from camoufox>=0.1.7->-r web_service/backend/requirements.txt (line 56))
+2026-01-27T08:58:25.8377163Z   Downloading screeninfo-0.8.1-py3-none-any.whl.metadata (2.9 kB)
+2026-01-27T08:58:25.8784405Z Collecting tqdm (from camoufox>=0.1.7->-r web_service/backend/requirements.txt (line 56))
+2026-01-27T08:58:25.8827673Z   Downloading tqdm-4.67.1-py3-none-any.whl.metadata (57 kB)
+2026-01-27T08:58:25.9018399Z Collecting ua_parser (from camoufox>=0.1.7->-r web_service/backend/requirements.txt (line 56))
+2026-01-27T08:58:25.9059557Z   Downloading ua_parser-1.0.1-py3-none-any.whl.metadata (5.6 kB)
+2026-01-27T08:58:25.9338166Z Collecting aiohappyeyeballs>=2.5.0 (from aiohttp>=3.7.4->black==23.12.0->-r web_service/backend/requirements.txt (line 90))
+2026-01-27T08:58:25.9375691Z   Downloading aiohappyeyeballs-2.6.1-py3-none-any.whl.metadata (5.9 kB)
+2026-01-27T08:58:25.9476343Z Collecting aiosignal>=1.4.0 (from aiohttp>=3.7.4->black==23.12.0->-r web_service/backend/requirements.txt (line 90))
+2026-01-27T08:58:25.9511495Z   Downloading aiosignal-1.4.0-py3-none-any.whl.metadata (3.7 kB)
+2026-01-27T08:58:26.0414977Z Collecting frozenlist>=1.1.1 (from aiohttp>=3.7.4->black==23.12.0->-r web_service/backend/requirements.txt (line 90))
+2026-01-27T08:58:26.0458366Z   Downloading frozenlist-1.8.0-cp310-cp310-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl.metadata (20 kB)
+2026-01-27T08:58:26.3452482Z Collecting multidict<7.0,>=4.5 (from aiohttp>=3.7.4->black==23.12.0->-r web_service/backend/requirements.txt (line 90))
+2026-01-27T08:58:26.3494966Z   Downloading multidict-6.7.1-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (5.3 kB)
+2026-01-27T08:58:26.4167939Z Collecting propcache>=0.2.0 (from aiohttp>=3.7.4->black==23.12.0->-r web_service/backend/requirements.txt (line 90))
+2026-01-27T08:58:26.4210778Z   Downloading propcache-0.4.1-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (13 kB)
+2026-01-27T08:58:26.8888009Z Collecting yarl<2.0,>=1.17.0 (from aiohttp>=3.7.4->black==23.12.0->-r web_service/backend/requirements.txt (line 90))
+2026-01-27T08:58:26.8929439Z   Downloading yarl-1.22.0-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (75 kB)
+2026-01-27T08:58:26.9802648Z Collecting zipp>=3.20 (from importlib-metadata>=4.11.4->keyring==24.3.0->-r web_service/backend/requirements.txt (line 68))
+2026-01-27T08:58:26.9839020Z   Downloading zipp-3.23.0-py3-none-any.whl.metadata (3.6 kB)
+2026-01-27T08:58:27.0927587Z Collecting curl_cffi>=0.14.0 (from scrapling[fetchers]>=0.3.7->-r web_service/backend/requirements.txt (line 55))
+2026-01-27T08:58:27.0968705Z   Downloading curl_cffi-0.14.0-cp39-abi3-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl.metadata (15 kB)
+2026-01-27T08:58:27.1103929Z Collecting playwright (from camoufox>=0.1.7->-r web_service/backend/requirements.txt (line 56))
+2026-01-27T08:58:27.1156129Z   Downloading playwright-1.56.0-py3-none-manylinux1_x86_64.whl.metadata (3.5 kB)
+2026-01-27T08:58:27.1358896Z Collecting patchright==1.56.0 (from scrapling[fetchers]>=0.3.7->-r web_service/backend/requirements.txt (line 55))
+2026-01-27T08:58:27.1407772Z   Downloading patchright-1.56.0-py3-none-manylinux1_x86_64.whl.metadata (12 kB)
+2026-01-27T08:58:27.2107686Z Collecting msgspec>=0.20.0 (from scrapling[fetchers]>=0.3.7->-r web_service/backend/requirements.txt (line 55))
+2026-01-27T08:58:27.2158746Z   Downloading msgspec-0.20.0-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (5.5 kB)
+2026-01-27T08:58:27.2410731Z Collecting pyee<14,>=13 (from patchright==1.56.0->scrapling[fetchers]>=0.3.7->-r web_service/backend/requirements.txt (line 55))
+2026-01-27T08:58:27.2447273Z   Downloading pyee-13.0.0-py3-none-any.whl.metadata (2.9 kB)
+2026-01-27T08:58:27.3218041Z Collecting requests-file>=1.4 (from tldextract>=5.3.1->scrapling[all])
+2026-01-27T08:58:27.3254104Z   Downloading requests_file-3.0.1-py2.py3-none-any.whl.metadata (1.7 kB)
+2026-01-27T08:58:27.3491988Z Collecting filelock>=3.0.8 (from tldextract>=5.3.1->scrapling[all])
+2026-01-27T08:58:27.3531354Z   Downloading filelock-3.20.3-py3-none-any.whl.metadata (2.1 kB)
+2026-01-27T08:58:27.4449291Z Collecting IPython>=8.37 (from scrapling>=0.3.7->scrapling[fetchers]>=0.3.7->-r web_service/backend/requirements.txt (line 55))
+2026-01-27T08:58:27.4487139Z   Downloading ipython-8.38.0-py3-none-any.whl.metadata (5.1 kB)
+2026-01-27T08:58:27.4772002Z Collecting markdownify>=1.2.0 (from scrapling>=0.3.7->scrapling[fetchers]>=0.3.7->-r web_service/backend/requirements.txt (line 55))
+2026-01-27T08:58:27.4815759Z   Downloading markdownify-1.2.2-py3-none-any.whl.metadata (9.9 kB)
+2026-01-27T08:58:27.5034427Z Collecting mcp>=1.24.0 (from scrapling>=0.3.7->scrapling[fetchers]>=0.3.7->-r web_service/backend/requirements.txt (line 55))
+2026-01-27T08:58:27.5070504Z   Downloading mcp-1.26.0-py3-none-any.whl.metadata (89 kB)
+2026-01-27T08:58:27.5368781Z Collecting decorator (from IPython>=8.37->scrapling>=0.3.7->scrapling[fetchers]>=0.3.7->-r web_service/backend/requirements.txt (line 55))
+2026-01-27T08:58:27.5409749Z   Downloading decorator-5.2.1-py3-none-any.whl.metadata (3.9 kB)
+2026-01-27T08:58:27.5579178Z Collecting jedi>=0.16 (from IPython>=8.37->scrapling>=0.3.7->scrapling[fetchers]>=0.3.7->-r web_service/backend/requirements.txt (line 55))
+2026-01-27T08:58:27.5616162Z   Downloading jedi-0.19.2-py2.py3-none-any.whl.metadata (22 kB)
+2026-01-27T08:58:27.5802045Z Collecting matplotlib-inline (from IPython>=8.37->scrapling>=0.3.7->scrapling[fetchers]>=0.3.7->-r web_service/backend/requirements.txt (line 55))
+2026-01-27T08:58:27.5840741Z   Downloading matplotlib_inline-0.2.1-py3-none-any.whl.metadata (2.3 kB)
+2026-01-27T08:58:27.5959577Z Collecting pexpect>4.3 (from IPython>=8.37->scrapling>=0.3.7->scrapling[fetchers]>=0.3.7->-r web_service/backend/requirements.txt (line 55))
+2026-01-27T08:58:27.5996402Z   Downloading pexpect-4.9.0-py2.py3-none-any.whl.metadata (2.5 kB)
+2026-01-27T08:58:27.6360561Z Collecting prompt_toolkit<3.1.0,>=3.0.41 (from IPython>=8.37->scrapling>=0.3.7->scrapling[fetchers]>=0.3.7->-r web_service/backend/requirements.txt (line 55))
+2026-01-27T08:58:27.6402440Z   Downloading prompt_toolkit-3.0.52-py3-none-any.whl.metadata (6.4 kB)
+2026-01-27T08:58:27.6606720Z Collecting stack_data (from IPython>=8.37->scrapling>=0.3.7->scrapling[fetchers]>=0.3.7->-r web_service/backend/requirements.txt (line 55))
+2026-01-27T08:58:27.6641993Z   Downloading stack_data-0.6.3-py3-none-any.whl.metadata (18 kB)
+2026-01-27T08:58:27.6834589Z Collecting traitlets>=5.13.0 (from IPython>=8.37->scrapling>=0.3.7->scrapling[fetchers]>=0.3.7->-r web_service/backend/requirements.txt (line 55))
+2026-01-27T08:58:27.6869318Z   Downloading traitlets-5.14.3-py3-none-any.whl.metadata (10 kB)
+2026-01-27T08:58:27.7087026Z Collecting wcwidth (from prompt_toolkit<3.1.0,>=3.0.41->IPython>=8.37->scrapling>=0.3.7->scrapling[fetchers]>=0.3.7->-r web_service/backend/requirements.txt (line 55))
+2026-01-27T08:58:27.7122421Z   Downloading wcwidth-0.5.0-py3-none-any.whl.metadata (29 kB)
+2026-01-27T08:58:27.7327047Z Collecting parso<0.9.0,>=0.8.4 (from jedi>=0.16->IPython>=8.37->scrapling>=0.3.7->scrapling[fetchers]>=0.3.7->-r web_service/backend/requirements.txt (line 55))
+2026-01-27T08:58:27.7362490Z   Downloading parso-0.8.5-py2.py3-none-any.whl.metadata (8.3 kB)
+2026-01-27T08:58:27.7609123Z INFO: pip is looking at multiple versions of mcp to determine which version is compatible with other requirements. This could take a while.
+2026-01-27T08:58:27.7616157Z Collecting mcp>=1.24.0 (from scrapling>=0.3.7->scrapling[fetchers]>=0.3.7->-r web_service/backend/requirements.txt (line 55))
+2026-01-27T08:58:27.7662426Z   Downloading mcp-1.25.0-py3-none-any.whl.metadata (89 kB)
+2026-01-27T08:58:27.7852529Z   Downloading mcp-1.24.0-py3-none-any.whl.metadata (89 kB)
+2026-01-27T08:58:27.8262921Z Collecting markdownify>=1.2.0 (from scrapling>=0.3.7->scrapling[fetchers]>=0.3.7->-r web_service/backend/requirements.txt (line 55))
+2026-01-27T08:58:27.8313885Z   Downloading markdownify-1.2.0-py3-none-any.whl.metadata (9.9 kB)
+2026-01-27T08:58:27.8421412Z INFO: pip is still looking at multiple versions of mcp to determine which version is compatible with other requirements. This could take a while.
+2026-01-27T08:58:27.8463415Z Collecting jedi>=0.16 (from IPython>=8.37->scrapling>=0.3.7->scrapling[fetchers]>=0.3.7->-r web_service/backend/requirements.txt (line 55))
+2026-01-27T08:58:27.8507570Z   Downloading jedi-0.19.1-py2.py3-none-any.whl.metadata (22 kB)
+2026-01-27T08:58:27.8722794Z Collecting prompt_toolkit<3.1.0,>=3.0.41 (from IPython>=8.37->scrapling>=0.3.7->scrapling[fetchers]>=0.3.7->-r web_service/backend/requirements.txt (line 55))
+2026-01-27T08:58:27.8771692Z   Downloading prompt_toolkit-3.0.51-py3-none-any.whl.metadata (6.4 kB)
+2026-01-27T08:58:27.8855399Z INFO: This is taking longer than usual. You might need to provide the dependency resolver with stricter constraints to reduce runtime. See https://pip.pypa.io/warnings/backtracking for guidance. If you want to abort this run, press Ctrl + C.
+2026-01-27T08:58:27.8930284Z Collecting IPython>=8.37 (from scrapling>=0.3.7->scrapling[fetchers]>=0.3.7->-r web_service/backend/requirements.txt (line 55))
+2026-01-27T08:58:27.8977337Z   Downloading ipython-8.37.0-py3-none-any.whl.metadata (5.1 kB)
+2026-01-27T08:58:27.9241267Z Collecting pysocks (from camoufox>=0.1.7->-r web_service/backend/requirements.txt (line 56))
+2026-01-27T08:58:27.9289110Z   Downloading PySocks-1.7.0-py3-none-any.whl.metadata (13 kB)
+2026-01-27T08:58:27.9557162Z   Downloading PySocks-1.6.8.tar.gz (283 kB)
+2026-01-27T08:58:27.9770701Z   Installing build dependencies: started
+2026-01-27T08:58:28.7476747Z   Installing build dependencies: finished with status 'done'
+2026-01-27T08:58:28.7484514Z   Getting requirements to build wheel: started
+2026-01-27T08:58:29.0710691Z   Getting requirements to build wheel: finished with status 'done'
+2026-01-27T08:58:29.0719961Z   Preparing metadata (pyproject.toml): started
+2026-01-27T08:58:29.2451828Z   Preparing metadata (pyproject.toml): finished with status 'done'
+2026-01-27T08:58:29.2651685Z   Downloading PySocks-1.6.7-py3-none-any.whl.metadata (312 bytes)
+2026-01-27T08:58:29.2875378Z   Downloading PySocks-1.6.6.tar.gz (282 kB)
+2026-01-27T08:58:29.3105240Z   Installing build dependencies: started
+2026-01-27T08:58:30.0852408Z   Installing build dependencies: finished with status 'done'
+2026-01-27T08:58:30.0859070Z   Getting requirements to build wheel: started
+2026-01-27T08:58:30.3936274Z   Getting requirements to build wheel: finished with status 'done'
+2026-01-27T08:58:30.3945940Z   Preparing metadata (pyproject.toml): started
+2026-01-27T08:58:30.5620739Z   Preparing metadata (pyproject.toml): finished with status 'done'
+2026-01-27T08:58:30.6445471Z   Downloading PySocks-1.6.5.tar.gz (17 kB)
+2026-01-27T08:58:30.6522503Z   Installing build dependencies: started
+2026-01-27T08:58:31.4168797Z   Installing build dependencies: finished with status 'done'
+2026-01-27T08:58:31.4173463Z   Getting requirements to build wheel: started
+2026-01-27T08:58:31.7318686Z   Getting requirements to build wheel: finished with status 'done'
+2026-01-27T08:58:31.7328041Z   Preparing metadata (pyproject.toml): started
+2026-01-27T08:58:31.9057356Z   Preparing metadata (pyproject.toml): finished with status 'done'
+2026-01-27T08:58:32.0091875Z   Downloading PySocks-1.6.4.tar.gz (17 kB)
+2026-01-27T08:58:32.0167159Z   Installing build dependencies: started
+2026-01-27T08:58:32.7854449Z   Installing build dependencies: finished with status 'done'
+2026-01-27T08:58:32.7859507Z   Getting requirements to build wheel: started
+2026-01-27T08:58:33.1061052Z   Getting requirements to build wheel: finished with status 'done'
+2026-01-27T08:58:33.1071513Z   Preparing metadata (pyproject.toml): started
+2026-01-27T08:58:33.2783944Z   Preparing metadata (pyproject.toml): finished with status 'done'
+2026-01-27T08:58:33.3665302Z   Downloading PySocks-1.6.3.tar.gz (17 kB)
+2026-01-27T08:58:33.3738261Z   Installing build dependencies: started
+2026-01-27T08:58:34.1325227Z   Installing build dependencies: finished with status 'done'
+2026-01-27T08:58:34.1331717Z   Getting requirements to build wheel: started
+2026-01-27T08:58:34.4438762Z   Getting requirements to build wheel: finished with status 'done'
+2026-01-27T08:58:34.4448583Z   Preparing metadata (pyproject.toml): started
+2026-01-27T08:58:34.6163296Z   Preparing metadata (pyproject.toml): finished with status 'done'
+2026-01-27T08:58:34.7007231Z   Downloading PySocks-1.6.2.tar.gz (17 kB)
+2026-01-27T08:58:34.7081339Z   Installing build dependencies: started
+2026-01-27T08:58:35.4960493Z   Installing build dependencies: finished with status 'done'
+2026-01-27T08:58:35.4966453Z   Getting requirements to build wheel: started
+2026-01-27T08:58:35.8074473Z   Getting requirements to build wheel: finished with status 'done'
+2026-01-27T08:58:35.8086141Z   Preparing metadata (pyproject.toml): started
+2026-01-27T08:58:35.9767981Z   Preparing metadata (pyproject.toml): finished with status 'done'
+2026-01-27T08:58:36.0587271Z   Downloading PySocks-1.6.1.tar.gz (32 kB)
+2026-01-27T08:58:36.0671785Z   Installing build dependencies: started
+2026-01-27T08:58:36.8244635Z   Installing build dependencies: finished with status 'done'
+2026-01-27T08:58:36.8251028Z   Getting requirements to build wheel: started
+2026-01-27T08:58:37.1467534Z   Getting requirements to build wheel: finished with status 'done'
+2026-01-27T08:58:37.1478150Z   Preparing metadata (pyproject.toml): started
+2026-01-27T08:58:37.3197182Z   Preparing metadata (pyproject.toml): finished with status 'done'
+2026-01-27T08:58:37.4023456Z   Downloading PySocks-1.6.0.tar.gz (32 kB)
+2026-01-27T08:58:37.4110294Z   Installing build dependencies: started
+2026-01-27T08:58:38.1744737Z   Installing build dependencies: finished with status 'done'
+2026-01-27T08:58:38.1751282Z   Getting requirements to build wheel: started
+2026-01-27T08:58:38.4830617Z   Getting requirements to build wheel: finished with status 'done'
+2026-01-27T08:58:38.4840439Z   Preparing metadata (pyproject.toml): started
+2026-01-27T08:58:38.6566365Z   Preparing metadata (pyproject.toml): finished with status 'done'
+2026-01-27T08:58:38.6774551Z   Downloading PySocks-1.5.7.tar.gz (32 kB)
+2026-01-27T08:58:38.6860081Z   Installing build dependencies: started
+2026-01-27T08:58:39.4508959Z   Installing build dependencies: finished with status 'done'
+2026-01-27T08:58:39.4515454Z   Getting requirements to build wheel: started
+2026-01-27T08:58:39.7581304Z   Getting requirements to build wheel: finished with status 'done'
+2026-01-27T08:58:39.7591224Z   Preparing metadata (pyproject.toml): started
+2026-01-27T08:58:39.9323135Z   Preparing metadata (pyproject.toml): finished with status 'done'
+2026-01-27T08:58:39.9535567Z   Downloading PySocks-1.5.6.tar.gz (9.2 kB)
+2026-01-27T08:58:39.9589288Z   Installing build dependencies: started
+2026-01-27T08:58:40.7185441Z   Installing build dependencies: finished with status 'done'
+2026-01-27T08:58:40.7192654Z   Getting requirements to build wheel: started
+2026-01-27T08:58:41.0360984Z   Getting requirements to build wheel: finished with status 'done'
+2026-01-27T08:58:41.0371705Z   Preparing metadata (pyproject.toml): started
+2026-01-27T08:58:41.2083905Z   Preparing metadata (pyproject.toml): finished with status 'done'
+2026-01-27T08:58:41.2896637Z   Downloading PySocks-1.5.5.tar.gz (9.2 kB)
+2026-01-27T08:58:41.2954987Z   Installing build dependencies: started
+2026-01-27T08:58:42.0711759Z   Installing build dependencies: finished with status 'done'
+2026-01-27T08:58:42.0717472Z   Getting requirements to build wheel: started
+2026-01-27T08:58:42.3885233Z   Getting requirements to build wheel: finished with status 'done'
+2026-01-27T08:58:42.3895119Z   Preparing metadata (pyproject.toml): started
+2026-01-27T08:58:42.5594755Z   Preparing metadata (pyproject.toml): finished with status 'done'
+2026-01-27T08:58:42.6454714Z   Downloading PySocks-1.5.4.tar.gz (9.0 kB)
+2026-01-27T08:58:42.6514177Z   Installing build dependencies: started
+2026-01-27T08:58:43.4224314Z   Installing build dependencies: finished with status 'done'
+2026-01-27T08:58:43.4230714Z   Getting requirements to build wheel: started
+2026-01-27T08:58:43.7368501Z   Getting requirements to build wheel: finished with status 'done'
+2026-01-27T08:58:43.7378395Z   Preparing metadata (pyproject.toml): started
+2026-01-27T08:58:43.9079189Z   Preparing metadata (pyproject.toml): finished with status 'done'
+2026-01-27T08:58:43.9960448Z   Downloading PySocks-1.5.3.tar.gz (9.0 kB)
+2026-01-27T08:58:44.0017766Z   Installing build dependencies: started
+2026-01-27T08:58:44.7686797Z   Installing build dependencies: finished with status 'done'
+2026-01-27T08:58:44.7693505Z   Getting requirements to build wheel: started
+2026-01-27T08:58:45.0782954Z   Getting requirements to build wheel: finished with status 'done'
+2026-01-27T08:58:45.0793230Z   Preparing metadata (pyproject.toml): started
+2026-01-27T08:58:45.2510632Z   Preparing metadata (pyproject.toml): finished with status 'done'
+2026-01-27T08:58:45.3357954Z   Downloading PySocks-1.5.2.tar.gz (9.0 kB)
+2026-01-27T08:58:45.3416342Z   Installing build dependencies: started
+2026-01-27T08:58:46.1276188Z   Installing build dependencies: finished with status 'done'
+2026-01-27T08:58:46.1283488Z   Getting requirements to build wheel: started
+2026-01-27T08:58:46.4393177Z   Getting requirements to build wheel: finished with status 'done'
+2026-01-27T08:58:46.4404341Z   Preparing metadata (pyproject.toml): started
+2026-01-27T08:58:46.6126184Z   Preparing metadata (pyproject.toml): finished with status 'done'
+2026-01-27T08:58:46.6334212Z   Downloading PySocks-1.5.0.tar.gz (6.5 kB)
+2026-01-27T08:58:46.6388501Z   Installing build dependencies: started
+2026-01-27T08:58:47.4215006Z   Installing build dependencies: finished with status 'done'
+2026-01-27T08:58:47.4222066Z   Getting requirements to build wheel: started
+2026-01-27T08:58:47.7477762Z   Getting requirements to build wheel: finished with status 'done'
+2026-01-27T08:58:47.7486793Z   Preparing metadata (pyproject.toml): started
+2026-01-27T08:58:47.9211450Z   Preparing metadata (pyproject.toml): finished with status 'done'
+2026-01-27T08:58:48.0063370Z   Downloading PySocks-1.4.2.tar.gz (6.4 kB)
+2026-01-27T08:58:48.0122544Z   Installing build dependencies: started
+2026-01-27T08:58:48.8721012Z   Installing build dependencies: finished with status 'done'
+2026-01-27T08:58:48.8727921Z   Getting requirements to build wheel: started
+2026-01-27T08:58:49.1897106Z   Getting requirements to build wheel: finished with status 'done'
+2026-01-27T08:58:49.1906360Z   Preparing metadata (pyproject.toml): started
+2026-01-27T08:58:49.3604228Z   Preparing metadata (pyproject.toml): finished with status 'done'
+2026-01-27T08:58:49.3762946Z Collecting pyproject_hooks (from build==1.0.3->-r web_service/backend/requirements.txt (line 95))
+2026-01-27T08:58:49.3807859Z   Downloading pyproject_hooks-1.1.0-py3-none-any.whl.metadata (1.3 kB)
+2026-01-27T08:58:49.6522760Z   Downloading pyproject_hooks-1.0.0-py3-none-any.whl.metadata (1.3 kB)
+2026-01-27T08:58:49.9981018Z   Downloading pyproject_hooks-0.1.0-py3-none-any.whl.metadata (2.2 kB)
+2026-01-27T08:58:50.2753289Z Collecting language-tags (from camoufox>=0.1.7->-r web_service/backend/requirements.txt (line 56))
+2026-01-27T08:58:50.3422500Z   Downloading language_tags-1.1.0-py2.py3-none-any.whl.metadata (2.1 kB)
+2026-01-27T08:58:51.4785979Z   Downloading language_tags-1.0.0.tar.gz (203 kB)
+2026-01-27T08:58:51.5021850Z   Installing build dependencies: started
+2026-01-27T08:58:52.2677828Z   Installing build dependencies: finished with status 'done'
+2026-01-27T08:58:52.2683939Z   Getting requirements to build wheel: started
+2026-01-27T08:58:52.5896900Z   Getting requirements to build wheel: finished with status 'done'
+2026-01-27T08:58:52.5906509Z   Preparing metadata (pyproject.toml): started
+2026-01-27T08:58:52.7680771Z   Preparing metadata (pyproject.toml): finished with status 'done'
+2026-01-27T08:58:53.9065610Z   Downloading language_tags-0.5.0.tar.gz (203 kB)
+2026-01-27T08:58:53.9298736Z   Installing build dependencies: started
+2026-01-27T08:58:54.6946338Z   Installing build dependencies: finished with status 'done'
+2026-01-27T08:58:54.6952246Z   Getting requirements to build wheel: started
+2026-01-27T08:58:55.0159962Z   Getting requirements to build wheel: finished with status 'done'
+2026-01-27T08:58:55.0169372Z   Preparing metadata (pyproject.toml): started
+2026-01-27T08:58:55.1893204Z   Preparing metadata (pyproject.toml): finished with status 'done'
+2026-01-27T08:58:56.2784253Z   Downloading language_tags-0.4.6.tar.gz (200 kB)
+2026-01-27T08:58:56.3015957Z   Installing build dependencies: started
+2026-01-27T08:58:57.0661377Z   Installing build dependencies: finished with status 'done'
+2026-01-27T08:58:57.0666585Z   Getting requirements to build wheel: started
+2026-01-27T08:58:57.3856798Z   Getting requirements to build wheel: finished with status 'done'
+2026-01-27T08:58:57.3865943Z   Preparing metadata (pyproject.toml): started
+2026-01-27T08:58:57.5622395Z   Preparing metadata (pyproject.toml): finished with status 'done'
+2026-01-27T08:58:58.7137951Z   Downloading language_tags-0.4.5.tar.gz (199 kB)
+2026-01-27T08:58:58.7385463Z   Installing build dependencies: started
+2026-01-27T08:58:59.5141370Z   Installing build dependencies: finished with status 'done'
+2026-01-27T08:58:59.5148566Z   Getting requirements to build wheel: started
+2026-01-27T08:58:59.8393804Z   Getting requirements to build wheel: finished with status 'done'
+2026-01-27T08:58:59.8402970Z   Preparing metadata (pyproject.toml): started
+2026-01-27T08:59:00.0184462Z   Preparing metadata (pyproject.toml): finished with status 'done'
+2026-01-27T08:59:01.1969656Z   Downloading language_tags-0.4.4.tar.gz (199 kB)
+2026-01-27T08:59:01.2197874Z   Installing build dependencies: started
+2026-01-27T08:59:01.9859921Z   Installing build dependencies: finished with status 'done'
+2026-01-27T08:59:01.9866905Z   Getting requirements to build wheel: started
+2026-01-27T08:59:02.3126349Z   Getting requirements to build wheel: finished with status 'done'
+2026-01-27T08:59:02.3135750Z   Preparing metadata (pyproject.toml): started
+2026-01-27T08:59:02.5104354Z   Preparing metadata (pyproject.toml): finished with status 'done'
+2026-01-27T08:59:03.6118399Z   Downloading language_tags-0.4.3.tar.gz (199 kB)
+2026-01-27T08:59:03.6384639Z   Installing build dependencies: started
+2026-01-27T08:59:04.3968408Z   Installing build dependencies: finished with status 'done'
+2026-01-27T08:59:04.3975897Z   Getting requirements to build wheel: started
+2026-01-27T08:59:04.7278652Z   Getting requirements to build wheel: finished with status 'done'
+2026-01-27T08:59:04.7288994Z   Preparing metadata (pyproject.toml): started
+2026-01-27T08:59:04.9104131Z   Preparing metadata (pyproject.toml): finished with status 'done'
+2026-01-27T08:59:06.0851840Z   Downloading language_tags-0.4.2-py2.py3-none-any.whl.metadata (4.7 kB)
+2026-01-27T08:59:07.2837657Z   Downloading language_tags-0.4.1-py2.py3-none-any.whl.metadata (4.5 kB)
+2026-01-27T08:59:08.7973323Z   Downloading language_tags-0.4.0-py2.py3-none-any.whl.metadata (4.2 kB)
+2026-01-27T08:59:09.9454149Z   Downloading language_tags-0.3.2-py2.py3-none-any.whl.metadata (3.8 kB)
+2026-01-27T08:59:11.1059916Z   Downloading language_tags-0.3.1.tar.gz (196 kB)
+2026-01-27T08:59:11.1266735Z   Installing build dependencies: started
+2026-01-27T08:59:11.8894042Z   Installing build dependencies: finished with status 'done'
+2026-01-27T08:59:11.8900508Z   Getting requirements to build wheel: started
+2026-01-27T08:59:12.2081022Z   Getting requirements to build wheel: finished with status 'done'
+2026-01-27T08:59:12.2091285Z   Preparing metadata (pyproject.toml): started
+2026-01-27T08:59:12.3862591Z   Preparing metadata (pyproject.toml): finished with status 'done'
+2026-01-27T08:59:13.5353293Z   Downloading language_tags-0.3.0.tar.gz (196 kB)
+2026-01-27T08:59:13.5573374Z   Installing build dependencies: started
+2026-01-27T08:59:14.3291978Z   Installing build dependencies: finished with status 'done'
+2026-01-27T08:59:14.3299427Z   Getting requirements to build wheel: started
+2026-01-27T08:59:14.6468614Z   Getting requirements to build wheel: finished with status 'done'
+2026-01-27T08:59:14.6478024Z   Preparing metadata (pyproject.toml): started
+2026-01-27T08:59:14.8269690Z   Preparing metadata (pyproject.toml): finished with status 'done'
+2026-01-27T08:59:15.9809571Z   Downloading language_tags-0.2.0.tar.gz (195 kB)
+2026-01-27T08:59:16.0015759Z   Installing build dependencies: started
+2026-01-27T08:59:16.7836292Z   Installing build dependencies: finished with status 'done'
+2026-01-27T08:59:16.7843335Z   Getting requirements to build wheel: started
+2026-01-27T08:59:17.1021161Z   Getting requirements to build wheel: finished with status 'done'
+2026-01-27T08:59:17.1032187Z   Preparing metadata (pyproject.toml): started
+2026-01-27T08:59:17.2823889Z   Preparing metadata (pyproject.toml): finished with status 'done'
+2026-01-27T08:59:18.4646384Z   Downloading language_tags-0.1.1.tar.gz (194 kB)
+2026-01-27T08:59:18.4859410Z   Installing build dependencies: started
+2026-01-27T08:59:19.2540739Z   Installing build dependencies: finished with status 'done'
+2026-01-27T08:59:19.2547430Z   Getting requirements to build wheel: started
+2026-01-27T08:59:19.5793486Z   Getting requirements to build wheel: finished with status 'done'
+2026-01-27T08:59:19.5803494Z   Preparing metadata (pyproject.toml): started
+2026-01-27T08:59:19.7550466Z   Preparing metadata (pyproject.toml): finished with status 'done'
+2026-01-27T08:59:20.9221340Z   Downloading language_tags-0.1.0.tar.gz (194 kB)
+2026-01-27T08:59:20.9425232Z   Installing build dependencies: started
+2026-01-27T08:59:21.7072919Z   Installing build dependencies: finished with status 'done'
+2026-01-27T08:59:21.7079755Z   Getting requirements to build wheel: started
+2026-01-27T08:59:22.0315487Z   Getting requirements to build wheel: finished with status 'done'
+2026-01-27T08:59:22.0325403Z   Preparing metadata (pyproject.toml): started
+2026-01-27T08:59:22.2083368Z   Preparing metadata (pyproject.toml): finished with status 'done'
+2026-01-27T08:59:23.3046770Z Collecting backports.tarfile (from jaraco.context==5.3.0->-r web_service/backend/requirements.txt (line 116))
+2026-01-27T08:59:23.3105963Z   Downloading backports.tarfile-1.1.1-py3-none-any.whl.metadata (2.0 kB)
+2026-01-27T08:59:41.4842099Z   Downloading backports.tarfile-1.1.0-py3-none-any.whl.metadata (1.9 kB)
+2026-01-27T08:59:59.7174689Z   Downloading backports.tarfile-1.0.0-py3-none-any.whl.metadata (1.9 kB)
+2026-01-27T09:00:17.8308903Z Collecting zipp>=3.20 (from importlib-metadata>=4.11.4->keyring==24.3.0->-r web_service/backend/requirements.txt (line 68))
+2026-01-27T09:00:17.8356585Z   Downloading zipp-3.22.0-py3-none-any.whl.metadata (3.6 kB)
+2026-01-27T09:01:30.0630200Z   Downloading zipp-3.21.0-py3-none-any.whl.metadata (3.7 kB)
+2026-01-27T09:02:41.7725322Z   Downloading zipp-3.20.2-py3-none-any.whl.metadata (3.7 kB)
+2026-01-27T09:03:54.2949944Z   Downloading zipp-3.20.1-py3-none-any.whl.metadata (3.7 kB)
+2026-01-27T09:05:07.8473083Z   Downloading zipp-3.20.0-py3-none-any.whl.metadata (3.6 kB)
+2026-01-27T09:06:21.7621201Z Collecting uvloop!=0.15.0,!=0.15.1,>=0.14.0 (from uvicorn[standard]==0.24.0->-r web_service/backend/requirements.txt (line 12))
+2026-01-27T09:06:21.7674784Z   Downloading uvloop-0.21.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.9 kB)
+2026-01-27T09:13:50.1671063Z   Downloading uvloop-0.20.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.9 kB)
+2026-01-27T09:14:33.4611791Z error: resolution-too-deep
+2026-01-27T09:14:33.4612181Z
+2026-01-27T09:14:33.4612608Z × Dependency resolution exceeded maximum depth
+2026-01-27T09:14:33.4613501Z ╰─> Pip cannot resolve the current dependencies as the dependency graph is too complex for pip to solve efficiently.
+2026-01-27T09:14:33.4614388Z
+2026-01-27T09:14:33.4614861Z hint: Try adding lower bounds to constrain your dependencies, for example: 'package>=2.0.0' instead of just 'package'.
+2026-01-27T09:14:33.4615495Z
+2026-01-27T09:14:33.4615958Z Link: https://pip.pypa.io/en/stable/topics/dependency-resolution/#handling-resolution-too-deep-errors
+2026-01-27T09:14:35.1412152Z ##[error]Process completed with exit code 1.
+2026-01-27T09:14:35.1551224Z ##[group]Run actions/upload-artifact@v4
+2026-01-27T09:14:35.1551508Z with:
+2026-01-27T09:14:35.1551684Z   name: race-reports-105
+2026-01-27T09:14:35.1552688Z   path: race-report.html
+qualified_races.json
+raw_race_data.json
+reporter_output.log
+browser_verify.log
+browser_verification.json
+metrics.json
+errors.json
+adapter_stats.json
+browser_selector_state.json
+anomaly_history.json
+canary_result.json
+*_debug.html
+debug-output/
+
+2026-01-27T09:14:35.1554087Z   retention-days: 14
+2026-01-27T09:14:35.1554643Z   if-no-files-found: ignore
+2026-01-27T09:14:35.1555019Z   compression-level: 9
+2026-01-27T09:14:35.1555275Z   overwrite: false
+2026-01-27T09:14:35.1555465Z   include-hidden-files: false
+2026-01-27T09:14:35.1555671Z env:
+2026-01-27T09:14:35.1555832Z   PYTHON_VERSION: 3.10.12
+2026-01-27T09:14:35.1556035Z   REPORT_RETENTION_DAYS: 14
+2026-01-27T09:14:35.1556231Z   MAX_RETRIES: 3
+2026-01-27T09:14:35.1556397Z   REQUEST_TIMEOUT: 45
+2026-01-27T09:14:35.1556587Z   SCRAPLING_HEADLESS: true
+2026-01-27T09:14:35.1556822Z   SCRAPLING_BLOCK_IMAGES: true
+2026-01-27T09:14:35.1557109Z   PLAYWRIGHT_BROWSERS_PATH: /home/runner/.cache/ms-playwright
+2026-01-27T09:14:35.1557483Z   pythonLocation: /opt/hostedtoolcache/Python/3.10.12/x64
+2026-01-27T09:14:35.1557874Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.10.12/x64/lib/pkgconfig
+2026-01-27T09:14:35.1558269Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.10.12/x64
+2026-01-27T09:14:35.1558618Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.10.12/x64
+2026-01-27T09:14:35.1558977Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.10.12/x64
+2026-01-27T09:14:35.1559331Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.10.12/x64/lib
+2026-01-27T09:14:35.1559621Z ##[endgroup]
+2026-01-27T09:14:35.3913804Z No files were found with the provided path: race-report.html
+2026-01-27T09:14:35.3916118Z qualified_races.json
+2026-01-27T09:14:35.3916473Z raw_race_data.json
+2026-01-27T09:14:35.3916802Z reporter_output.log
+2026-01-27T09:14:35.3917118Z browser_verify.log
+2026-01-27T09:14:35.3917474Z browser_verification.json
+2026-01-27T09:14:35.3917901Z metrics.json
+2026-01-27T09:14:35.3918173Z errors.json
+2026-01-27T09:14:35.3918448Z adapter_stats.json
+2026-01-27T09:14:35.3918763Z browser_selector_state.json
+2026-01-27T09:14:35.3919137Z anomaly_history.json
+2026-01-27T09:14:35.3919446Z canary_result.json
+2026-01-27T09:14:35.3919741Z *_debug.html
+2026-01-27T09:14:35.3920092Z debug-output/. No artifacts will be uploaded.
+2026-01-27T09:14:35.4054438Z ##[group]Run python scripts/generate_summary.py >> $GITHUB_STEP_SUMMARY
+2026-01-27T09:14:35.4055369Z [36;1mpython scripts/generate_summary.py >> $GITHUB_STEP_SUMMARY[0m
+2026-01-27T09:14:35.4101707Z shell: /usr/bin/bash -e {0}
+2026-01-27T09:14:35.4102086Z env:
+2026-01-27T09:14:35.4102369Z   PYTHON_VERSION: 3.10.12
+2026-01-27T09:14:35.4102804Z   REPORT_RETENTION_DAYS: 14
+2026-01-27T09:14:35.4103158Z   MAX_RETRIES: 3
+2026-01-27T09:14:35.4103467Z   REQUEST_TIMEOUT: 45
+2026-01-27T09:14:35.4104047Z   SCRAPLING_HEADLESS: true
+2026-01-27T09:14:35.4104438Z   SCRAPLING_BLOCK_IMAGES: true
+2026-01-27T09:14:35.4105009Z   PLAYWRIGHT_BROWSERS_PATH: /home/runner/.cache/ms-playwright
+2026-01-27T09:14:35.4105738Z   pythonLocation: /opt/hostedtoolcache/Python/3.10.12/x64
+2026-01-27T09:14:35.4106510Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.10.12/x64/lib/pkgconfig
+2026-01-27T09:14:35.4107242Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.10.12/x64
+2026-01-27T09:14:35.4107929Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.10.12/x64
+2026-01-27T09:14:35.4108572Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.10.12/x64
+2026-01-27T09:14:35.4109228Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.10.12/x64/lib
+2026-01-27T09:14:35.4109818Z   PYTHONPATH: /home/runner/work/fortuna/fortuna
+2026-01-27T09:14:35.4110273Z ##[endgroup]
+2026-01-27T09:14:35.4482538Z ##[group]Run sudo pkill -9 Xvfb || true
+2026-01-27T09:14:35.4482992Z [36;1msudo pkill -9 Xvfb || true[0m
+2026-01-27T09:14:35.4526152Z shell: /usr/bin/bash -e {0}
+2026-01-27T09:14:35.4526530Z env:
+2026-01-27T09:14:35.4526813Z   PYTHON_VERSION: 3.10.12
+2026-01-27T09:14:35.4527159Z   REPORT_RETENTION_DAYS: 14
+2026-01-27T09:14:35.4527500Z   MAX_RETRIES: 3
+2026-01-27T09:14:35.4527795Z   REQUEST_TIMEOUT: 45
+2026-01-27T09:14:35.4528133Z   SCRAPLING_HEADLESS: true
+2026-01-27T09:14:35.4528495Z   SCRAPLING_BLOCK_IMAGES: true
+2026-01-27T09:14:35.4529016Z   PLAYWRIGHT_BROWSERS_PATH: /home/runner/.cache/ms-playwright
+2026-01-27T09:14:35.4529687Z   pythonLocation: /opt/hostedtoolcache/Python/3.10.12/x64
+2026-01-27T09:14:35.4530652Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.10.12/x64/lib/pkgconfig
+2026-01-27T09:14:35.4531360Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.10.12/x64
+2026-01-27T09:14:35.4531994Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.10.12/x64
+2026-01-27T09:14:35.4532666Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.10.12/x64
+2026-01-27T09:14:35.4533304Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.10.12/x64/lib
+2026-01-27T09:14:35.4533997Z ##[endgroup]
+2026-01-27T09:14:35.4958208Z Post job cleanup.
+2026-01-27T09:14:35.5917413Z [command]/usr/bin/git version
+2026-01-27T09:14:35.5953200Z git version 2.52.0
+2026-01-27T09:14:35.5996204Z Temporarily overriding HOME='/home/runner/work/_temp/f752c300-c1c7-406f-a3ae-7881fbe09579' before making global git config changes
+2026-01-27T09:14:35.5997551Z Adding repository directory to the temporary git global config as a safe directory
+2026-01-27T09:14:35.6009653Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/fortuna/fortuna
+2026-01-27T09:14:35.6044034Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-01-27T09:14:35.6076177Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-01-27T09:14:35.6312310Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-01-27T09:14:35.6333454Z http.https://github.com/.extraheader
+2026-01-27T09:14:35.6345860Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-01-27T09:14:35.6375762Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-01-27T09:14:35.6596269Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-01-27T09:14:35.6626780Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-01-27T09:14:35.6946593Z Evaluate and set job outputs
+2026-01-27T09:14:35.6952704Z Cleaning up orphan processes
