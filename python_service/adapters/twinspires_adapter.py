@@ -86,9 +86,9 @@ class TwinSpiresAdapter(BaseAdapterV3):
 
         # Fallback to Playwright
         try:
-            from scrapling.fetchers import AsyncPlayWrightSession
+            from scrapling.fetchers import AsyncStealthySession
 
-            self._session = AsyncPlayWrightSession(
+            self._session = AsyncStealthySession(
                 headless=True,
                 browser_type='chromium',
             )

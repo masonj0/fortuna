@@ -51,7 +51,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PYTHON_VERSION: '3.11'
+  PYTHON_VERSION: '3.10.12'
   REPORT_RETENTION_DAYS: 14
   MAX_RETRIES: 3
   REQUEST_TIMEOUT: 45
@@ -172,8 +172,8 @@ jobs:
       - name: 'Install Dependencies'
         run: |
           pip install --upgrade pip
-          pip install -r web_service/backend/requirements.txt
-          pip install "scrapling[all]"
+          # Install everything together so pip can resolve conflicts
+          pip install -r web_service/backend/requirements.txt "scrapling[all]"
 
       - name: 'Install Browser (Minimal)'
         run: |
@@ -265,7 +265,6 @@ jobs:
           sudo apt-get update
 
           # Install all required dependencies for headless browsers
-          # Note: libasound2 (not libasound2t64) for Ubuntu 22.04
           sudo apt-get install -y --no-install-recommends \
             xvfb \
             xauth \
@@ -292,15 +291,21 @@ jobs:
             libxkbcommon0 \
             libatspi2.0-0 \
             libgbm1 \
-            libasound2t64 \
             fonts-liberation \
             fonts-noto-color-emoji
+
+          # Handle libasound2 vs libasound2t64 (Ubuntu 22.04 vs 24.04)
+          if apt-cache show libasound2t64 >/dev/null 2>&1; then
+            sudo apt-get install -y libasound2t64
+          else
+            sudo apt-get install -y libasound2
+          fi
 
       - name: '📦 Install Python Dependencies'
         run: |
           python -m pip install --upgrade pip wheel setuptools
-          pip install -r web_service/backend/requirements.txt
-          pip install "scrapling[all]" jsonschema
+          # Install everything together so pip can resolve conflicts between FastAPI and Scrapling
+          pip install -r web_service/backend/requirements.txt "scrapling[all]" jsonschema
 
       - name: '🦊 Install Browsers'
         id: install-browsers
@@ -477,7 +482,7 @@ jobs:
             *_debug.html
             debug-output/
           retention-days: ${{ env.REPORT_RETENTION_DAYS }}
-          if-no-files-found: warn
+          if-no-files-found: ignore
           compression-level: 9
 
       - name: '📝 Generate Summary'
