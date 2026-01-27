@@ -47,13 +47,20 @@ class EquibaseAdapter(BaseAdapterV3):
         parser = HTMLParser(index_response.text)
         race_links = [link.attributes["href"] for link in parser.css("a.entry-race-level")]
 
+        semaphore = asyncio.Semaphore(5)
+
         async def fetch_single_html(race_url: str):
-            response = await self.make_request(self.http_client, "GET", race_url, headers=self._get_headers())
-            return response.text if response else ""
+            async with semaphore:
+                try:
+                    response = await self.make_request("GET", race_url, headers=self._get_headers())
+                    return response.text if response else ""
+                except Exception as e:
+                    self.logger.warning("Failed to fetch race page", url=race_url, error=str(e))
+                    return ""
 
         tasks = [fetch_single_html(link) for link in race_links]
         html_pages = await asyncio.gather(*tasks)
-        return {"pages": html_pages, "date": date}
+        return {"pages": [p for p in html_pages if p], "date": date}
 
     def _parse_races(self, raw_data: Any) -> List[Race]:
         """Parses a list of raw HTML strings into Race objects."""

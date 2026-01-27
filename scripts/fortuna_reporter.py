@@ -322,14 +322,40 @@ class Reporter:
 
         raise RuntimeError(f"All {self.config.max_retries} fetch attempts failed. Last error: {last_error}")
 
+    def _get_firewalled_adapters(self) -> list[str]:
+        """Identify adapters that should be disabled due to repeated failures."""
+        stats_path = Path("adapter_stats.json")
+        if not stats_path.exists():
+            return []
+
+        try:
+            stats = json.loads(stats_path.read_text())
+            # stats is usually a list of adapter status dicts
+            firewalled = []
+            for adapter in stats:
+                # If consecutive failures > 5, firewall it
+                if adapter.get('consecutive_failures', 0) > 5:
+                    firewalled.append(adapter.get('name'))
+
+            if firewalled:
+                self.log(f"🔥 Firewalling chronically failing adapters: {firewalled}", LogLevel.WARNING)
+            return firewalled
+        except Exception as e:
+            self.log(f"Failed to read adapter stats for firewall: {e}", LogLevel.DEBUG)
+            return []
+
     async def run(self) -> bool:
         """Main entry point with graceful degradation."""
         self.log("=== Fortuna Unified Race Reporter ===")
         self.log(f"Analyzer: {self.config.analyzer_type}")
-        self.log(f"Excluding {len(self.config.excluded_adapters)} adapters")
+
+        # Adapter Firewall
+        firewalled = self._get_firewalled_adapters()
+        excluded = list(set(self.config.excluded_adapters + firewalled))
+        self.log(f"Excluding {len(excluded)} adapters (including {len(firewalled)} firewalled)")
 
         settings = get_settings()
-        odds_engine = OddsEngine(config=settings, exclude_adapters=self.config.excluded_adapters)
+        odds_engine = OddsEngine(config=settings, exclude_adapters=excluded)
         analyzer_engine = AnalyzerEngine()
 
         # Pre-flight health check
@@ -420,6 +446,18 @@ class Reporter:
             outputs_generated["html"] = self.generate_html_report(report_data)
             outputs_generated["markdown"] = self.generate_markdown_summary(qualified_races)
 
+            # Metadata for downstream consumers
+            metadata = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "analyzer_type": self.config.analyzer_type,
+                "run_mode": os.getenv("RUN_MODE", "full"),
+                "canary_health": os.getenv("CANARY_HEALTH", "unknown"),
+                "race_count": len(qualified_races),
+                "adapter_count": len(odds_engine.adapters),
+                "version": "1.1.0",
+            }
+            self.save_json(metadata, Path("report-metadata.json"), "report metadata")
+
         except Exception as e:
             self.log(f"Critical error: {e}", LogLevel.ERROR)
             # Still try to generate a failure report
@@ -427,7 +465,19 @@ class Reporter:
 
         finally:
             self.metrics.end_time = datetime.now(timezone.utc)
-            await odds_engine.close()
+            self.log("Generation complete. Shutting down engines...")
+
+            # Record adapter metrics
+            if 'odds_engine' in locals():
+                self.metrics.adapters_used = list(odds_engine.adapters.keys())
+                # Capture adapter stats for firewalling next run
+                adapter_stats = odds_engine.get_all_adapter_statuses()
+                self.save_json(adapter_stats, Path("adapter_stats.json"), "adapter stats")
+                # CRITICAL: Use shutdown() to ensure all browser sessions are closed
+                await odds_engine.shutdown()
+
+            # Save metrics.json
+            self.save_json(self.metrics.to_dict(), Path("metrics.json"), "execution metrics")
 
             successful_outputs = sum(outputs_generated.values())
             self.log(f"Generated {successful_outputs}/{len(outputs_generated)} outputs")
