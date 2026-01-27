@@ -2,22 +2,20 @@
 
 import asyncio
 from datetime import datetime
-from typing import Any
-from typing import List
-from typing import Optional
+from typing import Any, List, Optional
 
 from selectolax.parser import HTMLParser, Node
 
-from ..models import OddsData
-from ..models import Race
-from ..models import Runner
+from ..models import Race, Runner
 from ..utils.odds import parse_odds_to_decimal
 from ..utils.text import clean_text
 from .base_adapter_v3 import BaseAdapterV3
+from .mixins import BrowserHeadersMixin, DebugMixin
+from .utils.odds_validator import create_odds_data
 from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy, StealthMode
 
 
-class SportingLifeAdapter(BaseAdapterV3):
+class SportingLifeAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
     """
     Adapter for sportinglife.com, migrated to BaseAdapterV3.
     """
@@ -40,6 +38,12 @@ class SportingLifeAdapter(BaseAdapterV3):
             block_resources=True
         )
 
+    def _get_headers(self) -> dict:
+        return self._get_browser_headers(
+            host="www.sportinglife.com",
+            referer="https://www.sportinglife.com/racing/racecards",
+        )
+
     async def _fetch_data(self, date: str) -> Optional[dict]:
         """
         Fetches the raw HTML for all race pages for a given date.
@@ -55,6 +59,8 @@ class SportingLifeAdapter(BaseAdapterV3):
         if not index_response:
             self.logger.warning("Failed to fetch SportingLife index page", url=index_url)
             return None
+
+        self._save_debug_html(index_response.text, f"sportinglife_index_{date}")
 
         parser = HTMLParser(index_response.text)
         links = {
@@ -119,33 +125,36 @@ class SportingLifeAdapter(BaseAdapterV3):
 
                 header_text = clean_text(header.text())
                 parts = header_text.split()
+                if not parts:
+                    continue
                 race_time_str = parts[0]
                 track_name = " ".join(parts[1:])
 
-                start_time = datetime.combine(race_date, datetime.strptime(race_time_str, "%H:%M").time())
+                try:
+                    start_time = datetime.combine(race_date, datetime.strptime(race_time_str, "%H:%M").time())
+                except ValueError:
+                    continue
 
                 race_number = 1
                 nav_links = parser.css('a[class*="SubNavigation__Link"]')
                 active_link = parser.css_first('a[class*="SubNavigation__Link--active"]')
                 if active_link and nav_links:
                     try:
-                        # Find the index of active_link in nav_links
-                        # Selectolax nodes don't support equality easily, so we compare HTML or attributes
                         for idx, link in enumerate(nav_links):
                             if link.html == active_link.html:
                                 race_number = idx + 1
                                 break
                     except Exception:
-                        self.logger.warning("Error finding active race link index.")
+                        pass
 
-                runners = [self._parse_runner(row) for row in parser.css('div[class*="RunnerCard"]')]
+                runners = [r for row in parser.css('div[class*="RunnerCard"]') if (r := self._parse_runner(row))]
 
                 race = Race(
                     id=f"sl_{track_name.replace(' ', '')}_{start_time.strftime('%Y%m%d')}_R{race_number}",
                     venue=track_name,
                     race_number=race_number,
                     start_time=start_time,
-                    runners=[r for r in runners if r],
+                    runners=runners,
                     source=self.source_name,
                 )
                 all_races.append(race)
@@ -174,18 +183,10 @@ class SportingLifeAdapter(BaseAdapterV3):
             odds_str = clean_text(odds_node.text()) if odds_node else ""
 
             win_odds = parse_odds_to_decimal(odds_str)
-            odds_data = (
-                {
-                    self.source_name: OddsData(
-                        win=win_odds,
-                        source=self.source_name,
-                        last_updated=datetime.now(),
-                    )
-                }
-                if win_odds and win_odds < 999
-                else {}
-            )
+            odds_data = {}
+            if odds_val := create_odds_data(self.source_name, win_odds):
+                odds_data[self.source_name] = odds_val
+
             return Runner(number=number, name=name, odds=odds_data)
         except (AttributeError, ValueError):
-            self.logger.warning("Failed to parse a runner on SportingLife, skipping runner.")
             return None

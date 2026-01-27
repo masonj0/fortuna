@@ -16,37 +16,39 @@ import redis.asyncio as redis_async
 import structlog
 from pydantic import ValidationError
 
-from .adapters.at_the_races_adapter import AtTheRacesAdapter
+from .adapters import (
+    AtTheRacesAdapter,
+    BetfairAdapter,
+    BetfairGreyhoundAdapter,
+    BrisnetAdapter,
+    EquibaseAdapter,
+    FanDuelAdapter,
+    GbgbApiAdapter,
+    GreyhoundAdapter,
+    HarnessAdapter,
+    HorseRacingNationAdapter,
+    NYRABetsAdapter,
+    OddscheckerAdapter,
+    PointsBetGreyhoundAdapter,
+    PuntersAdapter,
+    RacingAndSportsAdapter,
+    RacingAndSportsGreyhoundAdapter,
+    RacingPostAdapter,
+    RacingTVAdapter,
+    SportingLifeAdapter,
+    TabAdapter,
+    TheRacingApiAdapter,
+    TimeformAdapter,
+    TVGAdapter,
+    TwinSpiresAdapter,
+    UniversalAdapter,
+    XpressbetAdapter,
+)
 from .adapters.base_adapter_v3 import BaseAdapterV3
-from .adapters.betfair_adapter import BetfairAdapter
-
-# from .adapters.betfair_datascientist_adapter import BetfairDataScientistAdapter
-from .adapters.betfair_greyhound_adapter import BetfairGreyhoundAdapter
-from .adapters.brisnet_adapter import BrisnetAdapter
-from .adapters.equibase_adapter import EquibaseAdapter
-from .adapters.fanduel_adapter import FanDuelAdapter
-from .adapters.gbgb_api_adapter import GbgbApiAdapter
-from .adapters.greyhound_adapter import GreyhoundAdapter
-from .adapters.harness_adapter import HarnessAdapter
-from .adapters.horseracingnation_adapter import HorseRacingNationAdapter
-from .adapters.nyrabets_adapter import NYRABetsAdapter
-from .adapters.oddschecker_adapter import OddscheckerAdapter
-from .adapters.pointsbet_greyhound_adapter import PointsBetGreyhoundAdapter
-from .adapters.punters_adapter import PuntersAdapter
-from .adapters.racing_and_sports_adapter import RacingAndSportsAdapter
-from .adapters.racing_and_sports_greyhound_adapter import RacingAndSportsGreyhoundAdapter
-from .adapters.racingpost_adapter import RacingPostAdapter
-from .adapters.racingtv_adapter import RacingTVAdapter
-from .adapters.sporting_life_adapter import SportingLifeAdapter
-from .adapters.tab_adapter import TabAdapter
-from .adapters.the_racing_api_adapter import TheRacingApiAdapter
-from .adapters.timeform_adapter import TimeformAdapter
-from .adapters.tvg_adapter import TVGAdapter
-from .adapters.twinspires_adapter import TwinSpiresAdapter
-from .adapters.xpressbet_adapter import XpressbetAdapter
 from .config import get_settings
 from .core.exceptions import AdapterConfigError
 from .core.exceptions import AdapterHttpError
+from .core.exceptions import AuthenticationError
 from .adapter_manager import AdapterHealthMonitor, AdapterHealth, AdapterStatus
 from .cache_manager import StaleDataCache
 from .manual_override_manager import ManualOverrideManager
@@ -123,6 +125,7 @@ class OddsEngine:
                 TimeformAdapter,
                 TwinSpiresAdapter,
                 TVGAdapter,
+                UniversalAdapter,
                 XpressbetAdapter,
                 PointsBetGreyhoundAdapter,
             ]
@@ -161,21 +164,6 @@ class OddsEngine:
                     avg_response_time_ms=0,
                     last_error=None,
                 )
-            # Special case for BetfairDataScientistAdapter with extra args - DISABLED
-            # try:
-            #     bds_adapter = BetfairDataScientistAdapter(
-            #         model_name="ThoroughbredModel",
-            #         url="https://betfair-data-supplier-prod.herokuapp.com/api/widgets/kvs-ratings/datasets",
-            #         config=self.config,
-            #     )
-            #     if manual_override_manager and getattr(bds_adapter, "supports_manual_override", False):
-            #         bds_adapter.enable_manual_override(manual_override_manager)
-            #     self.adapters.append(bds_adapter)
-            # except Exception:
-            #     self.logger.warning(
-            #         "Failed to initialize adapter: BetfairDataScientistAdapter",
-            #         exc_info=True,
-            #     )
 
             self.logger.info(f"{len(self.adapters)} adapters initialized successfully.")
 
@@ -281,6 +269,14 @@ class OddsEngine:
                     error_message=error_message,
                 )
             ]
+        except AuthenticationError as e:
+            self.logger.warning(
+                "Authentication failed for adapter, skipping.",
+                adapter=adapter.source_name,
+                error=str(e),
+            )
+            error_message = str(e)
+            is_success = False
         except Exception as e:
             self.logger.error(
                 "Critical failure during fetch from adapter.",
@@ -345,7 +341,11 @@ class OddsEngine:
                         existing_runner.odds.update(new_runner.odds)
                     else:
                         existing_race.runners.append(new_runner)
-                existing_race.source += f", {race.source}"
+
+                # Maintain source as string
+                sources = set(existing_race.source.split(", "))
+                sources.add(race.source)
+                existing_race.source = ", ".join(sorted(list(sources)))
 
         return list(race_map.values())
 
@@ -434,7 +434,8 @@ class OddsEngine:
             if stale_data:
                 log.info("Using stale data from cache.", cache_age_hours=stale_data['age_hours'])
                 stale_results = stale_data['data']
-                stale_results['metadata']['data_freshness'] = 'stale'
+                if 'metadata' in stale_results:
+                    stale_results['metadata']['data_freshness'] = 'stale'
                 stale_results['warnings'] = ["Using cached data from a previous run as all live sources failed."]
                 return stale_results
 

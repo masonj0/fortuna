@@ -69,6 +69,14 @@ class AdapterConfigError(AdapterError):
     pass
 
 
+class AuthenticationError(FortunaException):
+    """Raised when authentication fails."""
+
+    def __init__(self, source: str, message: str):
+        self.source = source
+        super().__init__(f"[{source}] Authentication failed: {message}")
+
+
 class AdapterParsingError(AdapterError):
     """Raised when an adapter fails to parse the response from an API."""
 

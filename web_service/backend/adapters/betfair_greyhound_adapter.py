@@ -6,10 +6,11 @@ from typing import Any
 from typing import List
 from typing import Optional
 
+from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy
 from ..models import Race
 from ..models import Runner
 from .base_adapter_v3 import BaseAdapterV3
-from .betfair_auth_mixin import BetfairAuthMixin
+from .mixins import BetfairAuthMixin
 
 
 class BetfairGreyhoundAdapter(BetfairAuthMixin, BaseAdapterV3):
@@ -21,17 +22,18 @@ class BetfairGreyhoundAdapter(BetfairAuthMixin, BaseAdapterV3):
     def __init__(self, config=None):
         super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
 
+    def _configure_fetch_strategy(self) -> FetchStrategy:
+        return FetchStrategy(primary_engine=BrowserEngine.HTTPX)
+
     async def _fetch_data(self, date: str) -> Any:
         """Fetches the raw market catalogue for greyhound races on a given date."""
-        await self._authenticate(self.http_client)
-        if not self.session_token:
+        if not await self._authenticate(self.http_client):
             self.logger.error("Authentication failed, cannot fetch data.")
             return None
 
         start_time, end_time = self._get_datetime_range(date)
 
         response = await self.make_request(
-            self.http_client,
             method="post",
             url=f"{self.BASE_URL}listMarketCatalogue/",
             json={
