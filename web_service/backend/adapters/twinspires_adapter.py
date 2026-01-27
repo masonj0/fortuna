@@ -17,7 +17,7 @@ import logging
 import random
 from pathlib import Path
 
-from scrapling.fetchers import AsyncStealthySession, AsyncPlayWrightSession
+from scrapling.fetchers import AsyncStealthySession
 from scrapling.parser import Selector
 
 from web_service.backend.models import OddsData, Race, Runner
@@ -115,9 +115,10 @@ class TwinSpiresAdapter(BaseAdapterV3):
             if backend == BrowserBackend.STEALTHY_CAMOUFOX:
                 self._sessions[backend] = AsyncStealthySession(headless=True, block_images=True, solve_cloudflare=True)
             elif backend == BrowserBackend.PLAYWRIGHT_CHROMIUM:
-                self._sessions[backend] = AsyncPlayWrightSession(headless=True, browser_type='chromium')
+                # In newer scrapling versions, AsyncStealthySession handles all browser types
+                self._sessions[backend] = AsyncStealthySession(headless=True, browser_type='chromium')
             elif backend == BrowserBackend.PLAYWRIGHT_FIREFOX:
-                self._sessions[backend] = AsyncPlayWrightSession(headless=True, browser_type='firefox')
+                self._sessions[backend] = AsyncStealthySession(headless=True, browser_type='firefox')
 
             await self._sessions[backend].start()
         return self._sessions[backend]

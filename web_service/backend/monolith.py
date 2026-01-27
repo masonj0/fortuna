@@ -178,7 +178,12 @@ def get_resource_path(relative_path: str) -> Path:
 # ====================================================================
 def create_backend_api():
     """Create FastAPI instance with fallback support"""
-    api = FastAPI(title="Fortuna Backend")
+    # Use the lifespan from the main API to ensure engine initialization
+    try:
+        from web_service.backend.api import lifespan as backend_lifespan
+        api = FastAPI(title="Fortuna Backend", lifespan=backend_lifespan)
+    except ImportError:
+        api = FastAPI(title="Fortuna Backend")
 
     @api.get("/health")
     async def health():
@@ -191,13 +196,14 @@ def create_backend_api():
 
     try:
         logger.info("Attempting to load full backend API...")
-        from web_service.backend import api as backend_api
+        from web_service.backend.api import router as backend_router
 
-        # Copy routes from full backend
-        for route in backend_api.app.routes:
-            api.routes.append(route)
+        # Include the router directly instead of copying routes from app.
+        # This avoids double-prefixing (/api/api/...) and accidental copying
+        # of static mounts and middleware from the standalone app instance.
+        api.include_router(backend_router)
 
-        logger.info(f"OK - Full backend API loaded ({len(api.routes)} routes)")
+        logger.info("OK - Full backend API router included")
         return api
 
     except (ImportError, AttributeError) as e:
