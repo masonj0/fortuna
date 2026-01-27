@@ -459,9 +459,19 @@ class BaseAdapterV3(ABC):
                 error_type=type(e).__name__,
                 health_report=self.smart_fetcher.get_health_report(),
             )
+
+            # Save a snapshot if we have a response body in the error
+            if hasattr(e, 'response') and hasattr(e.response, 'text'):
+                self._save_debug_snapshot(
+                    content=e.response.text,
+                    context=f"request_failed_{getattr(e.response, 'status', 'unknown')}",
+                    url=full_url
+                )
+
             # Re-raise as a standard adapter error for consistent downstream handling
+            status_code = getattr(getattr(e, 'response', None), 'status', 503)
             raise AdapterHttpError(
-                adapter_name=self.source_name, status_code=503, url=full_url
+                adapter_name=self.source_name, status_code=status_code, url=full_url
             ) from e
 
     def _should_save_debug_html(self) -> bool:
@@ -470,34 +480,77 @@ class BaseAdapterV3(ABC):
         return os.getenv("CI") == "true" or os.getenv("DEBUG_MODE") == "true"
 
     def _save_debug_snapshot(self, content: str, context: str, url: str | None = None):
-        """Saves HTML or other text content to a file for debugging purposes."""
+        """
+        Saves HTML or other text content to a file for debugging purposes.
+        Enhanced to include metadata and better organization.
+        """
         if not self._should_save_debug_html():
             return
 
         import os
         import re
+        import json
         from datetime import datetime
 
         try:
-            debug_dir = "debug-snapshots"
+            debug_dir = os.path.join("debug-snapshots", self.source_name.lower())
             os.makedirs(debug_dir, exist_ok=True)
 
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
 
             # Sanitize context and URL for a safe filename
             sanitized_context = re.sub(r'[\\/*?:"<>|]', "_", context)
             sanitized_url = ""
             if url:
-                sanitized_url = f"_{re.sub(r'https://?|www.', '', url).replace('/', '_')[:50]}"
+                # Remove protocol and query params for filename
+                clean_url = re.sub(r'https?://(www\.)?', '', url).split('?')[0]
+                sanitized_url = f"_{re.sub(r'[\\/*?:\x22<>|]', '_', clean_url)[:60]}"
 
-            filename = f"{timestamp}_{self.source_name}_{sanitized_context}{sanitized_url}.html"
-            filepath = os.path.join(debug_dir, filename)
+            base_filename = f"{timestamp}_{sanitized_context}{sanitized_url}"
+
+            # Save the main content (HTML/JSON)
+            content_ext = ".json" if content.startswith(("{", "[")) else ".html"
+            filepath = os.path.join(debug_dir, f"{base_filename}{content_ext}")
 
             with open(filepath, "w", encoding="utf-8") as f:
                 f.write(content)
-            self.logger.info("Saved debug snapshot", filepath=filepath)
+
+            # Save metadata for better diagnostic context
+            meta_path = os.path.join(debug_dir, f"{base_filename}_meta.json")
+            meta = {
+                "timestamp": datetime.now().isoformat(),
+                "adapter": self.source_name,
+                "url": url or self.attempted_url,
+                "context": context,
+                "engine": getattr(self.smart_fetcher, 'last_engine', 'unknown'),
+                "health_report": self.smart_fetcher.get_health_report()
+            }
+            with open(meta_path, "w", encoding="utf-8") as f:
+                json.dump(meta, f, indent=2)
+
+            self.logger.info("Saved debug snapshot and metadata",
+                             filepath=filepath, meta_path=meta_path)
+
+            # Prune old snapshots (keep last 50)
+            self._prune_debug_snapshots(debug_dir, max_files=100)
+
         except Exception as e:
             self.logger.warning("Failed to save debug snapshot", error=str(e))
+
+    def _prune_debug_snapshots(self, debug_dir: str, max_files: int = 100):
+        """Keep the number of debug files under control."""
+        import os
+        try:
+            files = [os.path.join(debug_dir, f) for f in os.listdir(debug_dir)]
+            if len(files) <= max_files:
+                return
+
+            # Sort by modification time (oldest first)
+            files.sort(key=os.path.getmtime)
+            for f in files[:-max_files]:
+                os.remove(f)
+        except Exception:
+            pass
 
     async def health_check(self) -> dict[str, Any]:
         """

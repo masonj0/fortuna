@@ -17,13 +17,12 @@ import logging
 import random
 from pathlib import Path
 
-from scrapling.fetchers import AsyncStealthySession
 from scrapling.parser import Selector
 
 from web_service.backend.models import OddsData, Race, Runner
 from web_service.backend.utils.odds import parse_odds_to_decimal
 from .base_adapter_v3 import BaseAdapterV3
-from python_service.browser.adaptive_selector import get_browser_selector, BrowserBackend
+from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy, StealthMode
 
 logger = logging.getLogger(__name__)
 
@@ -105,106 +104,22 @@ class TwinSpiresAdapter(BaseAdapterV3):
             cache_ttl=180.0,
             rate_limit=1.5  # Slightly more conservative
         )
-        self._browser_selector = get_browser_selector()
-        self._sessions: Dict[BrowserBackend, Any] = {}
         self._debug_dir = Path(os.environ.get('DEBUG_OUTPUT_DIR', '.'))
         self.attempted_url: Optional[str] = None
 
-    async def _get_session(self, backend: BrowserBackend):
-        if backend not in self._sessions:
-            if backend == BrowserBackend.STEALTHY_CAMOUFOX:
-                self._sessions[backend] = AsyncStealthySession(headless=True, block_images=True, solve_cloudflare=True)
-            elif backend == BrowserBackend.PLAYWRIGHT_CHROMIUM:
-                # In newer scrapling versions, AsyncStealthySession handles all browser types
-                self._sessions[backend] = AsyncStealthySession(headless=True, browser_type='chromium')
-            elif backend == BrowserBackend.PLAYWRIGHT_FIREFOX:
-                self._sessions[backend] = AsyncStealthySession(headless=True, browser_type='firefox')
-
-            try:
-                await self._sessions[backend].start()
-            except RuntimeError as e:
-                if "already has an active browser context" not in str(e):
-                    raise
-        return self._sessions[backend]
-
-    async def _fetch_with_retry(
-        self,
-        url: str,
-        max_retries: int = 3,
-        base_delay: float = 2.0,
-        **fetch_kwargs
-    ) -> Optional[Any]:
+    def _configure_fetch_strategy(self) -> FetchStrategy:
         """
-        Fetch URL with exponential backoff retry logic.
-
-        Args:
-            url: URL to fetch
-            max_retries: Maximum number of retry attempts
-            base_delay: Base delay between retries (doubles each attempt)
-            **fetch_kwargs: Additional arguments for session.fetch()
-
-        Returns:
-            Response object or None on failure
+        TwinSpires has strong anti-bot protections.
+        Using CAMOUFLAGE stealth mode and blocking non-essential resources.
         """
-        last_error = None
-
-        for attempt in range(max_retries):
-            backend = await self._browser_selector.select_backend()
-            session = await self._get_session(backend)
-            start_time = asyncio.get_event_loop().time()
-
-            try:
-                self.logger.info(
-                    f"Fetch attempt {attempt + 1}/{max_retries} using {backend.value}",
-                    url=url
-                )
-
-                # Add jitter to avoid thundering herd
-                if attempt > 0:
-                    delay = base_delay * (2 ** attempt) + random.uniform(0, 1)
-                    self.logger.debug(f"Waiting {delay:.1f}s before retry")
-                    await asyncio.sleep(delay)
-
-                response = await session.fetch(url, **fetch_kwargs)
-
-                latency_ms = (asyncio.get_event_loop().time() - start_time) * 1000
-
-                # Check for soft failures (200 but blocked content)
-                if response.status == 200:
-                    if self._is_blocked_response(response.text):
-                        self.logger.warning("Detected blocked response (CAPTCHA/Challenge)")
-                        await self._browser_selector.record_result(backend, False, latency_ms, "blocked")
-                        last_error = "Blocked by anti-bot"
-                        continue
-
-                    await self._browser_selector.record_result(backend, True, latency_ms)
-                    return response
-
-                elif response.status in (403, 429, 503):
-                    self.logger.warning(f"Rate limited or blocked: {response.status}")
-                    await self._browser_selector.record_result(backend, False, latency_ms, f"http_{response.status}")
-                    last_error = f"HTTP {response.status}"
-                    continue
-
-                else:
-                    self.logger.error(f"Unexpected status: {response.status}")
-                    await self._browser_selector.record_result(backend, False, latency_ms, f"http_{response.status}")
-                    last_error = f"HTTP {response.status}"
-
-            except asyncio.TimeoutError:
-                latency_ms = (asyncio.get_event_loop().time() - start_time) * 1000
-                self.logger.warning(f"Timeout on attempt {attempt + 1}")
-                await self._browser_selector.record_result(backend, False, latency_ms, "timeout")
-                last_error = "Timeout"
-
-            except Exception as e:
-                latency_ms = (asyncio.get_event_loop().time() - start_time) * 1000
-                self.logger.error(f"Fetch error: {e}", exc_info=True)
-                await self._browser_selector.record_result(backend, False, latency_ms, type(e).__name__)
-                last_error = str(e)
-
-        self.logger.error(f"All {max_retries} attempts failed. Last error: {last_error}")
-        return None
+        return FetchStrategy(
+            primary_engine=BrowserEngine.CAMOUFOX,
+            enable_js=True,
+            stealth_mode=StealthMode.CAMOUFLAGE,
+            block_resources=True,
+            max_retries=3,
+            timeout=45,
+        )
 
     def _is_blocked_response(self, html: str) -> bool:
         """Check if response indicates we're blocked."""
@@ -243,13 +158,16 @@ class TwinSpiresAdapter(BaseAdapterV3):
             self.attempted_url = url
             self.logger.info(f"Trying URL pattern: {url}")
 
-            response = await self._fetch_with_retry(
-                url,
-                max_retries=int(os.environ.get('MAX_RETRIES', 3)),
-                timeout=int(os.environ.get('REQUEST_TIMEOUT', 45)) * 1000,
-                network_idle=True,
-                wait_selector='div[class*="race"], [class*="RaceCard"], [class*="track"]',
-            )
+            try:
+                response = await self.make_request(
+                    "GET",
+                    url,
+                    network_idle=True,
+                    wait_selector='div[class*="race"], [class*="RaceCard"], [class*="track"]',
+                )
+            except Exception as e:
+                self.logger.warning(f"Failed to fetch {url}: {e}")
+                continue
 
             if response and response.status == 200:
                 # Save debug HTML
@@ -685,16 +603,5 @@ class TwinSpiresAdapter(BaseAdapterV3):
 
     async def cleanup(self):
         """Cleanup resources."""
-        for session in self._sessions.values():
-            try:
-                await session.close()
-            except Exception as e:
-                self.logger.warning(f"Error closing session: {e}")
-        self._sessions.clear()
+        await self.close()
         self.logger.info("TwinSpires adapter cleaned up")
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self.cleanup()

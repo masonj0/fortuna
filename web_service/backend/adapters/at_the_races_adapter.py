@@ -8,8 +8,7 @@ from typing import Any
 from typing import List
 from typing import Optional
 
-from bs4 import BeautifulSoup
-from bs4 import Tag
+from selectolax.parser import HTMLParser, Node
 
 from ..models import OddsData
 from ..models import Race
@@ -89,12 +88,12 @@ class AtTheRacesAdapter(BaseAdapterV3):
             self.logger.warning("No response from AtTheRaces index page", url=index_url)
             return None
 
-        index_soup = BeautifulSoup(index_response.text, "html.parser")
+        parser = HTMLParser(index_response.text)
 
         # Try multiple selectors to find race links
         links = set()
         for selector in self.SELECTORS['race_links']:
-            found_links = {a["href"] for a in index_soup.select(selector) if a.get("href")}
+            found_links = {a.attributes["href"] for a in parser.css(selector) if a.attributes.get("href")}
             links.update(found_links)
 
         if not links:
@@ -112,8 +111,8 @@ class AtTheRacesAdapter(BaseAdapterV3):
 
         # Filter out exceptions and empty responses
         valid_pages = [
-            page for page in html_pages
-            if not isinstance(page, Exception) and page[1]
+            page for page in html_pages_with_urls
+            if not isinstance(page, Exception) and page and page[1]
         ]
 
         self.logger.info(f"Successfully fetched {len(valid_pages)}/{len(links)} race pages")
@@ -176,12 +175,12 @@ class AtTheRacesAdapter(BaseAdapterV3):
 
     def _parse_single_race(self, html: str, url_path: str, race_date) -> Optional[Race]:
         """Parse a single race from HTML"""
-        soup = BeautifulSoup(html, "html.parser")
+        parser = HTMLParser(html)
 
         # Find details container with fallback
         details_container = None
         for selector in self.SELECTORS['details_container']:
-            details_container = soup.select_one(selector)
+            details_container = parser.css_first(selector)
             if details_container:
                 break
 
@@ -192,11 +191,11 @@ class AtTheRacesAdapter(BaseAdapterV3):
         # Extract track name
         track_name_node = None
         for selector in self.SELECTORS['track_name']:
-            track_name_node = details_container.select_one(selector)
+            track_name_node = details_container.css_first(selector)
             if track_name_node:
                 break
 
-        track_name_raw = clean_text(track_name_node.get_text()) if track_name_node else ""
+        track_name_raw = clean_text(track_name_node.text()) if track_name_node else ""
         track_name = normalize_venue_name(track_name_raw)
 
         if not track_name:
@@ -206,12 +205,12 @@ class AtTheRacesAdapter(BaseAdapterV3):
         # Extract race time
         race_time_node = None
         for selector in self.SELECTORS['race_time']:
-            race_time_node = details_container.select_one(selector)
+            race_time_node = details_container.css_first(selector)
             if race_time_node:
                 break
 
         race_time_str = (
-            clean_text(race_time_node.get_text()).replace(" ATR", "")
+            clean_text(race_time_node.text()).replace(" ATR", "")
             if race_time_node else ""
         )
 
@@ -239,7 +238,7 @@ class AtTheRacesAdapter(BaseAdapterV3):
         # Parse runners with fallback selectors
         runner_nodes = []
         for selector in self.SELECTORS['runners']:
-            runner_nodes = soup.select(selector)
+            runner_nodes = parser.css(selector)
             if runner_nodes:
                 break
 
@@ -261,25 +260,25 @@ class AtTheRacesAdapter(BaseAdapterV3):
 
         return race
 
-    def _parse_runner(self, row: Tag) -> Optional[Runner]:
+    def _parse_runner(self, row: Node) -> Optional[Runner]:
         """Parse a single runner from HTML"""
         try:
             # Horse name
-            name_node = row.select_one("h3")
+            name_node = row.css_first("h3")
             if not name_node:
                 return None
-            name = clean_text(name_node.get_text())
+            name = clean_text(name_node.text())
 
             # Saddle cloth number
-            num_node = row.select_one(".horse-in-racecard__saddle-cloth-number")
+            num_node = row.css_first(".horse-in-racecard__saddle-cloth-number")
             if not num_node:
                 return None
-            num_str = clean_text(num_node.get_text())
+            num_str = clean_text(num_node.text())
             number = int("".join(filter(str.isdigit, num_str)))
 
             # Odds
-            odds_node = row.select_one(".horse-in-racecard__odds")
-            odds_str = clean_text(odds_node.get_text()) if odds_node else ""
+            odds_node = row.css_first(".horse-in-racecard__odds")
+            odds_str = clean_text(odds_node.text()) if odds_node else ""
 
             win_odds = parse_odds_to_decimal(odds_str)
             odds_data = (

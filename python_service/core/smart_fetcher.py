@@ -51,6 +51,13 @@ class FetchStrategy:
     wait_for_selector: Optional[str] = None  # Wait for specific element before returning
 
 
+class FetchError(Exception):
+    """Custom exception that can hold a response object"""
+    def __init__(self, message, response=None):
+        super().__init__(message)
+        self.response = response
+
+
 class SmartFetcher:
     """
     Intelligent fetcher with automatic engine selection and fallback.
@@ -144,6 +151,7 @@ class SmartFetcher:
 
                 # Success! Boost this engine's health
                 self._engine_health[engine] = min(1.0, self._engine_health[engine] + 0.1)
+                self.last_engine = engine.value
 
                 self.logger.info(
                     "Fetch successful",
@@ -180,6 +188,11 @@ class SmartFetcher:
             last_error=str(last_error),
             health_scores={k.value: v for k, v in self._engine_health.items()}
         )
+
+        # If the last error was a FetchError with a response, propagate it
+        if isinstance(last_error, FetchError):
+            raise last_error
+
         raise Exception(f"All fetch engines failed. Last error: {last_error}")
 
     def _get_ordered_engines(self) -> list[BrowserEngine]:
@@ -254,7 +267,7 @@ class SmartFetcher:
 
                 # Check for HTTP errors
                 if hasattr(response, 'status') and response.status >= 400:
-                    raise Exception(f"HTTP {response.status}")
+                    raise FetchError(f"HTTP {response.status}", response=response)
 
                 return response
 
