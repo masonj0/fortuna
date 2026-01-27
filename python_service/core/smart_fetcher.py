@@ -127,6 +127,13 @@ class SmartFetcher:
         # Get engines ordered by health score (best first)
         engines = self._get_ordered_engines()
 
+        # Prioritize primary engine from strategy if it's healthy
+        primary = self.strategy.primary_engine
+        if primary in engines and self._engine_health[primary] > 0.5:
+            # Move primary to the front
+            engines.remove(primary)
+            engines.insert(0, primary)
+
         # Capture and strip method/url to avoid collision in scrapling
         method = kwargs.pop('method', 'GET').upper()
         kwargs.pop('url', None)
