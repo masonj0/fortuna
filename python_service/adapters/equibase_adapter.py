@@ -43,22 +43,46 @@ class EquibaseAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
         """
         Fetches the raw HTML for all race pages for a given date.
         """
-        index_url = f"/entries/{date}"
-        index_response = await self.make_request("GET", index_url, headers=self._get_headers())
+        # Try different possible index URLs for Equibase
+        index_urls = [
+            f"/entries/{date}",
+            f"/static/entry/index.html",
+            f"/static/entry/{date}/index.html",
+        ]
+
+        index_response = None
+        for url in index_urls:
+            try:
+                self.logger.info(f"Trying Equibase index: {url}")
+                index_response = await self.make_request("GET", url, headers=self._get_headers())
+                if index_response and index_response.text and len(index_response.text) > 1000:
+                    break
+            except Exception:
+                continue
+
         if not index_response or not index_response.text:
-            self.logger.warning("Failed to fetch Equibase index page", url=index_url)
+            self.logger.warning("Failed to fetch Equibase index page")
             return None
 
-        self._save_debug_html(index_response.text, f"equibase_index_{date}")
+        self._save_debug_snapshot(index_response.text, f"equibase_index_{date}")
 
         parser = HTMLParser(index_response.text)
-        race_links = [link.attributes["href"] for link in parser.css("a.entry-race-level")]
+        # More robust race link detection
+        race_links = []
+        for a in parser.css("a"):
+            href = a.attributes.get("href", "")
+            if "/static/entry/" in href or "entry-race-level" in a.attributes.get("class", ""):
+                 race_links.append(href)
+
+        race_links = list(set(race_links))
 
         semaphore = asyncio.Semaphore(5)
 
         async def fetch_single_html(race_url: str):
             async with semaphore:
                 try:
+                    # Random delay to be less robotic (0.5 to 1.5 seconds)
+                    await asyncio.sleep(0.5 + (hash(race_url) % 100) / 100.0)
                     response = await self.make_request("GET", race_url, headers=self._get_headers())
                     return response.text if response else ""
                 except Exception as e:
@@ -153,6 +177,15 @@ class EquibaseAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
 
     def _parse_post_time(self, date_str: str, time_str: str) -> datetime:
         """Parses a time string like 'Post Time: 12:30 PM ET' into a datetime object."""
-        time_part = time_str.split(" ")[-2] + " " + time_str.split(" ")[-1]
-        dt_str = f"{date_str} {time_part}"
-        return datetime.strptime(dt_str, "%Y-%m-%d %I:%M %p")
+        try:
+            # Handle formats like "12:30 PM ET" or just "12:30 PM"
+            parts = time_str.replace("Post Time:", "").strip().split(" ")
+            if len(parts) >= 2:
+                time_part = f"{parts[0]} {parts[1]}"
+                dt_str = f"{date_str} {time_part}"
+                return datetime.strptime(dt_str, "%Y-%m-%d %I:%M %p")
+        except Exception:
+            self.logger.warning(f"Failed to parse post time: {time_str}")
+
+        # Fallback to a safe default
+        return datetime.now()

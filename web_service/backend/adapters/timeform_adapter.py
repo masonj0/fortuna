@@ -137,39 +137,8 @@ class TimeformAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
                 runners = []
                 # Use tbody as the main container for each runner
                 for row in parser.css('tbody.rp-horse-row'):
-                    name_node = row.css_first("a.rp-horse")
-                    if not name_node: continue
-                    name = clean_text(name_node.text())
-
-                    number = 0
-                    num_attr = row.attributes.get("data-entrynumber")
-                    if num_attr:
-                        try: number = int(num_attr)
-                        except: pass
-
-                    if not number:
-                        num_node = row.css_first(".rp-entry-number")
-                        if num_node:
-                            num_text = clean_text(num_node.text())
-                            num_match = re.search(r'^\d+', num_text)
-                            if num_match:
-                                number = int(num_match.group())
-
-                    win_odds = None
-                    if name.lower() in forecast_map:
-                        win_odds = parse_odds_to_decimal(forecast_map[name.lower()])
-
-                    # Try to find live odds button if available (old selector)
-                    if not win_odds:
-                        odds_tag = row.css_first("button.rp-bet-placer-btn__odds")
-                        if odds_tag:
-                            win_odds = parse_odds_to_decimal(clean_text(odds_tag.text()))
-
-                    odds_data = {}
-                    if odds_val := create_odds_data(self.source_name, win_odds):
-                        odds_data[self.source_name] = odds_val
-
-                    runners.append(Runner(number=number, name=name, odds=odds_data))
+                    if runner := self._parse_runner(row, forecast_map):
+                        runners.append(runner)
 
                 if not runners:
                     continue
@@ -196,3 +165,45 @@ class TimeformAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
                 self.logger.warning(f"Error parsing Timeform race: {e}")
                 continue
         return all_races
+
+    def _parse_runner(self, row: Node, forecast_map: dict = None) -> Optional[Runner]:
+        """Parses a single runner from a table row node."""
+        try:
+            name_node = row.css_first("a.rp-horse") or row.css_first("a.rp-horseTable_horse-name")
+            if not name_node:
+                return None
+            name = clean_text(name_node.text())
+
+            number = 0
+            num_attr = row.attributes.get("data-entrynumber")
+            if num_attr:
+                try:
+                    number = int(num_attr)
+                except:
+                    pass
+
+            if not number:
+                num_node = row.css_first(".rp-entry-number") or row.css_first("span.rp-horseTable_horse-number")
+                if num_node:
+                    num_text = clean_text(num_node.text()).strip("()")
+                    num_match = re.search(r"\d+", num_text)
+                    if num_match:
+                        number = int(num_match.group())
+
+            win_odds = None
+            if forecast_map and name.lower() in forecast_map:
+                win_odds = parse_odds_to_decimal(forecast_map[name.lower()])
+
+            # Try to find live odds button if available (old selector)
+            if not win_odds:
+                odds_tag = row.css_first("button.rp-bet-placer-btn__odds")
+                if odds_tag:
+                    win_odds = parse_odds_to_decimal(clean_text(odds_tag.text()))
+
+            odds_data = {}
+            if odds_val := create_odds_data(self.source_name, win_odds):
+                odds_data[self.source_name] = odds_val
+
+            return Runner(number=number, name=name, odds=odds_data)
+        except (AttributeError, ValueError, TypeError):
+            return None
