@@ -52,7 +52,7 @@ class ReporterConfig:
     raw_json_output_path: Path = field(default_factory=lambda: Path("raw_race_data.json"))
 
     max_retries: int = field(default_factory=lambda: int(os.getenv("MAX_RETRIES", "3")))
-    request_timeout: int = field(default_factory=lambda: int(os.getenv("REQUEST_TIMEOUT", "30")))
+    request_timeout: int = field(default_factory=lambda: int(os.getenv("REQUEST_TIMEOUT", "45")))
     analyzer_type: str = field(default_factory=lambda: os.getenv("ANALYZER_TYPE", "tiny_field_trifecta"))
     force_refresh: bool = field(default_factory=lambda: os.getenv("FORCE_REFRESH", "false").lower() == "true")
     max_summary_races: int = 25
