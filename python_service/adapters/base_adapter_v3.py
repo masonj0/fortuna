@@ -307,6 +307,8 @@ class BaseAdapterV3(ABC):
         self.manual_override_manager: ManualOverrideManager | None = None
         self.supports_manual_override = True
         self.attempted_url: Optional[str] = None
+        self.last_race_count: int = 0
+        self.last_duration_s: float = 0.0
         self._initial_rate_limit = rate_limit
         # ✅ THESE 4 LINES MUST BE HERE (not in close()):
         self.circuit_breaker = CircuitBreaker()
@@ -408,6 +410,7 @@ class BaseAdapterV3(ABC):
             raise AdapterParsingError(self.source_name, "Parsing logic failed.") from e
 
         validated_races, warnings = DataValidationPipeline.validate_parsed_races(parsed_races)
+        self.last_race_count = len(validated_races)
 
         if warnings:
             self.logger.warning("Validation warnings during parsing", warnings=warnings)
@@ -474,6 +477,7 @@ class BaseAdapterV3(ABC):
             response = await self.smart_fetcher.fetch(full_url, method=method, **kwargs)
 
             latency_ms = (time.perf_counter() - start_time) * 1000
+            self.last_duration_s = latency_ms / 1000.0
             await self.metrics.record_success(latency_ms)
             await self.circuit_breaker.record_success()
             await self._adjust_rate_limit(success=True)
@@ -626,6 +630,8 @@ class BaseAdapterV3(ABC):
             "status": status,
             "circuit_state": self.circuit_breaker.state.value,
             "success_rate": round(self.metrics.success_rate, 3),
+            "last_race_count": self.last_race_count,
+            "last_duration_s": round(self.last_duration_s, 2),
         }
 
     async def reset(self) -> None:

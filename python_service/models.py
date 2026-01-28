@@ -56,6 +56,7 @@ class Race(FortunaBaseModel):
     distance: Optional[str] = None
     is_error_placeholder: bool = Field(False, alias="isErrorPlaceholder")
     error_message: Optional[str] = Field(None, alias="errorMessage")
+    metadata: Dict[str, Any] = {}
 
 
 class SourceInfo(FortunaBaseModel):

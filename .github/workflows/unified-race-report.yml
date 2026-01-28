@@ -605,6 +605,7 @@ jobs:
             metrics.json
             errors.json
             adapter_stats.json
+            adapter_success_summary.json
             browser_selector_state.json
             anomaly_history.json
             canary_result.json
