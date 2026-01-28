@@ -1,7 +1,7 @@
 # tests/adapters/test_racingtv_adapter.py
 import pytest
 
-from python_service.adapters.racingtv_adapter import RacingTVAdapter
+from python_service.adapters import RacingTVAdapter
 
 
 @pytest.mark.asyncio
