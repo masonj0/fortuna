@@ -69,22 +69,38 @@ def main():
             race_count = len(data.get("races", []))
             print(f"  ✅ Valid ({race_count} races)")
 
-            # Anomaly Gating
+            # Anomaly Gating and History Tracking
             if filename == "qualified_races.json":
                 anomaly_path = Path("anomaly_history.json")
+                history = []
                 if anomaly_path.exists():
                     try:
                         history = json.loads(anomaly_path.read_text())
-                        # Very simple check: if current count is < 20% of median, flag it
-                        counts = [h.get('race_count', 0) for h in history if 'race_count' in h]
-                        if counts:
-                            import statistics
-                            median = statistics.median(counts)
-                            if race_count < (median * 0.2) and median > 5:
-                                print(f"  ⚠️ ANOMALY DETECTED: Race count ({race_count}) is significantly lower than median ({median:.1f})")
-                                # We don't fail the job, but we could if we wanted strict gating
+                        if not isinstance(history, list):
+                            history = []
                     except:
-                        pass
+                        history = []
+
+                # Perform Anomaly Check
+                if history:
+                    counts = [h.get('race_count', 0) for h in history if 'race_count' in h]
+                    if counts:
+                        import statistics
+                        median = statistics.median(counts)
+                        if race_count < (median * 0.2) and median > 5:
+                            print(f"  ⚠️ ANOMALY DETECTED: Race count ({race_count}) is significantly lower than median ({median:.1f})")
+
+                # Update History (Keep last 30 entries)
+                history.append({
+                    "timestamp": json.load(open(filepath)).get("timestamp", ""),
+                    "race_count": race_count
+                })
+                history = history[-30:]
+                try:
+                    anomaly_path.write_text(json.dumps(history, indent=2))
+                    print(f"  📈 History updated in {anomaly_path}")
+                except Exception as e:
+                    print(f"  ⚠️ Failed to update history: {e}")
         else:
             print(f"  ❌ Invalid")
             for err in errors[:5]:

@@ -58,8 +58,8 @@ class Settings(BaseSettings):
     # --- Caching & Performance ---
     REDIS_URL: str = "redis://localhost:6379"
     CACHE_TTL_SECONDS: int = 1800  # 30 minutes
-    MAX_CONCURRENT_REQUESTS: int = 10
-    HTTP_POOL_CONNECTIONS: int = 100
+    MAX_CONCURRENT_REQUESTS: int = 5
+    HTTP_POOL_CONNECTIONS: int = 50
     HTTP_POOL_MAXSIZE: int = 100
     HTTP_MAX_KEEPALIVE: int = 50
     DEFAULT_TIMEOUT: int = 45

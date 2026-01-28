@@ -73,6 +73,7 @@ class SmartFetcher:
     - Configurable retry logic
     - Bot detection and adaptive escalation
     - Environment-aware (respects CI flags)
+    - Global session pool to prevent OOM
     """
 
     BOT_KEYWORDS = [
@@ -82,13 +83,14 @@ class SmartFetcher:
         "sucuri", "bot protection"
     ]
 
+    # Global shared session pool
+    _shared_fetchers: Dict[BrowserEngine, Any] = {}
+    _shared_httpx_client: Optional[httpx.AsyncClient] = None
+    _shared_lock = asyncio.Lock()
+
     def __init__(self, strategy: FetchStrategy = None):
         self.strategy = strategy or FetchStrategy()
         self.logger = structlog.get_logger(self.__class__.__name__)
-
-        # Track fetcher instances (lazy-loaded)
-        self._fetchers: Dict[BrowserEngine, Any] = {}
-        self._httpx_client: Optional[httpx.AsyncClient] = None
 
         # Health tracking: 0.0 (dead) to 1.0 (perfect)
         self._engine_health = {
@@ -245,41 +247,49 @@ class SmartFetcher:
         )
 
     async def _get_fetcher(self, engine: BrowserEngine):
-        """Lazy-load and cache fetchers"""
+        """Lazy-load and cache fetchers in a global pool"""
 
-        if engine in self._fetchers:
-            return self._fetchers[engine]
+        async with self._shared_lock:
+            if engine in self._shared_fetchers:
+                return self._shared_fetchers[engine]
 
-        self.logger.debug(f"Initializing {engine.value} fetcher")
+            self.logger.debug(f"Initializing global {engine.value} fetcher")
 
-        if engine == BrowserEngine.CAMOUFOX:
-            if not ASYNC_SESSIONS_AVAILABLE:
-                raise ImportError("AsyncStealthySession not available")
+            if engine == BrowserEngine.CAMOUFOX:
+                if not ASYNC_SESSIONS_AVAILABLE:
+                    raise ImportError("AsyncStealthySession not available")
 
-            fetcher = AsyncStealthySession(
-                headless=True,
-                disable_resources=self.strategy.block_resources,
-            )
-            await fetcher.start()
-            self._fetchers[engine] = fetcher
+                fetcher = AsyncStealthySession(
+                    headless=True,
+                    disable_resources=self.strategy.block_resources,
+                )
+                await fetcher.start()
+                self._shared_fetchers[engine] = fetcher
 
-        elif engine == BrowserEngine.PLAYWRIGHT:
-            if not ASYNC_SESSIONS_AVAILABLE:
-                raise ImportError("AsyncDynamicSession not available")
+            elif engine == BrowserEngine.PLAYWRIGHT:
+                if not ASYNC_SESSIONS_AVAILABLE:
+                    raise ImportError("AsyncDynamicSession not available")
 
-            fetcher = AsyncDynamicSession(
-                headless=True,
-                disable_resources=self.strategy.block_resources,
-            )
-            await fetcher.start()
-            self._fetchers[engine] = fetcher
+                fetcher = AsyncDynamicSession(
+                    headless=True,
+                    disable_resources=self.strategy.block_resources,
+                )
+                await fetcher.start()
+                self._shared_fetchers[engine] = fetcher
 
-        else:  # HTTPX
-            if self._httpx_client is None:
-                self._httpx_client = httpx.AsyncClient(follow_redirects=True)
-            return self._httpx_client
+            else:  # HTTPX
+                if self._shared_httpx_client is None:
+                    self._shared_httpx_client = httpx.AsyncClient(follow_redirects=True)
+                return self._shared_httpx_client
 
-        return self._fetchers[engine]
+            return self._shared_fetchers[engine]
+
+    def _is_bot_detected(self, response_text: str) -> bool:
+        """Check if response text contains bot detection keywords."""
+        if not response_text:
+            return False
+        text_lower = response_text.lower()
+        return any(kw in text_lower for kw in self.BOT_KEYWORDS)
 
     def _is_bot_detected(self, response_text: str) -> bool:
         """Check if response text contains bot detection keywords."""
@@ -297,7 +307,7 @@ class SmartFetcher:
 
                 if engine == BrowserEngine.HTTPX:
                     # Use httpx directly to avoid scrapling 0.3.x empty response bug
-                    response = await self._httpx_client.request(
+                    response = await self._shared_httpx_client.request(
                         method, url, timeout=self.strategy.timeout, **kwargs
                     )
                     # Add status attribute for compatibility with scrapling response
@@ -357,23 +367,25 @@ class SmartFetcher:
                 await asyncio.sleep(1)
 
     async def close(self):
-        """Cleanup all fetchers"""
-        for engine, fetcher in self._fetchers.items():
-            try:
-                if engine == BrowserEngine.CAMOUFOX and isinstance(fetcher, AsyncStealthySession):
-                    await fetcher.close()
-                    self.logger.debug("Closed Camoufox session")
-                elif engine == BrowserEngine.PLAYWRIGHT and isinstance(fetcher, AsyncDynamicSession):
-                    await fetcher.close()
-                    self.logger.debug("Closed Playwright session")
-            except Exception as e:
-                self.logger.warning(f"Error closing {engine.value}: {e}")
+        """Cleanup global fetchers"""
+        async with self._shared_lock:
+            for engine, fetcher in list(self._shared_fetchers.items()):
+                try:
+                    if engine == BrowserEngine.CAMOUFOX and isinstance(fetcher, AsyncStealthySession):
+                        await fetcher.close()
+                        self.logger.debug("Closed global Camoufox session")
+                    elif engine == BrowserEngine.PLAYWRIGHT and isinstance(fetcher, AsyncDynamicSession):
+                        await fetcher.close()
+                        self.logger.debug("Closed global Playwright session")
+                except Exception as e:
+                    self.logger.warning(f"Error closing global {engine.value}: {e}")
 
-        if self._httpx_client:
-            await self._httpx_client.aclose()
-            self._httpx_client = None
+            if self._shared_httpx_client:
+                await self._shared_httpx_client.aclose()
+                self.logger.debug("Closed global HTTPX client")
+                self._shared_httpx_client = None
 
-        self._fetchers.clear()
+            self._shared_fetchers.clear()
 
     def get_health_report(self) -> dict:
         """Get current health status of all engines"""
