@@ -57,7 +57,8 @@ class TheRacingApiAdapter(BaseAdapterV3):
         """Parses a single race object from the API response."""
         race_id = race_data.get("race_id")
         venue = race_data.get("course")
-        race_number = race_data.get("race_number")
+        # Handle different potential field names for race number
+        race_number = race_data.get("race_number") or race_data.get("race_no")
         start_time_str = race_data.get("off_time")
 
         if not all([race_id, venue, race_number, start_time_str]):
@@ -66,13 +67,19 @@ class TheRacingApiAdapter(BaseAdapterV3):
         runners = []
         for runner_data in race_data.get("runners", []):
             name = runner_data.get("horse")
-            number = runner_data.get("saddle_cloth")
-            if not all([name, number]):
+            # Handle different potential field names for saddle cloth number
+            number = runner_data.get("saddle_cloth") or runner_data.get("number")
+            if not all([name, str(number)] if number is not None else [name]):
                 continue
 
             odds = {}
             # TheRacingAPI sometimes provides odds in various formats
-            # This is a simplified placeholder
+            if odds_list := runner_data.get("odds"):
+                if isinstance(odds_list, list) and len(odds_list) > 0:
+                    odds_val = odds_list[0].get("odds_decimal")
+                    if odds_val:
+                        if odds_data := create_odds_data(self.source_name, odds_val):
+                            odds[self.source_name] = odds_data
 
             runners.append(
                 Runner(
