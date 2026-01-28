@@ -1,0 +1,139 @@
+{
+  "timestamp": "2026-01-28T10:10:12.182167",
+  "config": {
+    "timeout_seconds": 30,
+    "max_concurrent": 3,
+    "sites_tested": 8
+  },
+  "elapsed_seconds": 1.73,
+  "results": [
+    {
+      "name": "At The Races",
+      "url": "https://www.attheraces.com/racecards",
+      "notes": "Usually works without JavaScript",
+      "accessible": false,
+      "status_code": 200,
+      "has_content": false,
+      "blocked": true,
+      "blocked_by": [
+        "captcha"
+      ],
+      "error": null,
+      "size_bytes": 805196,
+      "text_length": 0,
+      "response_time_ms": 120,
+      "saved_file": "httpx_test_output/blocked_at_the_races.html"
+    },
+    {
+      "name": "Racing TV",
+      "url": "https://www.racingtv.com/racecards",
+      "notes": "Simple HTML site",
+      "accessible": false,
+      "status_code": 200,
+      "has_content": false,
+      "blocked": false,
+      "blocked_by": [],
+      "error": null,
+      "size_bytes": 3554,
+      "text_length": 3235,
+      "response_time_ms": 306,
+      "saved_file": "httpx_test_output/no_content_racing_tv.html"
+    },
+    {
+      "name": "Horse Racing Nation",
+      "url": "https://www.horseracingnation.com/race_cards",
+      "notes": "US site, might work",
+      "accessible": false,
+      "status_code": 404,
+      "has_content": false,
+      "blocked": false,
+      "blocked_by": [],
+      "error": null,
+      "size_bytes": 9,
+      "text_length": 0,
+      "response_time_ms": 259,
+      "saved_file": null
+    },
+    {
+      "name": "Equibase",
+      "url": "https://www.equibase.com/premium/todaysRacingLanding.cfm",
+      "notes": "Official US racing data",
+      "accessible": false,
+      "status_code": 404,
+      "has_content": false,
+      "blocked": false,
+      "blocked_by": [],
+      "error": null,
+      "size_bytes": 1361,
+      "text_length": 0,
+      "response_time_ms": 313,
+      "saved_file": null
+    },
+    {
+      "name": "Racing Post",
+      "url": "https://www.racingpost.com/racecards",
+      "notes": "Will likely be blocked, but worth checking",
+      "accessible": true,
+      "status_code": 200,
+      "has_content": true,
+      "blocked": false,
+      "blocked_by": [],
+      "error": null,
+      "size_bytes": 762414,
+      "text_length": 17123,
+      "response_time_ms": 1178,
+      "saved_file": "httpx_test_output/working_racing_post.html"
+    },
+    {
+      "name": "Sporting Life",
+      "url": "https://www.sportinglife.com/racing/racecards",
+      "notes": "Will likely be blocked, but worth checking",
+      "accessible": true,
+      "status_code": 200,
+      "has_content": true,
+      "blocked": false,
+      "blocked_by": [],
+      "error": null,
+      "size_bytes": 400243,
+      "text_length": 213161,
+      "response_time_ms": 133,
+      "saved_file": "httpx_test_output/working_sporting_life.html"
+    },
+    {
+      "name": "Timeform",
+      "url": "https://www.timeform.com/horse-racing/racecards",
+      "notes": "Premium data source",
+      "accessible": true,
+      "status_code": 200,
+      "has_content": true,
+      "blocked": false,
+      "blocked_by": [],
+      "error": null,
+      "size_bytes": 81421,
+      "text_length": 9818,
+      "response_time_ms": 450,
+      "saved_file": "httpx_test_output/working_timeform.html"
+    },
+    {
+      "name": "Sky Sports Racing",
+      "url": "https://www.skysports.com/racing/racecards",
+      "notes": "May have good coverage",
+      "accessible": true,
+      "status_code": 200,
+      "has_content": true,
+      "blocked": false,
+      "blocked_by": [],
+      "error": null,
+      "size_bytes": 195652,
+      "text_length": 33387,
+      "response_time_ms": 380,
+      "saved_file": "httpx_test_output/working_sky_sports_racing.html"
+    }
+  ],
+  "summary": {
+    "working": 4,
+    "blocked": 1,
+    "errored": 0,
+    "no_content": 3
+  }
+}

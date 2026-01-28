@@ -21,7 +21,6 @@ class AtTheRacesAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
     """
     Adapter for attheraces.com, migrated to BaseAdapterV3.
 
-    Uses simple HTTP requests as the site doesn't require JavaScript.
     Standardized on selectolax for performance.
     """
 
@@ -35,12 +34,13 @@ class AtTheRacesAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
             'a[href*="/racecard/"]',
         ],
         "details_container": [
+            ".race-header__details--primary",
             "atr-racecard-race-header .container",
             ".racecard-header .container",
         ],
-        "track_name": ["h1 a", "h1"],
-        "race_time": ["h1 span", ".race-time"],
-        "runners": ["atr-horse-in-racecard", ".horse-in-racecard"],
+        "track_name": ["h2", "h1 a", "h1"],
+        "race_time": ["h2 b", "h1 span", ".race-time"],
+        "runners": [".odds-grid-horse", "atr-horse-in-racecard", ".horse-in-racecard"],
     }
 
     def __init__(self, config=None):
@@ -49,6 +49,8 @@ class AtTheRacesAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
             base_url=self.BASE_URL,
             config=config
         )
+        # Limit concurrency to avoid triggering bot protection/timeouts
+        self._semaphore = asyncio.Semaphore(5)
 
     def _configure_fetch_strategy(self) -> FetchStrategy:
         """AtTheRaces is a simple HTML site - HTTPX is fastest."""
@@ -84,14 +86,21 @@ class AtTheRacesAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
         parser = HTMLParser(index_response.text)
         links = self._find_links_with_fallback(parser)
 
-        if not links:
+        # Filter out links that are not actual racecards (e.g. /racecards/date)
+        # Real racecards usually have a time at the end: /racecard/Venue/Date/Time
+        filtered_links = {
+            link for link in links
+            if re.search(r'/\d{4}$', link) or re.search(r'/\d{1,2}$', link)
+        }
+
+        if not filtered_links:
             self.logger.warning("No race links found on index page", date=date)
             return None
 
-        self.logger.info(f"Found {len(links)} race links for {date}")
+        self.logger.info(f"Found {len(filtered_links)} race links for {date}")
 
-        pages = await self._fetch_race_pages(links)
-        self.logger.info(f"Successfully fetched {len(pages)}/{len(links)} race pages")
+        pages = await self._fetch_race_pages(filtered_links)
+        self.logger.info(f"Successfully fetched {len(pages)}/{len(filtered_links)} race pages")
 
         return {"pages": pages, "date": date}
 
@@ -108,12 +117,19 @@ class AtTheRacesAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
         return links
 
     async def _fetch_race_pages(self, links: set) -> List[tuple]:
-        """Fetch all race pages concurrently."""
+        """Fetch all race pages concurrently with semaphore limit."""
         async def fetch_single(url_path: str):
-            response = await self.make_request(
-                "GET", url_path, headers=self._get_headers()
-            )
-            return (url_path, response.text) if response else (url_path, "")
+            async with self._semaphore:
+                try:
+                    # Random delay to be less robotic (0.5 to 1.5 seconds)
+                    await asyncio.sleep(0.5 + (hash(url_path) % 100) / 100.0)
+                    response = await self.make_request(
+                        "GET", url_path, headers=self._get_headers()
+                    )
+                    return (url_path, response.text) if response else (url_path, "")
+                except Exception as e:
+                    self.logger.warning(f"Failed to fetch {url_path}: {e}")
+                    return (url_path, "")
 
         tasks = [fetch_single(link) for link in links]
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -163,18 +179,25 @@ class AtTheRacesAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
             return None
 
         track_node = self._find_first_match(details, self.SELECTORS["track_name"])
-        track_name = normalize_venue_name(
-            clean_text(track_node.text()) if track_node else ""
-        )
-        if not track_name:
-            return None
+        track_text = clean_text(track_node.text()) if track_node else ""
 
-        time_node = self._find_first_match(details, self.SELECTORS["race_time"])
-        time_str = (
-            clean_text(time_node.text()).replace(" ATR", "")
-            if time_node else ""
-        )
-        if not time_str:
+        # New pattern: "14:32 Dundalk (IRE) 28 Jan 2026"
+        time_match = re.search(r'(\d{1,2}:\d{2})', track_text)
+        if time_match:
+            time_str = time_match.group(1)
+            track_name_raw = track_text.replace(time_str, "").strip()
+            # Remove date if present (e.g. "28 Jan 2026")
+            track_name_raw = re.sub(r'\d{1,2}\s+[A-Za-z]{3}\s+\d{4}', '', track_name_raw).strip()
+            track_name = normalize_venue_name(track_name_raw)
+        else:
+            track_name = normalize_venue_name(track_text)
+            time_node = self._find_first_match(details, self.SELECTORS["race_time"])
+            time_str = (
+                clean_text(time_node.text()).replace(" ATR", "")
+                if time_node else ""
+            )
+
+        if not track_name or not time_str:
             return None
 
         try:
@@ -209,47 +232,78 @@ class AtTheRacesAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
 
     def _extract_race_number(self, url_path: str) -> int:
         """Extract race number from URL path."""
-        # Standard: /racecard/GP/Attheraces-Sky-Sports-Racing-Hd-Virgin-535/2026-01-27/1520/1
-        # Alternative: /racecard/Vaal/27-January-2026/1010
-
-        # Look for a specific race number segment (usually the last digit after a slash)
-        # We want to avoid matching the time (4 digits)
-
-        # Try to match a single or double digit at the very end
         pattern = r"/(\d{1,2})$"
         if match := re.search(pattern, url_path):
             return int(match.group(1))
-
-        # Fallback: if it's a longer number, it might be the time, so we default to 1
         return 1
 
     def _parse_runners(self, parser: HTMLParser) -> List[Runner]:
         """Parse all runners from the page."""
+        # We'll map horse IDs to best odds
+        odds_map = {}
+
+        # Look in all potential odds grid wrappers
+        for wrapper in parser.css(".odds-grid__row-wrapper--entries"):
+            for row in wrapper.css(".odds-grid__row--horse"):
+                row_id = row.attributes.get("id", "")
+                horse_id_match = re.search(r'row-(\d+)', row_id)
+                if not horse_id_match:
+                    continue
+                horse_id = horse_id_match.group(1)
+
+                best_price = row.attributes.get("data-bestprice")
+                if best_price:
+                    try:
+                        odds_map[horse_id] = float(best_price)
+                    except ValueError:
+                        pass
+
         runner_nodes = []
         for selector in self.SELECTORS["runners"]:
             if nodes := parser.css(selector):
                 runner_nodes = nodes
                 break
 
-        return [r for row in runner_nodes if (r := self._parse_runner(row))]
+        runners = []
+        for row in runner_nodes:
+            runner = self._parse_runner(row, odds_map)
+            if runner:
+                runners.append(runner)
 
-    def _parse_runner(self, row: Node) -> Optional[Runner]:
+        return runners
+
+    def _parse_runner(self, row: Node, odds_map: dict) -> Optional[Runner]:
         """Parse a single runner."""
         try:
-            name_node = row.css_first("h3")
+            # Horse name can be in several places depending on layout
+            name_node = row.css_first("h3") or row.css_first('a[href*="/form/horse/"]')
             if not name_node:
                 return None
             name = clean_text(name_node.text())
 
-            num_node = row.css_first(".horse-in-racecard__saddle-cloth-number")
+            num_node = row.css_first(".horse-in-racecard__saddle-cloth-number") or row.css_first(".odds-grid-horse__no")
             if not num_node:
                 return None
             num_str = clean_text(num_node.text())
             number = int("".join(filter(str.isdigit, num_str)))
 
-            odds_node = row.css_first(".horse-in-racecard__odds")
-            odds_str = clean_text(odds_node.text()) if odds_node else ""
-            win_odds = parse_odds_to_decimal(odds_str)
+            # Try to get horse ID from link to match with odds_map
+            horse_id = None
+            horse_link = row.css_first('a[href*="/form/horse/"]')
+            if horse_link:
+                href = horse_link.attributes.get("href", "")
+                # Match digits after name and before query params
+                horse_id_match = re.search(r'/(\d+)(\?|$)', href)
+                if horse_id_match:
+                    horse_id = horse_id_match.group(1)
+
+            win_odds = odds_map.get(horse_id) if horse_id else None
+
+            # Fallback to old selector if not in map
+            if win_odds is None:
+                odds_node = row.css_first(".horse-in-racecard__odds")
+                odds_str = clean_text(odds_node.text()) if odds_node else ""
+                win_odds = parse_odds_to_decimal(odds_str)
 
             odds = {}
             if odds_data := create_odds_data(self.source_name, win_odds):
@@ -257,6 +311,5 @@ class AtTheRacesAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
 
             return Runner(number=number, name=name, odds=odds)
 
-        except (AttributeError, ValueError) as e:
-            self.logger.debug("Failed to parse runner", error=str(e))
+        except (AttributeError, ValueError):
             return None

@@ -1,0 +1,27 @@
+{
+  "timestamp": "2026-01-28T10:13:34.992363",
+  "timeout_seconds": 60,
+  "results": [
+    {
+      "adapter": "At The Races",
+      "status": "TIMEOUT",
+      "error": "Exceeded 60s timeout"
+    },
+    {
+      "adapter": "Sporting Life",
+      "status": "TIMEOUT",
+      "error": "Exceeded 60s timeout"
+    },
+    {
+      "adapter": "Racing Post",
+      "status": "TIMEOUT",
+      "error": "Exceeded 60s timeout"
+    }
+  ],
+  "summary": {
+    "successful": 0,
+    "no_data": 0,
+    "timeouts": 3,
+    "errored": 0
+  }
+}

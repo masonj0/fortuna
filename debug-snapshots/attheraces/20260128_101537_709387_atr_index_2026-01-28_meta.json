@@ -1,0 +1,25 @@
+{
+  "timestamp": "2026-01-28T10:15:37.712292",
+  "adapter": "AtTheRaces",
+  "url": "https://www.attheraces.com/racecards/2026-01-28",
+  "context": "atr_index_2026-01-28",
+  "engine": "httpx",
+  "health_report": {
+    "engines": {
+      "camoufox": {
+        "health": 0.8,
+        "status": "operational"
+      },
+      "playwright": {
+        "health": 1.0,
+        "status": "operational"
+      },
+      "httpx": {
+        "health": 0.7,
+        "status": "operational"
+      }
+    },
+    "best_engine": "playwright",
+    "camoufox_available": true
+  }
+}
