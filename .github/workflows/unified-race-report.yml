@@ -443,20 +443,57 @@ jobs:
           # Try to show logs if possible (though Xvfb doesn't log much to stdout here)
           exit 1
 
-      - name: '🧪 Verify Browser Setup'
+      - name: '🧪 Verify Browser Setup (Enhanced)'
         id: verify-browser
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
+          # Use enhanced browser verification
           python scripts/verify_browsers.py 2>&1 | tee browser_verify.log
           RESULT=$?
 
           if [ $RESULT -eq 0 ]; then
             echo "browser_verified=true" >> $GITHUB_OUTPUT
-            echo "✅ Browser verification passed"
+            echo "✅ All browsers working"
           else
             echo "browser_verified=false" >> $GITHUB_OUTPUT
-            echo "::warning::Browser verification had issues, continuing anyway..."
+
+            # Extract recommendations
+            if [ -f "browser_verification.json" ]; then
+              echo "📋 Recommendations:"
+              jq -r '.recommendations[] | "  \(.level): \(.message)"' browser_verification.json
+            fi
+
+            echo "::warning::Browser verification had issues, but continuing..."
+          fi
+
+          # Set browser availability for SmartFetcher
+          if [ -f "browser_verification.json" ]; then
+            HTTPX_OK=$(jq -r '.tests.httpx_fallback.passed // false' browser_verification.json)
+            PLAYWRIGHT_OK=$(jq -r '.tests.playwright_chromium.passed // false' browser_verification.json)
+            CAMOUFOX_OK=$(jq -r '.tests.async_stealthy.passed // false' browser_verification.json)
+
+            echo "httpx_verified=$HTTPX_OK" >> $GITHUB_OUTPUT
+            echo "playwright_verified=$PLAYWRIGHT_OK" >> $GITHUB_OUTPUT
+            echo "camoufox_verified=$CAMOUFOX_OK" >> $GITHUB_OUTPUT
+          fi
+
+      - name: '🔍 Verify SmartFetcher Integration'
+        id: verify-integration
+        continue-on-error: true
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          # Run integration checker
+          python scripts/verify_integration.py 2>&1 | tee integration_check.log
+
+          # Don't fail job, just warn
+          if [ $? -ne 0 ]; then
+            echo "::warning::SmartFetcher integration check found issues"
+            echo "integration_ok=false" >> $GITHUB_OUTPUT
+          else
+            echo "✅ SmartFetcher integration verified"
+            echo "integration_ok=true" >> $GITHUB_OUTPUT
           fi
 
       - name: '📂 Setup Directories'
@@ -538,6 +575,20 @@ jobs:
 
           exit $EXIT_CODE
 
+      - name: '📊 Extract SmartFetcher Health'
+        if: always()
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          # Extract engine health from logs if available
+          if [ -f "reporter_output.log" ]; then
+            # Look for SmartFetcher health logs
+            grep -i "engine.*health\|fetch successful" reporter_output.log > engine_health.log || true
+          fi
+
+          # Generate health summary
+          python scripts/extract_smartfetcher_health.py
+
       - name: '📊 Upload Artifacts'
         if: always()
         uses: actions/upload-artifact@v4
@@ -557,6 +608,9 @@ jobs:
             anomaly_history.json
             canary_result.json
             report-metadata.json
+            smartfetcher_health.json
+            integration_check_report.md
+            engine_health.log
             *_debug.html
             debug-output/
           retention-days: ${{ env.REPORT_RETENTION_DAYS }}
