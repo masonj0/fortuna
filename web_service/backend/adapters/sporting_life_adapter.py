@@ -18,6 +18,7 @@ from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy, Stea
 class SportingLifeAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
     """
     Adapter for sportinglife.com, migrated to BaseAdapterV3.
+    Standardized on selectolax for performance.
     """
 
     SOURCE_NAME = "SportingLife"
@@ -39,6 +40,7 @@ class SportingLifeAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
         )
 
     def _get_headers(self) -> dict:
+        """Get browser-like headers for SportingLife."""
         return self._get_browser_headers(
             host="www.sportinglife.com",
             referer="https://www.sportinglife.com/racing/racecards",
@@ -60,7 +62,7 @@ class SportingLifeAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
             self.logger.warning("Failed to fetch SportingLife index page", url=index_url)
             return None
 
-        self._save_debug_html(index_response.text, f"sportinglife_index_{date}")
+        self._save_debug_snapshot(index_response.text, f"sportinglife_index_{date}")
 
         parser = HTMLParser(index_response.text)
         links = {
@@ -69,13 +71,28 @@ class SportingLifeAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
             if a.attributes.get("href")
         }
 
+        if not links:
+            self.logger.warning("No race links found on SportingLife index page", date=date)
+            # Try a fallback selector
+            links = {
+                a.attributes["href"]
+                for a in parser.css('.meeting-summary a[href*="/racecard/"]')
+                if a.attributes.get("href")
+            }
+
+        if not links:
+            return None
+
+        self.logger.info(f"Found {len(links)} race links on SportingLife")
+
         async def fetch_single_html(url_path: str):
+            # Pass method='GET' explicitly to ensure it works through SmartFetcher
             response = await self.make_request("GET", url_path, headers=self._get_headers())
             return response.text if response else ""
 
         tasks = [fetch_single_html(link) for link in links]
         html_pages = await asyncio.gather(*tasks)
-        return {"pages": html_pages, "date": date}
+        return {"pages": [p for p in html_pages if p], "date": date}
 
     def _parse_races(self, raw_data: Any) -> List[Race]:
         """Parses a list of raw HTML strings into Race objects."""
@@ -100,7 +117,7 @@ class SportingLifeAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
 
                 header = parser.css_first('h1[class*="RacingRacecardHeader__Title"]')
                 if not header:
-                    self.logger.warning("Could not find race header.")
+                    self.logger.warning("Could not find race header in SportingLife page.")
                     continue
 
                 header_text = clean_text(header.text())
@@ -121,7 +138,8 @@ class SportingLifeAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
                 if active_link and nav_links:
                     try:
                         for idx, link in enumerate(nav_links):
-                            if link.html == active_link.html:
+                            # Compare text content or href if html comparison is too strict
+                            if link.text().strip() == active_link.text().strip():
                                 race_number = idx + 1
                                 break
                     except Exception:
@@ -129,8 +147,11 @@ class SportingLifeAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
 
                 runners = [r for row in parser.css('div[class*="RunnerCard"]') if (r := self._parse_runner(row))]
 
+                if not runners:
+                    continue
+
                 race = Race(
-                    id=f"sl_{track_name.replace(' ', '')}_{start_time.strftime('%Y%m%d')}_R{race_number}",
+                    id=f"sl_{track_name.replace(' ', '')}_{start_time:%Y%m%d}_R{race_number}",
                     venue=track_name,
                     race_number=race_number,
                     start_time=start_time,
@@ -138,9 +159,10 @@ class SportingLifeAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
                     source=self.source_name,
                 )
                 all_races.append(race)
-            except (AttributeError, ValueError) as e:
+            except Exception as e:
                 self.logger.warning(
-                    "Error parsing a race from SportingLife, skipping race.",
+                    "Error parsing a race from SportingLife",
+                    error=str(e),
                     exc_info=True,
                 )
                 continue

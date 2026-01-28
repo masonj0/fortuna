@@ -30,9 +30,9 @@ class BrisnetAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
 
     def _configure_fetch_strategy(self) -> FetchStrategy:
         return FetchStrategy(
-            primary_engine=BrowserEngine.HTTPX,
-            enable_js=False,
-            timeout=20,
+            primary_engine=BrowserEngine.PLAYWRIGHT,
+            enable_js=True,
+            timeout=30,
         )
 
     def _get_headers(self) -> dict:

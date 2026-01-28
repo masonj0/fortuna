@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate GitHub Actions step summary."""
+"""Generate GitHub Actions step summary with SmartFetcher health."""
 
 import json
 import os
@@ -80,17 +80,38 @@ def main():
                 data = json.load(f)
             lines.append("### 🌐 Browser Status\n")
 
-            # Playwright
-            pw = data.get("playwright", {})
-            status = "✅" if pw.get("installed") else "❌"
-            lines.append(f"- {status} **Playwright** (v{pw.get('version', 'N/A')})")
+            # Show test results
+            for name, result in data.get("tests", {}).items():
+                status = "✅" if result.get("passed") else "❌"
+                duration = result.get("duration_ms", 0)
+                lines.append(f"- {status} **{name}**: {result.get('message', 'N/A')} ({duration:.0f}ms)")
 
-            # Browsers
-            for name, info in data.get("browsers", {}).items():
-                status = "✅" if info.get("installed") else "❌"
-                lines.append(f"  - {status} {name.capitalize()} (v{info.get('version', 'N/A')})")
+            # Recommendations
+            recs = data.get("recommendations", [])
+            if recs:
+                lines.append("\n**Recommendations:**")
+                for rec in recs[:3]:
+                    lines.append(f"- {rec.get('message', '')}")
         except:
             pass
+
+    lines.append("")
+
+    # SmartFetcher Health
+    if Path("smartfetcher_health.json").exists():
+        try:
+            with open("smartfetcher_health.json") as f:
+                health = json.load(f)
+
+            lines.append("### 🔧 SmartFetcher Health\n")
+            if health.get("engines_used"):
+                lines.append("**Engines Used:** " + ", ".join(health["engines_used"]))
+            else:
+                lines.append("*No engine health data captured in this run.*")
+        except:
+            pass
+
+    lines.append("")
 
     # Adapter Firewall
     if Path("adapter_stats.json").exists():

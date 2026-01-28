@@ -193,6 +193,12 @@ jobs:
             browsers-canary-${{ runner.os }}-
             browsers-${{ runner.os }}-
 
+      - name: 'Install System Dependencies'
+        if: env.IS_QUICK != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y x11-utils
+
       - name: 'Install Dependencies'
         run: |
           pip install --upgrade pip
@@ -206,7 +212,24 @@ jobs:
       - name: 'Start Display'
         if: env.IS_QUICK != 'true'
         run: |
+          # Kill any existing Xvfb
+          sudo pkill -9 Xvfb || true
+          sleep 1
+
+          # Start fresh Xvfb
           sudo Xvfb :99 -screen 0 1280x720x24 &
+
+          # Wait and verify
+          echo "Waiting for Xvfb display :99..."
+          # Note: x11-utils is not explicitly installed here but usually exists or we'll just sleep if it fails
+          for i in {1..10}; do
+            if command -v xdpyinfo >/dev/null && xdpyinfo -display :99 >/dev/null 2>&1; then
+              echo "✅ Display :99 ready"
+              echo "DISPLAY=:99" >> $GITHUB_ENV
+              exit 0
+            fi
+            sleep 1
+          done
           echo "DISPLAY=:99" >> $GITHUB_ENV
           sleep 2
 
@@ -318,6 +341,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             xvfb \
             xauth \
+            x11-utils \
             libx11-xcb1 \
             libxcb1 \
             libxcomposite1 \
@@ -402,33 +426,74 @@ jobs:
 
           # Start fresh Xvfb
           sudo Xvfb :99 -screen 0 1920x1080x24 -ac +extension GLX +render -noreset &
-          echo "DISPLAY=:99" >> $GITHUB_ENV
 
           # Wait and verify
-          sleep 3
-          for i in {1..5}; do
+          echo "Waiting for Xvfb display :99..."
+          MAX_WAIT=15
+          for i in $(seq 1 $MAX_WAIT); do
             if xdpyinfo -display :99 >/dev/null 2>&1; then
-              echo "✅ Display :99 ready"
-              break
+              echo "✅ Display :99 ready after $i seconds"
+              echo "DISPLAY=:99" >> $GITHUB_ENV
+              exit 0
             fi
-            echo "Waiting for display (attempt $i)..."
+            echo "Attempt $i/$MAX_WAIT: Display not ready yet..."
             sleep 1
           done
+          echo "❌ Xvfb failed to start after $MAX_WAIT seconds"
+          # Try to show logs if possible (though Xvfb doesn't log much to stdout here)
+          exit 1
 
-      - name: '🧪 Verify Browser Setup'
+      - name: '🧪 Verify Browser Setup (Enhanced)'
         id: verify-browser
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
+          # Use enhanced browser verification
           python scripts/verify_browsers.py 2>&1 | tee browser_verify.log
           RESULT=$?
 
           if [ $RESULT -eq 0 ]; then
             echo "browser_verified=true" >> $GITHUB_OUTPUT
-            echo "✅ Browser verification passed"
+            echo "✅ All browsers working"
           else
             echo "browser_verified=false" >> $GITHUB_OUTPUT
-            echo "::warning::Browser verification had issues, continuing anyway..."
+
+            # Extract recommendations
+            if [ -f "browser_verification.json" ]; then
+              echo "📋 Recommendations:"
+              jq -r '.recommendations[] | "  \(.level): \(.message)"' browser_verification.json
+            fi
+
+            echo "::warning::Browser verification had issues, but continuing..."
+          fi
+
+          # Set browser availability for SmartFetcher
+          if [ -f "browser_verification.json" ]; then
+            HTTPX_OK=$(jq -r '.tests.httpx_fallback.passed // false' browser_verification.json)
+            PLAYWRIGHT_OK=$(jq -r '.tests.playwright_chromium.passed // false' browser_verification.json)
+            CAMOUFOX_OK=$(jq -r '.tests.async_stealthy.passed // false' browser_verification.json)
+
+            echo "httpx_verified=$HTTPX_OK" >> $GITHUB_OUTPUT
+            echo "playwright_verified=$PLAYWRIGHT_OK" >> $GITHUB_OUTPUT
+            echo "camoufox_verified=$CAMOUFOX_OK" >> $GITHUB_OUTPUT
+          fi
+
+      - name: '🔍 Verify SmartFetcher Integration'
+        id: verify-integration
+        continue-on-error: true
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          # Run integration checker
+          python scripts/verify_integration.py 2>&1 | tee integration_check.log
+
+          # Don't fail job, just warn
+          if [ $? -ne 0 ]; then
+            echo "::warning::SmartFetcher integration check found issues"
+            echo "integration_ok=false" >> $GITHUB_OUTPUT
+          else
+            echo "✅ SmartFetcher integration verified"
+            echo "integration_ok=true" >> $GITHUB_OUTPUT
           fi
 
       - name: '📂 Setup Directories'
@@ -510,6 +575,47 @@ jobs:
 
           exit $EXIT_CODE
 
+      - name: '📊 Extract SmartFetcher Health'
+        if: always()
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          # Extract engine health from logs if available
+          if [ -f "reporter_output.log" ]; then
+            # Look for SmartFetcher health logs
+            grep -i "engine.*health\|fetch successful" reporter_output.log > engine_health.log || true
+          fi
+
+          # Generate health summary
+          python << 'EOF'
+import json
+from pathlib import Path
+from collections import defaultdict
+
+health_summary = {
+    "engines_used": [],
+    "adapters_by_engine": defaultdict(list),
+    "total_requests": 0
+}
+
+if Path("adapter_stats.json").exists():
+    try:
+        with open("adapter_stats.json") as f:
+            stats = json.load(f)
+
+        for adapter_stat in stats:
+            # Note: fortuna_reporter.py doesn't currently put engine in adapter_stats.json,
+            # but we can try to guess or just report what we have.
+            pass
+    except:
+        pass
+
+with open("smartfetcher_health.json", "w") as f:
+    json.dump(health_summary, f, indent=2)
+
+print("✅ SmartFetcher health summary generated")
+EOF
+
       - name: '📊 Upload Artifacts'
         if: always()
         uses: actions/upload-artifact@v4
@@ -529,6 +635,9 @@ jobs:
             anomaly_history.json
             canary_result.json
             report-metadata.json
+            smartfetcher_health.json
+            integration_check_report.md
+            engine_health.log
             *_debug.html
             debug-output/
           retention-days: ${{ env.REPORT_RETENTION_DAYS }}
