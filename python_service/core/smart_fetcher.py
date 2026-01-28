@@ -291,6 +291,13 @@ class SmartFetcher:
         text_lower = response_text.lower()
         return any(kw in text_lower for kw in self.BOT_KEYWORDS)
 
+    def _is_bot_detected(self, response_text: str) -> bool:
+        """Check if response text contains bot detection keywords."""
+        if not response_text:
+            return False
+        text_lower = response_text.lower()
+        return any(kw in text_lower for kw in self.BOT_KEYWORDS)
+
     async def _fetch_with_engine(self, engine: BrowserEngine, url: str, method: str = "GET", **kwargs):
         """Execute fetch with timeout and retry logic"""
 
