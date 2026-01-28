@@ -23,7 +23,7 @@ class TimeformAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
     """
 
     SOURCE_NAME = "Timeform"
-    BASE_URL = "https://www.timeform.com/horse-racing"
+    BASE_URL = "https://www.timeform.com"
 
     def __init__(self, config=None):
         super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
@@ -45,7 +45,7 @@ class TimeformAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
         """
         Fetches the raw HTML for all race pages for a given date.
         """
-        index_url = f"/racecards/{date}"
+        index_url = f"/horse-racing/racecards/{date}"
         index_response = await self.make_request("GET", index_url, headers=self._get_headers())
         if not index_response or not index_response.text:
             self.logger.warning("Failed to fetch Timeform index page", url=index_url)
