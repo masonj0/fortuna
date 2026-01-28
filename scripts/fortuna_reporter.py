@@ -64,7 +64,7 @@ class ReporterConfig:
         "GreyhoundAdapter", "HarnessAdapter", "HorseRacingNationAdapter",
         "NYRABetsAdapter", "OddscheckerAdapter", "PuntersAdapter",
         "RacingAndSportsAdapter", "RacingAndSportsGreyhoundAdapter",
-        "RacingPostAdapter", "RacingTVAdapter", "SportingLifeAdapter",
+        "RacingPostAdapter", "RacingPostB2BAdapter", "RacingTVAdapter", "SportingLifeAdapter",
         "TabAdapter", "TheRacingApiAdapter", "TimeformAdapter",
         "TwinSpiresAdapter", "TVGAdapter", "XpressbetAdapter",
         "PointsBetGreyhoundAdapter",
@@ -79,6 +79,7 @@ class ReporterConfig:
     # - RacingPost: 406 Not Acceptable (user agent issues)
     RELIABLE_NON_KEYED_ADAPTERS: tuple[str, ...] = (
         "AtTheRacesAdapter",
+        "RacingPostB2BAdapter",
         "SportingLifeAdapter",
         "TwinSpiresAdapter",
     )
