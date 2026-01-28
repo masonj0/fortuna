@@ -69,9 +69,9 @@ class TrifectaAnalyzer(BaseAnalyzer):
 
     def __init__(
         self,
-        max_field_size: int = 10,
-        min_favorite_odds: float = 2.5,
-        min_second_favorite_odds: float = 4.0,
+        max_field_size: int = 14,
+        min_favorite_odds: float = 0.01,
+        min_second_favorite_odds: float = 0.01,
     ):
         self.max_field_size = max_field_size
         self.min_favorite_odds = Decimal(str(min_favorite_odds))
@@ -171,7 +171,8 @@ class TinyFieldTrifectaAnalyzer(TrifectaAnalyzer):
 
     def __init__(self, **kwargs):
         # Override the max_field_size to 6 for "tiny field" analysis
-        super().__init__(max_field_size=6, min_favorite_odds=0.75, min_second_favorite_odds=2.0, **kwargs)
+        # Set low odds thresholds to "let them through" as per user request
+        super().__init__(max_field_size=6, min_favorite_odds=0.01, min_second_favorite_odds=0.01, **kwargs)
 
     @property
     def name(self) -> str:

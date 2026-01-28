@@ -23,6 +23,7 @@ class AtTheRacesAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
     Adapter for attheraces.com, migrated to BaseAdapterV3.
 
     Uses simple HTTP requests as the site doesn't require JavaScript.
+    Standardized on selectolax for performance.
     """
 
     SOURCE_NAME = "AtTheRaces"
@@ -33,14 +34,20 @@ class AtTheRacesAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
         "race_links": [
             'a[href^="/racecard/"]',
             'a[href*="/racecard/"]',
+            '.racecard-link',
+            'a.atr-racecard-link',
+            '.meeting-race a',
+            'a[href*="/racecards/"]', # sometimes index links show up
         ],
         "details_container": [
             "atr-racecard-race-header .container",
             ".racecard-header .container",
+            ".racecard-header",
+            "header.race-header",
         ],
-        "track_name": ["h1 a", "h1"],
-        "race_time": ["h1 span", ".race-time"],
-        "runners": ["atr-horse-in-racecard", ".horse-in-racecard"],
+        "track_name": ["h1 a", "h1", ".track-name", ".venue-name"],
+        "race_time": ["h1 span", ".race-time", ".time"],
+        "runners": ["atr-horse-in-racecard", ".horse-in-racecard", ".runner-row", ".horse-row"],
     }
 
     def __init__(self, config=None):
@@ -79,7 +86,8 @@ class AtTheRacesAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
             self.logger.warning("No response from AtTheRaces index page", url=index_url)
             return None
 
-        self._save_debug_html(index_response.text, f"atr_index_{date}")
+        self.logger.info(f"AtTheRaces index fetched (size: {len(index_response.text)})", url=index_url)
+        self._save_debug_snapshot(index_response.text, f"atr_index_{date}")
 
         parser = HTMLParser(index_response.text)
         links = self._find_links_with_fallback(parser)
@@ -105,6 +113,15 @@ class AtTheRacesAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
                 if a.attributes.get("href")
             }
             links.update(found)
+
+        # Super-fallback: Regex search for anything that looks like a racecard link
+        if not links:
+            # selectolax parser has .html attribute
+            html = getattr(parser, 'html', '')
+            if html:
+                matches = re.findall(r'href=["\'](/racecard/[^"\']+)["\']', html)
+                links.update(matches)
+
         return links
 
     async def _fetch_race_pages(self, links: set) -> List[tuple]:
@@ -140,6 +157,7 @@ class AtTheRacesAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
         for url_path, html in raw_data["pages"]:
             if not html:
                 continue
+
             try:
                 if race := self._parse_single_race(html, url_path, race_date):
                     races.append(race)
@@ -147,6 +165,7 @@ class AtTheRacesAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
                 self.logger.warning(
                     "Error parsing race", url=url_path, error=str(e), exc_info=True
                 )
+                self._save_debug_snapshot(html, f"atr_parse_error_{url_path.split('/')[-1]}", url=url_path)
 
         return races
 
@@ -207,9 +226,24 @@ class AtTheRacesAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
 
     def _extract_race_number(self, url_path: str) -> int:
         """Extract race number from URL path."""
-        pattern = r"/racecard/[A-Z]{2}/[A-Za-z-]+/\d{4}-\d{2}-\d{2}/\d{4}/(\d+)"
+        # Standard: /racecard/GP/Attheraces-Sky-Sports-Racing-Hd-Virgin-535/2026-01-27/1520/1
+        # Alternative: /racecard/Vaal/27-January-2026/1010
+
+        # Look for a specific race number segment (usually the last digit after a slash)
+        # We want to avoid matching the time (4 digits)
+
+        # Try to match a single or double digit at the very end
+        pattern = r"/(\d{1,2})$"
         if match := re.search(pattern, url_path):
             return int(match.group(1))
+
+        # Fallback: Check if the race number is elsewhere in the URL
+        # Sometimes it's like /race1/ or similar
+        if 'race' in url_path.lower():
+             if match := re.search(r'race(\d+)', url_path.lower()):
+                 return int(match.group(1))
+
+        # Fallback: Default to 1
         return 1
 
     def _parse_runners(self, parser: HTMLParser) -> List[Runner]:
