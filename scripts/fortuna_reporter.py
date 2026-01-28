@@ -52,7 +52,7 @@ class ReporterConfig:
     raw_json_output_path: Path = field(default_factory=lambda: Path("raw_race_data.json"))
 
     max_retries: int = field(default_factory=lambda: int(os.getenv("MAX_RETRIES", "3")))
-    request_timeout: int = field(default_factory=lambda: int(os.getenv("REQUEST_TIMEOUT", "30")))
+    request_timeout: int = field(default_factory=lambda: int(os.getenv("REQUEST_TIMEOUT", "45")))
     analyzer_type: str = field(default_factory=lambda: os.getenv("ANALYZER_TYPE", "tiny_field_trifecta"))
     force_refresh: bool = field(default_factory=lambda: os.getenv("FORCE_REFRESH", "false").lower() == "true")
     max_summary_races: int = 25
@@ -471,9 +471,30 @@ class Reporter:
             # Record adapter metrics
             if 'odds_engine' in locals():
                 self.metrics.adapters_used = list(odds_engine.adapters.keys())
-                # Capture adapter stats for firewalling next run
+
+                # Capture adapter stats (including last_race_count and last_duration_s)
                 adapter_stats = odds_engine.get_all_adapter_statuses()
                 self.save_json(adapter_stats, Path("adapter_stats.json"), "adapter stats")
+
+                # --- SUCCESS SUMMARY ARTIFACT ---
+                # Generate a clean summary even if the reporter partially failed or timed out
+                success_summary = [
+                    {
+                        "adapter": s["adapter_name"],
+                        "race_count": s.get("last_race_count", 0),
+                        "duration_s": s.get("last_duration_s", 0.0)
+                    }
+                    for s in adapter_stats if s.get("last_race_count", 0) > 0
+                ]
+                success_summary.sort(key=lambda x: x["race_count"], reverse=True)
+                self.save_json(success_summary, Path("adapter_success_summary.json"), "adapter success summary")
+
+                if success_summary:
+                    self.log("=== 🏆 Success Summary: Race Quantities ===")
+                    for item in success_summary:
+                        self.log(f"  - {item['adapter']}: {item['race_count']} races ({item['duration_s']}s)")
+                    self.log("==========================================")
+
                 # CRITICAL: Use shutdown() to ensure all browser sessions are closed
                 await odds_engine.shutdown()
 

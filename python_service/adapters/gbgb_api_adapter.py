@@ -18,7 +18,7 @@ class GbgbApiAdapter(BaseAdapterV3):
     SOURCE_NAME = "GBGB"
     BASE_URL = "https://api.gbgb.org.uk/api/"
 
-    def __init__(self, config=None, session=None):
+    def __init__(self, config=None):
         super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
 
     def _configure_fetch_strategy(self) -> FetchStrategy:

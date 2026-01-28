@@ -3,10 +3,9 @@ import pytest
 from python_service.adapters.twinspires_adapter import TwinSpiresAdapter
 from unittest.mock import MagicMock, AsyncMock
 from pathlib import Path
-import pytest
-
-from python_service.adapters.twinspires_adapter import TwinSpiresAdapter
 from python_service.models import Race
+from decimal import Decimal
+from datetime import datetime, timedelta, timezone
 
 # A mock settings object to satisfy the adapter's config dependency
 class MockSettings:
@@ -20,20 +19,35 @@ def adapter():
 async def test_get_races_from_fixture(adapter, mocker):
     """
     Test that the adapter can correctly parse a local HTML fixture.
-    This test validates the end-to-end parsing logic, including runner data,
-    using the offline implementation.
+    This test validates the end-to-end parsing logic, including runner data.
     """
-    # Mock the async fetch method to return a controlled response
-    mock_response = mocker.MagicMock()
-    mock_response.status = 200
-    mock_response.text = Path("tests/fixtures/twinspires_racecard.html").read_text()
+    # ARRANGE
+    future_date = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%d")
+    fixture_path = Path("tests/fixtures/twinspires_racecard.html")
+    html_content = fixture_path.read_text()
 
-    adapter._fetch_with_retry = AsyncMock(return_value=mock_response)
+    # Mock the internal _fetch_data to return our fixture wrapped in the expected structure
+    mock_raw_data = {
+        "date": future_date,
+        "source": "TwinSpires",
+        "races": [
+            {
+                "html": html_content,
+                "track": "Churchill Downs",
+                "race_number": 5,
+                "post_time_text": f"{future_date} 17:05",
+                "date": future_date,
+                "full_page": False
+            }
+        ]
+    }
 
-    # Call the method under test
-    races = await adapter.get_races(date="2025-11-12")
+    adapter._fetch_data = AsyncMock(return_value=mock_raw_data)
 
-    # Assertions
+    # ACT
+    races = await adapter.get_races(date=future_date)
+
+    # ASSERT
     assert isinstance(races, list)
     assert len(races) == 1
 
@@ -50,7 +64,8 @@ async def test_get_races_from_fixture(adapter, mocker):
     assert runner_1 is not None
     assert runner_1.name == "Braveheart"
     assert not runner_1.scratched
-    assert runner_1.odds["TwinSpires"].win == 3.5
+    # 5/2 = 2.5 + 1 = 3.5
+    assert runner_1.odds["TwinSpires"].win == Decimal("3.5")
 
     # Verify a scratched runner
     runner_3 = next((r for r in race.runners if r.number == 3), None)

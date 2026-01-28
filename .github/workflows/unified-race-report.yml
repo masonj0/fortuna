@@ -221,13 +221,14 @@ jobs:
 
           # Wait and verify
           echo "Waiting for Xvfb display :99..."
-          # Note: x11-utils is not explicitly installed here but usually exists or we'll just sleep if it fails
-          for i in {1..10}; do
-            if command -v xdpyinfo >/dev/null && xdpyinfo -display :99 >/dev/null 2>&1; then
-              echo "✅ Display :99 ready"
+          MAX_WAIT=15
+          for i in $(seq 1 $MAX_WAIT); do
+            if xdpyinfo -display :99 >/dev/null 2>&1; then
+              echo "✅ Display :99 ready after $i seconds"
               echo "DISPLAY=:99" >> $GITHUB_ENV
               exit 0
             fi
+            echo "Attempt $i/$MAX_WAIT: Display not ready yet..."
             sleep 1
           done
           echo "DISPLAY=:99" >> $GITHUB_ENV
@@ -604,6 +605,7 @@ jobs:
             metrics.json
             errors.json
             adapter_stats.json
+            adapter_success_summary.json
             browser_selector_state.json
             anomaly_history.json
             canary_result.json
