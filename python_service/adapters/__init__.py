@@ -16,6 +16,7 @@ from .pointsbet_greyhound_adapter import PointsBetGreyhoundAdapter
 from .racing_and_sports_adapter import RacingAndSportsAdapter
 from .racing_and_sports_greyhound_adapter import RacingAndSportsGreyhoundAdapter
 from .racingpost_adapter import RacingPostAdapter
+from .racing_post_b2b_adapter import RacingPostB2BAdapter
 from .sporting_life_adapter import SportingLifeAdapter
 from .stubs import (
     HorseRacingNationAdapter,
@@ -52,6 +53,7 @@ __all__ = [
     "RacingAndSportsAdapter",
     "RacingAndSportsGreyhoundAdapter",
     "RacingPostAdapter",
+    "RacingPostB2BAdapter",
     "RacingTVAdapter",
     "SportingLifeAdapter",
     "TabAdapter",

@@ -62,8 +62,8 @@ class Settings(BaseSettings):
     HTTP_POOL_CONNECTIONS: int = 100
     HTTP_POOL_MAXSIZE: int = 100
     HTTP_MAX_KEEPALIVE: int = 50
-    DEFAULT_TIMEOUT: int = 30
-    ADAPTER_TIMEOUT: int = 20
+    DEFAULT_TIMEOUT: int = 45
+    ADAPTER_TIMEOUT: int = 45
 
     # --- Logging ---
     LOG_LEVEL: str = "INFO"

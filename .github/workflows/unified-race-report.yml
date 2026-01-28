@@ -528,8 +528,8 @@ jobs:
           CANARY_HEALTH: ${{ needs.canary-check.outputs.health_status }}
           MAX_RETRIES: ${{ env.MAX_RETRIES }}
           REQUEST_TIMEOUT: ${{ env.REQUEST_TIMEOUT }}
-          CAMOUFOX_AVAILABLE: ${{ steps.install-browsers.outputs.camoufox_available }}
-          CHROMIUM_AVAILABLE: ${{ steps.install-browsers.outputs.chromium_available }}
+          CAMOUFOX_AVAILABLE: ${{ steps.verify-browser.outputs.camoufox_verified || steps.install-browsers.outputs.camoufox_available }}
+          CHROMIUM_AVAILABLE: ${{ steps.verify-browser.outputs.playwright_verified || steps.install-browsers.outputs.chromium_available }}
           FIREFOX_AVAILABLE: ${{ steps.install-browsers.outputs.firefox_available }}
           CI: 'true'
         run: |
