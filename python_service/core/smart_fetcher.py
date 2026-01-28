@@ -284,10 +284,16 @@ class SmartFetcher:
                     raise FetchError(f"HTTP {status}", response=response)
 
                 # Check for empty response which is often a failure in this context
-                if not getattr(response, 'text', ''):
-                    # For browser engines, size 0 usually means something went wrong
+                response_text = getattr(response, 'text', '')
+                if not response_text:
+                    # Size 0 usually means something went wrong (block or capture failure)
+                    self.logger.warning("Received empty response body", url=url, engine=engine.value)
                     if engine != BrowserEngine.HTTPX:
-                         self.logger.warning("Received empty response body from browser engine", url=url, engine=engine.value)
+                        # For browser engines, this is definitely a failure we want to retry or fallback from
+                        raise FetchError(f"Empty response from {engine.value}", response=response)
+                    # For HTTPX, it might be legit, but usually not in our case
+                    # We'll allow it but log it strongly.
+                    # If it's a critical page, the adapter will fail later.
 
                 return response
 

@@ -34,14 +34,20 @@ class AtTheRacesAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
         "race_links": [
             'a[href^="/racecard/"]',
             'a[href*="/racecard/"]',
+            '.racecard-link',
+            'a.atr-racecard-link',
+            '.meeting-race a',
+            'a[href*="/racecards/"]', # sometimes index links show up
         ],
         "details_container": [
             "atr-racecard-race-header .container",
             ".racecard-header .container",
+            ".racecard-header",
+            "header.race-header",
         ],
-        "track_name": ["h1 a", "h1"],
-        "race_time": ["h1 span", ".race-time"],
-        "runners": ["atr-horse-in-racecard", ".horse-in-racecard"],
+        "track_name": ["h1 a", "h1", ".track-name", ".venue-name"],
+        "race_time": ["h1 span", ".race-time", ".time"],
+        "runners": ["atr-horse-in-racecard", ".horse-in-racecard", ".runner-row", ".horse-row"],
     }
 
     def __init__(self, config=None):
@@ -80,6 +86,7 @@ class AtTheRacesAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
             self.logger.warning("No response from AtTheRaces index page", url=index_url)
             return None
 
+        self.logger.info(f"AtTheRaces index fetched (size: {len(index_response.text)})", url=index_url)
         self._save_debug_snapshot(index_response.text, f"atr_index_{date}")
 
         parser = HTMLParser(index_response.text)
@@ -106,6 +113,15 @@ class AtTheRacesAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
                 if a.attributes.get("href")
             }
             links.update(found)
+
+        # Super-fallback: Regex search for anything that looks like a racecard link
+        if not links:
+            # selectolax parser has .html attribute
+            html = getattr(parser, 'html', '')
+            if html:
+                matches = re.findall(r'href=["\'](/racecard/[^"\']+)["\']', html)
+                links.update(matches)
+
         return links
 
     async def _fetch_race_pages(self, links: set) -> List[tuple]:
@@ -221,7 +237,13 @@ class AtTheRacesAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
         if match := re.search(pattern, url_path):
             return int(match.group(1))
 
-        # Fallback: if it's a longer number, it might be the time, so we default to 1
+        # Fallback: Check if the race number is elsewhere in the URL
+        # Sometimes it's like /race1/ or similar
+        if 'race' in url_path.lower():
+             if match := re.search(r'race(\d+)', url_path.lower()):
+                 return int(match.group(1))
+
+        # Fallback: Default to 1
         return 1
 
     def _parse_runners(self, parser: HTMLParser) -> List[Runner]:

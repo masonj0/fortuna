@@ -31,11 +31,12 @@ class SportingLifeAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
         """
         SportingLife requires JavaScript rendering to get the race links,
         so we must use a full browser engine like Playwright.
+        Uses CAMOUFLAGE mode to bypass anti-bot.
         """
         return FetchStrategy(
             primary_engine=BrowserEngine.PLAYWRIGHT,
             enable_js=True,
-            stealth_mode=StealthMode.FAST,
+            stealth_mode=StealthMode.CAMOUFLAGE,
             block_resources=True
         )
 
