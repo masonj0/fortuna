@@ -587,34 +587,7 @@ jobs:
           fi
 
           # Generate health summary
-          python << 'EOF'
-import json
-from pathlib import Path
-from collections import defaultdict
-
-health_summary = {
-    "engines_used": [],
-    "adapters_by_engine": defaultdict(list),
-    "total_requests": 0
-}
-
-if Path("adapter_stats.json").exists():
-    try:
-        with open("adapter_stats.json") as f:
-            stats = json.load(f)
-
-        for adapter_stat in stats:
-            # Note: fortuna_reporter.py doesn't currently put engine in adapter_stats.json,
-            # but we can try to guess or just report what we have.
-            pass
-    except:
-        pass
-
-with open("smartfetcher_health.json", "w") as f:
-    json.dump(health_summary, f, indent=2)
-
-print("✅ SmartFetcher health summary generated")
-EOF
+          python scripts/extract_smartfetcher_health.py
 
       - name: '📊 Upload Artifacts'
         if: always()
