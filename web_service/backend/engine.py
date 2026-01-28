@@ -18,6 +18,7 @@ from pydantic import ValidationError
 
 from .adapters import (
     AtTheRacesAdapter,
+    AtTheRacesGreyhoundAdapter,
     BetfairAdapter,
     BetfairGreyhoundAdapter,
     BrisnetAdapter,
@@ -103,6 +104,7 @@ class OddsEngine:
             # behavior in environments where secrets are not configured.
             adapter_classes = [
                 AtTheRacesAdapter,
+                AtTheRacesGreyhoundAdapter,
                 BetfairAdapter,
                 BetfairGreyhoundAdapter,
                 BrisnetAdapter,

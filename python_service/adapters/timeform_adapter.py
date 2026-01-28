@@ -1,6 +1,8 @@
 # python_service/adapters/timeform_adapter.py
 
 import asyncio
+import re
+import json
 from datetime import datetime
 from typing import Any, List, Optional
 
@@ -8,7 +10,7 @@ from selectolax.parser import HTMLParser, Node
 
 from ..models import Race, Runner
 from ..utils.odds import parse_odds_to_decimal
-from ..utils.text import clean_text
+from ..utils.text import clean_text, normalize_venue_name
 from .base_adapter_v3 import BaseAdapterV3
 from .mixins import BrowserHeadersMixin, DebugMixin
 from .utils.odds_validator import create_odds_data
@@ -25,12 +27,19 @@ class TimeformAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
 
     def __init__(self, config=None):
         super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
+        self._semaphore = asyncio.Semaphore(5)
 
     def _configure_fetch_strategy(self) -> FetchStrategy:
-        return FetchStrategy(primary_engine=BrowserEngine.HTTPX)
+        """Timeform works with HTTPX and good headers."""
+        return FetchStrategy(primary_engine=BrowserEngine.HTTPX, enable_js=False)
 
     def _get_headers(self) -> dict:
-        return self._get_browser_headers(host="www.timeform.com")
+        headers = self._get_browser_headers(host="www.timeform.com")
+        headers.update({
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+        })
+        return headers
 
     async def _fetch_data(self, date: str) -> Optional[dict]:
         """
@@ -42,37 +51,22 @@ class TimeformAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
             self.logger.warning("Failed to fetch Timeform index page", url=index_url)
             return None
 
-        self._save_debug_html(index_response.text, f"timeform_index_{date}")
+        self._save_debug_snapshot(index_response.text, f"timeform_index_{date}")
 
         parser = HTMLParser(index_response.text)
-        links = {a.attributes["href"] for a in parser.css("a.rp-racecard-off-link[href]") if a.attributes.get("href")}
+        # Updated selector for race links
+        links = {a.attributes["href"] for a in parser.css("a[href*='/racecards/'][href*='/20']") if a.attributes.get("href") and not a.attributes.get("href").endswith("/racecards")}
 
         async def fetch_single_html(url_path: str):
-            response = await self.make_request("GET", url_path, headers=self._get_headers())
-            return response.text if response else ""
+            async with self._semaphore:
+                await asyncio.sleep(0.5)
+                response = await self.make_request("GET", url_path, headers=self._get_headers())
+                return (url_path, response.text) if response else (url_path, "")
 
+        self.logger.info(f"Found {len(links)} race links on Timeform")
         tasks = [fetch_single_html(link) for link in links]
-        html_pages = await asyncio.gather(*tasks)
-        return {"pages": html_pages, "date": date}
-
-    def _get_headers(self) -> dict:
-        return {
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "Host": "www.timeform.com",
-            "Pragma": "no-cache",
-            "sec-ch-ua": '"Google Chrome";v="125", "Chromium";v="125", "Not.A/Brand";v="24"',
-            "sec-ch-ua-mobile": "?0",
-            "sec-ch-ua-platform": '"Windows"',
-            "Sec-Fetch-Dest": "document",
-            "Sec-Fetch-Mode": "navigate",
-            "Sec-Fetch-Site": "none",
-            "Sec-Fetch-User": "?1",
-            "Upgrade-Insecure-Requests": "1",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-        }
+        results = await asyncio.gather(*tasks)
+        return {"pages": [r for r in results if r[1]], "date": date}
 
     def _parse_races(self, raw_data: Any) -> List[Race]:
         """Parses a list of raw HTML strings into Race objects."""
@@ -82,76 +76,139 @@ class TimeformAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
         try:
             race_date = datetime.strptime(raw_data["date"], "%Y-%m-%d").date()
         except ValueError:
-            self.logger.error(
-                "Invalid date format provided to TimeformAdapter",
-                date=raw_data.get("date"),
-            )
+            self.logger.error("Invalid date format", date=raw_data.get("date"))
             return []
 
         all_races = []
-        for html in raw_data["pages"]:
-            if not html:
+        for url_path, html_content in raw_data["pages"]:
+            if not html_content:
                 continue
             try:
-                parser = HTMLParser(html)
+                parser = HTMLParser(html_content)
 
-                track_name_node = parser.css_first("h1.rp-raceTimeCourseName_name")
-                if not track_name_node:
+                # Extract via JSON-LD if possible
+                venue = ""
+                start_time = None
+                for script in parser.css('script[type="application/ld+json"]'):
+                    try:
+                        data = json.loads(script.text())
+                        if data.get("@type") == "Event":
+                            venue = normalize_venue_name(data.get("location", {}).get("name", ""))
+                            if sd := data.get("startDate"):
+                                # 2026-01-28T14:32:00
+                                start_time = datetime.fromisoformat(sd.split('+')[0])
+                            break
+                    except: continue
+
+                if not venue:
+                    # Fallback to title
+                    title = parser.css_first("title")
+                    if title:
+                        # 14:32 DUNDALK | Races 28 January 2026 ...
+                        match = re.search(r'(\d{1,2}:\d{2})\s+([^|]+)', title.text())
+                        if match:
+                            time_str = match.group(1)
+                            venue = normalize_venue_name(match.group(2).strip())
+                            start_time = datetime.combine(race_date, datetime.strptime(time_str, "%H:%M").time())
+
+                if not venue or not start_time:
                     continue
-                track_name = clean_text(track_name_node.text())
 
-                race_time_node = parser.css_first("span.rp-raceTimeCourseName_time")
-                if not race_time_node:
+                # Betting Forecast Parsing
+                forecast_map = {}
+                verdict_section = parser.css_first("section.rp-verdict")
+                if verdict_section:
+                    forecast_text = clean_text(verdict_section.text())
+                    if "Betting Forecast :" in forecast_text:
+                        # "Betting Forecast : 15/8 2.87 Spring Is Here, 3/1 4 This Guy, ..."
+                        after_forecast = forecast_text.split("Betting Forecast :")[1]
+                        # Split by comma
+                        parts = after_forecast.split(',')
+                        for part in parts:
+                            # Match odds and then name
+                            # Odds can be fractional space decimal
+                            m = re.search(r'(\d+/\d+|EVENS)\s+([\d\.]+)?\s*(.+)', part.strip())
+                            if m:
+                                odds_str = m.group(1)
+                                name = clean_text(m.group(3))
+                                forecast_map[name.lower()] = odds_str
+
+                # Runners
+                runners = []
+                # Use tbody as the main container for each runner
+                for row in parser.css('tbody.rp-horse-row'):
+                    if runner := self._parse_runner(row, forecast_map):
+                        runners.append(runner)
+
+                if not runners:
                     continue
-                race_time_str = clean_text(race_time_node.text())
 
-                start_time = datetime.combine(race_date, datetime.strptime(race_time_str, "%H:%M").time())
+                # Race number from URL or sequence
+                race_number = 1
+                num_match = re.search(r'/(\d+)/([^/]+)$', url_path)
+                # .../1432/207/1/view... -> the '1' is the race number
+                url_parts = url_path.split('/')
+                if len(url_parts) >= 10:
+                    try: race_number = int(url_parts[9])
+                    except: pass
 
-                all_times = [clean_text(a.text()) for a in parser.css("a.rp-racecard-off-link")]
-                race_number = all_times.index(race_time_str) + 1 if race_time_str in all_times else 1
-
-                runner_rows = parser.css("div.rp-horseTable_mainRow")
-                if not runner_rows:
-                    continue
-
-                runners = [self._parse_runner(row) for row in runner_rows]
                 race = Race(
-                    id=f"tf_{track_name.replace(' ', '')}_{start_time.strftime('%Y%m%d')}_R{race_number}",
-                    venue=track_name,
+                    id=f"tf_{venue.lower().replace(' ', '')}_{start_time:%Y%m%d}_R{race_number}",
+                    venue=venue,
                     race_number=race_number,
                     start_time=start_time,
-                    runners=[r for r in runners if r],  # Filter out None values
+                    runners=runners,
                     source=self.source_name,
                 )
                 all_races.append(race)
-            except (AttributeError, ValueError, TypeError):
-                self.logger.warning("Error parsing a race from Timeform, skipping race.", exc_info=True)
+            except Exception as e:
+                self.logger.warning(f"Error parsing Timeform race: {e}")
                 continue
         return all_races
 
-    def _parse_runner(self, row: Node) -> Optional[Runner]:
+    def _parse_runner(self, row: Node, forecast_map: dict = None) -> Optional[Runner]:
+        """Parses a single runner from a table row node."""
         try:
-            name_node = row.css_first("a.rp-horseTable_horse-name")
+            # Try modernized selector first, then legacy
+            name_node = row.css_first("a.rp-horse") or row.css_first("a.rp-horseTable_horse-name")
             if not name_node:
                 return None
             name = clean_text(name_node.text())
 
-            num_node = row.css_first("span.rp-horseTable_horse-number")
-            if not num_node:
-                return None
-            num_str = clean_text(num_node.text())
-            number_part = "".join(filter(str.isdigit, num_str.strip("()")))
-            number = int(number_part)
+            number = 0
+            num_attr = row.attributes.get("data-entrynumber")
+            if num_attr:
+                try:
+                    number = int(num_attr)
+                except ValueError:
+                    pass
+
+            if not number:
+                num_node = row.css_first(".rp-entry-number") or row.css_first("span.rp-horseTable_horse-number")
+                if num_node:
+                    num_text = clean_text(num_node.text())
+                    # Strip parentheses if present (legacy)
+                    num_text = num_text.strip("()")
+                    num_match = re.search(r"\d+", num_text)
+                    if num_match:
+                        number = int(num_match.group())
+
+            win_odds = None
+            # Normalize name for matching: lowercase and remove country codes like (IRE)
+            norm_name = re.sub(r"\(.*?\)", "", name).strip().lower()
+            if forecast_map and norm_name in forecast_map:
+                win_odds = parse_odds_to_decimal(forecast_map[norm_name])
+
+            # Try to find live odds button if available (old selector)
+            if not win_odds:
+                odds_tag = row.css_first("button.rp-bet-placer-btn__odds")
+                if odds_tag:
+                    win_odds = parse_odds_to_decimal(clean_text(odds_tag.text()))
 
             odds_data = {}
-            odds_tag = row.css_first("button.rp-bet-placer-btn__odds")
-            if odds_tag:
-                odds_str = clean_text(odds_tag.text())
-                if win_odds := parse_odds_to_decimal(odds_str):
-                    if odds_data_val := create_odds_data(self.source_name, win_odds):
-                        odds_data[self.source_name] = odds_data_val
+            if odds_val := create_odds_data(self.source_name, win_odds):
+                odds_data[self.source_name] = odds_val
 
             return Runner(number=number, name=name, odds=odds_data)
         except (AttributeError, ValueError, TypeError):
-            self.logger.warning("Failed to parse a runner from Timeform, skipping runner.")
             return None

@@ -1,6 +1,7 @@
 # python_service/adapters/__init__.py
 
 from .at_the_races_adapter import AtTheRacesAdapter
+from .at_the_races_greyhound_adapter import AtTheRacesGreyhoundAdapter
 from .betfair_adapter import BetfairAdapter
 from .betfair_datascientist_adapter import BetfairDataScientistAdapter
 from .betfair_greyhound_adapter import BetfairGreyhoundAdapter
@@ -33,6 +34,7 @@ from .xpressbet_adapter import XpressbetAdapter
 
 __all__ = [
     "AtTheRacesAdapter",
+    "AtTheRacesGreyhoundAdapter",
     "BetfairAdapter",
     "BetfairDataScientistAdapter",
     "BetfairGreyhoundAdapter",

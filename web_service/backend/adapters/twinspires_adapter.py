@@ -124,26 +124,19 @@ class TwinSpiresAdapter(DebugMixin, BaseAdapterV3):
 
     async def _fetch_data(self, date: str) -> Optional[dict]:
         """
-        Fetch race data from TwinSpires for given date.
-
-        Args:
-            date: Date string in YYYY-MM-DD format
-
-        Returns:
-            Dictionary with races data or None on failure
+        Fetch race data from TwinSpires for given date, including multiple disciplines.
         """
-        self.logger.info(f"Fetching TwinSpires races for {date}")
+        self.logger.info(f"Fetching TwinSpires multi-discipline races for {date}")
 
-        # Try multiple URL patterns
-        url_patterns = [
-            f"{self.BASE_URL}/bet/todays-races/time",
-            f"{self.BASE_URL}/racing/entries/{date}",
-            f"{self.BASE_URL}/races/today",
-        ]
+        all_races_data = []
 
-        for url in url_patterns:
+        # We explicitly target each discipline to "force" all three as requested
+        disciplines = ["thoroughbred", "harness", "greyhound"]
+
+        for disc in disciplines:
+            url = f"{self.BASE_URL}/bet/todays-races/{disc}"
             self.attempted_url = url
-            self.logger.info(f"Trying URL pattern: {url}")
+            self.logger.info(f"Fetching discipline: {disc} from {url}")
 
             try:
                 response = await self.make_request(
@@ -152,29 +145,36 @@ class TwinSpiresAdapter(DebugMixin, BaseAdapterV3):
                     network_idle=True,
                     wait_selector='div[class*="race"], [class*="RaceCard"], [class*="track"]',
                 )
+                if response and response.status == 200:
+                    self._save_debug_snapshot(response.text, f'twinspires_{disc}_{date}')
+                    disc_races = self._extract_races_from_page(response, date)
+                    if disc_races:
+                        # Tag them with discipline to help _detect_discipline if needed
+                        for r in disc_races:
+                            r["assigned_discipline"] = disc.capitalize()
+                        all_races_data.extend(disc_races)
+                        self.logger.info(f"Extracted {len(disc_races)} {disc} races")
             except Exception as e:
-                self.logger.warning(f"Failed to fetch {url}: {e}")
-                continue
+                self.logger.warning(f"Failed to fetch {disc} races: {e}")
 
-            if response and response.status == 200:
-                # Save debug HTML
-                self._save_debug_html(response.text, f'twinspires_{date}')
+        # If direct discipline links failed or returned nothing, try the general timeline view
+        if not all_races_data:
+            url = f"{self.BASE_URL}/bet/todays-races/time"
+            self.logger.info(f"Falling back to timeline view: {url}")
+            try:
+                response = await self.make_request("GET", url, network_idle=True)
+                if response and response.status == 200:
+                    all_races_data = self._extract_races_from_page(response, date)
+            except Exception as e:
+                self.logger.warning(f"Fallback failed: {e}")
 
-                # Extract races
-                races_data = self._extract_races_from_page(response, date)
+        if all_races_data:
+            return {
+                "races": all_races_data,
+                "date": date,
+                "source": self.source_name,
+            }
 
-                if races_data:
-                    self.logger.info(f"Successfully extracted {len(races_data)} races from {url}")
-                    return {
-                        "races": races_data,
-                        "date": date,
-                        "source": "twinspires_live",
-                        "url": url,
-                    }
-                else:
-                    self.logger.warning(f"No races extracted from {url}, trying next pattern")
-
-        self.logger.error("All URL patterns failed")
         return None
 
     def _extract_races_from_page(self, response, date: str) -> List[dict]:
@@ -318,11 +318,11 @@ class TwinSpiresAdapter(DebugMixin, BaseAdapterV3):
 
     def _parse_single_race(self, race_data: dict, date_str: str) -> Optional[Race]:
         """Parse a single race from extracted data."""
-        html = race_data.get("html", "")
-        if not html:
+        html_content = race_data.get("html", "")
+        if not html_content:
             return None
 
-        page = Selector(html)
+        page = Selector(html_content)
 
         track_name = race_data.get("track", "Unknown")
         race_number = race_data.get("race_number", 1)
@@ -340,10 +340,12 @@ class TwinSpiresAdapter(DebugMixin, BaseAdapterV3):
         # Generate race ID
         track_id = re.sub(r'[^a-z0-9]', '', track_name.lower())
         date_compact = date_str.replace('-', '')
-        race_id = f"ts_{track_id}_{date_compact}_R{race_number}"
 
         # Determine discipline
-        discipline = self._detect_discipline(page, html)
+        discipline = race_data.get("assigned_discipline") or self._detect_discipline(page, html_content)
+
+        disc_suffix = discipline[0].lower() if discipline else "t"
+        race_id = f"ts_{track_id}_{date_compact}_{disc_suffix}{race_number}"
 
         return Race(
             id=race_id,
