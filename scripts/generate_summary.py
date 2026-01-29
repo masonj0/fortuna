@@ -73,6 +73,22 @@ def main():
 
     lines.append("")
 
+    # Adapter Success Summary (Total Races Found)
+    if Path("adapter_success_summary.json").exists():
+        try:
+            with open("adapter_success_summary.json") as f:
+                success_data = json.load(f)
+
+            if success_data:
+                lines.append("### 🏆 Total Races Found per Adapter\n")
+                lines.append("| Adapter | Races | Duration |")
+                lines.append("|:---|:---:|:---:|")
+                for item in success_data:
+                    lines.append(f"| {item['adapter']} | {item['race_count']} | {item['duration_s']}s |")
+                lines.append("")
+        except:
+            pass
+
     # Browser verification
     if Path("browser_verification.json").exists():
         try:

@@ -221,13 +221,14 @@ jobs:
 
           # Wait and verify
           echo "Waiting for Xvfb display :99..."
-          # Note: x11-utils is not explicitly installed here but usually exists or we'll just sleep if it fails
-          for i in {1..10}; do
-            if command -v xdpyinfo >/dev/null && xdpyinfo -display :99 >/dev/null 2>&1; then
-              echo "✅ Display :99 ready"
+          MAX_WAIT=15
+          for i in $(seq 1 $MAX_WAIT); do
+            if xdpyinfo -display :99 >/dev/null 2>&1; then
+              echo "✅ Display :99 ready after $i seconds"
               echo "DISPLAY=:99" >> $GITHUB_ENV
               exit 0
             fi
+            echo "Attempt $i/$MAX_WAIT: Display not ready yet..."
             sleep 1
           done
           echo "DISPLAY=:99" >> $GITHUB_ENV
@@ -589,12 +590,46 @@ jobs:
           # Generate health summary
           python scripts/extract_smartfetcher_health.py
 
+      - name: '🎯 Extract Adapter Success Spotlight'
+        if: always()  # Run even if reporter failed
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          echo "=== Extracting Adapter Success Data ==="
+          echo "This captures successful adapters even if reporter crashes"
+          echo ""
+
+          # Run the success tracker
+          python scripts/track_adapter_success.py || echo "⚠️ Tracker had issues but continuing"
+
+          # Display results in logs
+          if [ -f "adapter_success_spotlight.json" ]; then
+            echo ""
+            echo "✅ Adapter Success Spotlight Generated!"
+            echo ""
+            echo "📊 Quick Summary:"
+            jq -r '"  • Successful Adapters: \(.total_successful_adapters)"' adapter_success_spotlight.json
+            jq -r '"  • Total Races: \(.total_races)"' adapter_success_spotlight.json
+            jq -r '"  • Tracks Covered: \(.total_tracks)"' adapter_success_spotlight.json
+
+            echo ""
+            echo "🏆 Top 5 Performing Adapters:"
+            jq -r '.adapters[0:5] | .[] | "  ✅ \(.adapter_name): \(.total_races) races (\(.tracks | length) tracks)"' adapter_success_spotlight.json
+
+            echo ""
+            echo "📄 Full details saved to adapter_success_spotlight.json and .md"
+          else
+            echo "⚠️ No spotlight file generated - no successful adapters found"
+          fi
+
       - name: '📊 Upload Artifacts'
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: race-reports-${{ matrix.analyzer }}-${{ github.run_number }}
           path: |
+            adapter_success_spotlight.json
+            adapter_success_spotlight.md
             race-report.html
             qualified_races.json
             raw_race_data.json
@@ -604,6 +639,7 @@ jobs:
             metrics.json
             errors.json
             adapter_stats.json
+            adapter_success_summary.json
             browser_selector_state.json
             anomaly_history.json
             canary_result.json

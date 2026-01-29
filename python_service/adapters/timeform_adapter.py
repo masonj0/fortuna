@@ -23,7 +23,7 @@ class TimeformAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
     """
 
     SOURCE_NAME = "Timeform"
-    BASE_URL = "https://www.timeform.com/horse-racing"
+    BASE_URL = "https://www.timeform.com"
 
     def __init__(self, config=None):
         super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
@@ -45,7 +45,7 @@ class TimeformAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
         """
         Fetches the raw HTML for all race pages for a given date.
         """
-        index_url = f"/racecards/{date}"
+        index_url = f"/horse-racing/racecards/{date}"
         index_response = await self.make_request("GET", index_url, headers=self._get_headers())
         if not index_response or not index_response.text:
             self.logger.warning("Failed to fetch Timeform index page", url=index_url)
@@ -169,7 +169,6 @@ class TimeformAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
     def _parse_runner(self, row: Node, forecast_map: dict = None) -> Optional[Runner]:
         """Parses a single runner from a table row node."""
         try:
-            # Try modernized selector first, then legacy
             name_node = row.css_first("a.rp-horse") or row.css_first("a.rp-horseTable_horse-name")
             if not name_node:
                 return None
@@ -180,24 +179,20 @@ class TimeformAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
             if num_attr:
                 try:
                     number = int(num_attr)
-                except ValueError:
+                except:
                     pass
 
             if not number:
                 num_node = row.css_first(".rp-entry-number") or row.css_first("span.rp-horseTable_horse-number")
                 if num_node:
-                    num_text = clean_text(num_node.text())
-                    # Strip parentheses if present (legacy)
-                    num_text = num_text.strip("()")
+                    num_text = clean_text(num_node.text()).strip("()")
                     num_match = re.search(r"\d+", num_text)
                     if num_match:
                         number = int(num_match.group())
 
             win_odds = None
-            # Normalize name for matching: lowercase and remove country codes like (IRE)
-            norm_name = re.sub(r"\(.*?\)", "", name).strip().lower()
-            if forecast_map and norm_name in forecast_map:
-                win_odds = parse_odds_to_decimal(forecast_map[norm_name])
+            if forecast_map and name.lower() in forecast_map:
+                win_odds = parse_odds_to_decimal(forecast_map[name.lower()])
 
             # Try to find live odds button if available (old selector)
             if not win_odds:
