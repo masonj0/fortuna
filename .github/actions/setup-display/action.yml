@@ -1,0 +1,22 @@
+name: 'Setup X Display'
+description: 'Start Xvfb display server for headless browser testing'
+runs:
+  using: 'composite'
+  steps:
+    - name: 'Start Xvfb'
+      shell: bash
+      run: |
+        sudo pkill -9 Xvfb || true
+        sleep 1
+        sudo Xvfb :99 -screen 0 1280x720x24 > /tmp/xvfb.log 2>&1 &
+
+        echo "Waiting for Xvfb display :99..."
+        for i in {1..30}; do
+          if xset -display :99 q &>/dev/null; then
+            echo "✓ Xvfb ready on display :99"
+            exit 0
+          fi
+          echo "  Attempt $i/30..."
+          sleep 1
+        done
+        echo "⚠️ Xvfb may not be fully ready"
