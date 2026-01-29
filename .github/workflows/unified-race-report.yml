@@ -526,6 +526,7 @@ EOF
             adapter_success_spotlight.md
             race-report.html
             qualified_races.json
+            link_healing_report.json
             raw_race_data.json
             reporter_output.log
             browser_verify.log

@@ -508,6 +508,18 @@ class Reporter:
             # Save metrics.json
             self.save_json(self.metrics.to_dict(), Path("metrics.json"), "execution metrics")
 
+            # --- LINK HEALER REPORT ---
+            try:
+                from python_service.utilities.link_healer import get_healing_report
+                healing_report = get_healing_report()
+                if healing_report.get("total_healing_attempts", 0) > 0:
+                    self.save_json(healing_report, Path("link_healing_report.json"), "link healing report")
+                    self.log(f"Link Healer recovered {healing_report['successful_heals']} broken links", LogLevel.SUCCESS)
+            except ImportError:
+                pass
+            except Exception as e:
+                self.log(f"Failed to generate healing report: {e}", LogLevel.WARNING)
+
             successful_outputs = sum(outputs_generated.values())
             self.log(f"Generated {successful_outputs}/{len(outputs_generated)} outputs")
 
