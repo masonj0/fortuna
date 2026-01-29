@@ -1,59 +1,7 @@
 {
-  "status": "unhealthy",
-  "success_rate": "29%",
-  "total_checks": 7,
-  "passed": 2,
-  "failed": 5,
-  "timestamp": "2026-01-28T20:58:07.647169",
-  "results": [
-    {
-      "source": "httpbin",
-      "success": false,
-      "latency_ms": 2620.3631839998707,
-      "message": "BrowserType.launch_persistent_context: Executable doesn't exist at /home/jules/.cache/ms-playwright/chromium-1194/chrome-linux/chrome\n\u2554\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2557\n\u2551 Looks like Playwright was just installed or updated.       \u2551\n\u2551 Please run the following command to download new browsers: \u2551\n\u2551                                                            \u2551\n\u2551     playwright install                                     \u2551\n\u2551                                                            \u2551\n\u2551 <3 Playwright Team                                         \u2551\n\u255a\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u255d",
-      "timestamp": "2026-01-28T20:58:04.032143"
-    },
-    {
-      "source": "TwinSpires",
-      "success": false,
-      "latency_ms": 1240.3011500000503,
-      "message": "BrowserType.launch_persistent_context: Executable doesn't exist at /home/jules/.cache/ms-playwright/chromium-1194/chrome-linux/chrome\n\u2554\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2557\n\u2551 Looks like Playwright was just installed or updated.       \u2551\n\u2551 Please run the following command to download new browsers: \u2551\n\u2551                                                            \u2551\n\u2551     playwright install                                     \u2551\n\u2551                                                            \u2551\n\u2551 <3 Playwright Team                                         \u2551\n\u255a\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u255d",
-      "timestamp": "2026-01-28T20:58:05.272482"
-    },
-    {
-      "source": "Racing.com",
-      "success": true,
-      "latency_ms": 256.8820980000055,
-      "message": "OK",
-      "timestamp": "2026-01-28T20:58:05.590111"
-    },
-    {
-      "source": "TAB.com.au",
-      "success": false,
-      "latency_ms": 530.1973190000808,
-      "message": "HTTP 500",
-      "timestamp": "2026-01-28T20:58:06.123807"
-    },
-    {
-      "source": "Racenet",
-      "success": false,
-      "latency_ms": 250.78983399998833,
-      "message": "HTTP 403",
-      "timestamp": "2026-01-28T20:58:06.374911"
-    },
-    {
-      "source": "AtTheRaces",
-      "success": true,
-      "latency_ms": 1009.2654000000039,
-      "message": "OK",
-      "timestamp": "2026-01-28T20:58:07.389931"
-    },
-    {
-      "source": "SportingLife",
-      "success": false,
-      "latency_ms": 255.4876389999663,
-      "message": "HTTP 404",
-      "timestamp": "2026-01-28T20:58:07.647058"
-    }
-  ]
+  "timestamp": "2026-01-29T10:01:50.578079",
+  "health_status": "healthy",
+  "success_rate": "100",
+  "should_alert": "false",
+  "message": "Canary check passed - core systems responsive"
 }
