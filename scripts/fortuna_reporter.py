@@ -491,7 +491,7 @@ class Reporter:
                 # Generate a clean summary even if the reporter partially failed or timed out
                 success_summary = [
                     {
-                        "adapter": s["adapter_name"],
+                        "adapter": s.get("adapter_name") or s.get("name", "Unknown"),
                         "race_count": s.get("last_race_count", 0),
                         "duration_s": s.get("last_duration_s", 0.0)
                     }

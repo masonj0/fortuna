@@ -68,7 +68,6 @@ env:
   PLAYWRIGHT_BROWSERS_PATH: '/home/runner/.cache/ms-playwright'
 
 jobs:
-  # Determine what to run based on trigger
   setup:
     runs-on: ubuntu-latest
     outputs:
@@ -80,7 +79,6 @@ jobs:
       - name: 'Determine execution mode'
         id: determine
         run: |
-          # Default values
           RUN_CANARY="false"
           RUN_FULL="false"
           RUN_SECURITY="false"
@@ -88,33 +86,16 @@ jobs:
           EVENT="${{ github.event_name }}"
           RUN_MODE="${{ inputs.run_mode }}"
 
-          echo "Event: $EVENT"
-          echo "Run Mode: $RUN_MODE"
-
           if [ "$EVENT" = "push" ]; then
             RUN_FULL="true"
             RUN_SECURITY="true"
           elif [ "$EVENT" = "workflow_dispatch" ]; then
             case "$RUN_MODE" in
-              "canary_only")
-                RUN_CANARY="true"
-                ;;
-              "canary_quick")
-                RUN_CANARY="true"
-                ;;
-              "skip_canary")
-                RUN_FULL="true"
-                ;;
-              "dry_run")
-                RUN_CANARY="true"
-                # For dry_run, we might still run the full report but with a flag
-                RUN_FULL="true"
-                ;;
-              *)
-                # "full" - run both
-                RUN_CANARY="true"
-                RUN_FULL="true"
-                ;;
+              "canary_only") RUN_CANARY="true" ;;
+              "canary_quick") RUN_CANARY="true" ;;
+              "skip_canary") RUN_FULL="true" ;;
+              "dry_run") RUN_CANARY="true"; RUN_FULL="true" ;;
+              *) RUN_CANARY="true"; RUN_FULL="true" ;;
             esac
           fi
 
@@ -135,48 +116,23 @@ jobs:
           echo "run_security=$RUN_SECURITY" >> $GITHUB_OUTPUT
           echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
 
-          echo "=== Execution Plan (Simply Success Mode) ==="
-          echo "Will run canary: $RUN_CANARY"
-          echo "Will run full report: $RUN_FULL"
-          echo "Will run security scan: $RUN_SECURITY"
-          echo "Analyzer matrix: $MATRIX"
-          echo "Mode: Counting successes, not filtering"
-
-  # Security scan for dependencies
   security-scan:
     runs-on: ubuntu-latest
     needs: setup
     if: needs.setup.outputs.run_security == 'true'
     steps:
       - uses: actions/checkout@v4
-
       - name: 'Setup Python'
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-
       - name: 'Run Security Scans'
         run: |
-          pip install \
-            pip-audit==2.7.3 \
-            safety==3.2.0 \
-            bandit==1.7.9
+          pip install pip-audit==2.7.3 safety==3.2.0 bandit==1.7.9
+          pip-audit -r web_service/backend/requirements.txt --ignore-vuln PYSEC-2022-43012 || true
+          safety check -r web_service/backend/requirements.txt --full-report || true
+          bandit -r scripts/ web_service/ -f screen || true
 
-          echo "=== pip-audit ==="
-          pip-audit -r web_service/backend/requirements.txt \
-            --ignore-vuln PYSEC-2022-43012 \
-            || echo "pip-audit found issues (non-blocking)"
-
-          echo ""
-          echo "=== safety ==="
-          safety check -r web_service/backend/requirements.txt --full-report \
-            || echo "safety found issues (non-blocking)"
-
-          echo ""
-          echo "=== bandit ==="
-          bandit -r scripts/ web_service/ -f screen || echo "bandit found issues (non-blocking)"
-
-  # Canary job - lightweight health check
   canary-check:
     runs-on: ubuntu-latest
     needs: setup
@@ -184,71 +140,49 @@ jobs:
     timeout-minutes: 15
     env:
       IS_QUICK: ${{ github.event.inputs.run_mode == 'canary_quick' }}
-
     outputs:
       health_status: ${{ steps.canary.outputs.health_status }}
       should_alert: ${{ steps.canary.outputs.should_alert }}
       success_rate: ${{ steps.canary.outputs.success_rate }}
-
     steps:
       - uses: actions/checkout@v4
-
       - name: 'Setup Python'
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
           cache-dependency-path: 'web_service/backend/requirements.txt'
-
-      - name: '🔄 Cache Browsers'
+      - name: 'Cache Browsers'
         uses: actions/cache@v4
         with:
           path: |
             ~/.cache/ms-playwright
             ~/.camoufox
           key: browsers-v1-${{ runner.os }}-${{ hashFiles('web_service/backend/requirements.txt') }}
-          restore-keys: |
-            browsers-v1-${{ runner.os }}-
-
+          restore-keys: browsers-v1-${{ runner.os }}-
       - name: 'Install System Dependencies'
         if: env.IS_QUICK != 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y x11-utils
-
       - name: 'Install Dependencies'
         run: |
           pip install --upgrade pip
           pip install -r web_service/backend/requirements.txt
-
       - name: 'Install Browser (Minimal)'
         if: env.IS_QUICK != 'true'
-        run: |
-          playwright install chromium --with-deps
-
+        run: playwright install chromium --with-deps
       - name: 'Start Display'
         if: env.IS_QUICK != 'true'
         uses: ./.github/actions/setup-display
-
-      - name: '🏥 Canary Health Check'
+      - name: 'Canary Health Check'
         id: canary
         timeout-minutes: 12
         env:
           DISPLAY: ':99'
           PYTHONPATH: ${{ github.workspace }}
-        run: |
-          echo "🏥 Starting Canary Health Check..."
-          python3 scripts/minimal_canary.py
+        run: python3 scripts/minimal_canary.py
 
-      - name: '📊 Save Canary Results'
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: canary-check-${{ github.run_number }}
-          path: canary_result.json
-          retention-days: ${{ env.REPORT_RETENTION_DAYS }}
-
-  # Main report generation - now focused on simply counting successes
   generate-unified-report:
     runs-on: ubuntu-latest
     needs: [setup, canary-check]
@@ -258,45 +192,35 @@ jobs:
       fail-fast: false
       matrix:
         analyzer: ${{ fromJson(needs.setup.outputs.matrix) }}
-
     steps:
       - uses: actions/checkout@v4
-
       - name: 'Setup Python'
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
           cache-dependency-path: 'web_service/backend/requirements.txt'
-
-      - name: '🔄 Cache Browsers'
+      - name: 'Cache Browsers'
         uses: actions/cache@v4
         with:
           path: |
             ~/.cache/ms-playwright
             ~/.camoufox
           key: browsers-v1-${{ runner.os }}-${{ hashFiles('web_service/backend/requirements.txt') }}
-          restore-keys: |
-            browsers-v1-${{ runner.os }}-
-
+          restore-keys: browsers-v1-${{ runner.os }}-
       - name: 'Install System Dependencies'
         run: |
           sudo apt-get update
           sudo apt-get install -y x11-utils xvfb
-
       - name: 'Install Python Dependencies'
         run: |
           pip install --upgrade pip
           pip install -r web_service/backend/requirements.txt
-
       - name: 'Setup Playwright'
-        run: |
-          playwright install chromium --with-deps
-
+        run: playwright install chromium --with-deps
       - name: 'Start X Display Server'
         uses: ./.github/actions/setup-display
-
-      - name: '📊 Generate Report (Simply Success Mode)'
+      - name: 'Generate Report'
         id: reporter
         continue-on-error: true
         timeout-minutes: 80
@@ -307,101 +231,22 @@ jobs:
           DEBUG_MODE: ${{ inputs.debug_mode }}
           FORCE_REFRESH: ${{ inputs.force_refresh }}
         run: |
-          echo "═══════════════════════════════════════════════"
-          echo "🎯 SIMPLY SUCCESS REPORT GENERATION"
-          echo "═══════════════════════════════════════════════"
-          echo "Analyzer: $ANALYZER_TYPE"
-          echo "Mode: Count & Display (no filtering)"
-          echo "Goal: HTTP 200 codes = SUCCESS"
-          echo "═══════════════════════════════════════════════"
-          echo ""
-
-          # Run reporter with simply_success analyzer
           python -u scripts/fortuna_reporter.py 2>&1 | tee reporter_output.log
-          EXIT_CODE=${PIPESTATUS[0]}
-
-          echo ""
-          echo "═══════════════════════════════════════════════"
-          echo "Report generation exit code: $EXIT_CODE"
-          echo "═══════════════════════════════════════════════"
-
-          exit $EXIT_CODE
-
-      - name: 'Check Reporter Outcome'
+          exit ${PIPESTATUS[0]}
+      - name: 'Extract Success Spotlight'
         if: always()
         run: |
-          if [ "${{ steps.reporter.outcome }}" == "failure" ]; then
-            echo "::warning::Reporter had issues but workflow continues (Simply Success mode)"
-          fi
-
-      - name: '📊 Extract Adapter Success Spotlight'
-        if: always()  # Always run, even if reporter had issues
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "🎯 ADAPTER SUCCESS SPOTLIGHT"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo ""
-          echo "Extracting adapter success data (even counts of zero)..."
-          echo ""
-
-          python scripts/track_adapter_success.py || echo "⚠️ Tracker had minor issues but continuing"
-
+          python scripts/track_adapter_success.py || true
           if [ -f "adapter_success_spotlight.json" ]; then
-            echo "✅ Spotlight generated!"
-            echo ""
-            echo "📊 Quick Summary:"
-            echo "  • Successful Adapters: $(jq -r '.total_successful_adapters' adapter_success_spotlight.json 2>/dev/null || echo 'N/A')"
-            echo "  • Total Races: $(jq -r '.total_races' adapter_success_spotlight.json 2>/dev/null || echo '0')"
-            echo "  • Tracks Covered: $(jq -r '.total_tracks' adapter_success_spotlight.json 2>/dev/null || echo '0')"
-
-            echo ""
-            echo "🏆 Adapter Results:"
-            jq -r '.adapters[] | "  ✅ \(.adapter_name): \(.total_races) races (\(.tracks | length) tracks)"' adapter_success_spotlight.json 2>/dev/null || echo "  (No adapter data available)"
-
-          if [ -f "adapter_success_spotlight.json" ]; then
-            echo "📊 Report Status:"
-            jq -r '.message // "Report generated"' adapter_success_spotlight.json
-            echo ""
-            echo "📄 Full details saved to:"
-            echo "   - adapter_success_spotlight.json"
-            echo "   - adapter_success_spotlight.md"
+            echo "Spotlight found"
+            jq -r '"Successful: " + (.total_successful_adapters|tostring)' adapter_success_spotlight.json
+            jq -r '"Races: " + (.total_races|tostring)' adapter_success_spotlight.json
           else
-            echo "⚠️ Creating minimal spotlight (zero races case)..."
+            echo "No spotlight, creating placeholder"
             TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-            echo '{"timestamp": "'$TS'", "total_successful_adapters": 0, "total_races": 0, "total_tracks": 0, "mode": "simply_success", "message": "System operational. No races discovered in this run.", "adapters": []}' > adapter_success_spotlight.json
-            echo "✅ Minimal spotlight created for zero-race scenario"
+            echo "{\"timestamp\": \"$TS\", \"total_successful_adapters\": 0, \"total_races\": 0, \"adapters\": []}" > adapter_success_spotlight.json
           fi
-
-          echo ""
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-      - name: '🎯 HTTP 200 Success Display'
-        if: always()
-        run: |
-          echo ""
-          echo "╔════════════════════════════════════════════════╗"
-          echo "║                                                ║"
-          echo "║         🎯  HTTP 200 SUCCESS METRICS  🎯       ║"
-          echo "║                                                ║"
-          echo "╚════════════════════════════════════════════════╝"
-          echo ""
-
-          if [ -f "adapter_success_spotlight.json" ]; then
-            echo "📊 Report Status:"
-            jq -r '.message // "Report generated"' adapter_success_spotlight.json
-            echo ""
-            echo "✅ Workflow completed successfully (HTTP 200)"
-            echo "   Artifacts available for review"
-          else
-            echo "✅ Workflow completed (HTTP 200)"
-            echo "   System is operational"
-          fi
-
-          echo ""
-
-      - name: '📊 Upload Artifacts (All Results, Including Zero Races)'
+      - name: 'Upload Artifacts'
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -414,7 +259,6 @@ jobs:
             link_healing_report.json
             raw_race_data.json
             reporter_output.log
-            browser_verify.log
             browser_verification.json
             metrics.json
             errors.json
@@ -432,38 +276,28 @@ jobs:
           retention-days: ${{ env.REPORT_RETENTION_DAYS }}
           if-no-files-found: warn
           compression-level: 6
-
-      - name: '📝 Generate Summary (Simply Success Mode)'
+      - name: 'Generate Step Summary'
         if: always()
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          echo "## 🎯 Simply Success Report Generated" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Mode: HTTP 200 Celebration" >> $GITHUB_STEP_SUMMARY
-          echo "- **Goal**: Count and display discovered races (no filtering)" >> $GITHUB_STEP_SUMMARY
-          echo "- **Philosophy**: Success = Job completed (HTTP 200)" >> $GITHUB_STEP_SUMMARY
-          echo "- **Result**: Artifacts available for review" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Key Artifacts" >> $GITHUB_STEP_SUMMARY
-          echo "- \`adapter_success_spotlight.json\` - Complete success metrics" >> $GITHUB_STEP_SUMMARY
-          echo "- \`qualified_races.json\` - All discovered races" >> $GITHUB_STEP_SUMMARY
-          echo "- \`reporter_output.log\` - Execution logs" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Summary" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Workflow completed. Even zero races = success in this mode." >> $GITHUB_STEP_SUMMARY
+          echo "## Simply Success Report" >> $GITHUB_STEP_SUMMARY
+          echo "Mode: HTTP 200 Celebration" >> $GITHUB_STEP_SUMMARY
+          if [ -f "adapter_success_spotlight.json" ]; then
+            RACES=$(jq -r '.total_races' adapter_success_spotlight.json)
+            ADAPTERS=$(jq -r '.total_successful_adapters' adapter_success_spotlight.json)
+            echo "- Success: $ADAPTERS adapters" >> $GITHUB_STEP_SUMMARY
+            echo "- Races: $RACES" >> $GITHUB_STEP_SUMMARY
+          fi
 
-  # Validation stage - now simply validates that artifacts exist
   validate-results:
     needs: [setup, generate-unified-report]
     runs-on: ubuntu-latest
     if: always() && needs.generate-unified-report.result != 'skipped'
-
     strategy:
       fail-fast: false
       matrix:
         analyzer: ${{ fromJson(needs.setup.outputs.matrix) }}
-
     steps:
       - uses: actions/checkout@v4
       - name: 'Setup Python'
@@ -474,71 +308,22 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: race-reports-${{ matrix.analyzer }}-${{ github.run_number }}
-      - name: '✅ Artifact Validation (Simply Success Mode)'
-        timeout-minutes: 5
-        env:
-          PYTHONPATH: ${{ github.workspace }}
+      - name: 'Validate Artifacts'
         run: |
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "✅ ARTIFACT VALIDATION"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo ""
-
-          ARTIFACTS_FOUND=0
-
-          # Check for spotlight
-          if [ -f "adapter_success_spotlight.json" ]; then
-            echo "✅ adapter_success_spotlight.json found"
-            echo "   Content preview:"
-            jq '.' adapter_success_spotlight.json | head -20
-            ARTIFACTS_FOUND=$((ARTIFACTS_FOUND + 1))
-          else
-            echo "⚠️  adapter_success_spotlight.json not found (may be created during run)"
-          fi
-
-          # Check for races
-          if [ -f "qualified_races.json" ]; then
-            echo "✅ qualified_races.json found"
-            RACE_COUNT=$(jq '.races | length' qualified_races.json 2>/dev/null || echo "0")
-            echo "   Race count: $RACE_COUNT"
-            ARTIFACTS_FOUND=$((ARTIFACTS_FOUND + 1))
-          else
-            echo "ℹ️  qualified_races.json not found (zero races is acceptable)"
-          fi
-
-          # Check for logs
-          if [ -f "reporter_output.log" ]; then
-            echo "✅ reporter_output.log found"
-            LOG_SIZE=$(wc -c < reporter_output.log)
-            echo "   Log size: $LOG_SIZE bytes"
-            ARTIFACTS_FOUND=$((ARTIFACTS_FOUND + 1))
-          else
-            echo "ℹ️  reporter_output.log not found"
-          fi
-
-          echo ""
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "Summary: $ARTIFACTS_FOUND artifacts validated"
-          echo "Status: ✅ PASS (Simply Success mode)"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo ""
-
-          # In Simply Success mode, validation always passes
+          [ -f "adapter_success_spotlight.json" ] && echo "Spotlight OK" || echo "Spotlight Missing"
+          [ -f "qualified_races.json" ] && echo "Races OK" || echo "Races Missing"
           exit 0
 
-  # Workflow run cleanup
   cleanup:
     needs: [setup, security-scan, generate-unified-report, validate-results]
     runs-on: ubuntu-latest
     if: always()
     steps:
-      - name: '🧹 System Cleanup'
+      - name: 'Cleanup'
         run: |
           sudo pkill -9 Xvfb || true
-          df -h | grep '^/dev/' || true
-          echo "✅ Cleanup complete"
+          echo "Cleanup complete"
 
-  # Notification job - simplified for Simply Success mode
   notify:
     needs: [setup, generate-unified-report, canary-check, validate-results]
     runs-on: ubuntu-latest
@@ -549,62 +334,18 @@ jobs:
       always() &&
       needs.canary-check.result == 'success' &&
       needs.canary-check.outputs.should_alert == 'true'
-
     steps:
-      - name: '⚠️ Create Alert (Only for Critical Issues)'
+      - name: 'Create Alert'
         uses: actions/github-script@v7
         with:
           script: |
             const today = new Date().toISOString().split('T')[0];
             const canaryHealth = '${{ needs.canary-check.outputs.health_status }}';
-
-            // In Simply Success mode, we only alert on canary failures
-            if (canaryHealth !== 'unhealthy') {
-              console.log('✅ Canary is healthy - no alert needed');
-              return;
-            }
-
-            const title = `⚠️ CANARY ALERT: Race Pipeline - ${today}`;
-            const alertLabel = 'pipeline-alert';
-
-            let body = `## Canary Health Alert\n\n`;
-            body += `| Property | Value |\n`;
-            body += `|----------|-------|\n`;
-            body += `| Run | #${{ github.run_number }} |\n`;
-            body += `| Trigger | ${{ github.event_name }} |\n`;
-            body += `| Time | ${new Date().toISOString()} |\n\n`;
-            body += `### ⚠️ Canary Status: UNHEALTHY\n\n`;
-            body += `**Success Rate:** ${{ needs.canary-check.outputs.success_rate }}\n\n`;
-            body += `Upstream data sources may be unavailable or have changed structure.\n\n`;
-            body += `### 🔗 Links\n`;
-            body += `- [View Run Logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})\n`;
-
-            // Check for existing open alert
-            const { data: issues } = await github.rest.issues.listForRepo({
+            if (canaryHealth !== 'unhealthy') return;
+            await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              state: 'open',
-              labels: alertLabel,
-              per_page: 5
+              title: `⚠️ CANARY ALERT: Race Pipeline - ${today}`,
+              body: `Canary health is unhealthy. Run #${{ github.run_number }}`,
+              labels: ['automated', 'pipeline-alert']
             });
-
-            const existingIssue = issues.find(i => i.title.includes('CANARY ALERT'));
-
-            if (existingIssue) {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: existingIssue.number,
-                body: `## New Alert - Run #${{ github.run_number }}\n\n${body}`
-              });
-              console.log(`Added comment to issue #${existingIssue.number}`);
-            } else {
-              await github.rest.issues.create({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                title: title,
-                body: body,
-                labels: ['automated', alertLabel]
-              });
-              console.log('Created new canary alert issue');
-            }

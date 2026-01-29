@@ -526,7 +526,10 @@ class BaseAdapterV3(ABC):
             # If we get a 404, try to heal the URL before giving up
             if status_code == 404 and not kwargs.get('_is_healing_retry'):
                 try:
-                    from python_service.utilities.link_healer import heal_url
+                    try:
+                        from ..utilities.link_healer import heal_url
+                    except (ImportError, ValueError):
+                        from python_service.utilities.link_healer import heal_url
 
                     self.logger.info("404 detected, attempting Link Healing...", url=full_url)
 
