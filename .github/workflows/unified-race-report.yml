@@ -9,16 +9,23 @@ on:
         required: false
         default: 'false'
         type: boolean
+      # analyzer_type:
+      #   description: 'Analyzer to use'
+      #   required: false
+      #   default: 'tiny_field_trifecta'
+      #   type: choice
+      #   options:
+      #     - tiny_field_trifecta
+      #     - value_bet
+      #     - longshot_finder
+      #     - all_analyzers
       analyzer_type:
-        description: 'Analyzer to use'
+        description: 'Analyzer to use (Simply Success default)'
         required: false
-        default: 'tiny_field_trifecta'
+        default: 'simply_success'
         type: choice
         options:
-          - tiny_field_trifecta
-          - value_bet
-          - longshot_finder
-          - all_analyzers
+          - simply_success
       debug_mode:
         description: 'Enable verbose debugging'
         required: false
@@ -108,13 +115,15 @@ jobs:
             esac
           fi
 
-          # Determine Analyzer Matrix
-          ANALYZER="${{ inputs.analyzer_type || 'tiny_field_trifecta' }}"
-          if [ "$ANALYZER" = "all_analyzers" ]; then
-            MATRIX='["tiny_field_trifecta", "value_bet", "longshot_finder"]'
-          else
-            MATRIX="[\"$ANALYZER\"]"
-          fi
+          # Determine Analyzer Matrix (Preserving old logic in comments)
+          # ANALYZER="${{ inputs.analyzer_type || 'tiny_field_trifecta' }}"
+          # if [ "$ANALYZER" = "all_analyzers" ]; then
+          #   MATRIX='["tiny_field_trifecta", "value_bet", "longshot_finder"]'
+          # else
+          #   MATRIX="[\"$ANALYZER\"]"
+          # fi
+          ANALYZER="${{ inputs.analyzer_type || 'simply_success' }}"
+          MATRIX="[\"$ANALYZER\"]"
 
           echo "run_canary=$RUN_CANARY" >> $GITHUB_OUTPUT
           echo "run_full_report=$RUN_FULL" >> $GITHUB_OUTPUT
