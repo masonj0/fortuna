@@ -421,6 +421,9 @@ jobs:
             echo "🏆 Adapter Results:"
             jq -r '.adapters[] | "  ✅ \(.adapter_name): \(.total_races) races (\(.tracks | length) tracks)"' adapter_success_spotlight.json 2>/dev/null || echo "  (No adapter data available)"
 
+          if [ -f "adapter_success_spotlight.json" ]; then
+            echo "📊 Report Status:"
+            jq -r '.message // "Report generated"' adapter_success_spotlight.json
             echo ""
             echo "📄 Full details saved to:"
             echo "   - adapter_success_spotlight.json"
