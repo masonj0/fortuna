@@ -15,6 +15,17 @@ class FortunaException(Exception):
     pass
 
 
+from enum import Enum
+
+class ErrorCategory(Enum):
+    BOT_DETECTION = "bot_detection"
+    NETWORK = "network"
+    STRUCTURE_CHANGE = "structure_change"
+    TIMEOUT = "timeout"
+    AUTHENTICATION = "authentication"
+    CONFIGURATION = "configuration"
+    UNKNOWN = "unknown"
+
 class AdapterError(FortunaException):
     """Base class for all adapter-related errors."""
 

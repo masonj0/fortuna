@@ -28,7 +28,7 @@ from python_service.core.smart_fetcher import (
     StealthMode,
 )
 
-from ..core.exceptions import AdapterHttpError, AdapterParsingError
+from ..core.exceptions import AdapterHttpError, AdapterParsingError, ErrorCategory
 from ..manual_override_manager import ManualOverrideManager
 from ..models import Race
 from ..validators import DataValidationPipeline
@@ -207,6 +207,7 @@ class AdapterMetrics:
     _total_requests: int = field(default=0, repr=False)
     _successful_requests: int = field(default=0, repr=False)
     _failed_requests: int = field(default=0, repr=False)
+    _consecutive_failures: int = field(default=0, repr=False)
     _total_latency_ms: float = field(default=0.0, repr=False)
     _last_success: float | None = field(default=None, repr=False)
     _last_failure: float | None = field(default=None, repr=False)
@@ -232,6 +233,7 @@ class AdapterMetrics:
         async with self._lock:
             self._total_requests += 1
             self._successful_requests += 1
+            self._consecutive_failures = 0
             self._total_latency_ms += latency_ms
             self._last_success = time.time()
 
@@ -239,8 +241,13 @@ class AdapterMetrics:
         async with self._lock:
             self._total_requests += 1
             self._failed_requests += 1
+            self._consecutive_failures += 1
             self._last_failure = time.time()
             self._last_error = error
+
+    @property
+    def consecutive_failures(self) -> int:
+        return self._consecutive_failures
 
     def snapshot(self) -> dict[str, Any]:
         """Return a point-in-time snapshot of metrics."""
@@ -301,6 +308,9 @@ class BaseAdapterV3(ABC):
         self.manual_override_manager: ManualOverrideManager | None = None
         self.supports_manual_override = True
         self.attempted_url: Optional[str] = None
+        self.last_race_count: int = 0
+        self.last_duration_s: float = 0.0
+        self._initial_rate_limit = rate_limit
         # ✅ THESE 4 LINES MUST BE HERE (not in close()):
         self.circuit_breaker = CircuitBreaker()
         self.rate_limiter = RateLimiter(requests_per_second=rate_limit)
@@ -401,6 +411,7 @@ class BaseAdapterV3(ABC):
             raise AdapterParsingError(self.source_name, "Parsing logic failed.") from e
 
         validated_races, warnings = DataValidationPipeline.validate_parsed_races(parsed_races)
+        self.last_race_count = len(validated_races)
 
         if warnings:
             self.logger.warning("Validation warnings during parsing", warnings=warnings)
@@ -427,18 +438,50 @@ class BaseAdapterV3(ABC):
             timeout=30,
         )
 
+    async def _adjust_rate_limit(self, success: bool):
+        """Dynamically adjust rate limits based on performance."""
+        # Target RPS is what was initially configured
+        target_rps = getattr(self, "_initial_rate_limit", 5.0)
+        current_rps = self.rate_limiter.requests_per_second
+
+        if not success:
+            # On failure, aggressively reduce rate limit (halve it)
+            new_rps = max(0.1, current_rps * 0.5)
+            if new_rps < current_rps:
+                self.rate_limiter.requests_per_second = new_rps
+                self.logger.warning("Backing off: reduced rate limit",
+                                     new_rps=round(new_rps, 2),
+                                     old_rps=round(current_rps, 2))
+        else:
+            # On success, slowly increase rate limit back to target
+            if current_rps < target_rps:
+                new_rps = min(target_rps, current_rps + 0.05)
+                if new_rps > current_rps:
+                    self.rate_limiter.requests_per_second = new_rps
+                    self.logger.debug("Scaling up: increased rate limit",
+                                      new_rps=round(new_rps, 2))
+
     async def make_request(self, method: str, url: str, **kwargs) -> httpx.Response:
         """
         Performs a web request using the SmartFetcher, which intelligently
-        manages browser engines, retries, and stealth capabilities. This method
-        replaces the previous direct-httpx implementation.
+        manages browser engines, retries, and stealth capabilities.
         """
         full_url = url if url.startswith("http") else f"{self.base_url}/{url.lstrip('/')}"
         self.attempted_url = full_url
 
+        # Apply rate limiting before the request
+        await self.rate_limiter.acquire()
+
+        start_time = time.perf_counter()
         try:
             # The SmartFetcher handles caching, retries, circuit breaking, etc.
             response = await self.smart_fetcher.fetch(full_url, method=method, **kwargs)
+
+            latency_ms = (time.perf_counter() - start_time) * 1000
+            self.last_duration_s = latency_ms / 1000.0
+            await self.metrics.record_success(latency_ms)
+            await self.circuit_breaker.record_success()
+            await self._adjust_rate_limit(success=True)
 
             # Log success with rich metadata from the fetcher
             self.logger.info(
@@ -447,16 +490,23 @@ class BaseAdapterV3(ABC):
                 status=getattr(response, "status", "N/A"),
                 size_bytes=len(getattr(response, "text", "")),
                 engine=getattr(response, "metadata", {}).get("engine_used", "unknown"),
+                latency_ms=round(latency_ms, 1)
             )
             return response
 
         except Exception as e:
+            category = getattr(e, "category", ErrorCategory.UNKNOWN).value
+            await self.metrics.record_failure(str(e))
+            await self.circuit_breaker.record_failure()
+            await self._adjust_rate_limit(success=False)
+
             # Log failure with detailed diagnostics from the fetcher
             self.logger.error(
                 "Request failed after all retries and engine fallbacks",
                 url=full_url,
                 error=str(e),
                 error_type=type(e).__name__,
+                error_category=category,
                 health_report=self.smart_fetcher.get_health_report(),
             )
 
@@ -581,6 +631,8 @@ class BaseAdapterV3(ABC):
             "status": status,
             "circuit_state": self.circuit_breaker.state.value,
             "success_rate": round(self.metrics.success_rate, 3),
+            "last_race_count": self.last_race_count,
+            "last_duration_s": round(self.last_duration_s, 2),
         }
 
     async def reset(self) -> None:

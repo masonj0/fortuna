@@ -81,6 +81,8 @@ class EquibaseAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
         async def fetch_single_html(race_url: str):
             async with semaphore:
                 try:
+                    # Random delay to be less robotic (0.5 to 1.5 seconds)
+                    await asyncio.sleep(0.5 + (hash(race_url) % 100) / 100.0)
                     response = await self.make_request("GET", race_url, headers=self._get_headers())
                     return response.text if response else ""
                 except Exception as e:
