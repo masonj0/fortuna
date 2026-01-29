@@ -1,7 +1,0 @@
-{
-  "timestamp": "2026-01-29T10:01:50.578079",
-  "health_status": "healthy",
-  "success_rate": "100",
-  "should_alert": "false",
-  "message": "Canary check passed - core systems responsive"
-}
