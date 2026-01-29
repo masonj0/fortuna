@@ -237,7 +237,7 @@ jobs:
           # Wait and verify
           echo "Waiting for Xvfb display :99..."
           for i in {1..30}; do
-            if xdpyinfo -display :99 >/dev/null 2>&1; then
+            if xset -display :99 q &>/dev/null; then
               echo "✓ Xvfb ready"
               break
             fi
@@ -255,53 +255,53 @@ jobs:
           echo "🏥 Starting Canary Health Check..."
 
           python3 << 'EOF'
-          import os
-          import sys
-          import json
-          import logging
-          from datetime import datetime
+import os
+import sys
+import json
+import logging
+from datetime import datetime
 
-          # Setup logging
-          logging.basicConfig(level=logging.DEBUG)
-          logger = logging.getLogger(__name__)
+# Setup logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
-          try:
-              # Attempt lightweight imports
-              logger.info("Importing core modules...")
-              # We use fortuna_reporter.py's logic or simple models
-              from web_service.backend.models import Race
-              logger.info("✓ Models imported successfully")
+try:
+    # Attempt lightweight imports
+    logger.info("Importing core modules...")
+    # We use fortuna_reporter.py's logic or simple models
+    from web_service.backend.models import Race
+    logger.info("✓ Models imported successfully")
 
-              # Simulate health check
-              health_status = "healthy"
-              success_rate = "100"
-              should_alert = "false"
+    # Simulate health check
+    health_status = "healthy"
+    success_rate = "100"
+    should_alert = "false"
 
-              canary_result = {
-                  "timestamp": datetime.now().isoformat(),
-                  "health_status": health_status,
-                  "success_rate": success_rate,
-                  "should_alert": should_alert,
-                  "message": "Canary check passed - core systems responsive"
-              }
+    canary_result = {
+        "timestamp": datetime.now().isoformat(),
+        "health_status": health_status,
+        "success_rate": success_rate,
+        "should_alert": should_alert,
+        "message": "Canary check passed - core systems responsive"
+    }
 
-              with open("canary_result.json", "w") as f:
-                  json.dump(canary_result, f, indent=2)
+    with open("canary_result.json", "w") as f:
+        json.dump(canary_result, f, indent=2)
 
-              logger.info("✓ Canary check complete")
-              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-                  f.write(f"health_status={health_status}\n")
-                  f.write(f"success_rate={success_rate}\n")
-                  f.write(f"should_alert={should_alert}\n")
+    logger.info("✓ Canary check complete")
+    with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+        f.write(f"health_status={health_status}\n")
+        f.write(f"success_rate={success_rate}\n")
+        f.write(f"should_alert={should_alert}\n")
 
-          except Exception as e:
-              logger.error(f"Canary check failed: {e}", exc_info=True)
-              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-                  f.write("health_status=unhealthy\n")
-                  f.write("success_rate=0\n")
-                  f.write("should_alert=true\n")
-              sys.exit(0) # Don't fail the job
-          EOF
+except Exception as e:
+    logger.error(f"Canary check failed: {e}", exc_info=True)
+    with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+        f.write("health_status=unhealthy\n")
+        f.write("success_rate=0\n")
+        f.write("should_alert=true\n")
+    sys.exit(0) # Don't fail the job
+EOF
 
       - name: '📊 Save Canary Results'
         if: always()
@@ -370,7 +370,7 @@ jobs:
           sudo Xvfb :99 -screen 0 1280x720x24 > /tmp/xvfb.log 2>&1 &
           echo "Waiting for Xvfb..."
           for i in {1..30}; do
-            if xdpyinfo -display :99 >/dev/null 2>&1; then
+            if xset -display :99 q &>/dev/null; then
               echo "✓ Xvfb ready on display :99"
               break
             fi
@@ -461,14 +461,17 @@ jobs:
             echo "✅ Spotlight generated!"
             echo ""
             echo "📊 Quick Summary:"
-            jq -r '"  • Successful Adapters: \(.total_successful_adapters)"' adapter_success_spotlight.json 2>/dev/null || echo "  • Successful Adapters: N/A"
-            jq -r '"  • Total Races: \(.total_races)"' adapter_success_spotlight.json 2>/dev/null || echo "  • Total Races: 0"
-            jq -r '"  • Tracks Covered: \(.total_tracks)"' adapter_success_spotlight.json 2>/dev/null || echo "  • Tracks Covered: 0"
+            echo "  • Successful Adapters: $(jq -r '.total_successful_adapters' adapter_success_spotlight.json 2>/dev/null || echo 'N/A')"
+            echo "  • Total Races: $(jq -r '.total_races' adapter_success_spotlight.json 2>/dev/null || echo '0')"
+            echo "  • Tracks Covered: $(jq -r '.total_tracks' adapter_success_spotlight.json 2>/dev/null || echo '0')"
 
             echo ""
             echo "🏆 Adapter Results:"
             jq -r '.adapters[] | "  ✅ \(.adapter_name): \(.total_races) races (\(.tracks | length) tracks)"' adapter_success_spotlight.json 2>/dev/null || echo "  (No adapter data available)"
 
+          if [ -f "adapter_success_spotlight.json" ]; then
+            echo "📊 Report Status:"
+            jq -r '.message // "Report generated"' adapter_success_spotlight.json
             echo ""
             echo "📄 Full details saved to:"
             echo "   - adapter_success_spotlight.json"
@@ -476,15 +479,15 @@ jobs:
           else
             echo "⚠️ Creating minimal spotlight (zero races case)..."
             cat > adapter_success_spotlight.json << EOF
-          {
-            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "total_successful_adapters": 0,
-            "total_races": 0,
-            "total_tracks": 0,
-            "mode": "simply_success",
-            "message": "System operational. No races discovered in this run.",
-            "adapters": []
-          }
+{
+  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "total_successful_adapters": 0,
+  "total_races": 0,
+  "total_tracks": 0,
+  "mode": "simply_success",
+  "message": "System operational. No races discovered in this run.",
+  "adapters": []
+}
 EOF
             echo "✅ Minimal spotlight created for zero-race scenario"
           fi
@@ -554,22 +557,21 @@ EOF
           PYTHONPATH: ${{ github.workspace }}
         run: |
           cat >> $GITHUB_STEP_SUMMARY << 'EOF'
-          ## 🎯 Simply Success Report Generated
+## 🎯 Simply Success Report Generated
 
-          ### Mode: HTTP 200 Celebration
-          - **Goal**: Count and display discovered races (no filtering)
-          - **Philosophy**: Success = Job completed (HTTP 200)
-          - **Result**: Artifacts available for review
+### Mode: HTTP 200 Celebration
+- **Goal**: Count and display discovered races (no filtering)
+- **Philosophy**: Success = Job completed (HTTP 200)
+- **Result**: Artifacts available for review
 
-          ### Key Artifacts
-          - `adapter_success_spotlight.json` - Complete success metrics
-          - `qualified_races.json` - All discovered races
-          - `reporter_output.log` - Execution logs
+### Key Artifacts
+- `adapter_success_spotlight.json` - Complete success metrics
+- `qualified_races.json` - All discovered races
+- `reporter_output.log` - Execution logs
 
-          ### Summary
-          ✅ Workflow completed. Even zero races = success in this mode.
-
-          EOF
+### Summary
+✅ Workflow completed. Even zero races = success in this mode.
+EOF
 
   # Validation stage - now simply validates that artifacts exist
   validate-results:
