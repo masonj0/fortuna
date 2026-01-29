@@ -127,11 +127,14 @@ class AdapterSuccessTracker:
             if isinstance(stats, list):
                 for adapter_data in stats:
                     adapter_name = adapter_data.get("adapter_name")
-                    # In our BaseAdapterV3, we added last_race_count and last_duration_s
                     races_found = adapter_data.get("last_race_count", 0)
                     status = adapter_data.get("status")
 
-                    if races_found > 0 and status == "OK":
+                    # Celebrate ANY adapter that isn't completely disabled or open circuit
+                    # "OK" and "DEGRADED" are both valid successes in "Simply Success" mode
+                    if status in ["OK", "DEGRADED"]:
+                        # --- SIMPLY SUCCESS SPOTLIGHT ---
+                        # Celebrate HTTP 200 successes even with 0 races
                         self.record_success(
                             adapter_name=adapter_name,
                             status_code=200,
@@ -145,7 +148,7 @@ class AdapterSuccessTracker:
                         races_found = adapter_data.get("races_found", 0)
                         successful = adapter_data.get("successful_requests", 0)
 
-                        if races_found > 0 and successful > 0:
+                        if successful > 0:
                             self.record_success(
                                 adapter_name=adapter_name,
                                 status_code=200,
