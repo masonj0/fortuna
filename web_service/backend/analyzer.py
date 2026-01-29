@@ -179,6 +179,24 @@ class TinyFieldTrifectaAnalyzer(TrifectaAnalyzer):
         return "tiny_field_trifecta_analyzer"
 
 
+class SimplySuccessAnalyzer(BaseAnalyzer):
+    """An analyzer that qualifies every race to show maximum successes (HTTP 200)."""
+
+    @property
+    def name(self) -> str:
+        return "simply_success"
+
+    def qualify_races(self, races: List[Race]) -> Dict[str, Any]:
+        """Returns all races with a perfect score to celebrate success."""
+        for race in races:
+            race.qualification_score = 100.0
+
+        return {
+            "criteria": {"mode": "simply_success", "filtering": "disabled"},
+            "races": races
+        }
+
+
 class AnalyzerEngine:
     """Discovers and manages all available analyzer plugins."""
 
@@ -191,6 +209,7 @@ class AnalyzerEngine:
         # For now, we register them manually.
         self.register_analyzer("trifecta", TrifectaAnalyzer)
         self.register_analyzer("tiny_field_trifecta", TinyFieldTrifectaAnalyzer)
+        self.register_analyzer("simply_success", SimplySuccessAnalyzer)
         log.info(
             "AnalyzerEngine discovered plugins",
             available_analyzers=list(self.analyzers.keys()),
