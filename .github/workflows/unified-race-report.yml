@@ -9,6 +9,19 @@ on:
         required: false
         default: 'false'
         type: boolean
+      # ===== FILTERING LOGIC COMMENTED OUT FOR FUTURE USE =====
+      # Complex filtering strategies archived for potential future deployment
+      # analyzer_type:
+      #   description: 'Analyzer to use'
+      #   required: false
+      #   default: 'tiny_field_trifecta'
+      #   type: choice
+      #   options:
+      #     - tiny_field_trifecta
+      #     - value_bet
+      #     - longshot_finder
+      #     - all_analyzers
+      # ========================================================
       analyzer_type:
         description: 'Analyzer to use (Simply Success - Count & Display Mode)'
         required: false
@@ -86,6 +99,15 @@ jobs:
             esac
           fi
 
+          # ===== ANALYZER MATRIX: SIMPLY SUCCESS MODE =====
+          # Preserving old complex filtering logic in comments for future reference
+          # ANALYZER="${{ inputs.analyzer_type || 'tiny_field_trifecta' }}"
+          # if [ "$ANALYZER" = "all_analyzers" ]; then
+          #   MATRIX='["tiny_field_trifecta", "value_bet", "longshot_finder"]'
+          # else
+          #   MATRIX="[\"$ANALYZER\"]"
+          # fi
+          # ==============================================
           ANALYZER="${{ inputs.analyzer_type || 'simply_success' }}"
           MATRIX="[\"$ANALYZER\"]"
 
@@ -213,8 +235,6 @@ jobs:
           exit ${PIPESTATUS[0]}
       - name: 'Extract Success Spotlight'
         if: always()
-        env:
-          PYTHONPATH: ${{ github.workspace }}
         run: |
           python scripts/track_adapter_success.py || true
           if [ -f "adapter_success_spotlight.json" ]; then
