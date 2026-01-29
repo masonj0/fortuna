@@ -253,55 +253,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           echo "🏥 Starting Canary Health Check..."
-
-          python3 << 'EOF'
-import os
-import sys
-import json
-import logging
-from datetime import datetime
-
-# Setup logging
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
-
-try:
-    # Attempt lightweight imports
-    logger.info("Importing core modules...")
-    # We use fortuna_reporter.py's logic or simple models
-    from web_service.backend.models import Race
-    logger.info("✓ Models imported successfully")
-
-    # Simulate health check
-    health_status = "healthy"
-    success_rate = "100"
-    should_alert = "false"
-
-    canary_result = {
-        "timestamp": datetime.now().isoformat(),
-        "health_status": health_status,
-        "success_rate": success_rate,
-        "should_alert": should_alert,
-        "message": "Canary check passed - core systems responsive"
-    }
-
-    with open("canary_result.json", "w") as f:
-        json.dump(canary_result, f, indent=2)
-
-    logger.info("✓ Canary check complete")
-    with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-        f.write(f"health_status={health_status}\n")
-        f.write(f"success_rate={success_rate}\n")
-        f.write(f"should_alert={should_alert}\n")
-
-except Exception as e:
-    logger.error(f"Canary check failed: {e}", exc_info=True)
-    with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-        f.write("health_status=unhealthy\n")
-        f.write("success_rate=0\n")
-        f.write("should_alert=true\n")
-    sys.exit(0) # Don't fail the job
-EOF
+          python3 scripts/minimal_canary.py
 
       - name: '📊 Save Canary Results'
         if: always()
@@ -478,17 +430,8 @@ EOF
             echo "   - adapter_success_spotlight.md"
           else
             echo "⚠️ Creating minimal spotlight (zero races case)..."
-            cat > adapter_success_spotlight.json << EOF
-{
-  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "total_successful_adapters": 0,
-  "total_races": 0,
-  "total_tracks": 0,
-  "mode": "simply_success",
-  "message": "System operational. No races discovered in this run.",
-  "adapters": []
-}
-EOF
+            TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+            echo '{"timestamp": "'$TS'", "total_successful_adapters": 0, "total_races": 0, "total_tracks": 0, "mode": "simply_success", "message": "System operational. No races discovered in this run.", "adapters": []}' > adapter_success_spotlight.json
             echo "✅ Minimal spotlight created for zero-race scenario"
           fi
 
@@ -556,22 +499,20 @@ EOF
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          cat >> $GITHUB_STEP_SUMMARY << 'EOF'
-## 🎯 Simply Success Report Generated
-
-### Mode: HTTP 200 Celebration
-- **Goal**: Count and display discovered races (no filtering)
-- **Philosophy**: Success = Job completed (HTTP 200)
-- **Result**: Artifacts available for review
-
-### Key Artifacts
-- `adapter_success_spotlight.json` - Complete success metrics
-- `qualified_races.json` - All discovered races
-- `reporter_output.log` - Execution logs
-
-### Summary
-✅ Workflow completed. Even zero races = success in this mode.
-EOF
+          echo "## 🎯 Simply Success Report Generated" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Mode: HTTP 200 Celebration" >> $GITHUB_STEP_SUMMARY
+          echo "- **Goal**: Count and display discovered races (no filtering)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Philosophy**: Success = Job completed (HTTP 200)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Result**: Artifacts available for review" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Key Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "- \`adapter_success_spotlight.json\` - Complete success metrics" >> $GITHUB_STEP_SUMMARY
+          echo "- \`qualified_races.json\` - All discovered races" >> $GITHUB_STEP_SUMMARY
+          echo "- \`reporter_output.log\` - Execution logs" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Summary" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Workflow completed. Even zero races = success in this mode." >> $GITHUB_STEP_SUMMARY
 
   # Validation stage - now simply validates that artifacts exist
   validate-results:
