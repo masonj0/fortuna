@@ -663,8 +663,10 @@ class BaseAdapterV3(ABC):
             "status": status,
             "circuit_state": self.circuit_breaker.state.value,
             "success_rate": round(self.metrics.success_rate, 3),
+            "consecutive_failures": self.metrics.consecutive_failures,
             "last_race_count": self.last_race_count,
             "last_duration_s": round(self.last_duration_s, 2),
+            "last_error": getattr(self.metrics, '_last_error', None),
         }
 
     async def reset(self) -> None:

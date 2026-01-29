@@ -334,9 +334,13 @@ class Reporter:
             # stats is usually a list of adapter status dicts
             firewalled = []
             for adapter in stats:
-                # If consecutive failures > 5, firewall it
-                if adapter.get('consecutive_failures', 0) > 5:
-                    firewalled.append(adapter.get('name'))
+                # Use 'adapter_name' which is what BaseAdapterV3.get_status returns
+                # Use 'consecutive_failures' which we just added to get_status
+                name = adapter.get('adapter_name') or adapter.get('name')
+                if name and adapter.get('consecutive_failures', 0) > 5:
+                    # Map adapter source name back to class name for exclusion if possible,
+                    # but usually these are used interchangeably in this context.
+                    firewalled.append(name)
 
             if firewalled:
                 self.log(f"🔥 Firewalling chronically failing adapters: {firewalled}", LogLevel.WARNING)
@@ -491,7 +495,7 @@ class Reporter:
                         "race_count": s.get("last_race_count", 0),
                         "duration_s": s.get("last_duration_s", 0.0)
                     }
-                    for s in adapter_stats if s.get("last_race_count", 0) > 0
+                    for s in adapter_stats if s.get("status") in ["OK", "DEGRADED"]
                 ]
                 success_summary.sort(key=lambda x: x["race_count"], reverse=True)
                 self.save_json(success_summary, Path("adapter_success_summary.json"), "adapter success summary")

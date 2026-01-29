@@ -135,8 +135,8 @@ def main():
             with open("adapter_stats.json") as f:
                 stats = json.load(f)
 
-            firewalled = [s.get('name') for s in stats if s.get('consecutive_failures', 0) > 5]
-            at_risk = [s.get('name') for s in stats if 3 < s.get('consecutive_failures', 0) <= 5]
+            firewalled = [s.get('adapter_name') or s.get('name') for s in stats if s.get('consecutive_failures', 0) > 5]
+            at_risk = [s.get('adapter_name') or s.get('name') for s in stats if 3 < s.get('consecutive_failures', 0) <= 5]
 
             if firewalled or at_risk:
                 lines.append("### 🔥 Adapter Firewall & Health\n")

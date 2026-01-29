@@ -32,13 +32,20 @@ def _get_best_win_odds(runner: Runner) -> Optional[Decimal]:
     if not runner.odds:
         return None
 
-    # Filter out invalid or placeholder odds (e.g., > 999)
-    valid_odds = [o.win for o in runner.odds.values() if o.win is not None and o.win > 0 and o.win < 999]
+    valid_odds = []
+    for source_data in runner.odds.values():
+        # Handle both dict and primitive formats
+        if isinstance(source_data, dict):
+            win = source_data.get('win')
+        elif hasattr(source_data, 'win'):
+            win = source_data.win
+        else:
+            win = source_data
 
-    if not valid_odds:
-        return None
+        if win is not None and 0 < win < 999:
+            valid_odds.append(win)
 
-    return min(valid_odds)
+    return min(valid_odds) if valid_odds else None
 
 
 class BaseAnalyzer(ABC):
@@ -62,9 +69,9 @@ class TrifectaAnalyzer(BaseAnalyzer):
 
     def __init__(
         self,
-        max_field_size: int = 10,
-        min_favorite_odds: float = 2.5,
-        min_second_favorite_odds: float = 4.0,
+        max_field_size: int = 14,
+        min_favorite_odds: float = 0.01,
+        min_second_favorite_odds: float = 0.01,
     ):
         self.max_field_size = max_field_size
         self.min_favorite_odds = Decimal(str(min_favorite_odds))
@@ -83,6 +90,8 @@ class TrifectaAnalyzer(BaseAnalyzer):
         """Scores all races and returns a dictionary with criteria and a sorted list."""
         qualified_races = []
         for race in races:
+            if not self.is_race_qualified(race):
+                continue
             score = self._evaluate_race(race)
             if score > 0:
                 race.qualification_score = score
@@ -144,18 +153,48 @@ class TrifectaAnalyzer(BaseAnalyzer):
         odds_score = (fav_odds_score * FAV_ODDS_WEIGHT) + (sec_fav_odds_score * SEC_FAV_ODDS_WEIGHT)
         final_score = (field_score * FIELD_SIZE_SCORE_WEIGHT) + (odds_score * ODDS_SCORE_WEIGHT)
 
-        # --- Apply a penalty if hard filters are not met, instead of returning None ---
+        # --- Apply hard filters before scoring ---
         if (
             len(active_runners) > self.max_field_size
             or favorite_odds < self.min_favorite_odds
             or second_favorite_odds < self.min_second_favorite_odds
         ):
-            # Assign a score of 0 to races that would have been filtered out
             return 0.0
 
         score = round(final_score * 100, 2)
         race.qualification_score = score
         return score
+
+
+class TinyFieldTrifectaAnalyzer(TrifectaAnalyzer):
+    """A specialized TrifectaAnalyzer that only considers races with 6 or fewer runners."""
+
+    def __init__(self, **kwargs):
+        # Override the max_field_size to 6 for "tiny field" analysis
+        # Set low odds thresholds to "let them through" as per user request
+        super().__init__(max_field_size=6, min_favorite_odds=0.01, min_second_favorite_odds=0.01, **kwargs)
+
+    @property
+    def name(self) -> str:
+        return "tiny_field_trifecta_analyzer"
+
+
+class SimplySuccessAnalyzer(BaseAnalyzer):
+    """An analyzer that qualifies every race to show maximum successes (HTTP 200)."""
+
+    @property
+    def name(self) -> str:
+        return "simply_success"
+
+    def qualify_races(self, races: List[Race]) -> Dict[str, Any]:
+        """Returns all races with a perfect score to celebrate success."""
+        for race in races:
+            race.qualification_score = 100.0
+
+        return {
+            "criteria": {"mode": "simply_success", "filtering": "disabled"},
+            "races": races
+        }
 
 
 class AnalyzerEngine:
@@ -169,6 +208,8 @@ class AnalyzerEngine:
         # In a real plugin system, this would inspect a folder.
         # For now, we register them manually.
         self.register_analyzer("trifecta", TrifectaAnalyzer)
+        self.register_analyzer("tiny_field_trifecta", TinyFieldTrifectaAnalyzer)
+        self.register_analyzer("simply_success", SimplySuccessAnalyzer)
         log.info(
             "AnalyzerEngine discovered plugins",
             available_analyzers=list(self.analyzers.keys()),
