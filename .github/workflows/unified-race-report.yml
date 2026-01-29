@@ -55,8 +55,8 @@ on:
       - '.github/workflows/unified-race-report.yml'
 
 concurrency:
-  group: race-report-${{ github.ref }}-${{ github.event_name }}
-  cancel-in-progress: true
+  group: race-report-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
 
 env:
   PYTHON_VERSION: '3.10.12'
@@ -157,7 +157,10 @@ jobs:
 
       - name: 'Run Security Scans'
         run: |
-          pip install pip-audit safety bandit
+          pip install \
+            pip-audit==2.7.3 \
+            safety==3.2.0 \
+            bandit==1.7.9
 
           echo "=== pip-audit ==="
           pip-audit -r web_service/backend/requirements.txt \
@@ -203,10 +206,9 @@ jobs:
           path: |
             ~/.cache/ms-playwright
             ~/.camoufox
-          key: browsers-canary-${{ runner.os }}-${{ hashFiles('web_service/backend/requirements.txt') }}
+          key: browsers-v1-${{ runner.os }}-${{ hashFiles('web_service/backend/requirements.txt') }}
           restore-keys: |
-            browsers-canary-${{ runner.os }}-
-            browsers-${{ runner.os }}-
+            browsers-v1-${{ runner.os }}-
 
       - name: 'Install System Dependencies'
         if: env.IS_QUICK != 'true'
@@ -226,28 +228,11 @@ jobs:
 
       - name: 'Start Display'
         if: env.IS_QUICK != 'true'
-        run: |
-          # Kill any existing Xvfb
-          sudo pkill -9 Xvfb || true
-          sleep 1
-
-          # Start fresh Xvfb
-          sudo Xvfb :99 -screen 0 1280x720x24 &
-
-          # Wait and verify
-          echo "Waiting for Xvfb display :99..."
-          for i in {1..30}; do
-            if xset -display :99 q &>/dev/null; then
-              echo "✓ Xvfb ready"
-              break
-            fi
-            echo "  Attempt $i/30..."
-            sleep 1
-          done
+        uses: ./.github/actions/setup-display
 
       - name: '🏥 Canary Health Check'
         id: canary
-        timeout-minutes: 10
+        timeout-minutes: 12
         env:
           DISPLAY: ':99'
           PYTHONPATH: ${{ github.workspace }}
@@ -268,17 +253,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: [setup, canary-check]
     if: always() && needs.setup.outputs.run_full_report == 'true'
-    timeout-minutes: 120
+    timeout-minutes: 100
     strategy:
       fail-fast: false
       matrix:
         analyzer: ${{ fromJson(needs.setup.outputs.matrix) }}
-
-    outputs:
-      status: ${{ steps.reporter.outputs.status }}
-      race_count: ${{ steps.reporter.outputs.race_count }}
-      adapters_succeeded: ${{ steps.reporter.outputs.adapters_succeeded }}
-      adapters_failed: ${{ steps.reporter.outputs.adapters_failed }}
 
     steps:
       - uses: actions/checkout@v4
@@ -296,10 +275,9 @@ jobs:
           path: |
             ~/.cache/ms-playwright
             ~/.camoufox
-          key: browsers-report-${{ runner.os }}-${{ hashFiles('web_service/backend/requirements.txt') }}
+          key: browsers-v1-${{ runner.os }}-${{ hashFiles('web_service/backend/requirements.txt') }}
           restore-keys: |
-            browsers-report-${{ runner.os }}-
-            browsers-${{ runner.os }}-
+            browsers-v1-${{ runner.os }}-
 
       - name: 'Install System Dependencies'
         run: |
@@ -316,23 +294,12 @@ jobs:
           playwright install chromium --with-deps
 
       - name: 'Start X Display Server'
-        run: |
-          sudo pkill -9 Xvfb || true
-          sleep 1
-          sudo Xvfb :99 -screen 0 1280x720x24 > /tmp/xvfb.log 2>&1 &
-          echo "Waiting for Xvfb..."
-          for i in {1..30}; do
-            if xset -display :99 q &>/dev/null; then
-              echo "✓ Xvfb ready on display :99"
-              break
-            fi
-            sleep 1
-          done
+        uses: ./.github/actions/setup-display
 
       - name: '📊 Generate Report (Simply Success Mode)'
         id: reporter
         continue-on-error: true
-        timeout-minutes: 90
+        timeout-minutes: 80
         env:
           PYTHONPATH: ${{ github.workspace }}
           DISPLAY: ':99'
@@ -351,7 +318,6 @@ jobs:
 
           # Run reporter with simply_success analyzer
           python -u scripts/fortuna_reporter.py 2>&1 | tee reporter_output.log
-
           EXIT_CODE=${PIPESTATUS[0]}
 
           echo ""
@@ -359,41 +325,14 @@ jobs:
           echo "Report generation exit code: $EXIT_CODE"
           echo "═══════════════════════════════════════════════"
 
-          if [ $EXIT_CODE -eq 0 ]; then
-            STATUS="success"
-            echo "✅ Reporter executed successfully"
-          else
-            STATUS="completed_with_errors"
-            echo "⚠️ Reporter completed with exit code $EXIT_CODE"
+          exit $EXIT_CODE
+
+      - name: 'Check Reporter Outcome'
+        if: always()
+        run: |
+          if [ "${{ steps.reporter.outcome }}" == "failure" ]; then
+            echo "::warning::Reporter had issues but workflow continues (Simply Success mode)"
           fi
-
-          # Extract metrics - now counting races regardless of filtering
-          if [ -f "qualified_races.json" ]; then
-            RACE_COUNT=$(jq '.races | length' qualified_races.json 2>/dev/null || echo "0")
-            echo "📊 Total races discovered: $RACE_COUNT"
-          else
-            RACE_COUNT="0"
-            echo "⚠️ No qualified_races.json found, race count set to 0"
-          fi
-
-          # Count adapters from adapter_stats.json if it exists
-          if [ -f "adapter_stats.json" ]; then
-            SUCCEEDED=$(jq '[.[] | select(.status == "OK")] | length' adapter_stats.json 2>/dev/null || echo "0")
-            FAILED=$(jq '[.[] | select(.status != "OK")] | length' adapter_stats.json 2>/dev/null || echo "0")
-          else
-            SUCCEEDED=$(grep -c "✓\|SUCCESS\|200" reporter_output.log 2>/dev/null || echo "0")
-            FAILED=$(grep -c "✗\|FAILED\|ERROR" reporter_output.log 2>/dev/null || echo "0")
-          fi
-
-          echo "status=$STATUS" >> $GITHUB_OUTPUT
-          echo "race_count=$RACE_COUNT" >> $GITHUB_OUTPUT
-          echo "adapters_succeeded=${SUCCEEDED}" >> $GITHUB_OUTPUT
-          echo "adapters_failed=${FAILED}" >> $GITHUB_OUTPUT
-
-          # ===== IMPORTANT: Never fail on zero races =====
-          # In Simply Success mode, we celebrate that the job finished.
-          # Zero races is acceptable and shows the system is working.
-          exit 0
 
       - name: '📊 Extract Adapter Success Spotlight'
         if: always()  # Always run, even if reporter had issues
@@ -492,7 +431,7 @@ jobs:
             debug-output/
           retention-days: ${{ env.REPORT_RETENTION_DAYS }}
           if-no-files-found: warn
-          compression-level: 9
+          compression-level: 6
 
       - name: '📝 Generate Summary (Simply Success Mode)'
         if: always()
@@ -589,7 +528,7 @@ jobs:
 
   # Workflow run cleanup
   cleanup:
-    needs: [generate-unified-report, validate-results]
+    needs: [setup, security-scan, generate-unified-report, validate-results]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -607,9 +546,9 @@ jobs:
       issues: write
       contents: read
     if: |
-      always() && (
-        needs.canary-check.outputs.should_alert == 'true'
-      )
+      always() &&
+      needs.canary-check.result == 'success' &&
+      needs.canary-check.outputs.should_alert == 'true'
 
     steps:
       - name: '⚠️ Create Alert (Only for Critical Issues)'
@@ -626,6 +565,7 @@ jobs:
             }
 
             const title = `⚠️ CANARY ALERT: Race Pipeline - ${today}`;
+            const alertLabel = 'pipeline-alert';
 
             let body = `## Canary Health Alert\n\n`;
             body += `| Property | Value |\n`;
@@ -644,7 +584,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               state: 'open',
-              labels: 'pipeline-alert',
+              labels: alertLabel,
               per_page: 5
             });
 
@@ -664,7 +604,7 @@ jobs:
                 repo: context.repo.repo,
                 title: title,
                 body: body,
-                labels: ['automated', 'pipeline-alert:warning']
+                labels: ['automated', alertLabel]
               });
               console.log('Created new canary alert issue');
             }
