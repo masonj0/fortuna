@@ -367,6 +367,7 @@ class BaseAdapterV3(ABC):
         Orchestrates the fetch-then-parse pipeline for the adapter.
         This public method should not be overridden by subclasses.
         """
+        self._last_date = date  # Store date for Link Healer context
         raw_data = None
 
         # Check for manual override data first
@@ -520,6 +521,40 @@ class BaseAdapterV3(ABC):
 
             # Re-raise as a standard adapter error for consistent downstream handling
             status_code = getattr(getattr(e, 'response', None), 'status', 503)
+
+            # --- LINK HEALER INTEGRATION ---
+            # If we get a 404, try to heal the URL before giving up
+            if status_code == 404 and not kwargs.get('_is_healing_retry'):
+                try:
+                    try:
+                        from ..utilities.link_healer import heal_url
+                    except (ImportError, ValueError):
+                        from python_service.utilities.link_healer import heal_url
+
+                    self.logger.info("404 detected, attempting Link Healing...", url=full_url)
+
+                    # Extract context for healing if provided, otherwise build basic context
+                    healer_context = kwargs.get('healer_context', {})
+                    if 'date' not in healer_context and hasattr(self, '_last_date'):
+                        healer_context['date'] = getattr(self, '_last_date')
+
+                    healed_url = await heal_url(self.source_name, full_url, healer_context)
+
+                    if healed_url and healed_url != full_url:
+                        self.logger.info("🔗 Link Healer found replacement!",
+                                         original=full_url, healed=healed_url)
+
+                        # Retry with the healed URL
+                        new_kwargs = kwargs.copy()
+                        new_kwargs['_is_healing_retry'] = True
+                        new_kwargs.pop('healer_context', None) # Don't pass context to retry
+
+                        return await self.make_request(method, healed_url, **new_kwargs)
+                except Exception as healer_err:
+                    self.logger.warning("Link Healer encountered an error",
+                                        error=str(healer_err))
+            # -------------------------------
+
             raise AdapterHttpError(
                 adapter_name=self.source_name, status_code=status_code, url=full_url
             ) from e
@@ -631,8 +666,10 @@ class BaseAdapterV3(ABC):
             "status": status,
             "circuit_state": self.circuit_breaker.state.value,
             "success_rate": round(self.metrics.success_rate, 3),
+            "consecutive_failures": self.metrics.consecutive_failures,
             "last_race_count": self.last_race_count,
             "last_duration_s": round(self.last_duration_s, 2),
+            "last_error": getattr(self.metrics, '_last_error', None),
         }
 
     async def reset(self) -> None:

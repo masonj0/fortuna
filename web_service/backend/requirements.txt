@@ -16,6 +16,7 @@ pydantic-core==2.14.1
 pydantic-settings==2.1.0
 
 # Asgi Http
+aiohttp==3.9.1
 anyio==3.7.1
 h11==0.14.0
 h2==4.1.0
