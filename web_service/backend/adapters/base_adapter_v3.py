@@ -207,6 +207,7 @@ class AdapterMetrics:
     _total_requests: int = field(default=0, repr=False)
     _successful_requests: int = field(default=0, repr=False)
     _failed_requests: int = field(default=0, repr=False)
+    _consecutive_failures: int = field(default=0, repr=False)
     _total_latency_ms: float = field(default=0.0, repr=False)
     _last_success: float | None = field(default=None, repr=False)
     _last_failure: float | None = field(default=None, repr=False)
@@ -232,6 +233,7 @@ class AdapterMetrics:
         async with self._lock:
             self._total_requests += 1
             self._successful_requests += 1
+            self._consecutive_failures = 0
             self._total_latency_ms += latency_ms
             self._last_success = time.time()
 
@@ -239,14 +241,13 @@ class AdapterMetrics:
         async with self._lock:
             self._total_requests += 1
             self._failed_requests += 1
+            self._consecutive_failures += 1
             self._last_failure = time.time()
             self._last_error = error
 
     @property
     def consecutive_failures(self) -> int:
-        # This is a bit tricky with the current lock-only metrics,
-        # but we can track it if we add a field.
-        return getattr(self, "_consecutive_failures", 0)
+        return self._consecutive_failures
 
     def snapshot(self) -> dict[str, Any]:
         """Return a point-in-time snapshot of metrics."""
