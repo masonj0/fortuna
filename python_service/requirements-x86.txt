@@ -206,7 +206,7 @@ wheel==0.45.1
     # via
     #   -r python_service/requirements.in
     #   pip-tools
-wrapt==2.0.1
+wrapt==2.1.1
     # via deprecated
 
 # The following packages are considered to be unsafe in a requirements file:
