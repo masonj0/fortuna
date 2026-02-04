@@ -203,7 +203,7 @@ sortedcontainers==2.4.0
     # via
     #   cyclonedx-python-lib
     #   fakeredis
-streamlit==1.53.1
+streamlit==1.54.0
     # via -r requirements-dev.in
 tabula-py==2.10.0
     # via -r requirements-dev.in
