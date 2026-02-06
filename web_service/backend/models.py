@@ -1,6 +1,6 @@
 # python_service/models.py
 
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from decimal import Decimal
 from typing import Annotated, Any, Callable, Dict, List, Optional
 
@@ -37,7 +37,8 @@ class Runner(FortunaBaseModel):
     name: str
     number: Optional[int] = Field(None, alias="saddleClothNumber")
     scratched: bool = False
-    odds: Dict[str, OddsData] = {}
+    odds: Dict[str, OddsData] = Field(default_factory=dict)
+    win_odds: Optional[float] = Field(None, alias="winOdds")
     jockey: Optional[str] = None
     trainer: Optional[str] = None
     metadata: Dict[str, Any] = {}

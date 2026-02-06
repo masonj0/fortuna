@@ -117,7 +117,6 @@ class SmartFetcher:
 
     # Global shared session pool
     _shared_fetchers: Dict[BrowserEngine, Any] = {}
-    _shared_httpx_client: Optional[httpx.AsyncClient] = None
     _shared_lock = asyncio.Lock()
 
     def __init__(self, strategy: FetchStrategy = None):
@@ -311,9 +310,10 @@ class SmartFetcher:
                 self._shared_fetchers[engine] = fetcher
 
             elif engine == BrowserEngine.HTTPX:
-                if self._shared_httpx_client is None:
-                    self._shared_httpx_client = httpx.AsyncClient(follow_redirects=True)
-                return self._shared_httpx_client
+                return await GlobalResourceManager.get_httpx_client()
+
+            else:
+                raise ValueError(f"No global fetcher required for engine: {engine}")
 
             else:
                 raise ValueError(f"No global fetcher required for engine: {engine}")
