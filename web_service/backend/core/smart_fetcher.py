@@ -315,9 +315,6 @@ class SmartFetcher:
             else:
                 raise ValueError(f"No global fetcher required for engine: {engine}")
 
-            else:
-                raise ValueError(f"No global fetcher required for engine: {engine}")
-
             return self._shared_fetchers[engine]
 
     def _is_bot_detected(self, response_text: str) -> bool:
