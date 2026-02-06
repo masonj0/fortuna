@@ -41,6 +41,39 @@ async def heal_url(adapter_name: str, url: str, context: Optional[Dict[str, Any]
 
     return None
 
+def get_healing_report() -> Dict[str, Any]:
+    """Returns a global healing report (placeholder for now)."""
+    return {"status": "active", "healed_count": 0}
+
+class LinkHealer:
+    """Context manager and helper for link healing."""
+    def __init__(self, adapter_name: str):
+        self.adapter_name = adapter_name
+        self.history = []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        pass
+
+    async def heal_url(self, url: str, context: Optional[Dict[str, Any]] = None) -> Optional[str]:
+        res = await heal_url(self.adapter_name, url, context)
+        if res:
+            self.history.append({
+                "original": url,
+                "healed": res,
+                "timestamp": datetime.now().isoformat()
+            })
+        return res
+
+    def get_healing_report(self) -> Dict[str, Any]:
+        return {
+            "adapter": self.adapter_name,
+            "history": self.history,
+            "success_count": len(self.history)
+        }
+
 def _heal_by_pattern(url: str) -> Optional[str]:
     """Fix common URL structure issues."""
     # Remove trailing .html if it might be an API

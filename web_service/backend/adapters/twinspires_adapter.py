@@ -12,19 +12,21 @@ import asyncio
 import logging
 import os
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from scrapling.parser import Selector
 
 from ..models import OddsData, Race, Runner
-from ..utils.odds import parse_odds_to_decimal
+from ..utils.odds import parse_odds_to_decimal, SmartOddsExtractor
+from ..utils.text import normalize_venue_name
 from .base_adapter_v3 import BaseAdapterV3
 from .constants import MAX_VALID_ODDS
 from .mixins import DebugMixin
 from .utils.odds_validator import create_odds_data
-from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy, StealthMode
+from ..core.smart_fetcher import BrowserEngine, FetchStrategy, StealthMode
+from ..utils.odds import SmartOddsExtractor
 
 logger = logging.getLogger(__name__)
 
@@ -236,7 +238,7 @@ class TwinSpiresAdapter(DebugMixin, BaseAdapterV3):
         """Extract data from a single race element."""
         try:
             # Get HTML string
-            html = str(race_elem.html) if hasattr(race_elem, 'html') else str(race_elem)
+            html_str = str(race_elem.html) if hasattr(race_elem, 'html') else str(race_elem)
 
             # Extract track name
             track_name = self._find_with_selectors(race_elem, self.TRACK_NAME_SELECTORS)
@@ -254,13 +256,22 @@ class TwinSpiresAdapter(DebugMixin, BaseAdapterV3):
             # Extract post time
             post_time_text = self._find_with_selectors(race_elem, self.POST_TIME_SELECTORS)
 
+            # Capture available bets
+            available_bets = []
+            html_lower = html_str.lower()
+            for kw in ["superfecta", "trifecta", "exacta", "quinella"]:
+                if kw in html_lower:
+                    available_bets.append(kw.capitalize())
+
             return {
-                "html": html,
+                "html": html_str,
                 "track": track_name.strip(),
                 "race_number": race_number,
                 "post_time_text": post_time_text,
                 "date": date,
                 "full_page": False,
+                "available_bets": available_bets,
+                "distance": self._find_with_selectors(race_elem, ['[class*="distance"]', '[class*="Distance"]', '[data-distance]', ".race-distance"])
             }
 
         except Exception as e:
@@ -337,15 +348,20 @@ class TwinSpiresAdapter(DebugMixin, BaseAdapterV3):
         # Parse runners
         runners = self._parse_runners(page)
 
-        # Generate race ID
-        track_id = re.sub(r'[^a-z0-9]', '', track_name.lower())
-        date_compact = date_str.replace('-', '')
-
         # Determine discipline
         discipline = race_data.get("assigned_discipline") or self._detect_discipline(page, html_content)
 
-        disc_suffix = discipline[0].lower() if discipline else "t"
-        race_id = f"ts_{track_id}_{date_compact}_{disc_suffix}{race_number}"
+        # Generate race ID
+        track_id = re.sub(r'[^a-z0-9]', '', track_name.lower())
+        date_compact = date_str.replace('-', '')
+        disc_suffix = ""
+        if discipline:
+            dl = discipline.lower()
+            if "harness" in dl: disc_suffix = "_h"
+            elif "greyhound" in dl: disc_suffix = "_g"
+            elif "quarter" in dl: disc_suffix = "_q"
+
+        race_id = f"ts_{track_id}_{date_compact}_R{race_number}{disc_suffix}"
 
         return Race(
             id=race_id,
@@ -355,6 +371,8 @@ class TwinSpiresAdapter(DebugMixin, BaseAdapterV3):
             discipline=discipline,
             runners=runners,
             source=self.source_name,
+            distance=race_data.get("distance"),
+            metadata={"available_bets": race_data.get("available_bets", [])}
         )
 
     def _parse_post_time(
@@ -537,11 +555,17 @@ class TwinSpiresAdapter(DebugMixin, BaseAdapterV3):
                         odds_text = odds_elem.text.strip() if hasattr(odds_elem, 'text') else None
                         if odds_text and odds_text.upper() not in ['SCR', 'SCRATCHED', '--', 'N/A']:
                             win_odds = parse_odds_to_decimal(odds_text)
-                            if odds_data := create_odds_data(self.source_name, win_odds):
-                                odds[self.source_name] = odds_data
+                            if win_odds:
                                 break
                 except Exception:
                     continue
+
+            # Advanced heuristic fallback
+            if win_odds is None:
+                win_odds = SmartOddsExtractor.extract_from_node(elem)
+
+            if win_odds:
+                odds[self.source_name] = OddsData(win=win_odds, source=self.source_name, last_updated=datetime.now(timezone.utc))
 
         return Runner(
             number=number,

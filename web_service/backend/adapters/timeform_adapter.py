@@ -3,21 +3,21 @@
 import asyncio
 import re
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, List, Optional
 
 from selectolax.parser import HTMLParser, Node
 
-from ..models import Race, Runner
-from ..utils.odds import parse_odds_to_decimal
+from ..models import Race, Runner, OddsData
+from ..utils.odds import parse_odds_to_decimal, SmartOddsExtractor
 from ..utils.text import clean_text, normalize_venue_name
 from .base_adapter_v3 import BaseAdapterV3
-from .mixins import BrowserHeadersMixin, DebugMixin
+from .mixins import BrowserHeadersMixin, DebugMixin, JSONParsingMixin
 from .utils.odds_validator import create_odds_data
-from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy
+from ..core.smart_fetcher import BrowserEngine, FetchStrategy
 
 
-class TimeformAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
+class TimeformAdapter(JSONParsingMixin, BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
     """
     Adapter for timeform.com, migrated to BaseAdapterV3 and standardized on selectolax.
     """
@@ -31,7 +31,7 @@ class TimeformAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
 
     def _configure_fetch_strategy(self) -> FetchStrategy:
         """Timeform works with HTTPX and good headers."""
-        return FetchStrategy(primary_engine=BrowserEngine.HTTPX, enable_js=False)
+        return FetchStrategy(primary_engine=BrowserEngine.CURL_CFFI, enable_js=False)
 
     def _get_headers(self) -> dict:
         headers = self._get_browser_headers(host="www.timeform.com")
@@ -200,9 +200,13 @@ class TimeformAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
                 if odds_tag:
                     win_odds = parse_odds_to_decimal(clean_text(odds_tag.text()))
 
+            # Advanced heuristic fallback
+            if win_odds is None:
+                win_odds = SmartOddsExtractor.extract_from_node(row)
+
             odds_data = {}
-            if odds_val := create_odds_data(self.source_name, win_odds):
-                odds_data[self.source_name] = odds_val
+            if win_odds:
+                odds_data[self.source_name] = OddsData(win=win_odds, source=self.source_name, last_updated=datetime.now(timezone.utc))
 
             return Runner(number=number, name=name, odds=odds_data)
         except (AttributeError, ValueError, TypeError):

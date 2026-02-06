@@ -25,7 +25,11 @@ print("\n" + "="*70)
 print("FRONTEND VALIDATION")
 print("="*70)
 
-frontend_out = project_root / 'web_service' / 'frontend' / 'public'
+# Try 'out' first (Next.js export), then 'public'
+frontend_out = project_root / 'web_service' / 'frontend' / 'out'
+if not frontend_out.exists():
+    frontend_out = project_root / 'web_service' / 'frontend' / 'public'
+
 print(f"Looking for frontend at: {frontend_out}")
 print(f"Exists: {frontend_out.exists()}")
 
@@ -47,16 +51,20 @@ if frontend_out.exists():
             print(f"  - {item.name}")
         sys.exit(1)
 else:
-    print(f"[ERROR] FATAL: Frontend 'public' directory not found!")
-    print(f"\nSearching for 'public' directory from project root:")
+    print(f"[ERROR] FATAL: Frontend 'out' or 'public' directory not found!")
+    print(f"\nSearching for 'out' or 'public' directory from project root:")
     for root, dirs, files in os.walk(project_root):
-        if 'public' in dirs:
-            out_path = Path(root) / 'public'
-            print(f"  Found at: {out_path}")
-            if (out_path / 'index.html').exists():
-                print(f"    [OK] Has index.html")
-                frontend_out = out_path
-                break
+        for target in ['out', 'public']:
+            if target in dirs:
+                out_path = Path(root) / target
+                print(f"  Found '{target}' at: {out_path}")
+                if (out_path / 'index.html').exists():
+                    print(f"    [OK] Has index.html")
+                    frontend_out = out_path
+                    break
+        else:
+            continue
+        break
     else:
         print(f"  Not found anywhere!")
         sys.exit(1)
