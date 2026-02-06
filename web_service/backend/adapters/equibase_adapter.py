@@ -8,11 +8,10 @@ from typing import Optional
 from selectolax.parser import HTMLParser
 from selectolax.parser import Node
 
-from ..models import Race
-from ..models import Runner
-from ..utils.odds import parse_odds_to_decimal
+from ..models import Race, Runner, OddsData
+from ..utils.odds import parse_odds_to_decimal, SmartOddsExtractor
 from ..utils.text import clean_text
-from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy
+from ..core.smart_fetcher import BrowserEngine, FetchStrategy
 from .base_adapter_v3 import BaseAdapterV3
 from .mixins import BrowserHeadersMixin, DebugMixin
 from .utils.odds_validator import create_odds_data
@@ -134,6 +133,13 @@ class EquibaseAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
                 if not runners:
                     continue
 
+                # Available bets
+                available_bets = []
+                html_lower = html.lower()
+                for kw in ["superfecta", "trifecta", "exacta", "quinella"]:
+                    if kw in html_lower:
+                        available_bets.append(kw.capitalize())
+
                 race = Race(
                     id=f"eqb_{venue.lower().replace(' ', '')}_{date}_{race_number}",
                     venue=venue,
@@ -141,6 +147,7 @@ class EquibaseAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
                     start_time=start_time,
                     runners=runners,
                     source=self.source_name,
+                    metadata={"available_bets": available_bets}
                 )
                 all_races.append(race)
             except (AttributeError, ValueError):
@@ -163,13 +170,18 @@ class EquibaseAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
             odds_node = node.css_first("td:nth-child(10)")
             odds_str = clean_text(odds_node.text()) if odds_node else ""
 
-            scratched = "scratched" in node.attributes.get("class", "").lower()
+            scratched = "scratched" in node.attributes.get("class", "").lower() or "SCR" in (clean_text(node.text()) or "")
 
             odds = {}
             if not scratched:
                 win_odds = parse_odds_to_decimal(odds_str)
-                if odds_data := create_odds_data(self.source_name, win_odds):
-                    odds[self.source_name] = odds_data
+
+                # Advanced heuristic fallback
+                if win_odds is None:
+                    win_odds = SmartOddsExtractor.extract_from_node(node)
+
+                if win_odds:
+                    odds[self.source_name] = OddsData(win=win_odds, source=self.source_name, last_updated=datetime.now(timezone.utc))
             return Runner(number=number, name=name, odds=odds, scratched=scratched)
         except (ValueError, AttributeError, IndexError):
             self.logger.warning("Could not parse Equibase runner, skipping.", exc_info=True)
@@ -183,9 +195,14 @@ class EquibaseAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
             if len(parts) >= 2:
                 time_part = f"{parts[0]} {parts[1]}"
                 dt_str = f"{date_str} {time_part}"
-                return datetime.strptime(dt_str, "%Y-%m-%d %I:%M %p")
+                dt = datetime.strptime(dt_str, "%Y-%m-%d %I:%M %p")
+                return dt.replace(tzinfo=timezone.utc)
         except Exception:
             self.logger.warning(f"Failed to parse post time: {time_str}")
 
-        # Fallback to a safe default
-        return datetime.now()
+        # Fallback to noon UTC for the given date if time parsing fails
+        try:
+            dt = datetime.strptime(date_str, "%Y-%m-%d")
+            return dt.replace(hour=12, minute=0, tzinfo=timezone.utc)
+        except:
+            return datetime.now(timezone.utc)

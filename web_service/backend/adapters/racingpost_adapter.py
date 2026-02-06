@@ -11,7 +11,7 @@ from ..utils.text import clean_text, normalize_venue_name
 from .base_adapter_v3 import BaseAdapterV3
 from .mixins import BrowserHeadersMixin, DebugMixin
 from .utils.odds_validator import create_odds_data
-from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy, StealthMode
+from ..core.smart_fetcher import BrowserEngine, FetchStrategy, StealthMode
 
 
 class RacingPostAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):

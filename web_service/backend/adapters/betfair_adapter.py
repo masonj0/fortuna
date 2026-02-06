@@ -5,7 +5,7 @@ from datetime import timedelta
 from typing import Any
 from typing import List
 
-from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy
+from ..core.smart_fetcher import BrowserEngine, FetchStrategy
 from ..models import Race
 from ..models import Runner
 from .base_adapter_v3 import BaseAdapterV3

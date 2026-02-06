@@ -4,7 +4,7 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy
+from ..core.smart_fetcher import BrowserEngine, FetchStrategy
 from ..core.exceptions import AdapterConfigError
 from ..models import Race, Runner
 from .base_adapter_v3 import BaseAdapterV3
