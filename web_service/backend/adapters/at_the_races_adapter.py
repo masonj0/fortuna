@@ -3,7 +3,7 @@
 
 import asyncio
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, List, Optional
 
 from selectolax.parser import HTMLParser, Node
@@ -14,6 +14,7 @@ from ..utils.text import clean_text, normalize_venue_name
 from .base_adapter_v3 import BaseAdapterV3
 from .mixins import BrowserHeadersMixin, DebugMixin, RacePageFetcherMixin
 from .utils.odds_validator import create_odds_data
+from ..core.exceptions import AdapterHttpError
 from ..core.smart_fetcher import BrowserEngine, FetchStrategy
 
 

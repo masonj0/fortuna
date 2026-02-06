@@ -1,6 +1,6 @@
 # python_service/adapters/equibase_adapter.py
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 from typing import List
 from typing import Optional
