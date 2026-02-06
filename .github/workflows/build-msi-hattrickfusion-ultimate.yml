@@ -20,7 +20,7 @@ env:
   TVG_API_KEY: mock
   GREYHOUND_API_URL: http://mock
   FORTUNA_ENV: smoke-test
-  FRONTEND_DIR: 'web_platform/frontend'
+  FRONTEND_DIR: 'web_service/frontend'
   BACKEND_DIR: 'web_service/backend'
   WIX_DIR: 'build_wix'
 
