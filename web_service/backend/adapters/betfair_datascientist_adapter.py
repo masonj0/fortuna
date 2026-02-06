@@ -10,7 +10,7 @@ from ..models import Race, Runner
 from ..utils.text import normalize_venue_name
 from .base_adapter_v3 import BaseAdapterV3
 from .utils.odds_validator import create_odds_data
-from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy
+from ..core.smart_fetcher import BrowserEngine, FetchStrategy
 
 
 class BetfairDataScientistAdapter(BaseAdapterV3):

@@ -7,7 +7,7 @@ from typing import Optional
 from selectolax.parser import HTMLParser
 from dateutil.parser import parse as parse_time
 
-from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy
+from ..core.smart_fetcher import BrowserEngine, FetchStrategy
 from ..models import Race
 from ..models import Runner
 from ..utils.odds import parse_odds_to_decimal

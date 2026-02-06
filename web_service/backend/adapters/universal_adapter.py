@@ -6,7 +6,7 @@ from selectolax.parser import HTMLParser
 
 from ..models import Race
 from .base_adapter_v3 import BaseAdapterV3
-from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy
+from ..core.smart_fetcher import BrowserEngine, FetchStrategy
 
 
 class UniversalAdapter(BaseAdapterV3):
