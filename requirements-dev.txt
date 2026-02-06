@@ -240,3 +240,4 @@ watchdog==6.0.0
 
 # The following packages are considered to be unsafe in a requirements file:
 # pip
+curl-cffi==0.7.2

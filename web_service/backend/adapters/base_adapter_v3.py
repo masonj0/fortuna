@@ -558,14 +558,17 @@ class BaseAdapterV3(ABC):
                     except (ImportError, ValueError):
                         heal_url = None
 
-                    self.logger.info("404 detected, attempting Link Healing...", url=full_url)
+                    if heal_url:
+                        self.logger.info("404 detected, attempting Link Healing...", url=full_url)
 
-                    # Extract context for healing if provided, otherwise build basic context
-                    healer_context = kwargs.get('healer_context', {})
-                    if 'date' not in healer_context and hasattr(self, '_last_date'):
-                        healer_context['date'] = getattr(self, '_last_date')
+                        # Extract context for healing if provided, otherwise build basic context
+                        healer_context = kwargs.get('healer_context', {})
+                        if 'date' not in healer_context and hasattr(self, '_last_date'):
+                            healer_context['date'] = getattr(self, '_last_date')
 
-                    healed_url = await heal_url(self.source_name, full_url, healer_context)
+                        healed_url = await heal_url(self.source_name, full_url, healer_context)
+                    else:
+                        healed_url = None
 
                     if healed_url and healed_url != full_url:
                         self.logger.info("🔗 Link Healer found replacement!",

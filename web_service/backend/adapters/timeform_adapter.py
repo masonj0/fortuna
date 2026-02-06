@@ -3,7 +3,7 @@
 import asyncio
 import re
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, List, Optional
 
 from selectolax.parser import HTMLParser, Node

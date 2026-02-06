@@ -275,7 +275,7 @@ class SmartFetcher:
         """Get engines sorted by health score (best first)"""
         return sorted(
             BrowserEngine,
-            key=lambda e: self._engine_health[e],
+            key=lambda e: self._engine_health.get(e, 0.0),
             reverse=True
         )
 
@@ -450,8 +450,8 @@ class SmartFetcher:
         return {
             "engines": {
                 engine.value: {
-                    "health": self._engine_health[engine],
-                    "status": "operational" if self._engine_health[engine] > 0.5 else "degraded"
+                    "health": self._engine_health.get(engine, 0.0),
+                    "status": "operational" if self._engine_health.get(engine, 0.0) > 0.5 else "degraded"
                 }
                 for engine in BrowserEngine
             },

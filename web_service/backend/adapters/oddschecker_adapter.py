@@ -1,7 +1,7 @@
 # python_service/adapters/oddschecker_adapter.py
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, List, Optional
 
 from selectolax.parser import HTMLParser, Node
