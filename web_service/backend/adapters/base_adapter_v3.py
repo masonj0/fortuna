@@ -21,7 +21,7 @@ from tenacity import (
     wait_exponential,
 )
 
-from python_service.core.smart_fetcher import (
+from ..core.smart_fetcher import (
     BrowserEngine,
     FetchStrategy,
     SmartFetcher,
@@ -34,6 +34,7 @@ from ..models import Race
 from ..validators import DataValidationPipeline
 
 T = TypeVar("T")
+DEFAULT_ODDS_FALLBACK = 2.75
 
 
 class CircuitState(Enum):
@@ -411,6 +412,32 @@ class BaseAdapterV3(ABC):
             )
             raise AdapterParsingError(self.source_name, "Parsing logic failed.") from e
 
+        for r in parsed_races:
+            # Global heuristic for runner numbers (addressing "impossible" high numbers)
+            active_runners = [run for run in r.runners if not run.scratched]
+            field_size = len(active_runners)
+
+            # If any runner has a number > 20 and it's also > field_size + 10 (buffer)
+            # or if it's extremely high (> 100), re-index everything as it's likely a parsing error (horse IDs).
+            # Also re-index if all numbers are missing/zero.
+            suspicious = all(run.number == 0 or run.number is None for run in r.runners)
+            if not suspicious:
+                for run in r.runners:
+                    if run.number:
+                        if run.number > 100 or (run.number > 20 and run.number > field_size + 10):
+                            suspicious = True
+                            break
+
+            if suspicious:
+                self.logger.warning("suspicious_runner_numbers", venue=r.venue, field_size=field_size)
+                for i, run in enumerate(r.runners):
+                    run.number = i + 1
+
+            for runner in r.runners:
+                # Use getattr for win_odds if it's not a direct attribute but in models it is.
+                if not runner.scratched and (runner.win_odds is None or runner.win_odds <= 0):
+                    runner.win_odds = DEFAULT_ODDS_FALLBACK
+
         validated_races, warnings = DataValidationPipeline.validate_parsed_races(parsed_races)
         self.last_race_count = len(validated_races)
 
@@ -529,7 +556,7 @@ class BaseAdapterV3(ABC):
                     try:
                         from ..utilities.link_healer import heal_url
                     except (ImportError, ValueError):
-                        from python_service.utilities.link_healer import heal_url
+                        heal_url = None
 
                     self.logger.info("404 detected, attempting Link Healing...", url=full_url)
 

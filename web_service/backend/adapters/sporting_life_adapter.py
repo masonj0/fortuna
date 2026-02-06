@@ -3,21 +3,22 @@
 import asyncio
 import json
 import re
-from datetime import datetime
-from typing import Any, List, Optional
+from datetime import datetime, timezone
+from typing import Any, List, Optional, Dict
 
 from selectolax.parser import HTMLParser, Node
 
-from ..models import Race, Runner
-from ..utils.odds import parse_odds_to_decimal
+from ..models import Race, Runner, OddsData
+from ..utils.odds import parse_odds_to_decimal, SmartOddsExtractor
 from ..utils.text import clean_text, normalize_venue_name
 from .base_adapter_v3 import BaseAdapterV3
-from .mixins import BrowserHeadersMixin, DebugMixin
+from .mixins import BrowserHeadersMixin, DebugMixin, RacePageFetcherMixin
 from .utils.odds_validator import create_odds_data
-from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy, StealthMode
+from ..core.smart_fetcher import BrowserEngine, FetchStrategy, StealthMode
+from ..core.exceptions import AdapterHttpError
 
 
-class SportingLifeAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
+class SportingLifeAdapter(BrowserHeadersMixin, DebugMixin, RacePageFetcherMixin, BaseAdapterV3):
     """
     Adapter for sportinglife.com, migrated to BaseAdapterV3.
     Hardened with __NEXT_DATA__ JSON parsing for robustness.
@@ -30,10 +31,6 @@ class SportingLifeAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
         super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
 
     def _configure_fetch_strategy(self) -> FetchStrategy:
-        """
-        SportingLife often works with HTTPX as it uses SSR with __NEXT_DATA__.
-        If HTTPX fails or returns incomplete data, SmartFetcher will fallback to Playwright.
-        """
         return FetchStrategy(
             primary_engine=BrowserEngine.HTTPX,
             enable_js=False,
@@ -53,64 +50,41 @@ class SportingLifeAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
         """
         Fetches the raw HTML for all race pages for a given date.
         """
-        index_url = "/racing/racecards"
-        index_response = await self.make_request(
-            "GET",
-            index_url,
-            headers=self._get_headers(),
-            follow_redirects=True,
-        )
-        if not index_response:
-            self.logger.warning("Failed to fetch SportingLife index page", url=index_url)
+        index_url = f"/racing/racecards/{date}/" if date else "/racing/racecards/"
+        resp = await self.make_request("GET", index_url, headers=self._get_headers(), follow_redirects=True)
+        if not resp or not resp.text:
+            raise AdapterHttpError(self.source_name, 500, index_url)
+
+        self._save_debug_snapshot(resp.text, f"sportinglife_index_{date}")
+        parser = HTMLParser(resp.text)
+        metadata = self._extract_race_metadata(parser)
+
+        if not metadata:
             return None
 
-        self._save_debug_snapshot(index_response.text, f"sportinglife_index_{date}")
+        pages = await self._fetch_race_pages_concurrent(metadata, self._get_headers(), semaphore_limit=8)
+        return {"pages": pages, "date": date}
 
-        parser = HTMLParser(index_response.text)
-
-        # Try to extract links from __NEXT_DATA__ first
-        links = set()
-        next_data_script = parser.css_first("script#__NEXT_DATA__")
-        if next_data_script:
+    def _extract_race_metadata(self, parser: HTMLParser) -> List[Dict[str, Any]]:
+        meta = []
+        next_data = parser.css_first("script#__NEXT_DATA__")
+        if next_data:
             try:
-                data = json.loads(next_data_script.text())
-                # Navigate to meetings/races in the JSON structure
-                meetings = data.get("props", {}).get("pageProps", {}).get("meetings", [])
-                for meeting in meetings:
-                    for race in meeting.get("races", []):
+                data = json.loads(next_data.text())
+                for meeting in data.get("props", {}).get("pageProps", {}).get("meetings", []):
+                    for i, race in enumerate(meeting.get("races", [])):
                         if url := race.get("racecard_url"):
-                            links.add(url)
-            except (json.JSONDecodeError, KeyError, TypeError):
-                self.logger.debug("Failed to extract links from __NEXT_DATA__ on index page")
+                            meta.append({"url": url, "race_number": i + 1})
+            except:
+                pass
 
-        # Fallback to HTML selectors if __NEXT_DATA__ failed or was missing
-        if not links:
-            links = {
-                a.attributes["href"]
-                for a in parser.css('li[class^="MeetingSummary__LineWrapper"] a[href*="/racecard/"]')
-                if a.attributes.get("href")
-            }
-
-        if not links:
-            links = {
-                a.attributes["href"]
-                for a in parser.css('.meeting-summary a[href*="/racecard/"]')
-                if a.attributes.get("href")
-            }
-
-        if not links:
-            self.logger.warning("No race links found on SportingLife index page", date=date)
-            return None
-
-        self.logger.info(f"Found {len(links)} race links on SportingLife")
-
-        async def fetch_single_html(url_path: str):
-            response = await self.make_request("GET", url_path, headers=self._get_headers())
-            return response.text if response else ""
-
-        tasks = [fetch_single_html(link) for link in links]
-        html_pages = await asyncio.gather(*tasks)
-        return {"pages": [p for p in html_pages if p], "date": date}
+        if not meta:
+            meetings = parser.css('section[class^="MeetingSummary"]') or parser.css(".meeting-summary")
+            for meeting in meetings:
+                for i, link in enumerate(meeting.css('a[href*="/racecard/"]')):
+                    if url := link.attributes.get("href"):
+                        meta.append({"url": url, "race_number": i + 1})
+        return meta
 
     def _parse_races(self, raw_data: Any) -> List[Race]:
         """Parses a list of raw HTML strings into Race objects."""
@@ -120,23 +94,18 @@ class SportingLifeAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
         try:
             race_date = datetime.strptime(raw_data["date"], "%Y-%m-%d").date()
         except ValueError:
-            self.logger.error("Invalid date format", date=raw_data.get("date"))
             return []
 
         all_races = []
-        for html in raw_data["pages"]:
-            if not html:
+        for item in raw_data["pages"]:
+            html_content = item.get("html")
+            if not html_content:
                 continue
             try:
-                parser = HTMLParser(html)
-
-                # Preferred: Parse from __NEXT_DATA__ JSON
-                race = self._parse_from_next_data(parser, race_date)
-
-                # Fallback: Parse from HTML
+                parser = HTMLParser(html_content)
+                race = self._parse_from_next_data(parser, race_date, item.get("race_number"), html_content)
                 if not race:
-                    race = self._parse_from_html(parser, race_date)
-
+                    race = self._parse_from_html(parser, race_date, item.get("race_number"), html_content)
                 if race:
                     all_races.append(race)
             except Exception as e:
@@ -144,144 +113,156 @@ class SportingLifeAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
                 continue
         return all_races
 
-    def _parse_from_next_data(self, parser: HTMLParser, race_date) -> Optional[Race]:
+    def _parse_from_next_data(self, parser: HTMLParser, race_date, race_number_fallback: Optional[int], html_content: str) -> Optional[Race]:
         """Extract race data from __NEXT_DATA__ JSON tag."""
-        script = parser.css_first("script#__NEXT_DATA__")
-        if not script:
+        next_data = parser.css_first("script#__NEXT_DATA__")
+        if not next_data:
             return None
 
         try:
-            data = json.loads(script.text())
+            data = json.loads(next_data.text())
             race_info = data.get("props", {}).get("pageProps", {}).get("race")
             if not race_info:
                 return None
 
-            track_name = normalize_venue_name(race_info.get("meeting_name", "Unknown"))
-            race_time_str = race_info.get("time", "")
-            if not race_time_str:
+            summary = race_info.get("race_summary") or {}
+            track_name = normalize_venue_name(race_info.get("meeting_name") or summary.get("course_name") or "Unknown")
+            rt = race_info.get("time") or summary.get("time") or race_info.get("off_time") or race_info.get("start_time")
+            if not rt:
+                def find_time(obj):
+                    if isinstance(obj, str) and re.match(r"^\d{1,2}:\d{2}$", obj):
+                        return obj
+                    if isinstance(obj, dict):
+                        for v in obj.values():
+                            if t := find_time(v): return t
+                    if isinstance(obj, list):
+                        for v in obj:
+                            if t := find_time(v): return t
+                    return None
+                rt = find_time(race_info)
+
+            if not rt:
                 return None
 
             try:
-                start_time = datetime.combine(race_date, datetime.strptime(race_time_str, "%H:%M").time())
-            except ValueError:
+                start_time = datetime.combine(race_date, datetime.strptime(rt, "%H:%M").time())
+                start_time = start_time.replace(tzinfo=timezone.utc)
+            except:
                 return None
 
-            race_number = race_info.get("race_number", 1)
+            race_num = race_info.get("race_number") or race_number_fallback or 1
 
             runners = []
-            for runner_data in race_info.get("runners", []):
-                name = clean_text(runner_data.get("horse_name", ""))
-                number = runner_data.get("saddle_cloth_number", 0)
+            for rd in (race_info.get("runners") or race_info.get("rides") or []):
+                name = clean_text(rd.get("horse_name") or rd.get("horse", {}).get("name", ""))
                 if not name:
                     continue
-
-                # Extract odds
-                win_odds = None
-                betting = runner_data.get("betting", {})
-                if betting:
-                    # Try to get live price
-                    price = betting.get("current_price")
-                    if price:
-                        win_odds = parse_odds_to_decimal(price)
-
-                # Fallback to 'odds' field if present
-                if win_odds is None:
-                    win_odds = parse_odds_to_decimal(runner_data.get("odds", ""))
+                num = rd.get("saddle_cloth_number") or rd.get("cloth_number") or 0
+                betting = rd.get("betting") or {}
+                wo = parse_odds_to_decimal(
+                    betting.get("current_odds") or betting.get("current_price") or
+                    rd.get("forecast_price") or rd.get("forecast_odds") or
+                    rd.get("betting_forecast_price") or rd.get("odds") or rd.get("bookmakerOdds") or ""
+                )
 
                 odds_data = {}
-                if odds_val := create_odds_data(self.source_name, win_odds):
-                    odds_data[self.source_name] = odds_val
+                if wo:
+                    odds_data[self.SOURCE_NAME] = OddsData(win=wo, source=self.SOURCE_NAME, last_updated=datetime.now(timezone.utc))
 
                 runners.append(Runner(
-                    number=number,
+                    number=num,
                     name=name,
-                    scratched=runner_data.get("is_non_runner", False),
+                    scratched=rd.get("is_non_runner") or rd.get("ride_status") == "NON_RUNNER",
                     odds=odds_data
                 ))
 
             if not runners:
                 return None
 
+            # Available bets
+            available_bets = []
+            html_lower = html_content.lower()
+            for kw in ["superfecta", "trifecta", "exacta", "quinella"]:
+                if kw in html_lower:
+                    available_bets.append(kw.capitalize())
+
             return Race(
-                id=f"sl_{track_name.replace(' ', '')}_{start_time:%Y%m%d}_R{race_number}",
+                id=f"sl_{track_name.lower().replace(' ', '')}_{start_time:%Y%m%d}_R{race_num}",
                 venue=track_name,
-                race_number=race_number,
+                race_number=race_num,
                 start_time=start_time,
                 runners=runners,
-                source=self.source_name,
+                distance=summary.get("distance") or race_info.get("distance"),
+                source=self.SOURCE_NAME,
+                discipline="Thoroughbred",
+                metadata={"available_bets": available_bets}
             )
-
-        except (json.JSONDecodeError, KeyError, TypeError) as e:
-            self.logger.debug("Failed to parse from __NEXT_DATA__", error=str(e))
+        except:
             return None
 
-    def _parse_from_html(self, parser: HTMLParser, race_date) -> Optional[Race]:
+    def _parse_from_html(self, parser: HTMLParser, race_date, race_number_fallback: Optional[int], html_content: str) -> Optional[Race]:
         """Fallback HTML parsing logic."""
-        header = parser.css_first('h1[class*="RacingRacecardHeader__Title"]')
-        if not header:
+        h1 = parser.css_first('h1[class*="RacingRacecardHeader__Title"]')
+        if not h1:
             return None
-
-        header_text = clean_text(header.text())
-        parts = header_text.split()
+        ht = clean_text(h1.text())
+        if not ht:
+            return None
+        parts = ht.split()
         if not parts:
             return None
-
-        race_time_str = parts[0]
-        track_name = normalize_venue_name(" ".join(parts[1:]))
-
         try:
-            start_time = datetime.combine(race_date, datetime.strptime(race_time_str, "%H:%M").time())
-        except ValueError:
+            start_time = datetime.combine(race_date, datetime.strptime(parts[0], "%H:%M").time())
+            start_time = start_time.replace(tzinfo=timezone.utc)
+        except:
             return None
 
-        race_number = 1
-        nav_links = parser.css('a[class*="SubNavigation__Link"]')
-        active_link = parser.css_first('a[class*="SubNavigation__Link--active"]')
-        if active_link and nav_links:
+        track_name = normalize_venue_name(" ".join(parts[1:]))
+        runners = []
+        for row in parser.css('div[class*="RunnerCard"]'):
             try:
-                for idx, link in enumerate(nav_links):
-                    if link.text().strip() == active_link.text().strip():
-                        race_number = idx + 1
-                        break
-            except Exception:
-                pass
+                nn = row.css_first('a[href*="/racing/profiles/horse/"]')
+                if not nn:
+                    continue
+                name = clean_text(nn.text()).splitlines()[0].strip()
+                num_node = row.css_first('span[class*="SaddleCloth__Number"]')
+                number = int("".join(filter(str.isdigit, clean_text(num_node.text())))) if num_node else 0
+                on = row.css_first('span[class*="Odds__Price"]')
+                wo = parse_odds_to_decimal(clean_text(on.text()) if on else "")
 
-        runners = [r for row in parser.css('div[class*="RunnerCard"]') if (r := self._parse_runner_row(row))]
+                # Advanced heuristic fallback
+                if wo is None:
+                    wo = SmartOddsExtractor.extract_from_node(row)
+
+                od = {}
+                if wo:
+                    od[self.SOURCE_NAME] = OddsData(win=wo, source=self.SOURCE_NAME, last_updated=datetime.now(timezone.utc))
+                runners.append(Runner(number=number, name=name, odds=od))
+            except:
+                continue
 
         if not runners:
             return None
 
+        dn = parser.css_first('span[class*="RacecardHeader__Distance"]') or parser.css_first(".race-distance")
+        distance = clean_text(dn.text()) if dn else None
+
+        # Available bets
+        available_bets = []
+        html_lower = html_content.lower()
+        for kw in ["superfecta", "trifecta", "exacta", "quinella"]:
+            if kw in html_lower:
+                available_bets.append(kw.capitalize())
+
+        race_num = race_number_fallback or 1
+
         return Race(
-            id=f"sl_{track_name.replace(' ', '')}_{start_time:%Y%m%d}_R{race_number}",
+            id=f"sl_{track_name.lower().replace(' ', '')}_{start_time:%Y%m%d}_R{race_num}",
             venue=track_name,
-            race_number=race_number,
+            race_number=race_num,
             start_time=start_time,
             runners=runners,
-            source=self.source_name,
+            distance=distance,
+            source=self.SOURCE_NAME,
+            metadata={"available_bets": available_bets}
         )
-
-    def _parse_runner_row(self, row: Node) -> Optional[Runner]:
-        """Parse a single runner row from HTML."""
-        try:
-            name_node = row.css_first('a[href*="/racing/profiles/horse/"]')
-            if not name_node:
-                return None
-            name = clean_text(name_node.text()).splitlines()[0].strip()
-
-            num_node = row.css_first('span[class*="SaddleCloth__Number"]')
-            if not num_node:
-                return None
-            num_str = clean_text(num_node.text())
-            number = int("".join(filter(str.isdigit, num_str)))
-
-            odds_node = row.css_first('span[class*="Odds__Price"]')
-            odds_str = clean_text(odds_node.text()) if odds_node else ""
-
-            win_odds = parse_odds_to_decimal(odds_str)
-            odds_data = {}
-            if odds_val := create_odds_data(self.source_name, win_odds):
-                odds_data[self.source_name] = odds_val
-
-            return Runner(number=number, name=name, odds=odds_data)
-        except (AttributeError, ValueError):
-            return None

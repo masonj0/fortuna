@@ -69,7 +69,7 @@ class Watchman:
         log.info("Watchman: Entering tactical monitoring loop.")
         # active_targets = list(targets)
 
-        # from python_service.adapters.betfair_adapter import BetfairAdapter
+        # from .adapters.betfair_adapter import BetfairAdapter
         # async with LiveOddsMonitor(betfair_adapter=BetfairAdapter(config=self.settings)) as live_monitor:
         #     async with httpx.AsyncClient() as client:
         #         while active_targets:
