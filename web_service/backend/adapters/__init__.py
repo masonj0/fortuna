@@ -18,12 +18,15 @@ from .racing_and_sports_greyhound_adapter import RacingAndSportsGreyhoundAdapter
 from .racingpost_adapter import RacingPostAdapter
 from .racing_post_b2b_adapter import RacingPostB2BAdapter
 from .sporting_life_adapter import SportingLifeAdapter
+from .boyle_sports_adapter import BoyleSportsAdapter
+from .sky_sports_adapter import SkySportsAdapter
+from .standardbred_canada_adapter import StandardbredCanadaAdapter
+from .tab_adapter import TabAdapter
 from .stubs import (
     HorseRacingNationAdapter,
     NYRABetsAdapter,
     PuntersAdapter,
     RacingTVAdapter,
-    TabAdapter,
     TemplateAdapter,
 )
 from .the_racing_api_adapter import TheRacingApiAdapter
@@ -56,6 +59,9 @@ __all__ = [
     "RacingPostB2BAdapter",
     "RacingTVAdapter",
     "SportingLifeAdapter",
+    "BoyleSportsAdapter",
+    "SkySportsAdapter",
+    "StandardbredCanadaAdapter",
     "TabAdapter",
     "TemplateAdapter",
     "TheRacingApiAdapter",
