@@ -37,6 +37,38 @@ class BrowserEngine(Enum):
     CAMOUFOX = "camoufox"      # Most stealthy (AsyncStealthySession) - best for anti-bot sites
     PLAYWRIGHT = "playwright"   # Fast and reliable - good for most sites
     HTTPX = "httpx"            # Lightweight fallback - simple HTML-only sites
+    CURL_CFFI = "curl_cffi"    # Alternative high-stealth engine
+
+
+class GlobalResourceManager:
+    """Manages shared resources like HTTP clients and semaphores."""
+    _httpx_client: Optional[httpx.AsyncClient] = None
+    _lock: asyncio.Lock = asyncio.Lock()
+    _global_semaphore: Optional[asyncio.Semaphore] = None
+
+    @classmethod
+    async def get_httpx_client(cls) -> httpx.AsyncClient:
+        if cls._httpx_client is None:
+            async with cls._lock:
+                if cls._httpx_client is None:
+                    cls._httpx_client = httpx.AsyncClient(
+                        follow_redirects=True,
+                        timeout=httpx.Timeout(30.0),
+                        limits=httpx.Limits(max_connections=100, max_keepalive_connections=20)
+                    )
+        return cls._httpx_client
+
+    @classmethod
+    def get_global_semaphore(cls) -> asyncio.Semaphore:
+        if cls._global_semaphore is None:
+            cls._global_semaphore = asyncio.Semaphore(10)
+        return cls._global_semaphore
+
+    @classmethod
+    async def cleanup(cls):
+        if cls._httpx_client:
+            await cls._httpx_client.aclose()
+            cls._httpx_client = None
 
 
 @dataclass
@@ -85,7 +117,6 @@ class SmartFetcher:
 
     # Global shared session pool
     _shared_fetchers: Dict[BrowserEngine, Any] = {}
-    _shared_httpx_client: Optional[httpx.AsyncClient] = None
     _shared_lock = asyncio.Lock()
 
     def __init__(self, strategy: FetchStrategy = None):
@@ -97,6 +128,7 @@ class SmartFetcher:
             BrowserEngine.CAMOUFOX: 0.8,      # Start with good but not perfect
             BrowserEngine.PLAYWRIGHT: 1.0,    # Most reliable, start at max
             BrowserEngine.HTTPX: 0.6,         # Limited, start lower
+            BrowserEngine.CURL_CFFI: 0.8,     # High-stealth alternative
         }
 
         # Last engine used for tracking
@@ -242,7 +274,7 @@ class SmartFetcher:
         """Get engines sorted by health score (best first)"""
         return sorted(
             BrowserEngine,
-            key=lambda e: self._engine_health[e],
+            key=lambda e: self._engine_health.get(e, 0.0),
             reverse=True
         )
 
@@ -277,10 +309,11 @@ class SmartFetcher:
                 await fetcher.start()
                 self._shared_fetchers[engine] = fetcher
 
-            else:  # HTTPX
-                if self._shared_httpx_client is None:
-                    self._shared_httpx_client = httpx.AsyncClient(follow_redirects=True)
-                return self._shared_httpx_client
+            elif engine == BrowserEngine.HTTPX:
+                return await GlobalResourceManager.get_httpx_client()
+
+            else:
+                raise ValueError(f"No global fetcher required for engine: {engine}")
 
             return self._shared_fetchers[engine]
 
@@ -296,6 +329,35 @@ class SmartFetcher:
 
         for attempt in range(self.strategy.max_retries):
             try:
+                if engine == BrowserEngine.CURL_CFFI:
+                    try:
+                        from curl_cffi import requests as curl_requests
+                    except ImportError:
+                        raise ImportError("curl_cffi not available")
+
+                    self.logger.debug(f"Using curl_cffi for {url}")
+                    timeout = kwargs.get("timeout", self.strategy.timeout)
+                    headers = kwargs.get("headers", {
+                        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+                    })
+                    impersonate = kwargs.get("impersonate", "chrome110")
+
+                    # Remove keys that curl_requests.AsyncSession.request doesn't like
+                    clean_kwargs = {k: v for k, v in kwargs.items() if k not in ["timeout", "headers", "impersonate", "network_idle", "wait_selector", "wait_until"]}
+
+                    async with curl_requests.AsyncSession() as s:
+                        response = await s.request(
+                            method,
+                            url,
+                            timeout=timeout,
+                            headers=headers,
+                            impersonate=impersonate,
+                            **clean_kwargs
+                        )
+                        response.status = response.status_code
+                        return response
+
                 fetcher = await self._get_fetcher(engine)
 
                 if engine == BrowserEngine.HTTPX:
@@ -385,8 +447,8 @@ class SmartFetcher:
         return {
             "engines": {
                 engine.value: {
-                    "health": self._engine_health[engine],
-                    "status": "operational" if self._engine_health[engine] > 0.5 else "degraded"
+                    "health": self._engine_health.get(engine, 0.0),
+                    "status": "operational" if self._engine_health.get(engine, 0.0) > 0.5 else "degraded"
                 }
                 for engine in BrowserEngine
             },

@@ -9,7 +9,7 @@ from ..core.exceptions import AdapterConfigError
 from ..models import Race, Runner
 from .base_adapter_v3 import BaseAdapterV3
 from .utils.odds_validator import create_odds_data
-from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy
+from ..core.smart_fetcher import BrowserEngine, FetchStrategy
 
 
 class GreyhoundAdapter(BaseAdapterV3):

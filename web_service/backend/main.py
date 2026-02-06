@@ -1,4 +1,5 @@
 import sys
+import os
 from pathlib import Path
 import uvicorn
 import logging
@@ -8,23 +9,25 @@ import traceback
 if getattr(sys, 'frozen', False):
     # Running as compiled executable
     PROJECT_ROOT = Path(sys.executable).parent
-    LOG_FILE = PROJECT_ROOT / 'fortuna-monolith.log'
-    # Redirect stdout and stderr to the log file to capture all output
-    sys.stdout = open(LOG_FILE, 'w', encoding='utf-8')
-    sys.stderr = sys.stdout
+    # Use TEMP directory for logs to avoid permission issues in Program Files
+    LOG_FILE = Path(os.environ.get('TEMP', '.')) / 'fortuna-monolith.log'
 else:
     # Running as script
     PROJECT_ROOT = Path(__file__).parent.parent.parent
     LOG_FILE = PROJECT_ROOT / 'fortuna-monolith-dev.log'
 
 # Configure logging to write to the log file and original stdout
+# Use a safer way to handle FileHandler in case of permissions
+handlers = [logging.StreamHandler(sys.__stdout__)]
+try:
+    handlers.append(logging.FileHandler(LOG_FILE))
+except Exception:
+    print(f"Warning: Could not create log file at {LOG_FILE}")
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(LOG_FILE),
-        logging.StreamHandler(sys.__stdout__)
-    ]
+    handlers=handlers
 )
 log = logging.getLogger(__name__)
 
