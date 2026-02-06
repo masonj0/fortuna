@@ -129,6 +129,7 @@ class SmartFetcher:
             BrowserEngine.CAMOUFOX: 0.8,      # Start with good but not perfect
             BrowserEngine.PLAYWRIGHT: 1.0,    # Most reliable, start at max
             BrowserEngine.HTTPX: 0.6,         # Limited, start lower
+            BrowserEngine.CURL_CFFI: 0.8,     # High-stealth alternative
         }
 
         # Last engine used for tracking
@@ -309,10 +310,13 @@ class SmartFetcher:
                 await fetcher.start()
                 self._shared_fetchers[engine] = fetcher
 
-            else:  # HTTPX
+            elif engine == BrowserEngine.HTTPX:
                 if self._shared_httpx_client is None:
                     self._shared_httpx_client = httpx.AsyncClient(follow_redirects=True)
                 return self._shared_httpx_client
+
+            else:
+                raise ValueError(f"No global fetcher required for engine: {engine}")
 
             return self._shared_fetchers[engine]
 
@@ -328,6 +332,35 @@ class SmartFetcher:
 
         for attempt in range(self.strategy.max_retries):
             try:
+                if engine == BrowserEngine.CURL_CFFI:
+                    try:
+                        from curl_cffi import requests as curl_requests
+                    except ImportError:
+                        raise ImportError("curl_cffi not available")
+
+                    self.logger.debug(f"Using curl_cffi for {url}")
+                    timeout = kwargs.get("timeout", self.strategy.timeout)
+                    headers = kwargs.get("headers", {
+                        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+                    })
+                    impersonate = kwargs.get("impersonate", "chrome110")
+
+                    # Remove keys that curl_requests.AsyncSession.request doesn't like
+                    clean_kwargs = {k: v for k, v in kwargs.items() if k not in ["timeout", "headers", "impersonate", "network_idle", "wait_selector", "wait_until"]}
+
+                    async with curl_requests.AsyncSession() as s:
+                        response = await s.request(
+                            method,
+                            url,
+                            timeout=timeout,
+                            headers=headers,
+                            impersonate=impersonate,
+                            **clean_kwargs
+                        )
+                        response.status = response.status_code
+                        return response
+
                 fetcher = await self._get_fetcher(engine)
 
                 if engine == BrowserEngine.HTTPX:
