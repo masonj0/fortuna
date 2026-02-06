@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
-from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy
+from ..core.smart_fetcher import BrowserEngine, FetchStrategy
 from ..models import Race, Runner
 from ..utils.odds import parse_odds_to_decimal
 from .base_adapter_v3 import BaseAdapterV3

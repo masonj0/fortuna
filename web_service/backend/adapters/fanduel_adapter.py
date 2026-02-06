@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
-from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy
+from ..core.smart_fetcher import BrowserEngine, FetchStrategy
 from ..models import Race, Runner
 from .base_adapter_v3 import BaseAdapterV3
 from .utils.odds_validator import create_odds_data

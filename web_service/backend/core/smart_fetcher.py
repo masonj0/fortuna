@@ -37,6 +37,38 @@ class BrowserEngine(Enum):
     CAMOUFOX = "camoufox"      # Most stealthy (AsyncStealthySession) - best for anti-bot sites
     PLAYWRIGHT = "playwright"   # Fast and reliable - good for most sites
     HTTPX = "httpx"            # Lightweight fallback - simple HTML-only sites
+    CURL_CFFI = "curl_cffi"    # Alternative high-stealth engine
+
+
+class GlobalResourceManager:
+    """Manages shared resources like HTTP clients and semaphores."""
+    _httpx_client: Optional[httpx.AsyncClient] = None
+    _lock: asyncio.Lock = asyncio.Lock()
+    _global_semaphore: Optional[asyncio.Semaphore] = None
+
+    @classmethod
+    async def get_httpx_client(cls) -> httpx.AsyncClient:
+        if cls._httpx_client is None:
+            async with cls._lock:
+                if cls._httpx_client is None:
+                    cls._httpx_client = httpx.AsyncClient(
+                        follow_redirects=True,
+                        timeout=httpx.Timeout(30.0),
+                        limits=httpx.Limits(max_connections=100, max_keepalive_connections=20)
+                    )
+        return cls._httpx_client
+
+    @classmethod
+    def get_global_semaphore(cls) -> asyncio.Semaphore:
+        if cls._global_semaphore is None:
+            cls._global_semaphore = asyncio.Semaphore(10)
+        return cls._global_semaphore
+
+    @classmethod
+    async def cleanup(cls):
+        if cls._httpx_client:
+            await cls._httpx_client.aclose()
+            cls._httpx_client = None
 
 
 @dataclass

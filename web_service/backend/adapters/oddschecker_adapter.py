@@ -6,13 +6,13 @@ from typing import Any, List, Optional
 
 from selectolax.parser import HTMLParser, Node
 
-from ..models import Race, Runner
-from ..utils.odds import parse_odds_to_decimal
+from ..models import Race, Runner, OddsData
+from ..utils.odds import parse_odds_to_decimal, SmartOddsExtractor
 from ..utils.text import clean_text
 from .base_adapter_v3 import BaseAdapterV3
 from .mixins import BrowserHeadersMixin, DebugMixin
 from .utils.odds_validator import create_odds_data
-from python_service.core.smart_fetcher import BrowserEngine, FetchStrategy
+from ..core.smart_fetcher import BrowserEngine, FetchStrategy, StealthMode
 
 
 class OddscheckerAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
@@ -25,7 +25,12 @@ class OddscheckerAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
         super().__init__(source_name=self.SOURCE_NAME, base_url=self.BASE_URL, config=config)
 
     def _configure_fetch_strategy(self) -> FetchStrategy:
-        return FetchStrategy(primary_engine=BrowserEngine.HTTPX)
+        return FetchStrategy(
+            primary_engine=BrowserEngine.CURL_CFFI,
+            enable_js=True,
+            stealth_mode=StealthMode.CAMOUFLAGE,
+            timeout=45
+        )
 
     def _get_headers(self) -> dict:
         return self._get_browser_headers(host="www.oddschecker.com")
@@ -137,17 +142,24 @@ class OddscheckerAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
             odds_str = odds_node.text(strip=True)
 
             number_node = row.css_first("td.runner-number")
-            if not number_node or not number_node.text(strip=True).isdigit():
-                return None
-            number = int(number_node.text(strip=True))
+            number = 0
+            if number_node:
+                num_txt = "".join(filter(str.isdigit, number_node.text(strip=True)))
+                if num_txt:
+                    number = int(num_txt)
 
             if not name or not odds_str:
                 return None
 
             win_odds = parse_odds_to_decimal(odds_str)
+
+            # Advanced heuristic fallback
+            if win_odds is None:
+                win_odds = SmartOddsExtractor.extract_from_node(row)
+
             odds_dict = {}
-            if odds_data := create_odds_data(self.source_name, win_odds):
-                odds_dict[self.source_name] = odds_data
+            if win_odds:
+                odds_dict[self.source_name] = OddsData(win=win_odds, source=self.source_name, last_updated=datetime.now(timezone.utc))
 
             return Runner(number=number, name=name, odds=odds_dict)
         except (AttributeError, ValueError):
