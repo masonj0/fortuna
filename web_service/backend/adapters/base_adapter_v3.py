@@ -556,7 +556,7 @@ class BaseAdapterV3(ABC):
                     try:
                         from ..utilities.link_healer import heal_url
                     except (ImportError, ValueError):
-                        from python_service.utilities.link_healer import heal_url
+                        heal_url = None
 
                     self.logger.info("404 detected, attempting Link Healing...", url=full_url)
 
