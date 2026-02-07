@@ -362,7 +362,7 @@ class SmartFetcher:
 
                 if engine == BrowserEngine.HTTPX:
                     # Use httpx directly to avoid scrapling 0.3.x empty response bug
-                    response = await self._shared_httpx_client.request(
+                    response = await fetcher.request(
                         method, url, timeout=self.strategy.timeout, **kwargs
                     )
                     # Add status attribute for compatibility with scrapling response
@@ -435,11 +435,8 @@ class SmartFetcher:
                 except Exception as e:
                     self.logger.warning(f"Error closing global {engine.value}: {e}")
 
-            if self._shared_httpx_client:
-                await self._shared_httpx_client.aclose()
-                self.logger.debug("Closed global HTTPX client")
-                self._shared_httpx_client = None
-
+            # Note: HTTPX client is global and managed by GlobalResourceManager
+            # We don't close it here to avoid impacting other components.
             self._shared_fetchers.clear()
 
     def get_health_report(self) -> dict:
