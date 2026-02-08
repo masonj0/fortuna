@@ -84,6 +84,7 @@ proxy-tools==0.1.0
 
 # System Utilities
 psutil==5.9.6
+pywin32==306
 
 # Logging Monitoring
 structlog==23.2.0

@@ -6,7 +6,7 @@ import os
 import sys
 from pathlib import Path
 from contextlib import asynccontextmanager
-from datetime import date
+from datetime import date, datetime
 from typing import List, Optional
 
 import structlog
@@ -183,7 +183,15 @@ async def get_qualified_races(
 
 # Add other endpoints as needed, following the pattern above.
 
-app.include_router(router, prefix="/api")
+def _include_adapter_router():
+    """Helper to include adapter router after it is defined."""
+    router.include_router(adapter_router)
+
+# --- Adapter Management Endpoints (v3.0.0) ---
+
+from typing import Dict, Any
+
+adapter_router = APIRouter()
 
 # Mount static files (frontend)
 # This logic ensures that the frontend is served both in development and in the frozen executable.
@@ -207,7 +215,8 @@ if static_dir and static_dir.exists():
         """
         response = await call_next(request)
         # If a 404 is returned for a non-API, non-file path, serve the SPA index.
-        if response.status_code == 404 and not request.url.path.startswith("/api/"):
+        # We check for "/api" (no trailing slash) to catch all API routes correctly.
+        if response.status_code == 404 and not request.url.path.startswith("/api"):
             # A simple check to avoid redirecting file requests (e.g. for .css, .js)
             if "." not in request.url.path.split("/")[-1]:
                 return FileResponse(static_dir / "index.html")
@@ -287,8 +296,9 @@ def _adapter_requires_key(adapter) -> bool:
 
     return False
 
-# Include the new adapter router
-router.include_router(adapter_router)
+# Now include the adapter router and then include the main router into the app
+_include_adapter_router()
+app.include_router(router, prefix="/api")
 
 # Export app for Uvicorn
 __all__ = ["app"]
