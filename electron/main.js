@@ -58,7 +58,7 @@ class FortunaDesktopApp {
 
   async waitForBackend(maxRetries = 30) {
     const port = process.env.FORTUNA_PORT || 8000;
-    const url = `http://127.0.0.1:${port}/health`;
+    const url = `http://127.0.0.1:${port}/api/health`;
 
     console.log(`[Backend Check] Starting health check at: ${url}`);
 
@@ -100,9 +100,9 @@ class FortunaDesktopApp {
       backendCommand = path.join(__dirname, '..', '.venv', 'Scripts', 'python.exe');
       backendCwd = path.join(__dirname, '..', 'web_service', 'backend');
     } else {
-      // CORRECTED PATH: In production, the backend executable is at the root of the resources directory.
-      backendCommand = path.join(process.resourcesPath, 'fortuna-backend.exe');
-      backendCwd = process.resourcesPath;
+      // CORRECTED PATH: In production, the backend executable is staged in the 'fortuna-backend' subdirectory of resources.
+      backendCommand = path.join(process.resourcesPath, 'fortuna-backend', 'fortuna-backend.exe');
+      backendCwd = path.join(process.resourcesPath, 'fortuna-backend');
 
       console.log(`[Backend] Looking for executable at: ${backendCommand}`);
       console.log(`[Backend] Executable exists: ${fs.existsSync(backendCommand)}`);
@@ -156,12 +156,8 @@ class FortunaDesktopApp {
       const errorOutput = data.toString().trim();
       console.error(`[Backend STDERR] ${errorOutput}`);
       this.backendLogs.push(`ERROR: ${errorOutput}`);
-
-      if (this.backendState === 'starting') {
-        this.backendState = 'error';
-        this.isBackendStarting = false;
-      }
-
+      // NOTE: We don't set state to 'error' here because many libraries
+      // (like uvicorn or asyncio) write info/warnings to stderr.
       this.sendBackendStatusUpdate();
     });
 
