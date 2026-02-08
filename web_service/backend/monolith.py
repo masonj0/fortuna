@@ -176,62 +176,16 @@ def get_resource_path(relative_path: str) -> Path:
 # ====================================================================
 # API CREATION
 # ====================================================================
-def create_backend_api():
-    """Create FastAPI instance with fallback support"""
-    # Use the lifespan from the main API to ensure engine initialization
-    try:
-        from web_service.backend.api import lifespan as backend_lifespan
-        api = FastAPI(title="Fortuna Backend", lifespan=backend_lifespan)
-    except ImportError:
-        api = FastAPI(title="Fortuna Backend")
-
-    @api.get("/health")
-    async def health():
-        """Health check endpoint"""
-        return {
-            "status": "ok",
-            "service": "fortuna-monolith",
-            "version": APP_VERSION
-        }
-
-    try:
-        logger.info("Attempting to load full backend API...")
-        from web_service.backend.api import router as backend_router
-
-        # Include the router directly instead of copying routes from app.
-        # This avoids double-prefixing (/api/api/...) and accidental copying
-        # of static mounts and middleware from the standalone app instance.
-        api.include_router(backend_router)
-
-        logger.info("OK - Full backend API router included")
-        return api
-
-    except (ImportError, AttributeError) as e:
-        logger.warning(f"Full backend import failed: {e}")
-        logger.info("Running in minimal mode (basic endpoints only)")
-
-        # Provide stub endpoints
-        @api.get("/races")
-        async def get_races():
-            return {
-                "status": "error",
-                "message": "Full API not available",
-                "sample": [{"id": 1, "name": "Example Race", "status": "pending"}]
-            }
-
-        return api
-
-    except Exception as e:
-        logger.error(f"Unexpected error loading backend: {e}", exc_info=True)
-        return api
-
-# ====================================================================
-# APP CREATION
-# ====================================================================
 def create_app():
     """Create main FastAPI application"""
     logger.info("Creating FastAPI application...")
-    app = FastAPI(title="Fortuna Monolith")
+
+    # Use the lifespan from the main API to ensure engine initialization
+    try:
+        from web_service.backend.api import lifespan as backend_lifespan
+        app = FastAPI(title="Fortuna Monolith", lifespan=backend_lifespan)
+    except ImportError:
+        app = FastAPI(title="Fortuna Monolith")
 
     # CORS for local development
     app.add_middleware(
@@ -243,10 +197,18 @@ def create_app():
     )
     logger.info("OK - CORS middleware configured")
 
-    # Mount backend API
-    logger.info("Mounting backend API at /api...")
-    backend = create_backend_api()
-    app.mount("/api", backend, name="backend")
+    # Include backend API directly in the main app to share state/lifespan
+    logger.info("Including backend API routes at /api...")
+    try:
+        from web_service.backend.api import router as backend_router
+        app.include_router(backend_router, prefix="/api")
+        logger.info("OK - Full backend API routes included")
+    except Exception as e:
+        logger.error(f"Unexpected error loading backend routes: {e}", exc_info=True)
+        # Provide minimal health check if full backend fails
+        @app.get("/api/health")
+        async def health():
+            return {"status": "minimal", "error": str(e)}
 
     # Setup frontend serving
     frontend_path = get_resource_path("frontend_dist")
@@ -281,8 +243,8 @@ def create_app():
     # SPA routing - catch all unmapped routes and serve index.html
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
-        # Skip API routes
-        if full_path.startswith("api/"):
+        # Skip API routes - handle both "api/" and "api" (if path is just /api)
+        if full_path.startswith("api/") or full_path == "api":
             return JSONResponse({"error": "Not found"}, status_code=404)
 
         # Try exact file

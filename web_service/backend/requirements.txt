@@ -30,7 +30,7 @@ wsproto==1.2.0
 
 # Http Client
 requests==2.31.0
-curl-cffi==0.7.2
+curl-cffi>=0.14.0
 urllib3==2.1.0
 certifi>=2024.2.2
 charset-normalizer==3.3.2
@@ -84,6 +84,7 @@ proxy-tools==0.1.0
 
 # System Utilities
 psutil==5.9.6
+pywin32==306
 
 # Logging Monitoring
 structlog==23.2.0
