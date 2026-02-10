@@ -151,7 +151,7 @@ pytokens==0.3.0
     # via black
 pytz==2025.2
     # via pandas
-redis==7.0.1
+redis==7.1.1
     # via -r python_service/requirements.in
 requests==2.32.5
     # via -r python_service/requirements.in
