@@ -1,304 +1,314 @@
-from typing import Any, Dict, List, Optional, Tuple
-from datetime import datetime, timezone, date
+from typing import Any, Dict, List, Optional, Tuple, Set
+from datetime import datetime, timezone
 import re
 import asyncio
 from selectolax.parser import HTMLParser, Node
 
-from ..base_adapter_v3 import BaseAdapterV3
-from ..mixins import BrowserHeadersMixin, DebugMixin
+from .base import (
+    PageFetchingResultsAdapter,
+    extract_exotic_payouts,
+    parse_currency_value,
+    build_start_time,
+    EASTERN
+)
 from ...models import ResultRace, ResultRunner
 from ...utils.text import normalize_venue_name, clean_text
 from ...utils.odds import parse_odds_to_decimal
 from ...core.smart_fetcher import FetchStrategy, BrowserEngine
 
 
-class EquibaseResultsAdapter(BrowserHeadersMixin, DebugMixin, BaseAdapterV3):
-    """
-    Adapter for Equibase Results / Summary Charts.
-    Primary source for US thoroughbred race results.
-    """
+class EquibaseResultsAdapter(PageFetchingResultsAdapter):
+    """Equibase summary charts — primary US thoroughbred results source."""
 
     SOURCE_NAME = "EquibaseResults"
-    BASE_URL = "https://www.equibase.com"
-
-    def __init__(self, **kwargs):
-        super().__init__(
-            source_name=self.SOURCE_NAME,
-            base_url=self.BASE_URL,
-            **kwargs
-        )
-        self._semaphore = asyncio.Semaphore(5)
+    BASE_URL    = "https://www.equibase.com"
+    HOST        = "www.equibase.com"
+    IMPERSONATE = "chrome120"
+    TIMEOUT     = 60
 
     def _configure_fetch_strategy(self) -> FetchStrategy:
+        # Equibase uses Instart Logic / Imperva; PLAYWRIGHT_LEGACY with network_idle is robust
         return FetchStrategy(
-            primary_engine=BrowserEngine.HTTPX,
-            enable_js=False,
-            timeout=30,
+            primary_engine=BrowserEngine.PLAYWRIGHT, # Changed from PLAYWRIGHT_LEGACY to PLAYWRIGHT as per current project availability
+            enable_js=True,
+            stealth_mode="camouflage",
+            timeout=self.TIMEOUT,
         )
 
     def _get_headers(self) -> dict:
-        return self._get_browser_headers(host="www.equibase.com")
+        return {"Referer": "https://www.equibase.com/"}
 
-    async def _fetch_data(self, date_str: str) -> Optional[Dict[str, Any]]:
-        """Fetch results index and all track pages for a date."""
+    async def _discover_result_links(self, date_str: str) -> set:
         try:
             dt = datetime.strptime(date_str, "%Y-%m-%d")
         except ValueError:
             self.logger.error("Invalid date format", date=date_str)
-            return None
+            return set()
 
-        url = f"/static/chart/summary/index.html?date={dt.strftime('%m/%d/%Y')}"
+        index_urls = [
+            f"/static/chart/summary/index.html?SAP=TN",
+            f"/static/chart/summary/index.html?date={dt.strftime('%m/%d/%Y')}",
+            f"/static/chart/summary/{dt.strftime('%m%d%y')}sum.html",
+            f"/static/chart/summary/{dt.strftime('%Y%m%d')}sum.html",
+        ]
 
-        resp = await self.make_request("GET", url, headers=self._get_headers())
+        resp = None
+        for url in index_urls:
+            # Try multiple impersonations to bypass Imperva/Cloudflare
+            for imp in ["chrome120", "chrome110", "safari15_5"]:
+                try:
+                    resp = await self.make_request(
+                        "GET", url, headers=self._get_headers(), impersonate=imp
+                    )
+                    if (
+                        resp and resp.text
+                        and len(resp.text) > 2000 # Increased threshold for real content
+                        and "Pardon Our Interruption" not in resp.text
+                        and "<table" in resp.text.lower() # Verify presence of data tables
+                    ):
+                        break
+                    else:
+                        resp = None
+                except Exception:
+                    continue
+            if resp:
+                break
+
         if not resp or not resp.text:
-            self.logger.warning("No response from Equibase index", url=url)
-            return None
+            self.logger.warning("No response from Equibase index", date=date_str)
+            return set()
 
         self._save_debug_snapshot(resp.text, f"eqb_results_index_{date_str}")
-        parser = HTMLParser(resp.text)
+        initial_links = self._extract_track_links(resp.text, dt)
 
-        # Extract track-specific result page links
-        links = set()
-        for a in parser.css("a"):
-            href = a.attributes.get("href", "")
-            if (
-                "/static/chart/summary/" in href
-                and href.endswith(".html")
-                and "index.html" not in href
+        # Resolve any RaceCardIndex links to actual sum.html files
+        resolved_links = set()
+        index_links = [ln for ln in initial_links if "RaceCardIndex" in ln]
+        sum_links = [ln for ln in initial_links if "RaceCardIndex" not in ln]
+
+        resolved_links.update(sum_links)
+
+        if index_links:
+            self.logger.info("Resolving track indices", count=len(index_links))
+            metadata = [{"url": ln, "race_number": 0} for ln in index_links]
+            index_pages = await self._fetch_race_pages_concurrent(
+                metadata, self._get_headers(),
+            )
+            for p in index_pages:
+                html = p.get("html")
+                if not html: continue
+                # Extract all sum.html links from this track index
+                date_short = dt.strftime("%m%d%y")
+                for m in re.findall(r'href="([^"]+)"', html):
+                    normalised = m.replace("\\/", "/").replace("\\", "/")
+                    if date_short in normalised and "sum.html" in normalised:
+                        resolved_links.add(self._normalise_eqb_link(normalised))
+                for m in re.findall(r'"URL":"([^"]+)"', html):
+                    normalised = m.replace("\\/", "/").replace("\\", "/")
+                    if date_short in normalised and "sum.html" in normalised:
+                        resolved_links.add(self._normalise_eqb_link(normalised))
+
+        return resolved_links
+
+    def _extract_track_links(self, html: str, dt: datetime) -> set:
+        """Pull track-summary URLs from the index page."""
+        parser = HTMLParser(html)
+        raw_links: set = set()
+        date_short = dt.strftime("%m%d%y")
+
+        # Source 1 — inline JSON in <script> tags
+        for url_match in re.findall(r'"URL":"([^"]+)"', html):
+            normalised = url_match.replace("\\/", "/").replace("\\", "/")
+            if date_short in normalised and (
+                "sum.html" in normalised or "EQB.html" in normalised or "RaceCardIndex" in normalised
             ):
-                links.add(href)
+                raw_links.add(normalised)
 
-        if not links:
-            self.logger.warning("No track result links found", date=date_str)
-            return None
+        # Source 2 — <a> tags matching known patterns
+        selectors_and_patterns = [
+            ('table.display a[href*="sum.html"]', None),
+            ('a[href*="/static/chart/summary/"]', lambda h: "index.html" not in h and "calendar.html" not in h),
+            ("a", lambda h: (
+                re.search(r"[A-Z]{3}\d{6}(?:sum|EQB)\.html", h)
+                or (date_short in h and ("sum.html" in h.lower() or "eqb.html" in h.lower()))
+            ) and "index.html" not in h and "calendar.html" not in h),
+        ]
+        for selector, extra_filter in selectors_and_patterns:
+            for a in parser.css(selector):
+                href = (a.attributes.get("href") or "").replace("\\", "/")
+                if not href:
+                    continue
+                if extra_filter and not extra_filter(href):
+                    continue
+                if not self._venue_matches(a.text(), href):
+                    continue
+                raw_links.add(href)
 
-        self.logger.info("Found track result pages", count=len(links))
+        if not raw_links:
+            self.logger.warning("No track links found in index", date=str(dt.date()))
+            return set()
 
-        # Fetch all track pages concurrently
-        async def fetch_track_page(link: str) -> Tuple[str, str]:
-            async with self._semaphore:
-                try:
-                    r = await self.make_request("GET", link, headers=self._get_headers())
-                    return (link, r.text if r else "")
-                except Exception as e:
-                    self.logger.warning("Failed to fetch track page", link=link, error=str(e))
-                    return (link, "")
+        self.logger.info("Track links extracted", count=len(raw_links))
+        return {self._normalise_eqb_link(lnk) for lnk in raw_links}
 
-        tasks = [fetch_track_page(link) for link in links]
-        pages = await asyncio.gather(*tasks)
+    def _normalise_eqb_link(self, link: str) -> str:
+        """Turn a relative Equibase link into an absolute URL."""
+        if link.startswith("http"):
+            return link
+        path = link.lstrip("/")
+        if "static/chart/summary/" not in path:
+            if path.startswith("../"):
+                path = "static/chart/" + path.replace("../", "")
+            elif not path.startswith("static/"):
+                path = f"static/chart/summary/{path}"
+        path = re.sub(r"/+", "/", path)
+        return f"{self.BASE_URL}/{path}"
 
-        valid_pages = [(link, html) for link, html in pages if html]
-        return {"pages": valid_pages, "date": date_str}
+    # -- multi-race page parsing -------------------------------------------
 
-    def _parse_races(self, raw_data: Any) -> List[ResultRace]:
-        """Parse all track pages into ResultRace objects."""
-        if not raw_data or not raw_data.get("pages"):
-            return []
-
-        races = []
-        for link, html_content in raw_data["pages"]:
-            if not html_content:
-                continue
-            try:
-                parsed = self._parse_track_page(html_content, raw_data["date"], link)
-                races.extend(parsed)
-            except Exception as e:
-                self.logger.warning(
-                    "Failed to parse track page",
-                    link=link,
-                    error=str(e),
-                    exc_info=True
-                )
-        return races
-
-    def _parse_track_page(
-        self,
-        html_content: str,
-        date_str: str,
-        source_url: str
+    def _parse_page(
+        self, html: str, date_str: str, url: str,
     ) -> List[ResultRace]:
-        """Parse a single track's results page."""
-        parser = HTMLParser(html_content)
-        races = []
+        """A track summary page contains multiple race tables."""
+        parser = HTMLParser(html)
 
-        # Get venue from header
+        # Venue from page header
         track_node = parser.css_first("h3") or parser.css_first("h2")
         if not track_node:
-            self.logger.debug("No track header found", url=source_url)
+            self.logger.debug("No track header found", url=url)
             return []
-
         venue = normalize_venue_name(track_node.text(strip=True))
         if not venue:
             return []
 
-        # Find all race tables - they typically have "Race X" in the header
+        # Identify race tables and their indices among ALL tables
         all_tables = parser.css("table")
-        race_tables = []
-
-        for table in all_tables:
+        indexed_race_tables: List[Tuple[int, Node]] = []
+        for i, table in enumerate(all_tables):
             header = table.css_first("thead tr th")
             if header and "Race" in header.text():
-                race_tables.append(table)
+                indexed_race_tables.append((i, table))
 
-        for race_table in race_tables:
+        races: List[ResultRace] = []
+        for j, (idx, race_table) in enumerate(indexed_race_tables):
             try:
-                race = self._parse_race_table(race_table, venue, date_str, parser)
+                # Dividend tables sit between this race and the next
+                next_idx = (
+                    indexed_race_tables[j + 1][0]
+                    if j + 1 < len(indexed_race_tables)
+                    else len(all_tables)
+                )
+                dividend_tables = all_tables[idx + 1 : next_idx]
+                exotics = extract_exotic_payouts(dividend_tables)
+
+                race = self._parse_race_table(
+                    race_table, venue, date_str, exotics,
+                )
                 if race:
                     races.append(race)
-            except Exception as e:
-                self.logger.debug("Failed to parse race table", error=str(e))
-
+            except Exception as exc:
+                self.logger.debug(
+                    "Failed to parse race table", error=str(exc),
+                )
         return races
 
     def _parse_race_table(
         self,
-        race_table: Node,
+        table: Node,
         venue: str,
         date_str: str,
-        page_parser: HTMLParser
+        exotics: Dict[str, Tuple[Optional[float], Optional[str]]],
     ) -> Optional[ResultRace]:
-        """Parse a single race table into a ResultRace."""
-        header = race_table.css_first("thead tr th")
+        header = table.css_first("thead tr th")
         if not header:
             return None
+        header_text = header.text()
 
-        race_num_match = re.search(r"Race\s+(\d+)", header.text())
-        if not race_num_match:
+        race_match = re.search(r"Race\s+(\d+)", header_text)
+        if not race_match:
             return None
+        race_num = int(race_match.group(1))
 
-        race_num = int(race_num_match.group(1))
+        # Start time from header or fallback
+        start_time = self._parse_header_time(header_text, date_str)
 
-        # Parse runners
-        runners = []
-        for row in race_table.css("tbody tr"):
-            runner = self._parse_runner_row(row)
-            if runner:
-                runners.append(runner)
-
+        runners = [
+            r for row in table.css("tbody tr")
+            if (r := self._parse_runner_row(row)) is not None
+        ]
         if not runners:
             return None
 
-        # Parse exotic payouts from the dividends section
-        trifecta_payout, trifecta_combo = self._find_exotic_payout(
-            race_table, page_parser, "trifecta"
-        )
-        exacta_payout, exacta_combo = self._find_exotic_payout(
-            race_table, page_parser, "exacta"
-        )
-
-        # Build start time
-        try:
-            race_date = datetime.strptime(date_str, "%Y-%m-%d")
-            start_time = race_date.replace(
-                hour=12, minute=0,
-                tzinfo=timezone.utc
-            )
-        except ValueError:
-            start_time = datetime.now(timezone.utc)
-
-        def get_canonical_venue_local(venue: str) -> str:
-            if not venue: return ""
-            canonical = re.sub(r'\s*\([^)]*\)\s*', '', venue)
-            canonical = re.sub(r'[^a-zA-Z0-9]', '', canonical).lower()
-            return canonical
+        tri = exotics.get("trifecta", (None, None))
+        exa = exotics.get("exacta", (None, None))
+        sup = exotics.get("superfecta", (None, None))
 
         return ResultRace(
-            id=f"eqb_res_{get_canonical_venue_local(venue)}_{date_str.replace('-', '')}_R{race_num}",
+            id=self._make_race_id("eqb_res", venue, date_str, race_num),
             venue=venue,
             race_number=race_num,
             start_time=start_time,
             runners=runners,
             source=self.SOURCE_NAME,
             is_fully_parsed=True,
-            trifecta_payout=trifecta_payout,
-            trifecta_combination=trifecta_combo,
-            exacta_payout=exacta_payout,
-            exacta_combination=exacta_combo,
+            trifecta_payout=tri[0],
+            trifecta_combination=tri[1],
+            exacta_payout=exa[0],
+            exacta_combination=exa[1],
+            superfecta_payout=sup[0],
+            superfecta_combination=sup[1],
         )
+
+    @staticmethod
+    def _parse_header_time(header_text: str, date_str: str) -> datetime:
+        m = re.search(r"(\d{1,2}:\d{2})\s*([APM]{2})", header_text, re.I)
+        if m:
+            try:
+                t = datetime.strptime(
+                    f"{m.group(1)} {m.group(2).upper()}", "%I:%M %p",
+                ).time()
+                d = datetime.strptime(date_str, "%Y-%m-%d")
+                return datetime.combine(d, t).replace(tzinfo=EASTERN)
+            except ValueError:
+                pass
+        return build_start_time(date_str)
 
     def _parse_runner_row(self, row: Node) -> Optional[ResultRunner]:
-        """Parse a single runner row from results table."""
-        cols = row.css("td")
-        if len(cols) < 3:
-            return None
-
-        pos_text = clean_text(cols[0].text())
-        num_text = clean_text(cols[1].text())
-        name = clean_text(cols[2].text())
-
-        # Skip header-like rows
-        if not name or name.upper() in ("HORSE", "NAME", "RUNNER"):
-            return None
-
-        # Parse number
         try:
+            cols = row.css("td")
+            if len(cols) < 3:
+                return None
+
+            name = clean_text(cols[2].text())
+            if not name or name.upper() in ("HORSE", "NAME", "RUNNER"):
+                return None
+
+            pos_text = clean_text(cols[0].text())
+            num_text = clean_text(cols[1].text())
             number = int(num_text) if num_text.isdigit() else 0
-        except ValueError:
-            number = 0
 
-        # Parse odds
-        odds_text = clean_text(cols[3].text()) if len(cols) > 3 else ""
-        final_odds = parse_odds_to_decimal(odds_text)
+            odds_text = (
+                clean_text(cols[3].text()) if len(cols) > 3 else ""
+            )
+            final_odds = parse_odds_to_decimal(odds_text)
 
-        # Parse payouts (columns 4, 5, 6 typically)
-        win_pay = place_pay = show_pay = 0.0
-        if len(cols) >= 7:
-            win_pay = self._parse_currency_value(cols[4].text())
-            place_pay = self._parse_currency_value(cols[5].text())
-            show_pay = self._parse_currency_value(cols[6].text())
+            win_pay = place_pay = show_pay = 0.0
+            if len(cols) >= 7:
+                win_pay   = parse_currency_value(cols[4].text())
+                place_pay = parse_currency_value(cols[5].text())
+                show_pay  = parse_currency_value(cols[6].text())
 
-        return ResultRunner(
-            name=name,
-            number=number,
-            position=pos_text,
-            final_win_odds=final_odds,
-            win_payout=win_pay,
-            place_payout=place_pay,
-            show_payout=show_pay,
-        )
-
-    def _parse_currency_value(self, value_str: str) -> float:
-        """Parse currency strings like '$123.45'."""
-        if not value_str:
-            return 0.0
-        try:
-            cleaned = re.sub(r'[^\d.]', '', value_str)
-            return float(cleaned) if cleaned else 0.0
-        except (ValueError, TypeError):
-            return 0.0
-
-    def _find_exotic_payout(
-        self,
-        race_table: Node,
-        page_parser: HTMLParser,
-        bet_type: str
-    ) -> Tuple[Optional[float], Optional[str]]:
-        """Find exotic bet payout from dividend tables."""
-        all_tables = page_parser.css("table")
-        race_table_html = race_table.html if hasattr(race_table, 'html') else str(race_table)
-
-        found_race_table = False
-        for table in all_tables:
-            table_html = table.html if hasattr(table, 'html') else str(table)
-
-            if not found_race_table:
-                if table_html == race_table_html:
-                    found_race_table = True
-                continue
-
-            table_text = table.text().lower()
-            if bet_type.lower() not in table_text:
-                continue
-
-            for row in table.css("tr"):
-                row_text = row.text().lower()
-                if bet_type.lower() in row_text:
-                    cols = row.css("td")
-                    if len(cols) >= 2:
-                        combination = clean_text(cols[0].text())
-                        payout = self._parse_currency_value(cols[1].text())
-                        if payout > 0:
-                            return payout, combination
-            break
-
-        return None, None
+            return ResultRunner(
+                name=name,
+                number=number,
+                position=pos_text,
+                final_win_odds=final_odds,
+                win_payout=win_pay,
+                place_payout=place_pay,
+                show_payout=show_pay,
+            )
+        except Exception as exc:
+            self.logger.warning(
+                "Failed parsing runner row", error=str(exc),
+            )
+            return None

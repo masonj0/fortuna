@@ -20,8 +20,9 @@ def normalize_venue_name(name: Optional[str]) -> str:
         return "Unknown"
 
     # 1. Initial Cleaning: Replace dashes and strip all parenthetical info
+    # Handle full-width parentheses and brackets often found in international data
     name = str(name).replace("-", " ")
-    name = re.sub(r"\(.*?\)", " ", name)
+    name = re.sub(r"[\(\[（].*?[\)\]）]", " ", name)
 
     cleaned = clean_text(name)
     if not cleaned:
@@ -131,11 +132,13 @@ def get_canonical_venue(name: Optional[str]) -> str:
     """Returns a sanitized canonical form for deduplication keys."""
     if not name:
         return "unknown"
-    # Remove everything in parentheses
-    name = re.sub(r"\(.*?\)", "", str(name))
+    # Call normalization first to strip race titles and ads
+    norm = normalize_venue_name(name)
+    # Remove everything in parentheses (extra safety)
+    norm = re.sub(r"[\(\[（].*?[\)\]）]", "", norm)
     # Remove special characters, lowercase, strip
-    name = re.sub(r"[^a-z0-9]", "", name.lower())
-    return name or "unknown"
+    res = re.sub(r"[^a-z0-9]", "", norm.lower())
+    return res or "unknown"
 
 
 def normalize_course_name(name: str) -> str:

@@ -51,6 +51,7 @@ from .adapters import (
 )
 from .adapters.base_adapter_v3 import BaseAdapterV3
 from .config import get_settings
+from .core.database import FortunaDB
 from .core.exceptions import AdapterConfigError
 from .core.exceptions import AdapterHttpError
 from .core.exceptions import AuthenticationError
@@ -486,6 +487,22 @@ class OddsEngine:
 
         merged_results = self._merge_adapter_results(all_payloads)
         successful_count = len([s for s in merged_results["source_info"] if s["status"] == "SUCCESS"])
+
+        # Log harvest results to the centralized database (Project Alignment)
+        try:
+            db = FortunaDB()
+            harvest_summary = {}
+            for s in merged_results["source_info"]:
+                harvest_summary[s["name"]] = {
+                    "count": s["races_found"],
+                    "max_odds": 0.0 # Engine doesn't track max_odds per source easily here
+                }
+
+            # Simple async fire-and-forget or await? Better to await for database integrity.
+            await db.log_harvest(harvest_summary)
+            await db.close()
+        except Exception as e:
+            log.warning("Failed to log harvest to database", error=str(e))
 
         try:
             parsed_date = datetime.strptime(date, "%Y-%m-%d").date()

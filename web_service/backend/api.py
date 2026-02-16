@@ -24,6 +24,9 @@ from starlette.websockets import WebSocketDisconnect
 # Corrected imports for web_service.backend
 from .config import get_settings
 from .engine import OddsEngine
+from .core.database import FortunaDB
+from .core.auditor import AuditorEngine
+from .models import ResultRace
 from .health import router as health_router
 from .logging_config import configure_logging
 from .middleware.error_handler import UserFriendlyException, user_friendly_exception_handler, validation_exception_handler
@@ -42,9 +45,22 @@ async def lifespan(app: FastAPI):
     engine = OddsEngine(config=settings)
     app.state.engine = engine
 
-    log.info("Lifespan: Engine initialized successfully. Startup complete.")
+    # Initialize shared database engine
+    db = FortunaDB()
+    await db.initialize()
+    app.state.db = db
+
+    log.info("Lifespan: Engine and Database initialized successfully. Startup complete.")
     yield
     log.info("Lifespan: Shutdown sequence initiated.")
+
+    if hasattr(app.state, "db") and app.state.db:
+        try:
+            await app.state.db.close()
+            log.info("Database connection closed")
+        except Exception as e:
+            log.error(f"Error during database shutdown: {e}")
+
     if hasattr(app.state, "engine") and app.state.engine:
         try:
             # CRITICAL: Close all browser sessions
@@ -52,6 +68,7 @@ async def lifespan(app: FastAPI):
             log.info("Engine shutdown complete")
         except Exception as e:
             log.error(f"Error during shutdown: {e}", exc_info=True)
+
     log.info("Lifespan: Shutdown sequence complete.")
 
 # --- FastAPI App Initialization ---
@@ -96,6 +113,12 @@ def get_engine(request: Request) -> OddsEngine:
     if not hasattr(request.app.state, "engine") or request.app.state.engine is None:
         raise HTTPException(status_code=503, detail="The OddsEngine is not available.")
     return request.app.state.engine
+
+
+def get_db(request: Request) -> FortunaDB:
+    if not hasattr(request.app.state, "db") or request.app.state.db is None:
+        raise HTTPException(status_code=503, detail="The Database is not available.")
+    return request.app.state.db
 
 # --- API Endpoints (Restored and Adapted) ---
 
@@ -181,7 +204,51 @@ async def get_qualified_races(
         raise HTTPException(status_code=404, detail=f"Analyzer '{analyzer_name}' not found.")
 
 
-# Add other endpoints as needed, following the pattern above.
+# --- Audit Endpoints ---
+
+@router.get("/audit/tips/unverified", response_model=List[Dict[str, Any]])
+async def get_unverified_tips(
+    lookback_hours: int = Query(48, ge=1, le=168),
+    db: FortunaDB = Depends(get_db),
+    _=Depends(verify_api_key),
+):
+    """Returns tips that haven't been audited yet."""
+    return await db.get_unverified_tips(lookback_hours=lookback_hours)
+
+
+@router.get("/audit/tips/all", response_model=List[Dict[str, Any]])
+async def get_all_audited_tips(
+    db: FortunaDB = Depends(get_db),
+    _=Depends(verify_api_key),
+):
+    """Returns all audited tips."""
+    return await db.get_all_audited_tips()
+
+
+@router.get("/audit/tips/recent", response_model=List[Dict[str, Any]])
+async def get_recent_tips(
+    limit: int = Query(20, ge=1, le=100),
+    db: FortunaDB = Depends(get_db),
+    _=Depends(verify_api_key),
+):
+    """Returns the most recent tips regardless of audit status."""
+    return await db.get_recent_tips(limit=limit)
+
+
+@router.post("/audit/run")
+async def run_audit(
+    results: List[ResultRace],
+    db: FortunaDB = Depends(get_db),
+    _=Depends(verify_api_key),
+):
+    """Audits tips against the provided race results."""
+    auditor = AuditorEngine(db=db)
+    matched = await auditor.audit_races(results)
+    return {
+        "status": "success",
+        "tips_audited": len(matched),
+    }
+
 
 def _include_adapter_router():
     """Helper to include adapter router after it is defined."""
