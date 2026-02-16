@@ -21,8 +21,8 @@ def get_places_paid(field_size: int) -> int:
 class AuditorEngine:
     """Matches predicted tips against actual race results using SQLite storage."""
 
-    def __init__(self, db_path: Optional[str] = None) -> None:
-        self.db = FortunaDB(db_path)
+    def __init__(self, db: Optional[FortunaDB] = None, db_path: Optional[str] = None) -> None:
+        self.db = db or FortunaDB(db_path)
         self.logger = structlog.get_logger(self.__class__.__name__)
 
     async def __aenter__(self):

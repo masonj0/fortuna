@@ -217,6 +217,21 @@ class FortunaDB:
                     conn.executemany("INSERT INTO harvest_logs (timestamp, region, adapter_name, race_count, max_odds) VALUES (?, ?, ?, ?, ?)", to_insert)
         await self._run_in_executor(_log)
 
+    async def get_adapter_scores(self, days: int = 30) -> Dict[str, float]:
+        if not self._initialized: await self.initialize()
+        def _get():
+            conn = self._get_conn()
+            cutoff = (datetime.now(EASTERN) - timedelta(days=days)).isoformat()
+            cursor = conn.execute("""
+                SELECT adapter_name, AVG(race_count) as avg_count, AVG(max_odds) as avg_max_odds
+                FROM harvest_logs WHERE timestamp > ? GROUP BY adapter_name
+            """, (cutoff,))
+            scores = {}
+            for row in cursor.fetchall():
+                scores[row["adapter_name"]] = (row["avg_count"] or 0) + ((row["avg_max_odds"] or 0) * 2)
+            return scores
+        return await self._run_in_executor(_get)
+
     async def log_tips(self, tips: List[Dict[str, Any]]):
         if not self._initialized: await self.initialize()
         def _log():
@@ -262,6 +277,16 @@ class FortunaDB:
         if not self._initialized: await self.initialize()
         def _get():
             cursor = self._get_conn().execute("SELECT * FROM tips WHERE audit_completed = 1 ORDER BY start_time DESC")
+            return [dict(row) for row in cursor.fetchall()]
+        return await self._run_in_executor(_get)
+
+    async def get_recent_audited_goldmines(self, limit: int = 15) -> List[Dict[str, Any]]:
+        if not self._initialized: await self.initialize()
+        def _get():
+            cursor = self._get_conn().execute(
+                "SELECT * FROM tips WHERE audit_completed = 1 AND is_goldmine = 1 ORDER BY start_time DESC LIMIT ?",
+                (limit,)
+            )
             return [dict(row) for row in cursor.fetchall()]
         return await self._run_in_executor(_get)
 
@@ -313,6 +338,15 @@ class FortunaDB:
                         outcome.get("top1_place_payout"), outcome.get("top2_place_payout"), outcome.get("audit_timestamp") or datetime.now(EASTERN).isoformat(), race_id
                     ))
         await self._run_in_executor(_update)
+
+    async def clear_all_tips(self):
+        if not self._initialized: await self.initialize()
+        def _clear():
+            conn = self._get_conn()
+            with conn:
+                conn.execute("DELETE FROM tips")
+            conn.execute("VACUUM")
+        await self._run_in_executor(_clear)
 
     async def close(self) -> None:
         def _close():

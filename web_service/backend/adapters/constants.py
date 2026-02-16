@@ -27,3 +27,12 @@ CHROME_USER_AGENT: Final[str] = (
 )
 
 CHROME_SEC_CH_UA: Final[str] = '"Google Chrome";v="125", "Chromium";v="125", "Not.A/Brand";v="24"'
+
+# Results Adapters
+USA_RESULTS_ADAPTERS: Final[set] = {"EquibaseResults", "SportingLifeResults"}
+INT_RESULTS_ADAPTERS: Final[set] = {
+    "RacingPostResults",
+    "AtTheRacesResults",
+    "SportingLifeResults",
+    "SkySportsResults",
+}

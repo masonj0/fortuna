@@ -7,6 +7,8 @@ from typing import Annotated, Any, Callable, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, WrapSerializer, model_validator
 
+from .utils.text import get_canonical_venue
+
 
 def decimal_serializer(value: Decimal, handler: Callable[[Decimal], Any]) -> Any:
     """Custom serializer for Decimal to float conversion."""
@@ -106,15 +108,6 @@ class ManualParseRequest(FortunaBaseModel):
 
 
 # --- Analytics Models ---
-
-def get_canonical_venue(venue: str) -> str:
-    """Normalize venue name for matching."""
-    if not venue:
-        return ""
-    canonical = re.sub(r'\s*\([^)]*\)\s*', '', venue)
-    canonical = re.sub(r'[^a-zA-Z0-9]', '', canonical).lower()
-    return canonical
-
 
 def parse_position(pos_str: Optional[str]) -> Optional[int]:
     """'1st' -> 1, '2/12' -> 2, 'W' -> 1, etc."""
