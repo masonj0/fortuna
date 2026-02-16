@@ -78,7 +78,8 @@ jobs:
       - name: 📦 Install Dependencies
         shell: pwsh
         run: |
-          pip install --upgrade pip setuptools wheel
+          pip install --upgrade pip
+          pip install setuptools==69.5.1 wheel
           pip install -r ${{ env.BACKEND_DIR }}/requirements.txt -c ${{ steps.constraints.outputs.file }}
           pip install pyinstaller==6.6.0 pywin32 -c ${{ steps.constraints.outputs.file }}
       - name: 🏗️ Build with PyInstaller

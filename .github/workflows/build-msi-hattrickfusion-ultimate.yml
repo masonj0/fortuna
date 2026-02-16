@@ -94,6 +94,7 @@ jobs:
         shell: pwsh
         run: |
           python -m pip install --upgrade pip
+          pip install setuptools==69.5.1
           pip install uv
           uv pip install --system -r ${{ env.BACKEND_DIR }}/requirements.txt -c ${{ steps.constraints.outputs.file }}
           uv pip install --system pyinstaller==6.6.0 pywin32
