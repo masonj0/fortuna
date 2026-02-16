@@ -2,9 +2,10 @@
 
 from datetime import datetime, date, timezone
 from decimal import Decimal
+import re
 from typing import Annotated, Any, Callable, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, WrapSerializer
+from pydantic import BaseModel, ConfigDict, Field, WrapSerializer, model_validator
 
 
 def decimal_serializer(value: Decimal, handler: Callable[[Decimal], Any]) -> Any:
@@ -106,29 +107,54 @@ class ManualParseRequest(FortunaBaseModel):
 
 # --- Analytics Models ---
 
-class ResultRunner(FortunaBaseModel):
+def get_canonical_venue(venue: str) -> str:
+    """Normalize venue name for matching."""
+    if not venue:
+        return ""
+    canonical = re.sub(r'\s*\([^)]*\)\s*', '', venue)
+    canonical = re.sub(r'[^a-zA-Z0-9]', '', canonical).lower()
+    return canonical
+
+
+def parse_position(pos_str: Optional[str]) -> Optional[int]:
+    """'1st' -> 1, '2/12' -> 2, 'W' -> 1, etc."""
+    if not pos_str:
+        return None
+    s = str(pos_str).upper().strip()
+    direct = {
+        "W": 1, "1": 1, "1ST": 1,
+        "P": 2, "2": 2, "2ND": 2,
+        "S": 3, "3": 3, "3RD": 3,
+        "4": 4, "4TH": 4,
+        "5": 5, "5TH": 5,
+    }
+    if s in direct:
+        return direct[s]
+    m = re.search(r"^(\d+)", s)
+    return int(m.group(1)) if m else None
+
+
+class ResultRunner(Runner):
     """Extended runner with result information."""
-    name: str
-    number: int = 0
     position: Optional[str] = None
     position_numeric: Optional[int] = None
-    scratched: bool = False
     final_win_odds: Optional[float] = None
     win_payout: Optional[float] = None
     place_payout: Optional[float] = None
     show_payout: Optional[float] = None
 
+    @model_validator(mode="after")
+    def compute_position_numeric(self) -> "ResultRunner":
+        if self.position and self.position_numeric is None:
+            self.position_numeric = parse_position(self.position)
+        return self
 
-class ResultRace(FortunaBaseModel):
+
+class ResultRace(Race):
     """Race with full result data."""
-    id: str
-    venue: str
-    race_number: int = Field(..., alias="raceNumber")
-    start_time: datetime = Field(..., alias="startTime")
-    source: str
-    discipline: Optional[str] = None
     runners: List[ResultRunner] = Field(default_factory=list)
     official_dividends: Dict[str, float] = Field(default_factory=dict)
+    discipline: Optional[str] = None
     chart_url: Optional[str] = None
     is_fully_parsed: bool = False
 
@@ -140,6 +166,24 @@ class ResultRace(FortunaBaseModel):
     exacta_combination: Optional[str] = None
     superfecta_payout: Optional[float] = None
     superfecta_combination: Optional[str] = None
+
+    @property
+    def canonical_key(self) -> str:
+        d = self.start_time.strftime("%Y%m%d")
+        t = self.start_time.strftime("%H%M")
+        disc = (self.discipline or "T")[:1].upper()
+        return f"{get_canonical_venue(self.venue)}|{self.race_number}|{d}|{t}|{disc}"
+
+    @property
+    def relaxed_key(self) -> str:
+        d = self.start_time.strftime("%Y%m%d")
+        disc = (self.discipline or "T")[:1].upper()
+        return f"{get_canonical_venue(self.venue)}|{self.race_number}|{d}|{disc}"
+
+    def get_top_finishers(self, n: int = 5) -> List[ResultRunner]:
+        ranked = [r for r in self.runners if r.position_numeric is not None]
+        ranked.sort(key=lambda r: r.position_numeric)
+        return ranked[:n]
 
 
 class AuditResult(FortunaBaseModel):
@@ -155,4 +199,8 @@ class AuditResult(FortunaBaseModel):
     actual_2nd_fav_odds: Optional[float] = None
     trifecta_payout: Optional[float] = None
     trifecta_combination: Optional[str] = None
+    superfecta_payout: Optional[float] = None
+    superfecta_combination: Optional[str] = None
+    top1_place_payout: Optional[float] = None
+    top2_place_payout: Optional[float] = None
     audit_timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

@@ -35,7 +35,7 @@ async def test_get_races_from_fixture(adapter, mocker):
                 "html": html_content,
                 "track": "Churchill Downs",
                 "race_number": 5,
-                "post_time_text": f"{future_date} 17:05",
+                "post_time_text": "05:05 PM",
                 "date": future_date,
                 "full_page": False
             }
