@@ -129,7 +129,7 @@ pydantic-settings==2.12.0
     # via -r python_service/requirements.in
 pygments==2.19.2
     # via pytest
-pyinstaller==6.6.0
+pyinstaller==6.19.0
     # via -r python_service/requirements.in
 pyinstaller-hooks-contrib==2025.9
     # via pyinstaller
