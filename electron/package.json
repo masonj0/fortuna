@@ -14,7 +14,7 @@
     "electron-builder": "24.9.1"
   },
   "dependencies": {
-    "electron-updater": "^6.1.1"
+    "electron-updater": "^6.8.3"
   },
   "build": {
     "appId": "com.fortuna.faucet",
