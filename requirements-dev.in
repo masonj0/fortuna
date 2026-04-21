@@ -29,4 +29,4 @@ GitPython
 pip-audit
 pytest-mock
 anyio<4.0.0
-packaging<24
+packaging<27
