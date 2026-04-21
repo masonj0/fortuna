@@ -110,7 +110,7 @@ numpy==2.2.6
     #   tabula-py
 packageurl-python==0.17.6
     # via cyclonedx-python-lib
-packaging==23.2
+packaging==26.1
     # via
     #   -r requirements-dev.in
     #   altair
@@ -240,4 +240,3 @@ watchdog==6.0.0
 
 # The following packages are considered to be unsafe in a requirements file:
 # pip
-curl-cffi==0.7.2
